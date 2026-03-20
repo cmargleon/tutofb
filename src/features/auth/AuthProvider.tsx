@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../../firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { getIdTokenResult, onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { User as AppUser } from '../../../shared/src/types';
 
@@ -21,10 +21,14 @@ export const useRole = () => {
     isAdmin: appUser?.role === 'admin',
     isOperador: appUser?.role === 'operador',
     isRevisor: appUser?.role === 'revisor',
+    isActive: appUser?.active === true,
     canManageClients: appUser?.role === 'admin',
     canManageModels: appUser?.role === 'admin',
     canCreateBatches: appUser?.role === 'admin' || appUser?.role === 'operador',
     canEvaluate: appUser?.role === 'admin' || appUser?.role === 'operador' || appUser?.role === 'revisor',
+    canRegenerate: appUser?.role === 'admin' || appUser?.role === 'operador',
+    canAccessArchive: appUser?.role === 'admin' || appUser?.role === 'operador' || appUser?.role === 'revisor',
+    canAccessAnalytics: appUser?.role === 'admin' || appUser?.role === 'revisor',
   };
 };
 
@@ -37,13 +41,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let unsubscribeDoc: () => void;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      setLoading(true);
       setUser(firebaseUser);
       if (firebaseUser) {
         unsubscribeDoc = onSnapshot(
           doc(db, 'users', firebaseUser.uid),
-          (userDoc) => {
+          async (userDoc) => {
             if (userDoc.exists()) {
-              setAppUser(userDoc.data() as AppUser);
+              const tokenResult = await getIdTokenResult(firebaseUser);
+              const appUserData = userDoc.data() as AppUser;
+              setAppUser({
+                ...appUserData,
+                role: (tokenResult.claims.role as AppUser['role']) || appUserData.role,
+              });
             } else {
               setAppUser(null);
             }

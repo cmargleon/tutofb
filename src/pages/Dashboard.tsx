@@ -1,185 +1,215 @@
-import React, { useState, useEffect } from 'react';
-import { subscribeToRecentBatches, subscribeToAnalyticsSummary } from '../features/dashboard/firebase';
-import { Batch, AnalyticsSummary } from '../../shared/src/types';
-import { LoadingBlock, EmptyState } from '../components/ui';
-import { Activity, CheckCircle, XCircle, Clock, DollarSign, Image as ImageIcon } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Activity, CheckCircle2, Package, LayoutList, Users, UserSquare2 } from 'lucide-react';
+import { AnalyticsSummary, Batch, Job } from '../../shared/src/types';
+import { EmptyState, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
+import { DashboardSnapshot, subscribeToAnalyticsSummary, subscribeToDashboardData } from '../features/dashboard/firebase';
+
+const StatCard: React.FC<{
+  label: string;
+  value: string | number;
+  icon: React.ElementType;
+  tone: string;
+}> = ({ label, value, icon: Icon, tone }) => (
+  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm text-slate-500">{label}</p>
+        <p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p>
+      </div>
+      <div className={`rounded-2xl p-3 ${tone}`}>
+        <Icon className="h-6 w-6" />
+      </div>
+    </div>
+  </div>
+);
 
 export const Dashboard: React.FC = () => {
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [data, setData] = useState<DashboardSnapshot>({
+    clients: [],
+    models: [],
+    recentBatches: [],
+    recentJobs: [],
+  });
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let unsubBatches: () => void;
-    let unsubSummary: () => void;
+    const unsubscribeDashboard = subscribeToDashboardData(
+      (snapshot) => {
+        setData(snapshot);
+        setLoading(false);
+      },
+      (loadError) => {
+        console.error(loadError);
+        setError('No se pudo cargar el panel operativo.');
+        setLoading(false);
+      },
+    );
 
-    try {
-      unsubBatches = subscribeToRecentBatches(
-        (data) => {
-          setBatches(data);
-          setLoading(false);
-        },
-        (err) => {
-          console.error(err);
-          setError('Error loading batches');
-          setLoading(false);
-        }
-      );
-
-      unsubSummary = subscribeToAnalyticsSummary(
-        (data) => {
-          setSummary(data);
-        },
-        (err) => {
-          console.error(err);
-        }
-      );
-    } catch (err) {
-      console.error(err);
-      setError('Error initializing dashboard');
-      setLoading(false);
-    }
+    const unsubscribeSummary = subscribeToAnalyticsSummary(
+      (nextSummary) => setSummary(nextSummary),
+      (loadError) => {
+        console.error(loadError);
+      },
+    );
 
     return () => {
-      if (unsubBatches) unsubBatches();
-      if (unsubSummary) unsubSummary();
+      unsubscribeDashboard();
+      unsubscribeSummary();
     };
   }, []);
 
-  if (loading) return <LoadingBlock />;
+  const garmentCount = useMemo(
+    () => new Set(data.recentJobs.map((job) => `${job.garmentFilePath}::${job.garmentName}`)).size,
+    [data.recentJobs],
+  );
+
+  const processingJobs = useMemo(
+    () => data.recentJobs.filter((job) => job.status === 'processing' || job.status === 'pending').length,
+    [data.recentJobs],
+  );
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <PageHeader
+          title="Panel"
+          description="Sigue clientes, biblioteca de modelos, cola operativa y trabajos recientes."
+        />
+        <LoadingBlock />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+    <div className="max-w-7xl mx-auto space-y-8">
+      <PageHeader
+        title="Panel"
+        description="Vista operativa del catálogo: volumen de preparación, cola activa y últimos trabajos procesados."
+      />
 
       {error && (
-        <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700">
-          {error}
-        </div>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
       )}
 
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
-            <Activity className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">En Cola</p>
-            <p className="text-2xl font-bold text-gray-900">{summary?.pendingJobs || 0}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-green-50 text-green-600 rounded-lg">
-            <CheckCircle className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Completados</p>
-            <p className="text-2xl font-bold text-gray-900">{summary?.completedJobs || 0}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-red-50 text-red-600 rounded-lg">
-            <XCircle className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Fallidos</p>
-            <p className="text-2xl font-bold text-gray-900">{summary?.failedJobs || 0}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
-          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg">
-            <DollarSign className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Costo Total</p>
-            <p className="text-2xl font-bold text-gray-900">${(summary?.totalCostUsd || 0).toFixed(2)}</p>
-          </div>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Clientes" value={data.clients.length} icon={Users} tone="bg-sky-50 text-sky-600" />
+        <StatCard label="Modelos" value={data.models.length} icon={UserSquare2} tone="bg-emerald-50 text-emerald-600" />
+        <StatCard label="Prendas en lotes" value={garmentCount} icon={Package} tone="bg-amber-50 text-amber-600" />
+        <StatCard
+          label="Trabajos completados"
+          value={summary?.completedJobs || 0}
+          icon={CheckCircle2}
+          tone="bg-violet-50 text-violet-600"
+        />
       </div>
 
-      {/* Recent Batches */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">Últimos Lotes</h2>
-        </div>
-        
-        {batches.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-500 uppercase bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3">ID Lote</th>
-                  <th className="px-6 py-3">Cliente / Modelo</th>
-                  <th className="px-6 py-3">Progreso</th>
-                  <th className="px-6 py-3">Estado</th>
-                  <th className="px-6 py-3">Fecha</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {batches.map(batch => {
-                  const progress = batch.totalJobs > 0 
-                    ? Math.round(((batch.completedJobs + batch.failedJobs) / batch.totalJobs) * 100) 
-                    : 0;
-                  
-                  return (
-                    <tr key={batch.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-mono text-xs text-gray-500">
-                        <Link to={`/evaluacion?batchId=${batch.id}`} className="text-indigo-600 hover:underline">
-                          {batch.id?.substring(0, 8)}...
+      <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <h2 className="text-lg font-semibold text-slate-900">Trabajos recientes</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              La cola se actualiza en tiempo real desde Firestore y refleja el estado actual de cada job.
+            </p>
+          </div>
+
+          {data.recentJobs.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                title="Todavía no hay trabajos"
+                description="Cuando generes el primer lote aparecerán aquí los últimos jobs creados."
+                icon={<LayoutList className="w-6 h-6" />}
+              />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-500">
+                  <tr>
+                    <th className="px-6 py-3">Job</th>
+                    <th className="px-6 py-3">Cliente / Modelo</th>
+                    <th className="px-6 py-3">Prenda</th>
+                    <th className="px-6 py-3">Proveedor</th>
+                    <th className="px-6 py-3">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.recentJobs.map((job) => (
+                    <tr key={job.id} className="hover:bg-slate-50/80">
+                      <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                        <Link to={`/evaluacion?batchId=${job.batchId}`} className="text-slate-900 hover:underline">
+                          {job.id?.slice(0, 8)}
                         </Link>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="font-medium text-gray-900">{batch.clientNameSnapshot}</p>
-                        <p className="text-gray-500">{batch.modelNameSnapshot}</p>
+                        <div className="font-medium text-slate-900">{job.clientNameSnapshot}</div>
+                        <div className="text-slate-500">{job.modelNameSnapshot}</div>
                       </td>
+                      <td className="px-6 py-4 text-slate-700">{job.garmentName}</td>
+                      <td className="px-6 py-4 text-slate-500">{job.provider}</td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-full bg-gray-200 rounded-full h-2 max-w-[100px]">
-                            <div 
-                              className="bg-indigo-600 h-2 rounded-full" 
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-gray-500">{progress}%</span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {batch.completedJobs} / {batch.totalJobs}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          batch.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          batch.status === 'failed' ? 'bg-red-100 text-red-700' :
-                          batch.status === 'partial_failed' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-blue-100 text-blue-700'
-                        }`}>
-                          {batch.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-500">
-                        {batch.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
+                        <StatusBadge status={job.status} />
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Flujo operativo</h2>
+            <div className="mt-5 space-y-4 text-sm text-slate-600">
+              <div>
+                <strong className="block text-slate-900">1. Registrar clientes</strong>
+                Define la cuenta o marca a la que quedarán asociadas las imágenes y sus regeneraciones.
+              </div>
+              <div>
+                <strong className="block text-slate-900">2. Preparar modelos</strong>
+                Crea la biblioteca de modelos y sube varias poses reutilizables.
+              </div>
+              <div>
+                <strong className="block text-slate-900">3. Subir prendas</strong>
+                El wizard compone multiángulo, deduplica archivos y arma una prenda por regla de carpeta.
+              </div>
+              <div>
+                <strong className="block text-slate-900">4. Encolar combinaciones</strong>
+                Se crea un job por cada combinación pose-prenda respetando provider, prompt y aspect ratio.
+              </div>
+              <div>
+                <strong className="block text-slate-900">5. Evaluar y regenerar</strong>
+                Revisas resultados, mantienes la imagen previa visible mientras procesa y descargas desde Storage real.
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="p-6">
-            <EmptyState 
-              title="No hay lotes" 
-              description="Aún no se han generado imágenes." 
-              icon={<ImageIcon />} 
-            />
+
+          <div className="rounded-3xl border border-slate-200 bg-slate-950 p-6 text-white shadow-lg shadow-slate-900/10">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-white/10 p-3">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-300">Cola actual</p>
+                <p className="text-2xl font-semibold">{processingJobs}</p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 text-sm text-slate-300">
+              <div className="rounded-2xl bg-white/5 px-4 py-3">
+                Pendientes: <strong>{summary?.pendingJobs || 0}</strong>
+              </div>
+              <div className="rounded-2xl bg-white/5 px-4 py-3">
+                Procesando: <strong>{summary?.processingJobs || 0}</strong>
+              </div>
+              <div className="rounded-2xl bg-white/5 px-4 py-3">
+                Lotes recientes: <strong>{data.recentBatches.length}</strong>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

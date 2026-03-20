@@ -1,34 +1,60 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { Job, RegenerateJobRequest, RegenerateJobResponse } from '../../../shared/src/types';
+import { assertCallableRoles } from '../auth/roles';
+import { buildRegenerateJobPatch } from './regenerateJob.helpers';
 
-export const regenerateJob = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in');
-  }
+export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobResponse>>(async (request) => {
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
 
-  const { jobId, provider, prompt } = request.data;
-  
-  if (!jobId || !provider || !prompt) {
-    throw new HttpsError('invalid-argument', 'Missing required fields');
+  const jobId = typeof request.data?.jobId === 'string' ? request.data.jobId.trim() : '';
+  const provider = request.data?.provider;
+  const prompt = typeof request.data?.prompt === 'string' ? request.data.prompt.trim() : '';
+
+  if (!jobId) {
+    throw new HttpsError('invalid-argument', 'Debes indicar un trabajo para regenerar.');
   }
 
   const db = admin.firestore();
   const jobRef = db.collection('jobs').doc(jobId);
-  
-  const jobSnap = await jobRef.get();
-  if (!jobSnap.exists) {
-    throw new HttpsError('not-found', 'Job not found');
+  const snapshot = await jobRef.get();
+
+  if (!snapshot.exists) {
+    throw new HttpsError('not-found', 'Trabajo no encontrado.');
   }
 
-  // Update job to pending
-  await jobRef.update({
-    status: 'pending',
-    provider,
-    finalPrompt: prompt,
-    queuePriority: 100, // High priority for regenerations
-    retryCount: 0,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  const job = { id: snapshot.id, ...snapshot.data() } as Job;
+  if (job.status === 'processing') {
+    throw new HttpsError(
+      'failed-precondition',
+      'Este trabajo ya se está procesando. Espera a que termine antes de regenerarlo.',
+    );
+  }
+
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  try {
+    await jobRef.update({
+      ...buildRegenerateJobPatch(job, provider || '', prompt),
+      updatedAt: now,
+    });
+  } catch (error) {
+    throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Solicitud inválida.');
+  }
+
+  await jobRef.collection('logs').add({
+    type: 'system',
+    level: 'info',
+    message: 'Regeneración encolada desde la aplicación.',
+    payload: {
+      requestedByUid: request.auth!.uid,
+      provider,
+      prompt,
+    },
+    createdAt: now,
   });
 
-  return { success: true };
+  return {
+    success: true,
+    jobId,
+  };
 });

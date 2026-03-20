@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../../firebase';
-import { collection, query, where, orderBy, limit, startAfter, onSnapshot, QueryDocumentSnapshot } from 'firebase/firestore';
+import {
+  collection,
+  getCountFromServer,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  QueryDocumentSnapshot,
+  startAfter,
+  where,
+} from 'firebase/firestore';
 import { Batch } from '../../../shared/src/types';
 
 export const useArchiveBatches = (clientId: string | null, pageSize: number = 20) => {
@@ -12,6 +22,8 @@ export const useArchiveBatches = (clientId: string | null, pageSize: number = 20
   const [pageCursors, setPageCursors] = useState<QueryDocumentSnapshot[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [hasNextPage, setHasNextPage] = useState(false);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   // We need to keep a reference to the unsubscribe function for the current page
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -80,8 +92,17 @@ export const useArchiveBatches = (clientId: string | null, pageSize: number = 20
     
     if (clientId) {
       loadPage(0);
+      void getCountFromServer(query(collection(db, 'batches'), where('clientId', '==', clientId))).then((snapshot) => {
+        const count = snapshot.data().count;
+        setTotalItems(count);
+        setTotalPages(count === 0 ? 0 : Math.ceil(count / pageSize));
+      }).catch((err) => {
+        console.error('Error counting archive batches:', err);
+      });
     } else {
       setBatches([]);
+      setTotalItems(0);
+      setTotalPages(0);
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
@@ -115,6 +136,8 @@ export const useArchiveBatches = (clientId: string | null, pageSize: number = 20
     error, 
     currentPage, 
     hasNextPage, 
+    totalItems,
+    totalPages,
     nextPage, 
     prevPage 
   };

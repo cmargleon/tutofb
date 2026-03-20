@@ -1,243 +1,435 @@
+import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
-import { Job, JobOutput } from '../../../shared/src/types';
+import { Timestamp } from 'firebase-admin/firestore';
+import { Job, JobLog, JobOutput, Provider } from '../../../shared/src/types';
+import { generateWithProvider } from '../providers';
+import {
+  FAL_KEY,
+  OPENAI_API_KEY,
+  getJobStuckSweepLimit,
+  getJobTimeoutMs,
+} from '../config/runtime';
 
-// Make sure to define these environment variables in your Firebase project:
-// firebase functions:secrets:set FAL_KEY
-// firebase functions:secrets:set OPENAI_API_KEY
+const db = admin.firestore();
+const bucket = admin.storage().bucket();
 
-async function getSignedUrl(storagePath: string): Promise<string> {
-  const bucket = admin.storage().bucket();
+const toMillis = (value: unknown): number | null => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Timestamp) {
+    return value.toMillis();
+  }
+
+  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
+    return value.toMillis();
+  }
+
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+};
+
+const getSignedUrl = async (storagePath: string): Promise<string> => {
   const file = bucket.file(storagePath);
   const [url] = await file.getSignedUrl({
     action: 'read',
-    expires: Date.now() + 1000 * 60 * 60, // 1 hour
+    expires: Date.now() + 60 * 60 * 1000,
+    version: 'v4',
   });
   return url;
-}
+};
 
-async function uploadImageFromUrl(imageUrl: string, destinationPath: string): Promise<void> {
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image from provider: ${response.statusText}`);
+const extensionForContentType = (contentType: string): string => {
+  if (contentType.includes('jpeg')) return 'jpg';
+  if (contentType.includes('webp')) return 'webp';
+  return 'png';
+};
+
+const serializeError = (error: unknown): Record<string, unknown> => {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
   }
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const bucket = admin.storage().bucket();
-  const file = bucket.file(destinationPath);
-  await file.save(buffer, {
-    metadata: {
-      contentType: 'image/jpeg',
-    },
+
+  return {
+    message: 'Error desconocido',
+    raw: error,
+  };
+};
+
+const createLog = async (jobId: string, input: Omit<JobLog, 'createdAt'>): Promise<void> => {
+  await db.collection('jobs').doc(jobId).collection('logs').add({
+    ...input,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-}
+};
 
-export async function processJob(jobId: string, job: Job): Promise<void> {
-  const db = admin.firestore();
+const claimJob = async (jobId: string, workerId: string): Promise<Job | null> => {
   const jobRef = db.collection('jobs').doc(jobId);
+  const claimExpiresAt = Timestamp.fromMillis(Date.now() + getJobTimeoutMs());
+  const claimToken = randomUUID();
 
-  try {
-    // 1. Mark as processing
-    await jobRef.update({
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(jobRef);
+    if (!snapshot.exists) {
+      return null;
+    }
+
+    const job = { id: snapshot.id, ...snapshot.data() } as Job;
+    if (job.status !== 'pending') {
+      return null;
+    }
+
+    transaction.update(jobRef, {
       status: 'processing',
+      claimToken,
+      claimedBy: workerId,
+      claimExpiresAt,
+      timeoutAt: claimExpiresAt,
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastAttemptStartedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastError: null,
     });
 
-    // 2. Get signed URLs for inputs
-    const poseUrl = await getSignedUrl(job.poseImagePath);
-    const garmentUrl = await getSignedUrl(job.garmentFilePath);
-
-    // 3. Call provider
-    let resultImageUrl = '';
-    const falKey = process.env.FAL_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
-
-    if (job.provider === 'fal-seedream') {
-      if (!falKey) throw new Error('FAL_KEY is not set');
-      const response = await fetch('https://queue.fal.run/fal-ai/seedream', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${falKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: job.finalPrompt,
-          image: poseUrl,
-          garment_image: garmentUrl,
-          // Add other specific params for seedream if needed
-        }),
-      });
-      
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Fal Seedream Error: ${errText}`);
-      }
-      
-      // Wait for the queue to finish (simplified polling)
-      const queueData = await response.json();
-      const requestId = queueData.request_id;
-      
-      let status = 'IN_QUEUE';
-      let resultData: any = null;
-      while (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const statusRes = await fetch(`https://queue.fal.run/fal-ai/seedream/requests/${requestId}`, {
-          headers: { 'Authorization': `Key ${falKey}` }
-        });
-        resultData = await statusRes.json();
-        status = resultData.status;
-      }
-      
-      if (status !== 'COMPLETED') {
-        throw new Error(`Fal Seedream failed with status: ${status}`);
-      }
-      
-      resultImageUrl = resultData.images?.[0]?.url;
-      if (!resultImageUrl) throw new Error('No image returned from Fal Seedream');
-
-    } else if (job.provider === 'fal-banana-pro') {
-      if (!falKey) throw new Error('FAL_KEY is not set');
-      const response = await fetch('https://queue.fal.run/fal-ai/banana-pro', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${falKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: job.finalPrompt,
-          image: poseUrl,
-          garment_image: garmentUrl,
-          // Add other specific params for banana-pro if needed
-        }),
-      });
-      
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Fal Banana Pro Error: ${errText}`);
-      }
-      
-      const queueData = await response.json();
-      const requestId = queueData.request_id;
-      
-      let status = 'IN_QUEUE';
-      let resultData: any = null;
-      while (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const statusRes = await fetch(`https://queue.fal.run/fal-ai/banana-pro/requests/${requestId}`, {
-          headers: { 'Authorization': `Key ${falKey}` }
-        });
-        resultData = await statusRes.json();
-        status = resultData.status;
-      }
-      
-      if (status !== 'COMPLETED') {
-        throw new Error(`Fal Banana Pro failed with status: ${status}`);
-      }
-      
-      resultImageUrl = resultData.images?.[0]?.url;
-      if (!resultImageUrl) throw new Error('No image returned from Fal Banana Pro');
-
-    } else if (job.provider === 'openai-gpt-image-1.5') {
-      if (!openaiKey) throw new Error('OPENAI_API_KEY is not set');
-      // Note: OpenAI DALL-E 3 doesn't support image-to-image with multiple inputs like try-on natively in the same way.
-      // Assuming this is a placeholder for a specific custom model or DALL-E 2 edit.
-      // We will simulate a call or use DALL-E 3 with just the prompt for demonstration if it's a generic generation.
-      // For a real try-on, OpenAI might not be the right provider, but we implement the interface.
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'dall-e-3',
-          prompt: job.finalPrompt,
-          n: 1,
-          size: '1024x1024',
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`OpenAI Error: ${errText}`);
-      }
-
-      const data = await response.json();
-      resultImageUrl = data.data?.[0]?.url;
-      if (!resultImageUrl) throw new Error('No image returned from OpenAI');
-    } else {
-      throw new Error(`Unknown provider: ${job.provider}`);
-    }
-
-    // 4. Download and upload to Firebase Storage
-    const outputId = `out_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    const destinationPath = `generated/${job.clientId}/${job.batchId}/${jobId}/${outputId}.jpg`;
-    
-    await uploadImageFromUrl(resultImageUrl, destinationPath);
-
-    // 5. Update job with success
-    const currentOutput: JobOutput = {
-      id: outputId,
-      provider: job.provider,
-      prompt: job.finalPrompt,
-      resultImagePath: destinationPath,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    return {
+      ...job,
+      status: 'processing',
+      claimToken,
+      claimedBy: workerId,
+      claimExpiresAt,
+      timeoutAt: claimExpiresAt,
+      startedAt: claimExpiresAt,
+      lastAttemptStartedAt: claimExpiresAt,
+      lastError: null,
     };
+  });
+};
 
-    const batch = db.batch();
+const markCleanupResult = async (jobId: string, outputId: string, deleted: boolean, storagePath: string, error?: unknown) => {
+  const outputRef = db.collection('jobs').doc(jobId).collection('outputs').doc(outputId);
 
-    batch.update(jobRef, {
-      status: 'completed',
-      completedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      currentOutputId: outputId,
-      currentOutput: currentOutput,
+  if (deleted) {
+    await outputRef.set(
+      {
+        storageDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    await createLog(jobId, {
+      type: 'cleanup',
+      level: 'info',
+      message: 'Se eliminó el archivo previo del resultado regenerado.',
+      outputId,
+      payload: {
+        storagePath,
+      },
     });
-
-    const outputRef = jobRef.collection('outputs').doc(outputId);
-    batch.set(outputRef, currentOutput);
-
-    const logRef = jobRef.collection('logs').doc();
-    batch.set(logRef, {
-      type: 'provider_response',
-      payload: { success: true, provider: job.provider, outputId },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
-
-  } catch (error: any) {
-    console.error(`Error processing job ${jobId}:`, error);
-    
-    // Check retry count
-    const maxRetries = 3;
-    const currentRetry = job.retryCount || 0;
-    
-    const batch = db.batch();
-    
-    if (currentRetry < maxRetries) {
-      batch.update(jobRef, {
-        status: 'pending', // Requeue
-        retryCount: currentRetry + 1,
-        lastError: error.message || 'Unknown error',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    } else {
-      batch.update(jobRef, {
-        status: 'failed',
-        lastError: error.message || 'Unknown error',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-
-    const logRef = jobRef.collection('logs').doc();
-    batch.set(logRef, {
-      type: 'error',
-      payload: { error: error.message || 'Unknown error', stack: error.stack, retryCount: currentRetry },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    
-    await batch.commit();
+    return;
   }
-}
+
+  await createLog(jobId, {
+    type: 'cleanup',
+    level: 'warn',
+    message: 'No se pudo eliminar el archivo previo del resultado regenerado.',
+    outputId,
+    payload: {
+      storagePath,
+      error: serializeError(error),
+    },
+  });
+};
+
+const completeJob = async (
+  claimedJob: Job,
+  providerResult: Awaited<ReturnType<typeof generateWithProvider>>,
+  durationSeconds: number | null,
+): Promise<void> => {
+  const jobId = claimedJob.id!;
+  const jobRef = db.collection('jobs').doc(jobId);
+  const outputRef = jobRef.collection('outputs').doc();
+  const outputId = outputRef.id;
+  const extension = extensionForContentType(providerResult.contentType);
+  const destinationPath = `generated/${claimedJob.clientId}/${claimedJob.batchId}/${jobId}/${outputId}.${extension}`;
+
+  await bucket.file(destinationPath).save(providerResult.imageBytes, {
+    resumable: false,
+    metadata: {
+      contentType: providerResult.contentType,
+      cacheControl: 'private, max-age=31536000',
+    },
+  });
+
+  const costUsd =
+    claimedJob.provider === 'fal-seedream'
+      ? 0.03
+      : claimedJob.provider === 'fal-banana-pro'
+        ? 0.15
+        : 0.04;
+
+  const currentOutput: JobOutput = {
+    id: outputId,
+    jobId,
+    batchId: claimedJob.batchId,
+    clientId: claimedJob.clientId,
+    clientNameSnapshot: claimedJob.clientNameSnapshot,
+    modelId: claimedJob.modelId,
+    modelNameSnapshot: claimedJob.modelNameSnapshot,
+    poseImageId: claimedJob.poseImageId,
+    garmentId: claimedJob.garmentId,
+    garmentName: claimedJob.garmentName,
+    provider: providerResult.provider,
+    promptBase: claimedJob.promptBase,
+    finalPrompt: claimedJob.finalPrompt,
+    aspectRatio: claimedJob.aspectRatio,
+    resultImagePath: destinationPath,
+    contentType: providerResult.contentType,
+    remoteUrl: providerResult.remoteUrl,
+    requestId: providerResult.requestId,
+    costUsd,
+    durationSeconds,
+    providerResponseSummary: providerResult.responseSummary,
+    isCurrent: true,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const writeBatch = db.batch();
+  writeBatch.set(outputRef, currentOutput);
+
+  if (claimedJob.currentOutputId) {
+    writeBatch.set(
+      jobRef.collection('outputs').doc(claimedJob.currentOutputId),
+      {
+        isCurrent: false,
+      },
+      { merge: true },
+    );
+  }
+
+  writeBatch.update(jobRef, {
+    provider: providerResult.provider,
+    status: 'completed',
+    queuePriority: 0,
+    claimToken: null,
+    claimedBy: null,
+    claimExpiresAt: null,
+    timeoutAt: null,
+    completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    latestOutputCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    currentOutputId: outputId,
+    currentOutput,
+    completedOutputCount: admin.firestore.FieldValue.increment(1),
+    totalCostUsd: admin.firestore.FieldValue.increment(costUsd),
+    totalDurationSeconds: admin.firestore.FieldValue.increment(durationSeconds || 0),
+    [`providerUsage.${providerResult.provider}.completedOutputs`]: admin.firestore.FieldValue.increment(1),
+    [`providerUsage.${providerResult.provider}.totalCostUsd`]: admin.firestore.FieldValue.increment(costUsd),
+    [`providerUsage.${providerResult.provider}.totalDurationSeconds`]: admin.firestore.FieldValue.increment(
+      durationSeconds || 0,
+    ),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastError: null,
+  });
+
+  writeBatch.set(jobRef.collection('logs').doc(), {
+    type: 'provider_response',
+    level: 'info',
+    message: 'Proveedor completó la generación exitosamente.',
+    outputId,
+    payload: {
+      provider: providerResult.provider,
+      requestId: providerResult.requestId,
+      remoteUrl: providerResult.remoteUrl,
+      summary: providerResult.responseSummary,
+    },
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  writeBatch.set(jobRef.collection('logs').doc(), {
+    type: 'completed',
+    level: 'info',
+    message: 'Trabajo completado y resultado guardado en Storage.',
+    outputId,
+    payload: {
+      destinationPath,
+      durationSeconds,
+      costUsd,
+    },
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await writeBatch.commit();
+
+  if (claimedJob.currentOutputId && claimedJob.currentOutput?.resultImagePath) {
+    try {
+      await bucket.file(claimedJob.currentOutput.resultImagePath).delete({ ignoreNotFound: true });
+      await markCleanupResult(jobId, claimedJob.currentOutputId, true, claimedJob.currentOutput.resultImagePath);
+    } catch (error) {
+      await markCleanupResult(
+        jobId,
+        claimedJob.currentOutputId,
+        false,
+        claimedJob.currentOutput.resultImagePath,
+        error,
+      );
+    }
+  }
+};
+
+const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> => {
+  const jobRef = db.collection('jobs').doc(claimedJob.id!);
+  const nextRetryCount = (claimedJob.retryCount || 0) + 1;
+  const shouldRetry = nextRetryCount <= (claimedJob.maxRetries || 0);
+  const errorMessage =
+    error instanceof Error ? error.message : 'Ocurrió un error desconocido durante la generación.';
+
+  const writeBatch = db.batch();
+  writeBatch.update(jobRef, {
+    status: shouldRetry ? 'pending' : 'failed',
+    queuePriority: shouldRetry ? 0 : 0,
+    retryCount: nextRetryCount,
+    claimToken: null,
+    claimedBy: null,
+    claimExpiresAt: null,
+    timeoutAt: null,
+    startedAt: null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastError: errorMessage,
+  });
+
+  writeBatch.set(jobRef.collection('logs').doc(), {
+    type: shouldRetry ? 'retry_scheduled' : 'failed',
+    level: shouldRetry ? 'warn' : 'error',
+    message: shouldRetry
+      ? `La generación falló y quedó reencolada para el intento ${nextRetryCount}.`
+      : 'La generación agotó sus reintentos y quedó fallida.',
+    payload: {
+      retryCount: nextRetryCount,
+      maxRetries: claimedJob.maxRetries,
+      error: serializeError(error),
+    },
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await writeBatch.commit();
+};
+
+export const requeueExpiredJobs = async (): Promise<number> => {
+  const snapshot = await db
+    .collection('jobs')
+    .where('status', '==', 'processing')
+    .where('claimExpiresAt', '<=', Timestamp.now())
+    .limit(getJobStuckSweepLimit())
+    .get();
+
+  if (snapshot.empty) {
+    return 0;
+  }
+
+  const writeBatch = db.batch();
+  snapshot.docs.forEach((docSnapshot) => {
+    const job = { id: docSnapshot.id, ...docSnapshot.data() } as Job;
+    const nextRetryCount = (job.retryCount || 0) + 1;
+    const shouldRetry = nextRetryCount <= (job.maxRetries || 0);
+
+    writeBatch.update(docSnapshot.ref, {
+      status: shouldRetry ? 'pending' : 'failed',
+      retryCount: nextRetryCount,
+      claimToken: null,
+      claimedBy: null,
+      claimExpiresAt: null,
+      timeoutAt: null,
+      startedAt: null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastError: shouldRetry
+        ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
+        : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
+    });
+
+    writeBatch.set(docSnapshot.ref.collection('logs').doc(), {
+      type: shouldRetry ? 'retry_scheduled' : 'failed',
+      level: shouldRetry ? 'warn' : 'error',
+      message: shouldRetry
+        ? 'El trabajo quedó atascado y fue reencolado automáticamente.'
+        : 'El trabajo quedó atascado y fue marcado como fallido al agotar reintentos.',
+      payload: {
+        retryCount: nextRetryCount,
+        maxRetries: job.maxRetries,
+        previousClaimToken: job.claimToken,
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  await writeBatch.commit();
+  return snapshot.size;
+};
+
+export const processJob = async (jobId: string, source: 'create' | 'requeue'): Promise<void> => {
+  await requeueExpiredJobs();
+
+  const workerId = `worker:${source}:${randomUUID()}`;
+  const claimedJob = await claimJob(jobId, workerId);
+  if (!claimedJob) {
+    return;
+  }
+
+  await createLog(jobId, {
+    type: 'claim',
+    level: 'info',
+    message: 'Trabajo reclamado por el worker.',
+    payload: {
+      workerId,
+      claimToken: claimedJob.claimToken,
+      source,
+    },
+  });
+
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), getJobTimeoutMs());
+
+  try {
+    const [poseImageUrl, garmentImageUrl] = await Promise.all([
+      getSignedUrl(claimedJob.poseImagePath),
+      getSignedUrl(claimedJob.garmentFilePath),
+    ]);
+
+    await createLog(jobId, {
+      type: 'provider_request',
+      level: 'info',
+      message: 'Se enviaron los insumos al proveedor.',
+      payload: {
+        provider: claimedJob.provider,
+        aspectRatio: claimedJob.aspectRatio,
+        poseImagePath: claimedJob.poseImagePath,
+        garmentFilePath: claimedJob.garmentFilePath,
+      },
+    });
+
+    const providerResult = await generateWithProvider(
+      claimedJob.provider as Provider,
+      {
+        poseImageUrl,
+        garmentImageUrl,
+        prompt: claimedJob.finalPrompt,
+        aspectRatio: claimedJob.aspectRatio,
+        signal: controller.signal,
+      },
+      {
+        falKey: FAL_KEY.value(),
+        openaiApiKey: OPENAI_API_KEY.value(),
+      },
+    );
+
+    const startedAtMs = toMillis(claimedJob.lastAttemptStartedAt) || Date.now();
+    const durationSeconds = Math.max(0, Math.round((Date.now() - startedAtMs) / 1000));
+    await completeJob(claimedJob, providerResult, durationSeconds);
+  } catch (error) {
+    await retryOrFailJob(claimedJob, error);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+};

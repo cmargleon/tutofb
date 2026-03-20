@@ -66,6 +66,10 @@
         "clientNameSnapshot": { "type": "string" },
         "modelId": { "type": "string" },
         "modelNameSnapshot": { "type": "string" },
+        "provider": { "type": "string", "enum": ["fal-seedream", "fal-banana-pro", "openai-gpt-image-1.5"] },
+        "aspectRatio": { "type": "string", "enum": ["9:16", "3:4", "2:3", "1:1", "4:3", "3:2", "16:9"] },
+        "promptBase": { "type": "string" },
+        "backgroundConfig": { "type": "object" },
         "poseIds": { "type": "array", "items": { "type": "string" } },
         "garmentCount": { "type": "number" },
         "totalJobs": { "type": "number" },
@@ -73,13 +77,14 @@
         "processingJobs": { "type": "number" },
         "completedJobs": { "type": "number" },
         "failedJobs": { "type": "number" },
+        "completedOutputCount": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "processing", "completed", "partial_failed", "failed"] },
         "latestJobCreatedAt": { "type": "timestamp" },
         "createdAt": { "type": "timestamp" },
         "updatedAt": { "type": "timestamp" },
         "createdByUid": { "type": "string" }
       },
-      "required": ["clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "poseIds", "garmentCount", "totalJobs", "pendingJobs", "processingJobs", "completedJobs", "failedJobs", "status", "createdAt", "updatedAt", "createdByUid"]
+      "required": ["clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "provider", "aspectRatio", "promptBase", "backgroundConfig", "poseIds", "garmentCount", "totalJobs", "pendingJobs", "processingJobs", "completedJobs", "failedJobs", "status", "createdAt", "updatedAt", "createdByUid"]
     },
     "Job": {
       "title": "Job",
@@ -101,10 +106,15 @@
         "provider": { "type": "string", "enum": ["fal-seedream", "fal-banana-pro", "openai-gpt-image-1.5"] },
         "promptBase": { "type": "string" },
         "finalPrompt": { "type": "string" },
-        "backgroundConfig": { "type": "string" },
+        "backgroundConfig": { "type": "object" },
         "status": { "type": "string", "enum": ["pending", "processing", "completed", "failed"] },
         "queuePriority": { "type": "number" },
         "retryCount": { "type": "number" },
+        "maxRetries": { "type": "number" },
+        "claimToken": { "type": "string" },
+        "claimedBy": { "type": "string" },
+        "claimExpiresAt": { "type": "timestamp" },
+        "timeoutAt": { "type": "timestamp" },
         "startedAt": { "type": "timestamp" },
         "completedAt": { "type": "timestamp" },
         "currentOutputId": { "type": "string" },
@@ -118,12 +128,15 @@
             "createdAt": { "type": "timestamp" }
           }
         },
+        "completedOutputCount": { "type": "number" },
+        "totalCostUsd": { "type": "number" },
+        "totalDurationSeconds": { "type": "number" },
         "createdAt": { "type": "timestamp" },
         "updatedAt": { "type": "timestamp" },
         "createdByUid": { "type": "string" },
         "lastError": { "type": "string" }
       },
-      "required": ["batchId", "clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "poseImageId", "poseImagePath", "garmentId", "garmentName", "garmentFilePath", "garmentIsMultiAngle", "aspectRatio", "provider", "promptBase", "finalPrompt", "status", "queuePriority", "retryCount", "createdAt", "updatedAt", "createdByUid"]
+      "required": ["batchId", "clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "poseImageId", "poseImagePath", "garmentId", "garmentName", "garmentFilePath", "garmentIsMultiAngle", "aspectRatio", "provider", "promptBase", "finalPrompt", "backgroundConfig", "status", "queuePriority", "retryCount", "maxRetries", "completedOutputCount", "totalCostUsd", "totalDurationSeconds", "createdAt", "updatedAt", "createdByUid"]
     }
   },
   "firestore": {

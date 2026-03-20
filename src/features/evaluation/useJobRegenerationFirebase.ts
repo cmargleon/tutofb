@@ -15,7 +15,7 @@ export const useJobRegenerationFirebase = (jobs: Job[]) => {
         ...prev,
         [job.id!]: {
           provider: job.provider,
-          prompt: job.finalPrompt || job.promptBase || ''
+          prompt: job.promptBase || job.finalPrompt || ''
         }
       };
     });

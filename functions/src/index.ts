@@ -17,4 +17,6 @@ export * from './triggers/onClientDelete';
 export * from './triggers/onModelDelete';
 export * from './triggers/processJobOnCreate';
 export * from './triggers/processJobOnRequeue';
+export * from './triggers/requeueExpiredJobs';
 export * from './triggers/analyticsTriggers';
+export * from './triggers/syncClaimsOnUserWrite';

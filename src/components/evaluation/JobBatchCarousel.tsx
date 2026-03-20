@@ -60,7 +60,7 @@ export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs }) => {
               batch={batch}
               job={job}
               index={index}
-              draft={localDrafts[job.id!] || { provider: job.provider, prompt: job.finalPrompt || job.promptBase || '' }}
+              draft={localDrafts[job.id!] || { provider: job.provider, prompt: job.promptBase || job.finalPrompt || '' }}
               isQueueing={!!queueingJobs[job.id!]}
               regenerationError={regenerationErrors[job.id!] || null}
               onUpdateDraft={(updates) => updateDraft(job.id!, updates)}

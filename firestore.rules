@@ -1,146 +1,115 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function userDocPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasUserDoc() {
+      return isAuthenticated() && exists(userDocPath());
+    }
+
+    function userData() {
+      return get(userDocPath()).data;
+    }
+
+    function currentRole() {
+      return isAuthenticated()
+        ? (
+            request.auth.token.role is string
+              ? request.auth.token.role
+              : (hasUserDoc() ? userData().role : null)
+          )
+        : null;
+    }
+
+    function isActiveUser() {
+      return isAuthenticated() && hasUserDoc() && userData().active == true;
     }
 
     function hasRole(role) {
-      return isAuthenticated() && (
-        (request.auth.token.role == role) || 
-        (getUserData().role == role)
-      );
+      return isActiveUser() && currentRole() == role;
     }
 
     function isAdmin() {
-      return hasRole('admin') || 
-             (request.auth.token.email == "claudiomatiasrg@gmail.com" && request.auth.token.email_verified == true);
+      return hasRole('admin');
     }
 
-    function isOperador() {
-      return hasRole('operador');
+    function canGenerate() {
+      return isActiveUser() && (currentRole() in ['admin', 'operador']);
     }
 
-    function isRevisor() {
-      return hasRole('revisor');
+    function canReview() {
+      return isActiveUser() && (currentRole() in ['admin', 'operador', 'revisor']);
     }
 
-    function canWriteData() {
-      return isAdmin() || isOperador();
+    function canReadAnalytics() {
+      return isActiveUser() && (currentRole() in ['admin', 'revisor']);
     }
 
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    function areImmutableFieldsUnchanged(fields) {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
-    }
-
-    function validStringLength(field, minLen, maxLen) {
-      return request.resource.data[field] is string &&
-        request.resource.data[field].size() >= minLen &&
-        request.resource.data[field].size() <= maxLen;
-    }
-
-    // ===============================================================
-    // Users
-    // ===============================================================
     match /users/{uid} {
-      allow read: if isAuthenticated();
-      allow create: if isAdmin() && 
-                    hasRequiredFields(['uid', 'email', 'role', 'active', 'createdAt', 'updatedAt']) &&
-                    request.resource.data.uid == uid &&
-                    request.resource.data.role in ['admin', 'operador', 'revisor'];
-      allow update: if isAdmin() && 
-                    areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
-                    request.resource.data.role in ['admin', 'operador', 'revisor'];
+      allow read: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
+      allow create: if isAdmin()
+        && request.resource.data.uid == uid
+        && request.resource.data.role in ['admin', 'operador', 'revisor'];
+      allow update: if isAdmin()
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role in ['admin', 'operador', 'revisor'];
       allow delete: if isAdmin();
     }
 
-    // ===============================================================
-    // Clients
-    // ===============================================================
     match /clients/{clientId} {
-      allow read: if isAuthenticated();
-      allow create: if isAdmin() && 
-                    hasRequiredFields(['name', 'createdAt', 'updatedAt', 'batchCount', 'createdByUid']) &&
-                    validStringLength('name', 1, 100) &&
-                    request.resource.data.createdByUid == request.auth.uid &&
-                    request.resource.data.batchCount == 0;
-      allow update: if isAdmin() && 
-                    areImmutableFieldsUnchanged(['createdAt', 'createdByUid']);
-      allow delete: if isAdmin();
+      allow read: if canReview();
+      allow create, update, delete: if isAdmin();
     }
 
-    // ===============================================================
-    // Models
-    // ===============================================================
     match /models/{modelId} {
-      allow read: if isAuthenticated();
-      allow create: if isAdmin() && 
-                    hasRequiredFields(['clientId', 'clientNameSnapshot', 'name', 'poses', 'poseCount', 'createdAt', 'updatedAt', 'createdByUid']) &&
-                    validStringLength('name', 1, 100) &&
-                    request.resource.data.createdByUid == request.auth.uid;
-      allow update: if isAdmin() && 
-                    areImmutableFieldsUnchanged(['clientId', 'createdAt', 'createdByUid']);
-      allow delete: if isAdmin();
+      allow read: if canReview();
+      allow create, update, delete: if isAdmin();
     }
 
-    // ===============================================================
-    // Batches
-    // ===============================================================
     match /batches/{batchId} {
-      allow read: if isAuthenticated();
-      allow create: if false; // Only Cloud Functions
-      allow update: if false; // Only Cloud Functions
-      allow delete: if isAdmin();
+      allow read: if canReview();
+      allow create, update, delete: if false;
     }
 
-    // ===============================================================
-    // Jobs
-    // ===============================================================
     match /jobs/{jobId} {
-      allow read: if isAuthenticated();
-      allow create: if false; // Only Cloud Functions
-      allow update: if false; // Only Cloud Functions
-      allow delete: if isAdmin();
-      
+      allow read: if canReview();
+      allow create, update, delete: if false;
+
       match /outputs/{outputId} {
-        allow read: if isAuthenticated();
-        allow write: if false; // Only Cloud Functions write outputs
+        allow read: if canReview();
+        allow create, update, delete: if false;
       }
-      
+
       match /logs/{logId} {
-        allow read: if isAuthenticated();
-        allow write: if false; // Only Cloud Functions write logs
+        allow read: if canReview();
+        allow create, update, delete: if false;
       }
     }
 
-    // ===============================================================
-    // Analytics
-    // ===============================================================
     match /analytics_summary/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Only Cloud Functions
+      allow read: if canReadAnalytics();
+      allow write: if false;
     }
+
     match /analytics_daily/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Only Cloud Functions
+      allow read: if canReadAnalytics();
+      allow write: if false;
     }
+
     match /analytics_clients/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Only Cloud Functions
+      allow read: if canReadAnalytics();
+      allow write: if false;
     }
+
     match /analytics_providers/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Only Cloud Functions
+      allow read: if canReadAnalytics();
+      allow write: if false;
     }
   }
 }

@@ -1,29 +1,26 @@
-import { Provider, BackgroundConfig } from '../../../shared/src/types';
+import { AspectRatio, BackgroundConfig, GarmentSourceType, Provider } from '../../../shared/src/types';
 
-export type SourceType = 'single' | 'folder-root' | 'subfolder';
+export type SourceType = GarmentSourceType;
 
 export interface UploadedGarmentDraft {
   id: string;
   name: string;
   sourceType: SourceType;
   files: File[];
+  uploadFile: File;
   previewUrl: string;
   isMultiAngle: boolean;
+  originalFileNames: string[];
 }
 
 export interface WizardState {
   step: number;
-  // Step 1
   selectedClientId: string | null;
   selectedModelId: string | null;
   selectedPoseIds: string[];
-  
-  // Step 2
   garments: UploadedGarmentDraft[];
-  
-  // Step 3
   provider: Provider;
   prompt: string;
-  aspectRatio: string;
+  aspectRatio: AspectRatio;
   backgroundConfig: BackgroundConfig;
 }

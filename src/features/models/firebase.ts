@@ -130,6 +130,9 @@ export const deleteModel = async (id: string) => {
 
 export const getImageUrl = async (storagePath: string): Promise<string> => {
   try {
+    if (storagePath.startsWith('http://') || storagePath.startsWith('https://')) {
+      return storagePath;
+    }
     const imageRef = ref(storage, storagePath);
     return await getDownloadURL(imageRef);
   } catch (error) {

@@ -1,12 +1,13 @@
 import React from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth, useRole } from '../features/auth/AuthProvider';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { LayoutDashboard, Users, UserSquare2, Wand2, Archive, Eye, BarChart3, LogOut } from 'lucide-react';
 
 export const Layout: React.FC = () => {
   const { appUser } = useAuth();
+  const role = useRole();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -15,16 +16,16 @@ export const Layout: React.FC = () => {
   };
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'operador', 'revisor'] },
-    { name: 'Clientes', path: '/clients', icon: Users, roles: ['admin'] },
-    { name: 'Modelos', path: '/models', icon: UserSquare2, roles: ['admin'] },
-    { name: 'Generar', path: '/generate', icon: Wand2, roles: ['admin', 'operador'] },
-    { name: 'Evaluación', path: '/evaluacion', icon: Eye, roles: ['admin', 'operador', 'revisor'] },
-    { name: 'Archivo', path: '/archivo', icon: Archive, roles: ['admin', 'operador', 'revisor'] },
-    { name: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'operador', 'revisor'] },
+    { name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: role.isActive },
+    { name: 'Clientes', path: '/clients', icon: Users, visible: role.canManageClients },
+    { name: 'Modelos', path: '/models', icon: UserSquare2, visible: role.canManageModels },
+    { name: 'Generar', path: '/generate', icon: Wand2, visible: role.canCreateBatches },
+    { name: 'Evaluación', path: '/evaluacion', icon: Eye, visible: role.canEvaluate },
+    { name: 'Archivo', path: '/archivo', icon: Archive, visible: role.canAccessArchive },
+    { name: 'Analíticas', path: '/analytics', icon: BarChart3, visible: role.canAccessAnalytics },
   ];
 
-  const filteredNav = navItems.filter(item => appUser?.role && item.roles.includes(appUser.role));
+  const filteredNav = navItems.filter(item => item.visible);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -52,7 +53,7 @@ export const Layout: React.FC = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">{appUser?.displayName || 'Admin User'}</p>
-              <p className="text-xs text-gray-500 truncate capitalize">{appUser?.role || 'admin'}</p>
+              <p className="text-xs text-gray-500 truncate capitalize">{appUser?.role || 'sin rol'}</p>
             </div>
           </div>
           <button

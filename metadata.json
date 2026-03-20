@@ -1,5 +1,5 @@
 {
-  "name": "Firebase Test App",
-  "description": "A test application demonstrating Firebase Authentication and Firestore database integration.",
+  "name": "Tuto Firebase",
+  "description": "Catálogo interno para generación, evaluación y archivo de virtual try-on sobre Firebase.",
   "requestFramePermissions": []
 }

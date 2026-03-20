@@ -34,6 +34,8 @@ export const Archive: React.FC = () => {
     loading: batchesLoading, 
     currentPage, 
     hasNextPage, 
+    totalItems,
+    totalPages,
     nextPage, 
     prevPage 
   } = useArchiveBatches(selectedClientId, 20);
@@ -116,7 +118,7 @@ export const Archive: React.FC = () => {
                         : 'Fecha desconocida';
                       return (
                         <option key={b.id} value={b.id}>
-                          {dateStr} · {b.completedJobs || 0} imágenes · {b.modelNameSnapshot}
+                          Trabajo {b.id?.slice(0, 8)} · {dateStr} · {(b.completedJobs || 0)} imágenes · {b.modelNameSnapshot}
                         </option>
                       );
                     })
@@ -134,7 +136,7 @@ export const Archive: React.FC = () => {
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <span className="text-xs font-medium text-gray-500 px-2">
-                    Pág. {currentPage + 1}
+                    Pág. {currentPage + 1}{totalPages > 0 ? ` de ${totalPages}` : ''}
                   </span>
                   <button
                     onClick={nextPage}
@@ -176,7 +178,7 @@ export const Archive: React.FC = () => {
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{batch.clientNameSnapshot}</h2>
                   <p className="text-gray-500">
-                    {batch.modelNameSnapshot} · {batch.totalJobs} resultados · {batch.createdAt?.toMillis ? new Date(batch.createdAt.toMillis()).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }) : ''}
+                    Trabajo {batch.id?.slice(0, 8)} · {batch.modelNameSnapshot} · {batch.totalJobs} resultados · {batch.createdAt?.toMillis ? new Date(batch.createdAt.toMillis()).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }) : ''}
                   </p>
                 </div>
                 
@@ -192,6 +194,12 @@ export const Archive: React.FC = () => {
 
               {/* Jobs Carousel */}
               <JobBatchCarousel batch={batch} jobs={jobs} />
+
+              {totalItems > 0 && (
+                <div className="text-xs text-gray-500">
+                  {totalItems} lote{totalItems === 1 ? '' : 's'} archivado{totalItems === 1 ? '' : 's'} para este cliente.
+                </div>
+              )}
             </div>
           ) : batch && jobs.length === 0 ? (
             <EmptyState

@@ -1,47 +1,49 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
     function isAuthenticated() {
       return request.auth != null;
     }
 
+    function currentRole() {
+      return isAuthenticated() && request.auth.token.role is string
+        ? request.auth.token.role
+        : null;
+    }
+
+    function isActiveUser() {
+      return isAuthenticated() && request.auth.token.active == true;
+    }
+
     function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.role == 'admin' || 
-        (request.auth.token.email == "claudiomatiasrg@gmail.com" && request.auth.token.email_verified == true)
-      );
+      return isActiveUser() && currentRole() == 'admin';
     }
 
-    function isOperador() {
-      return isAuthenticated() && request.auth.token.role == 'operador';
+    function canGenerate() {
+      return isActiveUser() && (currentRole() == 'admin' || currentRole() == 'operador');
     }
 
-    function canWriteData() {
-      return isAdmin() || isOperador();
+    function isImageUpload() {
+      return request.resource != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
     }
 
     match /models/{clientId}/{modelId}/poses/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow read: if isActiveUser();
+      allow write: if isAdmin() && isImageUpload();
       allow delete: if isAdmin();
     }
 
-    match /garments/{batchId}/{garmentId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if canWriteData() && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
-      allow delete: if isAdmin();
-    }
-
-    match /garments/drafts/{uid}/{draftBatchId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
-      allow delete: if isAuthenticated() && request.auth.uid == uid;
+    match /garments/drafts/{uid}/{draftBatchId}/{garmentFile} {
+      allow read: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
+      allow write: if canGenerate() && request.auth.uid == uid && isImageUpload();
+      allow delete: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
     }
 
     match /generated/{clientId}/{batchId}/{jobId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Only Cloud Functions
+      allow read: if isActiveUser();
+      allow write: if false;
       allow delete: if isAdmin();
     }
   }

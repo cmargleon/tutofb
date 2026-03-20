@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Batch, Job, Provider } from '../../../shared/src/types';
 import { StatusBadge } from '../ui';
 import { Download, RefreshCw, AlertCircle } from 'lucide-react';
-import { saveAs } from 'file-saver';
-import { ref, getDownloadURL } from 'firebase/storage';
-import { storage } from '../../firebase';
+import { useRole } from '../../features/auth/AuthProvider';
+import {
+  downloadSingleJobImage,
+  resolveStorageAssetUrl,
+} from '../../features/evaluation/downloadBatchImages';
 
 interface Props {
   batch: Batch;
@@ -27,6 +29,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
   onUpdateDraft,
   onRegenerate
 }) => {
+  const role = useRole();
   const [downloading, setDownloading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
@@ -35,8 +38,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
     const fetchUrl = async () => {
       if (job.currentOutput?.resultImagePath) {
         try {
-          const imageRef = ref(storage, job.currentOutput.resultImagePath);
-          const url = await getDownloadURL(imageRef);
+          const url = await resolveStorageAssetUrl(job.currentOutput.resultImagePath);
           if (isMounted) setImageUrl(url);
         } catch (error) {
           console.error('Error fetching image URL:', error);
@@ -50,17 +52,10 @@ export const JobEvaluationCard: React.FC<Props> = ({
   }, [job.currentOutput?.resultImagePath]);
 
   const handleDownload = async () => {
-    if (!imageUrl) return;
+    if (!job.currentOutput?.resultImagePath) return;
     setDownloading(true);
     try {
-      const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error('Network response was not ok');
-      const blob = await response.blob();
-      const cleanClientName = batch.clientNameSnapshot.replace(/[^a-zA-Z0-9]/g, '_');
-      const cleanModelName = batch.modelNameSnapshot.replace(/[^a-zA-Z0-9]/g, '_');
-      const cleanGarmentName = job.garmentName.replace(/[^a-zA-Z0-9]/g, '_');
-      const fileName = `${cleanClientName}_${cleanModelName}_${cleanGarmentName}_pose${index + 1}_${job.id}.jpg`;
-      saveAs(blob, fileName);
+      await downloadSingleJobImage(batch, job, index);
     } catch (error) {
       console.error('Error downloading image:', error);
       alert('Error al descargar la imagen');
@@ -144,12 +139,12 @@ export const JobEvaluationCard: React.FC<Props> = ({
           <select
             value={draft.provider}
             onChange={(e) => onUpdateDraft({ provider: e.target.value as Provider })}
-            disabled={isProcessing || isQueueing}
+            disabled={isProcessing || isQueueing || !role.canRegenerate}
             className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-50 disabled:text-gray-500"
           >
-            <option value="fal-seedream">Seedream (FAL)</option>
-            <option value="fal-banana-pro">Banana Pro (FAL)</option>
-            <option value="openai-gpt-image-1.5">OpenAI DALL-E 3</option>
+            <option value="fal-seedream">fal.ai seedream</option>
+            <option value="fal-banana-pro">fal.ai banana-pro</option>
+            <option value="openai-gpt-image-1.5">OpenAI gpt-image-1.5</option>
           </select>
         </div>
 
@@ -158,10 +153,10 @@ export const JobEvaluationCard: React.FC<Props> = ({
           <textarea
             value={draft.prompt}
             onChange={(e) => onUpdateDraft({ prompt: e.target.value })}
-            disabled={isProcessing || isQueueing}
+            disabled={isProcessing || isQueueing || !role.canRegenerate}
             rows={4}
             className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 resize-none flex-grow disabled:bg-gray-50 disabled:text-gray-500"
-            placeholder="Describe cómo debe verse la imagen final..."
+            placeholder="Define el prompt base para regenerar..."
           />
         </div>
 
@@ -171,14 +166,20 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </div>
         )}
 
-        <button
-          onClick={onRegenerate}
-          disabled={isProcessing || isQueueing || !draft.prompt.trim()}
-          className="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${isQueueing ? 'animate-spin' : ''}`} />
-          Regenerar foto
-        </button>
+        {role.canRegenerate ? (
+          <button
+            onClick={onRegenerate}
+            disabled={isProcessing || isQueueing || !draft.prompt.trim()}
+            className="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isQueueing ? 'animate-spin' : ''}`} />
+            Regenerar foto
+          </button>
+        ) : (
+          <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
+            Tu rol puede revisar y descargar resultados, pero no encolar regeneraciones.
+          </div>
+        )}
       </div>
     </div>
   );

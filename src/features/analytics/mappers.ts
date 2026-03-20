@@ -16,8 +16,10 @@ export const mapSummary = (data: any): AnalyticsSummary => {
     completedJobs: completed,
     failedJobs: failed,
     pendingJobs: data.pendingJobs || 0,
+    processingJobs: data.processingJobs || 0,
     successRate: (completed + failed) > 0 ? Math.round((completed / (completed + failed)) * 100) : 0,
     avgDurationSeconds: totalCompletedOutputs > 0 ? Math.round(totalDuration / totalCompletedOutputs) : 0,
+    totalCompletedOutputs: totalCompletedOutputs,
     totalCostUsd: data.totalCostUsd || 0,
     projectedMonthlyCostUsd: 0, // Will be calculated in the hook based on daily data
     updatedAt: data.updatedAt?.toDate() || new Date(),

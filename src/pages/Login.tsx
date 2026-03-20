@@ -1,95 +1,116 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db, googleProvider } from '../firebase';
-import { signInWithPopup } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { LogIn } from 'lucide-react';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
+import { auth, db } from '../firebase';
+import { syncUserClaims } from '../features/auth/firebase';
+import { User as AppUser } from '../../shared/src/types';
 
 export const Login: React.FC = () => {
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleGoogleLogin = async () => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setIsLoading(true);
     setError('');
+
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      // Check if user document exists
-      const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-      
-      if (!userSnap.exists()) {
-        // Create user document if it doesn't exist
-        // Default role is 'operador', but if it's the admin email, they get 'admin'
-        const isAdmin = user.email === 'claudiomatiasrg@gmail.com';
-        await setDoc(userRef, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || user.email?.split('@')[0] || 'User',
-          role: isAdmin ? 'admin' : 'operador',
-          active: true,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const user = credential.user;
+      const userSnapshot = await getDoc(doc(db, 'users', user.uid));
+
+      if (!userSnapshot.exists()) {
+        await signOut(auth);
+        throw new Error('Tu usuario no está habilitado en el sistema. Pide a un administrador que te dé acceso.');
       }
-      
+
+      const appUser = userSnapshot.data() as AppUser;
+      if (!appUser.active) {
+        await signOut(auth);
+        throw new Error('Tu usuario está desactivado. Pide a un administrador que revise tu acceso.');
+      }
+
+      await syncUserClaims(user.uid);
+      await user.getIdToken(true);
       navigate('/');
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Failed to login with Google');
+    } catch (submitError: any) {
+      console.error(submitError);
+      setError(submitError.message || 'No se pudo iniciar sesión.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-sm border border-gray-100">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Virtual Try-On
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Inicia sesión para continuar
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 overflow-hidden">
+        <div className="bg-slate-950 px-8 py-10 text-white">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em]">
+            <ShieldCheck className="w-4 h-4" />
+            Acceso interno
+          </div>
+          <h1 className="mt-5 text-3xl font-semibold">Tuto Catalog</h1>
+          <p className="mt-2 text-sm text-slate-300">
+            Inicia sesión con tu usuario interno para trabajar en generación, evaluación y archivo.
           </p>
         </div>
-        
-        <div className="mt-8 space-y-6">
-          {error && <div className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md">{error}</div>}
 
-          <div>
-            <button
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-3 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-            >
-              <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                <svg className="h-5 w-5" viewBox="0 0 24 24">
-                  <path
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    fill="#4285F4"
-                  />
-                  <path
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    fill="#34A853"
-                  />
-                  <path
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    fill="#FBBC05"
-                  />
-                  <path
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    fill="#EA4335"
-                  />
-                </svg>
-              </span>
-              {isLoading ? 'Iniciando sesión...' : 'Continuar con Google'}
-            </button>
-          </div>
-        </div>
+        <form onSubmit={handleSubmit} className="px-8 py-8 space-y-5">
+          {error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-slate-700">Correo</span>
+            <div className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4">
+              <Mail className="w-4 h-4 text-slate-400" />
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="w-full bg-transparent px-3 py-3 text-sm text-slate-900 outline-none"
+                placeholder="tu@empresa.com"
+                autoComplete="email"
+                required
+              />
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-slate-700">Contraseña</span>
+            <div className="flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4">
+              <LockKeyhole className="w-4 h-4 text-slate-400" />
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full bg-transparent px-3 py-3 text-sm text-slate-900 outline-none"
+                placeholder="Ingresa tu contraseña"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+          </label>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isLoading ? 'Validando acceso...' : 'Entrar al sistema'}
+          </button>
+
+          <p className="text-center text-xs text-slate-500">
+            El acceso se controla por Firebase Auth y roles internos sincronizados con custom claims.
+          </p>
+        </form>
       </div>
     </div>
   );

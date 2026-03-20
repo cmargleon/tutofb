@@ -3,6 +3,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Job, RegenerateJobRequest, RegenerateJobResponse } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
+import { getAppFirestore } from '../firebase/appFirestore';
 
 export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobResponse>>(async (request) => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
@@ -15,7 +16,7 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
     throw new HttpsError('invalid-argument', 'Debes indicar un trabajo para regenerar.');
   }
 
-  const db = admin.firestore();
+  const db = getAppFirestore();
   const jobRef = db.collection('jobs').doc(jobId);
   const snapshot = await jobRef.get();
 

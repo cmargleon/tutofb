@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { Model } from '../../../shared/src/types';
 import { extractLiveOutputPaths } from './deletePlans';
 import { recursiveDeleteDocuments } from '../utils/recursiveDelete';
+import { getAppFirestore } from '../firebase/appFirestore';
 
 export const onModelDelete = onDocumentDeleted('models/{modelId}', async (event) => {
   const snapshot = event.data;
@@ -12,7 +13,7 @@ export const onModelDelete = onDocumentDeleted('models/{modelId}', async (event)
 
   const model = snapshot.data() as Model;
   const modelId = event.params.modelId;
-  const db = admin.firestore();
+  const db = getAppFirestore();
   const bucket = admin.storage().bucket();
 
   const [batchesSnapshot, jobsSnapshot, outputsSnapshot] = await Promise.all([

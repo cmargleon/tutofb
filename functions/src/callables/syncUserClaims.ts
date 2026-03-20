@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { User } from '../../../shared/src/types';
 import { getRequestRole } from '../auth/roles';
+import { getAppFirestore } from '../firebase/appFirestore';
 
 interface SyncUserClaimsRequest {
   uid?: string;
@@ -9,7 +10,7 @@ interface SyncUserClaimsRequest {
 }
 
 const loadUser = async (uid: string): Promise<User | null> => {
-  const snapshot = await admin.firestore().collection('users').doc(uid).get();
+  const snapshot = await getAppFirestore().collection('users').doc(uid).get();
   if (!snapshot.exists) {
     return null;
   }
@@ -60,7 +61,7 @@ export const syncUserClaims = onCall<SyncUserClaimsRequest>(async (request) => {
   }
 
   if (callerIsAdmin && request.data?.role && request.data.role !== targetUser.role) {
-    await admin.firestore().collection('users').doc(targetUid).update({
+    await getAppFirestore().collection('users').doc(targetUid).update({
       role: request.data.role,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });

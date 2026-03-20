@@ -9,8 +9,9 @@ import {
   getJobStuckSweepLimit,
   getJobTimeoutMs,
 } from '../config/runtime';
+import { getAppFirestore } from '../firebase/appFirestore';
 
-const db = admin.firestore();
+const db = getAppFirestore();
 const bucket = admin.storage().bucket();
 
 const toMillis = (value: unknown): number | null => {

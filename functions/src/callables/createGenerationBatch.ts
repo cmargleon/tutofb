@@ -10,6 +10,7 @@ import {
 } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { getBatchMaxJobs, getJobMaxRetries } from '../config/runtime';
+import { getAppFirestore } from '../firebase/appFirestore';
 import {
   assertModelOwnershipAndPoses,
   buildJobDraft,
@@ -21,7 +22,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     await assertCallableRoles(request, ['admin', 'operador']);
     const validated = validateCreateGenerationBatchInput(request.data, request.auth!.uid, getBatchMaxJobs());
 
-    const db = admin.firestore();
+    const db = getAppFirestore();
     const clientRef = db.collection('clients').doc(validated.clientId);
     const modelRef = db.collection('models').doc(validated.modelId);
     const [clientSnapshot, modelSnapshot] = await Promise.all([clientRef.get(), modelRef.get()]);

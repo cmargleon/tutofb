@@ -1,5 +1,6 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
+import { getAppFirestore } from '../firebase/appFirestore';
 
 export const onJobStatusChange = onDocumentUpdated('jobs/{jobId}', async (event) => {
   const snapshot = event.data;
@@ -10,7 +11,7 @@ export const onJobStatusChange = onDocumentUpdated('jobs/{jobId}', async (event)
 
   if (before.status === after.status) return;
 
-  const db = admin.firestore();
+  const db = getAppFirestore();
   const batchRef = db.collection('batches').doc(after.batchId);
 
   // Update batch counters

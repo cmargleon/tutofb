@@ -1,6 +1,7 @@
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { recursiveDeleteDocuments } from '../utils/recursiveDelete';
+import { getAppFirestore } from '../firebase/appFirestore';
 
 export const onClientDelete = onDocumentDeleted('clients/{clientId}', async (event) => {
   const snapshot = event.data;
@@ -9,7 +10,7 @@ export const onClientDelete = onDocumentDeleted('clients/{clientId}', async (eve
   }
 
   const clientId = event.params.clientId;
-  const db = admin.firestore();
+  const db = getAppFirestore();
   const bucket = admin.storage().bucket();
 
   const [modelsSnapshot, batchesSnapshot, jobsSnapshot] = await Promise.all([

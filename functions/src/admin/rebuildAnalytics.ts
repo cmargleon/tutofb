@@ -3,9 +3,10 @@ import { onCall } from 'firebase-functions/v2/https';
 import { Job, JobOutput } from '../../../shared/src/types';
 import { buildAnalyticsSnapshot } from '../analytics/aggregation';
 import { assertCallableRoles } from '../auth/roles';
+import { getAppFirestore } from '../firebase/appFirestore';
 
 const deleteCollectionDocs = async (collectionName: string): Promise<void> => {
-  const db = admin.firestore();
+  const db = getAppFirestore();
   const snapshot = await db.collection(collectionName).get();
   const batchSize = 400;
 
@@ -21,7 +22,7 @@ const deleteCollectionDocs = async (collectionName: string): Promise<void> => {
 export const rebuildAnalytics = onCall(async (request) => {
   await assertCallableRoles(request, ['admin']);
 
-  const db = admin.firestore();
+  const db = getAppFirestore();
   const [jobsSnapshot, outputsSnapshot] = await Promise.all([
     db.collection('jobs').get(),
     db.collectionGroup('outputs').get(),

@@ -2,8 +2,9 @@ import * as admin from 'firebase-admin';
 import { onDocumentCreated, onDocumentDeleted, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { Job, JobOutput } from '../../../shared/src/types';
 import { getJobStateDelta } from '../analytics/aggregation';
+import { getAppFirestore } from '../firebase/appFirestore';
 
-const db = admin.firestore();
+const db = getAppFirestore();
 
 const updateDailyDoc = (
   batch: FirebaseFirestore.WriteBatch,

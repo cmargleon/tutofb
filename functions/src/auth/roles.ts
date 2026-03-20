@@ -1,9 +1,9 @@
-import * as admin from 'firebase-admin';
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import { Role, User } from '../../../shared/src/types';
+import { getAppFirestore } from '../firebase/appFirestore';
 
 const loadUserDoc = async (uid: string): Promise<User | null> => {
-  const snapshot = await admin.firestore().collection('users').doc(uid).get();
+  const snapshot = await getAppFirestore().collection('users').doc(uid).get();
   if (!snapshot.exists) {
     return null;
   }

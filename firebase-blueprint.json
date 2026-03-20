@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Internal user profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "operador", "revisor"] },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["uid", "email", "role", "active", "createdAt", "updatedAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "A client or brand.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" },
+        "batchCount": { "type": "number" },
+        "lastBatchCreatedAt": { "type": "timestamp" },
+        "createdByUid": { "type": "string" }
+      },
+      "required": ["name", "createdAt", "updatedAt", "batchCount", "createdByUid"]
+    },
+    "Model": {
+      "title": "Model",
+      "description": "A model associated with a client.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "clientNameSnapshot": { "type": "string" },
+        "name": { "type": "string" },
+        "poses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "storagePath": { "type": "string" },
+              "fileName": { "type": "string" },
+              "createdAt": { "type": "timestamp" }
+            },
+            "required": ["id", "storagePath", "fileName", "createdAt"]
+          }
+        },
+        "poseCount": { "type": "number" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" },
+        "createdByUid": { "type": "string" }
+      },
+      "required": ["clientId", "clientNameSnapshot", "name", "poses", "poseCount", "createdAt", "updatedAt", "createdByUid"]
+    },
+    "Batch": {
+      "title": "Batch",
+      "description": "A generation batch.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "clientNameSnapshot": { "type": "string" },
+        "modelId": { "type": "string" },
+        "modelNameSnapshot": { "type": "string" },
+        "poseIds": { "type": "array", "items": { "type": "string" } },
+        "garmentCount": { "type": "number" },
+        "totalJobs": { "type": "number" },
+        "pendingJobs": { "type": "number" },
+        "processingJobs": { "type": "number" },
+        "completedJobs": { "type": "number" },
+        "failedJobs": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "partial_failed", "failed"] },
+        "latestJobCreatedAt": { "type": "timestamp" },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" },
+        "createdByUid": { "type": "string" }
+      },
+      "required": ["clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "poseIds", "garmentCount", "totalJobs", "pendingJobs", "processingJobs", "completedJobs", "failedJobs", "status", "createdAt", "updatedAt", "createdByUid"]
+    },
+    "Job": {
+      "title": "Job",
+      "description": "A generation job for a pose and garment.",
+      "type": "object",
+      "properties": {
+        "batchId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientNameSnapshot": { "type": "string" },
+        "modelId": { "type": "string" },
+        "modelNameSnapshot": { "type": "string" },
+        "poseImageId": { "type": "string" },
+        "poseImagePath": { "type": "string" },
+        "garmentId": { "type": "string" },
+        "garmentName": { "type": "string" },
+        "garmentFilePath": { "type": "string" },
+        "garmentIsMultiAngle": { "type": "boolean" },
+        "aspectRatio": { "type": "string" },
+        "provider": { "type": "string", "enum": ["fal-seedream", "fal-banana-pro", "openai-gpt-image-1.5"] },
+        "promptBase": { "type": "string" },
+        "finalPrompt": { "type": "string" },
+        "backgroundConfig": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "failed"] },
+        "queuePriority": { "type": "number" },
+        "retryCount": { "type": "number" },
+        "startedAt": { "type": "timestamp" },
+        "completedAt": { "type": "timestamp" },
+        "currentOutputId": { "type": "string" },
+        "currentOutput": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "provider": { "type": "string" },
+            "prompt": { "type": "string" },
+            "resultImagePath": { "type": "string" },
+            "createdAt": { "type": "timestamp" }
+          }
+        },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" },
+        "createdByUid": { "type": "string" },
+        "lastError": { "type": "string" }
+      },
+      "required": ["batchId", "clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "poseImageId", "poseImagePath", "garmentId", "garmentName", "garmentFilePath", "garmentIsMultiAngle", "aspectRatio", "provider", "promptBase", "finalPrompt", "status", "queuePriority", "retryCount", "createdAt", "updatedAt", "createdByUid"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Internal users."
+    },
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/Client" },
+      "description": "Clients."
+    },
+    "/models/{modelId}": {
+      "schema": { "$ref": "#/entities/Model" },
+      "description": "Models."
+    },
+    "/batches/{batchId}": {
+      "schema": { "$ref": "#/entities/Batch" },
+      "description": "Batches."
+    },
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/Job" },
+      "description": "Jobs."
+    }
+  }
+}

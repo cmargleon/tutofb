@@ -1,0 +1,5 @@
+{
+  "name": "Firebase Test App",
+  "description": "A test application demonstrating Firebase Authentication and Firestore database integration.",
+  "requestFramePermissions": []
+}

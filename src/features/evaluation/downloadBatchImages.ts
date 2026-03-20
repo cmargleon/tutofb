@@ -1,8 +1,8 @@
-import JSZip from 'jszip';
 import FileSaver from 'file-saver';
 import { getBlob, getDownloadURL, ref } from 'firebase/storage';
 import { Batch, Job } from '../../../shared/src/types';
-import { storage } from '../../firebase';
+import { auth, storage } from '../../firebase';
+import firebaseConfig from '../../../firebase-applet-config.json';
 
 const { saveAs } = FileSaver;
 
@@ -19,6 +19,147 @@ const isRemoteUrl = (value: string): boolean => value.startsWith('http://') || v
 const getExtension = (value: string): string => {
   const match = value.split('?')[0].match(/\.([a-zA-Z0-9]+)$/);
   return match?.[1]?.toLowerCase() || 'png';
+};
+
+export const buildBatchZipFilename = (batch: Batch): string =>
+  [
+    normalizeFilename(batch.clientNameSnapshot || 'cliente'),
+    normalizeFilename(batch.modelNameSnapshot || 'modelo'),
+    normalizeFilename(batch.id || 'batch'),
+  ].join('_');
+
+const getBatchZipDownloadUrl = (): string => {
+  const projectId = firebaseConfig.projectId;
+  if (!projectId) {
+    throw new Error('No se encontró el projectId de Firebase para descargar el lote.');
+  }
+
+  if (import.meta.env?.VITE_USE_FIREBASE_EMULATORS === 'true') {
+    return `http://127.0.0.1:5001/${projectId}/us-central1/downloadBatchZip`;
+  }
+
+  return `https://us-central1-${projectId}.cloudfunctions.net/downloadBatchZip`;
+};
+
+const getJobImageDownloadUrl = (): string => {
+  const projectId = firebaseConfig.projectId;
+  if (!projectId) {
+    throw new Error('No se encontró el projectId de Firebase para descargar la imagen.');
+  }
+
+  if (import.meta.env?.VITE_USE_FIREBASE_EMULATORS === 'true') {
+    return `http://127.0.0.1:5001/${projectId}/us-central1/downloadJobImage`;
+  }
+
+  return `https://us-central1-${projectId}.cloudfunctions.net/downloadJobImage`;
+};
+
+const requestBatchZipBlob = async (batchId: string): Promise<Blob> => {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Debes iniciar sesión para descargar las imágenes.');
+  }
+
+  const idToken = await user.getIdToken();
+  let response: globalThis.Response;
+
+  try {
+    response = await fetch(getBatchZipDownloadUrl(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ batchId }),
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        'No se pudo conectar con la función de descarga. Si estás en localhost, reinicia o despliega Functions para aplicar el cambio de CORS.',
+      );
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type') || '';
+    let message = `No se pudo descargar el lote (${response.status}).`;
+
+    try {
+      if (contentType.includes('application/json')) {
+        const payload = (await response.json()) as { message?: string };
+        if (payload.message) {
+          message = payload.message;
+        }
+      } else {
+        const text = (await response.text()).trim();
+        if (text) {
+          message = text;
+        }
+      }
+    } catch {
+      // Si la respuesta no se puede parsear, conservamos el mensaje por defecto.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.blob();
+};
+
+const requestJobImageBlob = async (jobId: string): Promise<Blob> => {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Debes iniciar sesión para descargar las imágenes.');
+  }
+
+  const idToken = await user.getIdToken();
+  let response: globalThis.Response;
+
+  try {
+    response = await fetch(getJobImageDownloadUrl(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ jobId }),
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        'No se pudo conectar con la función de descarga. Si estás en localhost, reinicia o despliega Functions para aplicar el cambio de CORS.',
+      );
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type') || '';
+    let message = `No se pudo descargar la imagen (${response.status}).`;
+
+    try {
+      if (contentType.includes('application/json')) {
+        const payload = (await response.json()) as { message?: string };
+        if (payload.message) {
+          message = payload.message;
+        }
+      } else {
+        const text = (await response.text()).trim();
+        if (text) {
+          message = text;
+        }
+      }
+    } catch {
+      // Si la respuesta no se puede parsear, conservamos el mensaje por defecto.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.blob();
 };
 
 export const resolveStorageAssetUrl = async (storagePath: string): Promise<string> => {
@@ -59,11 +200,15 @@ export const buildJobImageFilename = (batch: Batch, job: Job, poseIndex: number)
 ].join('_');
 
 export const downloadSingleJobImage = async (batch: Batch, job: Job, poseIndex: number): Promise<void> => {
+  if (!job.id) {
+    throw new Error('No se encontró el identificador del trabajo a descargar.');
+  }
+
   if (!job.currentOutput?.resultImagePath) {
     throw new Error('Este trabajo todavía no tiene un resultado disponible.');
   }
 
-  const blob = await getStorageAssetBlob(job.currentOutput.resultImagePath);
+  const blob = await requestJobImageBlob(job.id);
   saveAs(blob, buildJobImageFilename(batch, job, poseIndex));
 };
 
@@ -73,23 +218,10 @@ export const downloadBatchImages = async (batch: Batch, jobs: Job[]) => {
     throw new Error('No hay imágenes completadas para descargar.');
   }
 
-  const zip = new JSZip();
-  const zipFolderName = [
-    normalizeFilename(batch.clientNameSnapshot || 'cliente'),
-    normalizeFilename(batch.modelNameSnapshot || 'modelo'),
-    normalizeFilename(batch.id || 'batch'),
-  ].join('_');
-  const folder = zip.folder(zipFolderName);
-
-  if (!folder) {
-    throw new Error('No se pudo preparar el ZIP del lote.');
+  if (!batch.id) {
+    throw new Error('No se encontró el identificador del lote a descargar.');
   }
 
-  for (const [index, job] of completedJobs.entries()) {
-    const blob = await getStorageAssetBlob(job.currentOutput!.resultImagePath);
-    folder.file(buildJobImageFilename(batch, job, index), blob);
-  }
-
-  const zipBlob = await zip.generateAsync({ type: 'blob' });
-  saveAs(zipBlob, `${zipFolderName}.zip`);
+  const zipBlob = await requestBatchZipBlob(batch.id);
+  saveAs(zipBlob, `${buildBatchZipFilename(batch)}.zip`);
 };

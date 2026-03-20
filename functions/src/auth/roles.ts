@@ -16,12 +16,15 @@ export const getRequestRole = async (request: CallableRequest<unknown>): Promise
     return null;
   }
 
-  const tokenRole = request.auth.token.role;
+  return getUserRole(request.auth.uid, request.auth.token.role);
+};
+
+export const getUserRole = async (uid: string, tokenRole?: unknown): Promise<Role | null> => {
   if (tokenRole === 'admin' || tokenRole === 'operador' || tokenRole === 'revisor') {
     return tokenRole;
   }
 
-  const user = await loadUserDoc(request.auth.uid);
+  const user = await loadUserDoc(uid);
   if (!user || !user.active) {
     return null;
   }
@@ -38,6 +41,23 @@ export const assertCallableRoles = async (
   }
 
   const role = await getRequestRole(request);
+  if (!role || !allowedRoles.includes(role)) {
+    throw new HttpsError('permission-denied', 'No tienes permisos para ejecutar esta acción.');
+  }
+
+  return role;
+};
+
+export const assertUserRoles = async (
+  uid: string | null | undefined,
+  tokenRole: unknown,
+  allowedRoles: Role[],
+): Promise<Role> => {
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Debes iniciar sesión para continuar.');
+  }
+
+  const role = await getUserRole(uid, tokenRole);
   if (!role || !allowedRoles.includes(role)) {
     throw new HttpsError('permission-denied', 'No tienes permisos para ejecutar esta acción.');
   }

@@ -10,6 +10,8 @@ export * from './callables/createGenerationBatch';
 export * from './callables/regenerateJob';
 export * from './callables/syncUserClaims';
 export * from './admin/rebuildAnalytics';
+export * from './http/downloadBatchZip';
+export * from './http/downloadJobImage';
 
 // Export triggers
 export * from './triggers/onJobStatusChange';

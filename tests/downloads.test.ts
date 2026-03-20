@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildJobImageFilename } from '../src/features/evaluation/downloadBatchImages';
+import { buildBatchZipFilename, buildJobImageFilename } from '../src/features/evaluation/downloadBatchImages';
 import { Batch, Job } from '../shared/src/types';
 
 const batch: Batch = {
@@ -107,4 +107,9 @@ const job: Job = {
 test('buildJobImageFilename genera nombres estables y saneados para descarga', () => {
   const filename = buildJobImageFilename(batch, job, 0);
   assert.equal(filename, 'cliente-n_modelo-a_blusa-rosa_pose-1_job-job-1.png');
+});
+
+test('buildBatchZipFilename genera un nombre estable para el ZIP del lote', () => {
+  const filename = buildBatchZipFilename(batch);
+  assert.equal(filename, 'cliente-n_modelo-a_batch-1');
 });

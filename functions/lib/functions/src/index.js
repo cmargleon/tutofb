@@ -45,6 +45,8 @@ __exportStar(require("./callables/createGenerationBatch"), exports);
 __exportStar(require("./callables/regenerateJob"), exports);
 __exportStar(require("./callables/syncUserClaims"), exports);
 __exportStar(require("./admin/rebuildAnalytics"), exports);
+__exportStar(require("./http/downloadBatchZip"), exports);
+__exportStar(require("./http/downloadJobImage"), exports);
 // Export triggers
 __exportStar(require("./triggers/onJobStatusChange"), exports);
 __exportStar(require("./triggers/onClientDelete"), exports);

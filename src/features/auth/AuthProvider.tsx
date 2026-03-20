@@ -14,6 +14,20 @@ const AuthContext = createContext<AuthContextType>({ user: null, appUser: null, 
 
 export const useAuth = () => useContext(AuthContext);
 
+export const useRole = () => {
+  const { appUser } = useAuth();
+  
+  return {
+    isAdmin: appUser?.role === 'admin',
+    isOperador: appUser?.role === 'operador',
+    isRevisor: appUser?.role === 'revisor',
+    canManageClients: appUser?.role === 'admin',
+    canManageModels: appUser?.role === 'admin',
+    canCreateBatches: appUser?.role === 'admin' || appUser?.role === 'operador',
+    canEvaluate: appUser?.role === 'admin' || appUser?.role === 'operador' || appUser?.role === 'revisor',
+  };
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);

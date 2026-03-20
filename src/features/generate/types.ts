@@ -1,4 +1,4 @@
-import { Provider } from '../../../shared/src/types';
+import { Provider, BackgroundConfig } from '../../../shared/src/types';
 
 export type SourceType = 'single' | 'folder-root' | 'subfolder';
 
@@ -25,4 +25,5 @@ export interface WizardState {
   provider: Provider;
   prompt: string;
   aspectRatio: string;
+  backgroundConfig: BackgroundConfig;
 }

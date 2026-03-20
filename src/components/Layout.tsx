@@ -16,16 +16,15 @@ export const Layout: React.FC = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin', 'operador', 'revisor'] },
-    { name: 'Clientes', path: '/clients', icon: Users, roles: ['admin', 'operador'] },
-    { name: 'Modelos', path: '/models', icon: UserSquare2, roles: ['admin', 'operador'] },
+    { name: 'Clientes', path: '/clients', icon: Users, roles: ['admin'] },
+    { name: 'Modelos', path: '/models', icon: UserSquare2, roles: ['admin'] },
     { name: 'Generar', path: '/generate', icon: Wand2, roles: ['admin', 'operador'] },
     { name: 'Evaluación', path: '/evaluacion', icon: Eye, roles: ['admin', 'operador', 'revisor'] },
     { name: 'Archivo', path: '/archivo', icon: Archive, roles: ['admin', 'operador', 'revisor'] },
     { name: 'Analíticas', path: '/analytics', icon: BarChart3, roles: ['admin', 'operador', 'revisor'] },
   ];
 
-  // Bypass role filtering for now
-  const filteredNav = navItems;
+  const filteredNav = navItems.filter(item => appUser?.role && item.roles.includes(appUser.role));
 
   return (
     <div className="flex h-screen bg-gray-50">

@@ -28,7 +28,8 @@ export const Wizard: React.FC = () => {
     garments: [],
     provider: 'fal-seedream',
     prompt: '',
-    aspectRatio: '3:4'
+    aspectRatio: '3:4',
+    backgroundConfig: { type: 'studio' }
   });
 
   const [clients, setClients] = useState<Client[]>([]);
@@ -110,7 +111,8 @@ export const Wizard: React.FC = () => {
         garments: uploadedGarments,
         provider: state.provider,
         promptBase: state.prompt,
-        aspectRatio: state.aspectRatio
+        aspectRatio: state.aspectRatio,
+        backgroundConfig: state.backgroundConfig
       });
 
       // 3. Navigate to evaluation
@@ -274,6 +276,33 @@ export const Wizard: React.FC = () => {
             <option value="1:1">1:1 (Cuadrado)</option>
           </select>
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Fondo</label>
+          <select
+            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            value={state.backgroundConfig.type}
+            onChange={(e) => setState(s => ({ ...s, backgroundConfig: { ...s.backgroundConfig, type: e.target.value as any } }))}
+          >
+            <option value="studio">Estudio (Fondo neutro)</option>
+            <option value="outdoor">Exterior (Calle, naturaleza)</option>
+            <option value="custom">Personalizado</option>
+            <option value="none">Sin fondo (Transparente/Blanco)</option>
+          </select>
+        </div>
+
+        {state.backgroundConfig.type === 'custom' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción del fondo</label>
+            <input
+              type="text"
+              className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="Ej: Calle de París, atardecer en la playa..."
+              value={state.backgroundConfig.description || ''}
+              onChange={(e) => setState(s => ({ ...s, backgroundConfig: { ...s.backgroundConfig, description: e.target.value } }))}
+            />
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Prompt Base (Opcional)</label>

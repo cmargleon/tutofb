@@ -1,6 +1,6 @@
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
-import { Provider } from '../../../shared/src/types';
+import { Provider, BackgroundConfig } from '../../../shared/src/types';
 
 export interface CreateGenerationBatchRequest {
   clientId: string;
@@ -15,6 +15,7 @@ export interface CreateGenerationBatchRequest {
   provider: Provider;
   promptBase: string;
   aspectRatio: string;
+  backgroundConfig: BackgroundConfig;
 }
 
 export interface CreateGenerationBatchResponse {

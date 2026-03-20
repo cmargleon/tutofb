@@ -69,12 +69,12 @@ service cloud.firestore {
     // ===============================================================
     match /clients/{clientId} {
       allow read: if isAuthenticated();
-      allow create: if canWriteData() && 
+      allow create: if isAdmin() && 
                     hasRequiredFields(['name', 'createdAt', 'updatedAt', 'batchCount', 'createdByUid']) &&
                     validStringLength('name', 1, 100) &&
                     request.resource.data.createdByUid == request.auth.uid &&
                     request.resource.data.batchCount == 0;
-      allow update: if canWriteData() && 
+      allow update: if isAdmin() && 
                     areImmutableFieldsUnchanged(['createdAt', 'createdByUid']);
       allow delete: if isAdmin();
     }
@@ -84,11 +84,11 @@ service cloud.firestore {
     // ===============================================================
     match /models/{modelId} {
       allow read: if isAuthenticated();
-      allow create: if canWriteData() && 
+      allow create: if isAdmin() && 
                     hasRequiredFields(['clientId', 'clientNameSnapshot', 'name', 'poses', 'poseCount', 'createdAt', 'updatedAt', 'createdByUid']) &&
                     validStringLength('name', 1, 100) &&
                     request.resource.data.createdByUid == request.auth.uid;
-      allow update: if canWriteData() && 
+      allow update: if isAdmin() && 
                     areImmutableFieldsUnchanged(['clientId', 'createdAt', 'createdByUid']);
       allow delete: if isAdmin();
     }
@@ -98,13 +98,8 @@ service cloud.firestore {
     // ===============================================================
     match /batches/{batchId} {
       allow read: if isAuthenticated();
-      // Batches should ideally be created by Cloud Functions to ensure consistency,
-      // but if created by client, we allow it for operators/admins.
-      allow create: if canWriteData() && 
-                    hasRequiredFields(['clientId', 'modelId', 'poseIds', 'garmentCount', 'status', 'createdAt', 'createdByUid']) &&
-                    request.resource.data.createdByUid == request.auth.uid;
-      allow update: if canWriteData() && 
-                    areImmutableFieldsUnchanged(['clientId', 'modelId', 'createdAt', 'createdByUid']);
+      allow create: if false; // Only Cloud Functions
+      allow update: if false; // Only Cloud Functions
       allow delete: if isAdmin();
     }
 
@@ -113,12 +108,8 @@ service cloud.firestore {
     // ===============================================================
     match /jobs/{jobId} {
       allow read: if isAuthenticated();
-      // Jobs are created by Cloud Functions (createGenerationBatch)
-      // But we allow updates for regeneration (status = pending, queuePriority = high)
-      allow create: if false; // Only Cloud Functions should create jobs
-      allow update: if isAuthenticated() && // Revisor can also regenerate
-                    areImmutableFieldsUnchanged(['batchId', 'clientId', 'modelId', 'createdAt', 'createdByUid']) &&
-                    request.resource.data.status in ['pending', 'processing', 'completed', 'failed'];
+      allow create: if false; // Only Cloud Functions
+      allow update: if false; // Only Cloud Functions
       allow delete: if isAdmin();
       
       match /outputs/{outputId} {

@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Batch, Job, Provider } from '../../../shared/src/types';
-import { StatusBadge, ImageThumb } from '../ui';
+import { StatusBadge } from '../ui';
 import { Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { saveAs } from 'file-saver';
+import { ref, getDownloadURL } from 'firebase/storage';
+import { storage } from '../../firebase';
 
 interface Props {
   batch: Batch;
@@ -26,12 +28,32 @@ export const JobEvaluationCard: React.FC<Props> = ({
   onRegenerate
 }) => {
   const [downloading, setDownloading] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchUrl = async () => {
+      if (job.currentOutput?.resultImagePath) {
+        try {
+          const imageRef = ref(storage, job.currentOutput.resultImagePath);
+          const url = await getDownloadURL(imageRef);
+          if (isMounted) setImageUrl(url);
+        } catch (error) {
+          console.error('Error fetching image URL:', error);
+        }
+      } else {
+        if (isMounted) setImageUrl(null);
+      }
+    };
+    fetchUrl();
+    return () => { isMounted = false; };
+  }, [job.currentOutput?.resultImagePath]);
 
   const handleDownload = async () => {
-    if (!job.currentOutput?.resultImagePath) return;
+    if (!imageUrl) return;
     setDownloading(true);
     try {
-      const response = await fetch(job.currentOutput.resultImagePath);
+      const response = await fetch(imageUrl);
       if (!response.ok) throw new Error('Network response was not ok');
       const blob = await response.blob();
       const cleanClientName = batch.clientNameSnapshot.replace(/[^a-zA-Z0-9]/g, '_');
@@ -48,7 +70,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
   };
 
   const isProcessing = job.status === 'pending' || job.status === 'processing';
-  const hasOutput = !!job.currentOutput?.resultImagePath;
+  const hasOutput = !!imageUrl;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
@@ -65,7 +87,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
       <div className="relative aspect-[3/4] bg-gray-100 flex-shrink-0">
         {hasOutput ? (
           <img
-            src={job.currentOutput!.resultImagePath}
+            src={imageUrl!}
             alt={`Pose ${index + 1}`}
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"

@@ -1,6 +1,8 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Batch, Job } from '../../../shared/src/types';
+import { ref, getDownloadURL } from 'firebase/storage';
+import { storage } from '../../firebase';
 
 export const downloadBatchImages = async (batch: Batch, jobs: Job[]) => {
   const completedJobs = jobs.filter(job => job.status === 'completed' && job.currentOutput?.resultImagePath);
@@ -19,7 +21,9 @@ export const downloadBatchImages = async (batch: Batch, jobs: Job[]) => {
 
   const fetchPromises = completedJobs.map(async (job, index) => {
     try {
-      const response = await fetch(job.currentOutput!.resultImagePath);
+      const imageRef = ref(storage, job.currentOutput!.resultImagePath);
+      const url = await getDownloadURL(imageRef);
+      const response = await fetch(url);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const blob = await response.blob();
       

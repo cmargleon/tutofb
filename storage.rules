@@ -6,29 +6,43 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' || 
+        (request.auth.token.email == "claudiomatiasrg@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isOperador() {
+      return isAuthenticated() && request.auth.token.role == 'operador';
+    }
+
+    function canWriteData() {
+      return isAdmin() || isOperador();
+    }
+
     match /models/{clientId}/{modelId}/poses/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
-      allow delete: if isAuthenticated();
+      allow write: if isAdmin() && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
     }
 
     match /garments/{batchId}/{garmentId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
-      allow delete: if isAuthenticated();
+      allow write: if canWriteData() && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
     }
 
-    match /garments/drafts/{uid}/{fileName} {
-      allow read: if isAuthenticated() && request.auth.uid == uid;
+    match /garments/drafts/{uid}/{draftBatchId}/{fileName} {
+      allow read: if isAuthenticated();
       allow write: if isAuthenticated() && request.auth.uid == uid && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
       allow delete: if isAuthenticated() && request.auth.uid == uid;
     }
 
     match /generated/{clientId}/{batchId}/{jobId}/{fileName} {
       allow read: if isAuthenticated();
-      // Cloud Functions will write these, but we can allow authenticated users if needed for manual uploads
-      allow write: if false; 
-      allow delete: if isAuthenticated();
+      allow write: if false; // Only Cloud Functions
+      allow delete: if isAdmin();
     }
   }
 }

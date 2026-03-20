@@ -72,6 +72,13 @@ export interface JobOutput {
   createdAt: any;
 }
 
+export interface BackgroundConfig {
+  type: 'studio' | 'outdoor' | 'custom' | 'none';
+  description?: string;
+  color?: string;
+  lighting?: string;
+}
+
 export interface Job {
   id?: string;
   batchId: string;
@@ -89,7 +96,7 @@ export interface Job {
   provider: Provider;
   promptBase: string;
   finalPrompt: string;
-  backgroundConfig: string;
+  backgroundConfig: BackgroundConfig;
   status: JobStatus;
   queuePriority: number;
   retryCount: number;

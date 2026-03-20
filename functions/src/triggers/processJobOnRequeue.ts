@@ -1,38 +1,19 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import * as admin from 'firebase-admin';
+import { processJob } from '../workers/jobWorker';
+import { Job } from '../../../shared/src/types';
 
-export const processJobOnRequeue = onDocumentUpdated('jobs/{jobId}', async (event) => {
+export const processJobOnRequeue = onDocumentUpdated({
+  document: 'jobs/{jobId}',
+  timeoutSeconds: 540,
+  memory: '512MiB'
+}, async (event) => {
   const snapshot = event.data;
   if (!snapshot) return;
 
-  const before = snapshot.before.data();
-  const after = snapshot.after.data();
+  const before = snapshot.before.data() as Job;
+  const after = snapshot.after.data() as Job;
 
   if (before.status !== 'pending' && after.status === 'pending') {
-    // Re-process job here
-    const db = admin.firestore();
-    const jobRef = db.collection('jobs').doc(event.params.jobId);
-
-    await jobRef.update({
-      status: 'processing',
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Simulate completion
-    setTimeout(async () => {
-      await jobRef.update({
-        status: 'completed',
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        currentOutput: {
-          id: 'output-2',
-          provider: after.provider,
-          prompt: after.finalPrompt,
-          resultImagePath: 'generated/dummy2.png',
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        }
-      });
-    }, 5000);
+    await processJob(event.params.jobId, after);
   }
 });

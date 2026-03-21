@@ -42,19 +42,7 @@ export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs, showFloatingGar
         onGoTo={goToSlide}
       />
 
-      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900 flex items-center">
-            <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm mr-3">
-              Prenda {activeSlideIndex + 1}
-            </span>
-            {activeSlide.garmentName}
-          </h2>
-          <span className="text-sm text-gray-500 font-medium">
-            {activeSlide.jobs.length} poses
-          </span>
-        </div>
-
+      <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-6 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {activeSlide.jobs.map((job, index) => (
             <JobEvaluationCard

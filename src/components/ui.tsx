@@ -42,6 +42,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ title, description, icon
 interface ImageThumbProps {
   storagePath: string;
   alt?: string;
+  fit?: 'cover' | 'contain';
+  imgClassName?: string;
 }
 
 export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
@@ -69,7 +71,12 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-export const ImageThumb: React.FC<ImageThumbProps> = ({ storagePath, alt = 'Thumbnail' }) => {
+export const ImageThumb: React.FC<ImageThumbProps> = ({
+  storagePath,
+  alt = 'Thumbnail',
+  fit = 'cover',
+  imgClassName = '',
+}) => {
   const { url, loading } = useStorageAssetUrl(storagePath);
 
   if (loading) {
@@ -84,7 +91,7 @@ export const ImageThumb: React.FC<ImageThumbProps> = ({ storagePath, alt = 'Thum
     <img 
       src={url} 
       alt={alt} 
-      className="w-full h-full object-cover rounded-md border border-gray-200"
+      className={`h-full w-full rounded-md border border-gray-200 ${fit === 'contain' ? 'object-contain' : 'object-cover'} ${imgClassName}`.trim()}
       referrerPolicy="no-referrer"
     />
   );

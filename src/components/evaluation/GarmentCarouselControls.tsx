@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { GarmentSlide } from '../../features/evaluation/jobSlides';
-import { ImageThumb } from '../ui';
+import { ActiveGarmentThumbnail } from './ActiveGarmentThumbnail';
 
 interface Props {
   slides: GarmentSlide[];
@@ -18,45 +18,49 @@ export const GarmentCarouselControls: React.FC<Props> = ({
   onPrev,
   onGoTo
 }) => {
-  if (slides.length <= 1) return null;
+  const activeSlide = slides[activeIndex] || slides[0];
+
+  if (!activeSlide) return null;
 
   return (
-    <div className="flex flex-col items-center space-y-4 mb-8">
-      <div className="flex items-center space-x-4">
+    <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-7 shadow-sm">
+      <div className="grid items-center gap-6 lg:grid-cols-[1fr_auto_1fr]">
         <button
           onClick={onPrev}
           disabled={activeIndex === 0}
-          className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-base font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 lg:justify-self-start"
         >
-          <ChevronLeft className="w-6 h-6 text-gray-600" />
+          <span className="inline-flex items-center gap-2">
+            <ChevronLeft className="h-5 w-5" />
+            Prenda anterior
+          </span>
         </button>
-        
-        <div className="text-sm font-medium text-gray-700">
-          Prenda {activeIndex + 1} de {slides.length} · {slides[activeIndex].jobs.length} poses
-        </div>
+
+        <button
+          type="button"
+          onClick={() => onGoTo(activeIndex)}
+          className="justify-self-center"
+          title={activeSlide.garmentName}
+        >
+          <ActiveGarmentThumbnail
+            currentIndex={activeIndex}
+            totalItems={slides.length}
+            garmentName={activeSlide.garmentName}
+            poseCount={activeSlide.jobs.length}
+            storagePath={activeSlide.garmentFilePath}
+          />
+        </button>
 
         <button
           onClick={onNext}
           disabled={activeIndex === slides.length - 1}
-          className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-base font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 lg:justify-self-end"
         >
-          <ChevronRight className="w-6 h-6 text-gray-600" />
+          <span className="inline-flex items-center gap-2">
+            Siguiente prenda
+            <ChevronRight className="h-5 w-5" />
+          </span>
         </button>
-      </div>
-
-      <div className="flex space-x-2 overflow-x-auto max-w-full pb-2 px-4">
-        {slides.map((slide, idx) => (
-          <button
-            key={slide.garmentId}
-            onClick={() => onGoTo(idx)}
-            className={`relative w-16 h-16 rounded-md overflow-hidden flex-shrink-0 border-2 transition-all ${
-              idx === activeIndex ? 'border-indigo-600 ring-2 ring-indigo-200' : 'border-transparent hover:border-gray-300'
-            }`}
-            title={slide.garmentName}
-          >
-            <ImageThumb storagePath={slide.garmentFilePath} alt={slide.garmentName} />
-          </button>
-        ))}
       </div>
     </div>
   );

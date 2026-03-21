@@ -125,6 +125,41 @@ export const Wizard: React.FC = () => {
     (state.step === 2 && state.garments.length > 0) ||
     state.step === 3;
 
+  const isStepComplete = (stepId: number) => {
+    switch (stepId) {
+      case 1:
+        return Boolean(state.selectedClientId && state.selectedModelId && state.selectedPoseIds.length > 0);
+      case 2:
+        return state.garments.length > 0;
+      case 3:
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  const canSelectStep = (targetStep: number) => {
+    if (targetStep <= state.step) {
+      return true;
+    }
+
+    for (let stepId = 1; stepId < targetStep; stepId += 1) {
+      if (!isStepComplete(stepId)) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleStepSelect = (targetStep: number) => {
+    if (!canSelectStep(targetStep)) {
+      return;
+    }
+
+    setState((current) => ({ ...current, step: targetStep }));
+  };
+
   const handleFiles = async (files: File[]) => {
     try {
       const nextGarments = await handleGarmentFiles(files, state.garments);
@@ -410,16 +445,6 @@ export const Wizard: React.FC = () => {
         </label>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Reglas de agrupado</h2>
-        <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-2">
-          <div className="rounded-2xl bg-slate-50 p-4">Archivo individual: una prenda.</div>
-          <div className="rounded-2xl bg-slate-50 p-4">Carpeta raíz con imágenes sueltas: una prenda multiángulo.</div>
-          <div className="rounded-2xl bg-slate-50 p-4">Carpeta con subcarpetas: cada subcarpeta es una prenda.</div>
-          <div className="rounded-2xl bg-slate-50 p-4">Si hay subcarpetas, imágenes en raíz se vuelven prendas individuales.</div>
-        </div>
-      </div>
-
       {state.garments.length === 0 ? (
         <EmptyState
           title="Todavía no hay prendas en el lote"
@@ -594,7 +619,12 @@ export const Wizard: React.FC = () => {
       )}
 
       <div className="rounded-[32px] border border-slate-200 bg-slate-50 p-6 shadow-sm">
-        <WizardStepper steps={STEPS} currentStep={state.step} />
+        <WizardStepper
+          steps={STEPS}
+          currentStep={state.step}
+          onStepSelect={handleStepSelect}
+          canSelectStep={canSelectStep}
+        />
 
         {state.step === 1 && renderClientModelStep()}
         {state.step === 2 && renderGarmentsStep()}

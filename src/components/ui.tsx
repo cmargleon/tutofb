@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { getImageUrl } from '../features/models/firebase';
+import React from 'react';
+import { useStorageAssetUrl } from '../features/storage/useStorageAssetUrl';
 
 interface PageHeaderProps {
   title: string;
@@ -70,24 +70,7 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 };
 
 export const ImageThumb: React.FC<ImageThumbProps> = ({ storagePath, alt = 'Thumbnail' }) => {
-  const [url, setUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchUrl = async () => {
-      try {
-        const downloadUrl = await getImageUrl(storagePath);
-        if (isMounted) setUrl(downloadUrl);
-      } catch (err) {
-        console.error('Error loading image', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-    fetchUrl();
-    return () => { isMounted = false; };
-  }, [storagePath]);
+  const { url, loading } = useStorageAssetUrl(storagePath);
 
   if (loading) {
     return <div className="w-full h-full bg-gray-100 animate-pulse rounded-md" />;

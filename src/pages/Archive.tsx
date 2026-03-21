@@ -193,7 +193,7 @@ export const Archive: React.FC = () => {
               </div>
 
               {/* Jobs Carousel */}
-              <JobBatchCarousel batch={batch} jobs={jobs} />
+              <JobBatchCarousel batch={batch} jobs={jobs} showFloatingGarment />
 
               {totalItems > 0 && (
                 <div className="text-xs text-gray-500">

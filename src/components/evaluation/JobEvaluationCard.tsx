@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Batch, Job, Provider } from '../../../shared/src/types';
 import { StatusBadge } from '../ui';
 import { Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
-import {
-  downloadSingleJobImage,
-  resolveStorageAssetUrl,
-} from '../../features/evaluation/downloadBatchImages';
+import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
+import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
 
 interface Props {
   batch: Batch;
@@ -31,25 +29,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
 }) => {
   const role = useRole();
   const [downloading, setDownloading] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchUrl = async () => {
-      if (job.currentOutput?.resultImagePath) {
-        try {
-          const url = await resolveStorageAssetUrl(job.currentOutput.resultImagePath);
-          if (isMounted) setImageUrl(url);
-        } catch (error) {
-          console.error('Error fetching image URL:', error);
-        }
-      } else {
-        if (isMounted) setImageUrl(null);
-      }
-    };
-    fetchUrl();
-    return () => { isMounted = false; };
-  }, [job.currentOutput?.resultImagePath]);
+  const { url: imageUrl } = useStorageAssetUrl(job.currentOutput?.resultImagePath || null);
 
   const handleDownload = async () => {
     if (!job.currentOutput?.resultImagePath) return;

@@ -4,13 +4,15 @@ import { useGarmentCarousel } from '../../features/evaluation/useGarmentCarousel
 import { GarmentCarouselControls } from './GarmentCarouselControls';
 import { JobEvaluationCard } from './JobEvaluationCard';
 import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRegenerationFirebase';
+import { FloatingGarmentPreview } from './FloatingGarmentPreview';
 
 interface Props {
   batch: Batch;
   jobs: Job[];
+  showFloatingGarment?: boolean;
 }
 
-export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs }) => {
+export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs, showFloatingGarment = false }) => {
   const { slides, activeSlideIndex, activeSlide, nextSlide, prevSlide, goToSlide } = useGarmentCarousel(jobs);
   const {
     localDrafts,
@@ -69,6 +71,13 @@ export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs }) => {
           ))}
         </div>
       </div>
+
+      {showFloatingGarment ? (
+        <FloatingGarmentPreview
+          garmentName={activeSlide.garmentName}
+          storagePath={activeSlide.garmentFilePath}
+        />
+      ) : null}
     </div>
   );
 };

@@ -1,7 +1,6 @@
 import FileSaver from 'file-saver';
-import { getBlob, getDownloadURL, ref } from 'firebase/storage';
 import { Batch, Job } from '../../../shared/src/types';
-import { auth, storage } from '../../firebase';
+import { auth } from '../../firebase';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 const { saveAs } = FileSaver;
@@ -13,8 +12,6 @@ const normalizeFilename = (value: string): string =>
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'archivo';
-
-const isRemoteUrl = (value: string): boolean => value.startsWith('http://') || value.startsWith('https://');
 
 const getExtension = (value: string): string => {
   const match = value.split('?')[0].match(/\.([a-zA-Z0-9]+)$/);
@@ -160,35 +157,6 @@ const requestJobImageBlob = async (jobId: string): Promise<Blob> => {
   }
 
   return response.blob();
-};
-
-export const resolveStorageAssetUrl = async (storagePath: string): Promise<string> => {
-  if (isRemoteUrl(storagePath)) {
-    return storagePath;
-  }
-
-  return getDownloadURL(ref(storage, storagePath));
-};
-
-export const getStorageAssetBlob = async (storagePath: string): Promise<Blob> => {
-  if (isRemoteUrl(storagePath)) {
-    const response = await fetch(storagePath);
-    if (!response.ok) {
-      throw new Error(`No se pudo descargar el archivo (${response.status}).`);
-    }
-    return response.blob();
-  }
-
-  try {
-    return await getBlob(ref(storage, storagePath));
-  } catch {
-    const signedUrl = await getDownloadURL(ref(storage, storagePath));
-    const response = await fetch(signedUrl);
-    if (!response.ok) {
-      throw new Error(`No se pudo descargar el archivo (${response.status}).`);
-    }
-    return response.blob();
-  }
 };
 
 export const buildJobImageFilename = (batch: Batch, job: Job, poseIndex: number): string => [

@@ -140,7 +140,7 @@ export const Evaluacion: React.FC = () => {
           icon={<Clock className="w-6 h-6" />}
         />
       ) : (
-        <JobBatchCarousel batch={batch} jobs={jobs} />
+        <JobBatchCarousel batch={batch} jobs={jobs} showFloatingGarment />
       )}
     </div>
   );

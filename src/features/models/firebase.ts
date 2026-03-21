@@ -4,6 +4,18 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { Model, Pose, Client } from '../../../shared/src/types';
 import { v4 as uuidv4 } from 'uuid';
 
+interface UpdateModelInput {
+  name: string;
+  clientId: string;
+  filesToAdd?: File[];
+  poseIdsToRemove?: string[];
+}
+
+const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+
+const getModelStorageRootPath = (modelId: string, clientId: string, existingRootPath?: string) =>
+  existingRootPath || `models/${clientId}/${modelId}`;
+
 export const subscribeToModels = (callback: (models: Model[]) => void, onError: (error: Error) => void) => {
   const q = query(collection(db, 'models'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snapshot) => {
@@ -31,6 +43,7 @@ export const createModel = async (clientId: string, name: string, files: File[])
   const newModelRef = doc(collection(db, 'models'));
   const modelId = newModelRef.id;
   console.log('Generated model ID:', modelId);
+  const storageRootPath = getModelStorageRootPath(modelId, clientId);
 
   const poses: Pose[] = [];
   const uploadedRefs: any[] = [];
@@ -41,8 +54,8 @@ export const createModel = async (clientId: string, name: string, files: File[])
       const file = files[i];
       console.log(`Uploading file ${i + 1}/${files.length}: ${file.name}`);
       const poseId = uuidv4();
-      const fileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const storagePath = `models/${clientId}/${modelId}/poses/${poseId}-${fileName}`;
+      const fileName = sanitizeFileName(file.name);
+      const storagePath = `${storageRootPath}/poses/${poseId}-${fileName}`;
       const storageRef = ref(storage, storagePath);
       
       // Add a timeout to uploadBytes to prevent hanging
@@ -69,8 +82,11 @@ export const createModel = async (clientId: string, name: string, files: File[])
       clientId,
       clientNameSnapshot: clientName,
       name: name.trim(),
+      storageRootPath,
       poses,
       poseCount: poses.length,
+      coverPoseId: poses[0]?.id || null,
+      coverPosePath: poses[0]?.storagePath || null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       createdByUid: auth.currentUser.uid
@@ -93,31 +109,85 @@ export const createModel = async (clientId: string, name: string, files: File[])
   }
 };
 
-export const updateModel = async (id: string, name: string, clientId: string) => {
+export const updateModel = async (id: string, input: UpdateModelInput) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
-  
-  // Get client name if client changed
-  let clientNameSnapshot = undefined;
-  if (clientId) {
-    const clientRef = doc(db, 'clients', clientId);
-    const clientSnap = await getDoc(clientRef);
-    if (clientSnap.exists()) {
-      clientNameSnapshot = (clientSnap.data() as Client).name;
-    }
+  const trimmedName = input.name.trim();
+  if (!trimmedName || !input.clientId) {
+    throw new Error('Completa el nombre y el cliente del modelo.');
   }
 
   const modelRef = doc(db, 'models', id);
-  const updates: any = {
-    name: name.trim(),
-    updatedAt: serverTimestamp()
-  };
+  const [modelSnap, clientSnap] = await Promise.all([
+    getDoc(modelRef),
+    getDoc(doc(db, 'clients', input.clientId)),
+  ]);
 
-  if (clientId && clientNameSnapshot) {
-    updates.clientId = clientId;
-    updates.clientNameSnapshot = clientNameSnapshot;
+  if (!modelSnap.exists()) {
+    throw new Error('Modelo no encontrado');
   }
 
-  await updateDoc(modelRef, updates);
+  if (!clientSnap.exists()) {
+    throw new Error('Cliente no encontrado');
+  }
+
+  const model = modelSnap.data() as Model;
+  const clientNameSnapshot = (clientSnap.data() as Client).name;
+  const storageRootPath = getModelStorageRootPath(id, model.clientId, model.storageRootPath);
+  const filesToAdd = input.filesToAdd || [];
+  const poseIdsToRemove = new Set(input.poseIdsToRemove || []);
+  const poses = Array.isArray(model.poses) ? model.poses : [];
+  const keptPoses = poses.filter((pose) => !poseIdsToRemove.has(pose.id));
+
+  if (keptPoses.length === 0 && filesToAdd.length === 0) {
+    throw new Error('Debes conservar al menos una pose o agregar una nueva.');
+  }
+
+  const uploadedRefs: Array<{ storageRef: ReturnType<typeof ref>; previewStoragePath?: string | null }> = [];
+  const addedPoses: Pose[] = [];
+
+  try {
+    for (const file of filesToAdd) {
+      const poseId = uuidv4();
+      const fileName = sanitizeFileName(file.name);
+      const storagePath = `${storageRootPath}/poses/${poseId}-${fileName}`;
+      const storageRef = ref(storage, storagePath);
+      await uploadBytes(storageRef, file);
+      uploadedRefs.push({ storageRef });
+      addedPoses.push({
+        id: poseId,
+        storagePath,
+        fileName,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    const nextPoses = [...keptPoses, ...addedPoses];
+    const coverPose = nextPoses[0] || null;
+
+    await updateDoc(modelRef, {
+      clientId: input.clientId,
+      clientNameSnapshot,
+      name: trimmedName,
+      storageRootPath,
+      poses: nextPoses,
+      poseCount: nextPoses.length,
+      coverPoseId: coverPose?.id || null,
+      coverPosePath: coverPose?.storagePath || null,
+      updatedAt: serverTimestamp(),
+    });
+
+    const posesToDelete = poses.filter((pose) => poseIdsToRemove.has(pose.id));
+    await Promise.allSettled(
+      posesToDelete.flatMap((pose) =>
+        [pose.storagePath, pose.previewStoragePath]
+          .filter((value): value is string => Boolean(value))
+          .map((storagePath) => deleteObject(ref(storage, storagePath))),
+      ),
+    );
+  } catch (error) {
+    await Promise.allSettled(uploadedRefs.map(({ storageRef }) => deleteObject(storageRef)));
+    throw error;
+  }
 };
 
 export const deleteModel = async (id: string) => {

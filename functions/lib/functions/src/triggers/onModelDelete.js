@@ -57,7 +57,7 @@ exports.onModelDelete = (0, firestore_1.onDocumentDeleted)('models/{modelId}', a
     await (0, recursiveDelete_1.recursiveDeleteDocuments)(jobsSnapshot.docs);
     await (0, recursiveDelete_1.recursiveDeleteDocuments)(batchesSnapshot.docs);
     await Promise.allSettled([
-        bucket.deleteFiles({ prefix: `models/${model.clientId}/${modelId}/`, force: true }),
+        bucket.deleteFiles({ prefix: `${model.storageRootPath || `models/${model.clientId}/${modelId}`}/`, force: true }),
         ...outputPaths.map((storagePath) => bucket.file(storagePath).delete({ ignoreNotFound: true })),
     ]);
 });

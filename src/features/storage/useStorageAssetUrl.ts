@@ -7,6 +7,7 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
 
   useEffect(() => {
     let isMounted = true;
+    let revokeObjectUrl: (() => void) | undefined;
 
     if (!storagePath) {
       setUrl(null);
@@ -19,9 +20,12 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
     setLoading(true);
 
     void resolveStorageAssetUrl(storagePath)
-      .then((nextUrl) => {
+      .then((resolvedAsset) => {
         if (isMounted) {
-          setUrl(nextUrl || null);
+          revokeObjectUrl = resolvedAsset.revoke;
+          setUrl(resolvedAsset.url || null);
+        } else {
+          resolvedAsset.revoke?.();
         }
       })
       .catch((error) => {
@@ -38,6 +42,7 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
 
     return () => {
       isMounted = false;
+      revokeObjectUrl?.();
     };
   }, [storagePath]);
 

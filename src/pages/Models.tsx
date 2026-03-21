@@ -3,7 +3,7 @@ import { PageHeader, LoadingBlock, EmptyState, ImageThumb } from '../components/
 import { subscribeToModels, createModel, updateModel, deleteModel } from '../features/models/firebase';
 import { subscribeToClients } from '../features/clients/firebase';
 import { Model, Client } from '../../shared/src/types';
-import { UserSquare2, Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Image as ImageIcon, Upload } from 'lucide-react';
+import { UserSquare2, Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Image as ImageIcon, Upload, X } from 'lucide-react';
 
 const formatDate = (timestamp: any) => {
   if (!timestamp) return '';
@@ -15,6 +15,40 @@ const formatDate = (timestamp: any) => {
     hour: '2-digit',
     minute: '2-digit'
   }).format(date);
+};
+
+const LocalFileThumb: React.FC<{ file: File; onRemove: () => void }> = ({ file, onRemove }) => {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextPreviewUrl = URL.createObjectURL(file);
+    setPreviewUrl(nextPreviewUrl);
+
+    return () => {
+      URL.revokeObjectURL(nextPreviewUrl);
+    };
+  }, [file]);
+
+  return (
+    <div className="aspect-[3/4] relative group rounded-md overflow-hidden border border-gray-200 bg-gray-50">
+      {previewUrl ? (
+        <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
+      ) : (
+        <div className="h-full w-full animate-pulse bg-gray-100" />
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute top-2 right-2 inline-flex items-center justify-center rounded-full bg-white/95 p-1.5 text-red-600 shadow-sm hover:bg-white"
+        aria-label={`Quitar ${file.name}`}
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-2">
+        <p className="truncate text-[11px] text-white">{file.name}</p>
+      </div>
+    </div>
+  );
 };
 
 export const Models: React.FC = () => {
@@ -34,6 +68,9 @@ export const Models: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editClientId, setEditClientId] = useState('');
+  const [editFilesToAdd, setEditFilesToAdd] = useState<File[]>([]);
+  const [editPoseIdsToRemove, setEditPoseIdsToRemove] = useState<string[]>([]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,17 +147,64 @@ export const Models: React.FC = () => {
     setEditingId(model.id!);
     setEditName(model.name);
     setEditClientId(model.clientId);
+    setEditFilesToAdd([]);
+    setEditPoseIdsToRemove([]);
   };
 
-  const handleSaveEdit = async (id: string) => {
-    const trimmedName = editName.trim();
-    if (!trimmedName || !editClientId) return;
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditName('');
+    setEditClientId('');
+    setEditFilesToAdd([]);
+    setEditPoseIdsToRemove([]);
+    setIsSavingEdit(false);
+  };
 
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+
+    setEditFilesToAdd((current) => [...current, ...Array.from(e.target.files || [])]);
+    e.target.value = '';
+  };
+
+  const handleRemovePendingEditFile = (indexToRemove: number) => {
+    setEditFilesToAdd((current) => current.filter((_, index) => index !== indexToRemove));
+  };
+
+  const handleTogglePoseRemoval = (poseId: string) => {
+    setEditPoseIdsToRemove((current) =>
+      current.includes(poseId)
+        ? current.filter((currentPoseId) => currentPoseId !== poseId)
+        : [...current, poseId],
+    );
+  };
+
+  const handleSaveEdit = async (model: Model) => {
+    const id = model.id;
+    const trimmedName = editName.trim();
+    if (!id || !trimmedName || !editClientId) return;
+
+    const remainingPoseCount =
+      (model.poses?.filter((pose) => !editPoseIdsToRemove.includes(pose.id)).length || 0) + editFilesToAdd.length;
+
+    if (remainingPoseCount === 0) {
+      alert('Debes dejar al menos una pose o agregar una nueva foto antes de guardar.');
+      return;
+    }
+
+    setIsSavingEdit(true);
     try {
-      await updateModel(id, trimmedName, editClientId);
-      setEditingId(null);
+      await updateModel(id, {
+        name: trimmedName,
+        clientId: editClientId,
+        filesToAdd: editFilesToAdd,
+        poseIdsToRemove: editPoseIdsToRemove,
+      });
+      handleCancelEdit();
     } catch (err: any) {
       alert(err.message || 'Error al actualizar modelo');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -321,16 +405,62 @@ export const Models: React.FC = () => {
                                   ))}
                                 </select>
                               </div>
+                              <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div>
+                                    <h4 className="text-sm font-medium text-gray-900">Agregar fotos</h4>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                      Las nuevas poses se subirán cuando guardes el modelo.
+                                    </p>
+                                  </div>
+                                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                                    <Upload className="w-3.5 h-3.5" />
+                                    Subir fotos
+                                    <input
+                                      type="file"
+                                      multiple
+                                      accept="image/*"
+                                      className="sr-only"
+                                      onChange={handleEditFileChange}
+                                      disabled={isSavingEdit}
+                                    />
+                                  </label>
+                                </div>
+                                {editFilesToAdd.length > 0 && (
+                                  <div className="mt-4">
+                                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                      Nuevas fotos ({editFilesToAdd.length})
+                                    </p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                      {editFilesToAdd.map((file, index) => (
+                                        <LocalFileThumb
+                                          key={`${file.name}-${file.lastModified}-${index}`}
+                                          file={file}
+                                          onRemove={() => handleRemovePendingEditFile(index)}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              {editPoseIdsToRemove.length > 0 && (
+                                <p className="text-xs text-amber-600">
+                                  {editPoseIdsToRemove.length} pose{editPoseIdsToRemove.length === 1 ? '' : 's'} marcada
+                                  {editPoseIdsToRemove.length === 1 ? '' : 's'} para eliminar al guardar.
+                                </p>
+                              )}
                               <div className="flex items-center gap-3">
                                 <button
-                                  onClick={() => handleSaveEdit(model.id!)}
-                                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                                  onClick={() => handleSaveEdit(model)}
+                                  disabled={isSavingEdit}
+                                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
                                 >
-                                  Guardar
+                                  {isSavingEdit ? 'Guardando...' : 'Guardar'}
                                 </button>
                                 <button
-                                  onClick={() => setEditingId(null)}
-                                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50"
+                                  onClick={handleCancelEdit}
+                                  disabled={isSavingEdit}
+                                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                                 >
                                   Cancelar
                                 </button>
@@ -361,9 +491,33 @@ export const Models: React.FC = () => {
                               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Poses ({model.poses.length})</h4>
                               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                                 {model.poses.map(pose => (
-                                  <div key={pose.id} className="aspect-[3/4] relative group">
+                                  <div
+                                    key={pose.id}
+                                    className={`aspect-[3/4] relative group rounded-md overflow-hidden bg-white ${editingId === model.id && editPoseIdsToRemove.includes(pose.id) ? 'opacity-40' : ''}`}
+                                  >
                                     <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} />
-                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded-md" />
+                                    <div className="absolute inset-0 rounded-md bg-black/0 transition-colors group-hover:bg-black/10" />
+                                    {editingId === model.id && (
+                                      <>
+                                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2 py-2 rounded-b-md">
+                                          <p className="truncate text-[11px] text-white">{pose.fileName}</p>
+                                          {editPoseIdsToRemove.includes(pose.id) && (
+                                            <p className="mt-1 text-[11px] font-medium text-amber-200">Se eliminará al guardar</p>
+                                          )}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTogglePoseRemoval(pose.id)}
+                                          className={`absolute top-2 right-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium shadow-sm ${
+                                            editPoseIdsToRemove.includes(pose.id)
+                                              ? 'bg-white text-gray-700'
+                                              : 'bg-red-600 text-white hover:bg-red-700'
+                                          }`}
+                                        >
+                                          {editPoseIdsToRemove.includes(pose.id) ? 'Deshacer' : 'Quitar'}
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 ))}
                               </div>

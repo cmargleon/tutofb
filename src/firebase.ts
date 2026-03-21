@@ -5,9 +5,11 @@ import { connectStorageEmulator, getStorage } from 'firebase/storage';
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
-export const db = firebaseConfig.firestoreDatabaseId
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+const appConfig = firebaseConfig as typeof firebaseConfig & { firestoreDatabaseId?: string };
+
+const app = initializeApp(appConfig);
+export const db = appConfig.firestoreDatabaseId
+  ? getFirestore(app, appConfig.firestoreDatabaseId)
   : getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);

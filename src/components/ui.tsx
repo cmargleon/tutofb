@@ -91,7 +91,7 @@ export const ImageThumb: React.FC<ImageThumbProps> = ({
     <img 
       src={url} 
       alt={alt} 
-      className={`h-full w-full rounded-md border border-gray-200 ${fit === 'contain' ? 'object-contain' : 'object-cover'} ${imgClassName}`.trim()}
+      className={`h-full w-full rounded-md border border-gray-200 bg-white ${fit === 'contain' ? 'object-contain' : 'object-cover'} ${imgClassName}`.trim()}
       referrerPolicy="no-referrer"
     />
   );

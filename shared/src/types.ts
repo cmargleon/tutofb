@@ -113,6 +113,7 @@ export interface Model {
   clientId: string;
   clientNameSnapshot: string;
   name: string;
+  storageRootPath?: string;
   poses: Pose[];
   poseCount: number;
   coverPoseId?: string | null;

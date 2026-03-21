@@ -30,7 +30,7 @@ export const onModelDelete = onDocumentDeleted('models/{modelId}', async (event)
   await recursiveDeleteDocuments(batchesSnapshot.docs);
 
   await Promise.allSettled([
-    bucket.deleteFiles({ prefix: `models/${model.clientId}/${modelId}/`, force: true }),
+    bucket.deleteFiles({ prefix: `${model.storageRootPath || `models/${model.clientId}/${modelId}`}/`, force: true }),
     ...outputPaths.map((storagePath) => bucket.file(storagePath).delete({ ignoreNotFound: true })),
   ]);
 });

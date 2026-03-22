@@ -52,5 +52,13 @@ service firebase.storage {
       allow write: if false;
       allow delete: if isAdmin();
     }
+
+    // Newer model-generation flows store assets under
+    // model_generations/{clientId}/{modelId}/{stage}/{sessionId}/{fileName}.
+    match /model_generations/{clientId}/{modelId}/{stage}/{sessionId}/{fileName} {
+      allow read: if isActiveUser();
+      allow write: if false;
+      allow delete: if isAdmin();
+    }
   }
 }

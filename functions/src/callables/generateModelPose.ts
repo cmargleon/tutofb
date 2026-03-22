@@ -22,6 +22,26 @@ import {
   TextToImageResult,
 } from '../providers/textToImage';
 
+const OPENAI_RATE_LIMIT_MAX_RETRIES = 5;
+const DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS = 15_000;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isOpenAIRateLimitError = (error: unknown): boolean => {
+  const message = String((error as { message?: string } | null)?.message ?? error ?? '');
+  return message.includes('rate_limit_exceeded') || /rate limit/i.test(message);
+};
+
+const getOpenAIRetryDelayMs = (error: unknown): number => {
+  const message = String((error as { message?: string } | null)?.message ?? error ?? '');
+  const match = message.match(/try again in\s+(\d+(?:\.\d+)?)s/i);
+  if (!match) return DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS;
+
+  const seconds = Number(match[1]);
+  if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS;
+  return Math.ceil(seconds * 1000);
+};
+
 const runProvider = (
   provider: ModelPhotoProvider,
   prompt: string,
@@ -94,8 +114,7 @@ export const generateModelPose = onCall(
         }))[0]
       : null;
 
-    const results = await Promise.allSettled(
-      Array.from({ length: count }, async (_, index) => {
+    const generatePhoto = async (index: number) => {
         const result = await runProvider(provider, prompt, aspectRatio, falKey, openaiKey, referenceImageUrl);
 
         const ext = result.contentType.includes('jpeg') || result.contentType.includes('jpg') ? 'jpg' : 'png';
@@ -109,8 +128,41 @@ export const generateModelPose = onCall(
         });
 
         return { index, storagePath, contentType: result.contentType };
-      }),
-    );
+    };
+
+    const generateAndStorePhoto = async (index: number) => {
+      let attempt = 0;
+
+      while (true) {
+        try {
+          return await generatePhoto(index);
+        } catch (error) {
+          if (provider !== 'openai-dalle' || !isOpenAIRateLimitError(error) || attempt >= OPENAI_RATE_LIMIT_MAX_RETRIES) {
+            throw error;
+          }
+
+          await sleep(getOpenAIRetryDelayMs(error));
+          attempt += 1;
+        }
+      }
+    };
+
+    const results: PromiseSettledResult<{ index: number; storagePath: string; contentType: string }>[] = [];
+    if (provider === 'openai-dalle') {
+      for (let index = 0; index < count; index += 1) {
+        try {
+          results.push({ status: 'fulfilled', value: await generateAndStorePhoto(index) });
+        } catch (reason) {
+          results.push({ status: 'rejected', reason });
+        }
+      }
+    } else {
+      results.push(
+        ...(await Promise.allSettled(
+          Array.from({ length: count }, (_, index) => generateAndStorePhoto(index)),
+        )),
+      );
+    }
 
     const photos = results
       .filter(

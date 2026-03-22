@@ -39,6 +39,23 @@ const admin = __importStar(require("firebase-admin"));
 const runtime_1 = require("../config/runtime");
 const providerCosts_1 = require("../../../shared/src/constants/providerCosts");
 const textToImage_1 = require("../providers/textToImage");
+const OPENAI_RATE_LIMIT_MAX_RETRIES = 5;
+const DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS = 15_000;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const isOpenAIRateLimitError = (error) => {
+    const message = String(error?.message ?? error ?? '');
+    return message.includes('rate_limit_exceeded') || /rate limit/i.test(message);
+};
+const getOpenAIRetryDelayMs = (error) => {
+    const message = String(error?.message ?? error ?? '');
+    const match = message.match(/try again in\s+(\d+(?:\.\d+)?)s/i);
+    if (!match)
+        return DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS;
+    const seconds = Number(match[1]);
+    if (!Number.isFinite(seconds) || seconds <= 0)
+        return DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS;
+    return Math.ceil(seconds * 1000);
+};
 const runProvider = (provider, prompt, aspectRatio, falKey, openaiKey, referenceImageUrl) => {
     if (referenceImageUrl) {
         switch (provider) {
@@ -86,7 +103,7 @@ exports.generateModelPose = (0, https_1.onCall)({ secrets: [runtime_1.FAL_KEY, r
             version: 'v4',
         }))[0]
         : null;
-    const results = await Promise.allSettled(Array.from({ length: count }, async (_, index) => {
+    const generatePhoto = async (index) => {
         const result = await runProvider(provider, prompt, aspectRatio, falKey, openaiKey, referenceImageUrl);
         const ext = result.contentType.includes('jpeg') || result.contentType.includes('jpg') ? 'jpg' : 'png';
         const storageBasePath = modelId
@@ -98,7 +115,36 @@ exports.generateModelPose = (0, https_1.onCall)({ secrets: [runtime_1.FAL_KEY, r
             resumable: false,
         });
         return { index, storagePath, contentType: result.contentType };
-    }));
+    };
+    const generateAndStorePhoto = async (index) => {
+        let attempt = 0;
+        while (true) {
+            try {
+                return await generatePhoto(index);
+            }
+            catch (error) {
+                if (provider !== 'openai-dalle' || !isOpenAIRateLimitError(error) || attempt >= OPENAI_RATE_LIMIT_MAX_RETRIES) {
+                    throw error;
+                }
+                await sleep(getOpenAIRetryDelayMs(error));
+                attempt += 1;
+            }
+        }
+    };
+    const results = [];
+    if (provider === 'openai-dalle') {
+        for (let index = 0; index < count; index += 1) {
+            try {
+                results.push({ status: 'fulfilled', value: await generateAndStorePhoto(index) });
+            }
+            catch (reason) {
+                results.push({ status: 'rejected', reason });
+            }
+        }
+    }
+    else {
+        results.push(...(await Promise.allSettled(Array.from({ length: count }, (_, index) => generateAndStorePhoto(index)))));
+    }
     const photos = results
         .filter((r) => r.status === 'fulfilled')
         .map((r) => r.value);

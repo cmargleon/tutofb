@@ -7,465 +7,37 @@ import { subscribeToClients } from '../features/clients/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { Model, Client, ModelPhotoProvider, AspectRatio } from '../../shared/src/types';
 import { isActiveCatalogEntity, isArchivedCatalogEntity } from '../../shared/src/domain';
-import { UserSquare2, Plus, Edit2, Trash2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Image as ImageIcon, Upload, X, Wand2, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UserSquare2, Plus, Edit2, Trash2, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Image as ImageIcon, Upload, Wand2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { useStorageAssetUrl } from '../features/storage/useStorageAssetUrl';
-import { HoverZoomImage } from '../components/evaluation/HoverZoomImage';
+
+import { CreateTab, GeneratedPhotoState } from '../features/models/types';
+import {
+  IDENTITY_CANDIDATE_COUNT,
+  MODEL_POSE_RECIPES,
+  MODEL_POSE_GROUPS,
+  DEFAULT_POSE_SELECTION_IDS,
+  AI_WIZARD_STEPS,
+  SEX_OPTIONS,
+  AGE_OPTIONS,
+  SKIN_OPTIONS,
+  HAIR_COLOR_OPTIONS,
+  HAIR_LENGTH_OPTIONS,
+  BUILD_OPTIONS,
+  BACKGROUND_OPTIONS,
+  TOP_OPTIONS,
+  BOTTOM_OPTIONS,
+  FOOTWEAR_OPTIONS,
+  ASPECT_OPTIONS,
+  PROVIDER_OPTIONS,
+} from '../features/models/constants';
+import { buildIdentityPrompt, buildPosePrompt } from '../features/models/prompts';
+import { SelectField } from '../components/models/SelectField';
+import { LocalFileThumb } from '../components/models/LocalFileThumb';
+import { CandidatePhotoCard } from '../components/models/CandidatePhotoCard';
+import { GeneratedPoseCard } from '../components/models/GeneratedPoseCard';
 
 const INPUT_BASE =
   'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400';
-
-// ─── AI Generation types ──────────────────────────────────────────────────────
-
-type CreateTab = 'upload' | 'generate';
-type GeneratedPhotoSource = 'candidate' | 'pose';
-type PoseRecipe = {
-  id: string;
-  label: string;
-  group: string;
-  shotType: string;
-  usesReferenceImage?: boolean;
-};
-type PoseGroupOption = {
-  id: string;
-  label: string;
-  poseIds: string[];
-};
-
-interface GeneratedPhotoState {
-  storagePath: string;
-  contentType: string;
-  rejected: boolean;
-  label?: string;
-  source: GeneratedPhotoSource;
-  loading?: boolean;
-  error?: boolean;
-}
-
-const IDENTITY_CANDIDATE_COUNT = 4;
-const MODEL_POSE_RECIPES: PoseRecipe[] = [
-  {
-    id: 'full-front',
-    label: 'Frente completa',
-    group: 'Cuerpo completo',
-    shotType: 'full body, standing upright, facing camera directly',
-    usesReferenceImage: true,
-  },
-  {
-    id: 'full-front-diagonal',
-    label: 'Diagonal de frente',
-    group: 'Cuerpo completo',
-    shotType: 'full body, standing, diagonal front angle, body slightly turned, looking at camera',
-  },
-  {
-    id: 'full-three-quarter',
-    label: '3/4 frente',
-    group: 'Cuerpo completo',
-    shotType: 'full body, standing, three-quarter angle, slight body turn',
-  },
-  {
-    id: 'full-profile-left',
-    label: 'Perfil lateral',
-    group: 'Cuerpo completo',
-    shotType: 'full body, side profile, facing left',
-  },
-  {
-    id: 'full-walking',
-    label: 'Caminando',
-    group: 'Cuerpo completo',
-    shotType: 'full body, walking pose, slight movement',
-  },
-  {
-    id: 'full-contrapposto',
-    label: 'Contrapposto',
-    group: 'Cuerpo completo',
-    shotType: 'full body, relaxed contrapposto pose, weight on one leg, facing camera',
-  },
-  {
-    id: 'back-full',
-    label: 'Espalda completa',
-    group: 'Cuerpo completo',
-    shotType: 'full body, back view, facing away from camera',
-  },
-  {
-    id: 'back-diagonal',
-    label: 'Espalda diagonal',
-    group: 'Cuerpo completo',
-    shotType: 'full body, three-quarter back view, body turned away, head slightly toward camera',
-  },
-  {
-    id: 'back-three-quarter',
-    label: '3/4 espalda',
-    group: 'Cuerpo completo',
-    shotType: 'full body, rear three-quarter angle, shoulders turned away from camera',
-  },
-  {
-    id: 'half-front',
-    label: 'Medio cuerpo frente',
-    group: 'Medio cuerpo',
-    shotType: 'half body, waist up, facing camera',
-  },
-  {
-    id: 'half-front-diagonal',
-    label: 'Medio cuerpo diagonal',
-    group: 'Medio cuerpo',
-    shotType: 'half body, waist up, diagonal front angle',
-  },
-  {
-    id: 'half-three-quarter',
-    label: 'Medio cuerpo 3/4',
-    group: 'Medio cuerpo',
-    shotType: 'half body, waist up, three-quarter angle',
-  },
-  {
-    id: 'half-back',
-    label: 'Medio cuerpo espalda',
-    group: 'Medio cuerpo',
-    shotType: 'half body, back view, waist up, facing away',
-  },
-  {
-    id: 'portrait-front',
-    label: 'Retrato frente',
-    group: 'Retrato',
-    shotType: 'portrait, face and shoulders, facing camera',
-  },
-  {
-    id: 'portrait-three-quarter',
-    label: 'Retrato 3/4',
-    group: 'Retrato',
-    shotType: 'portrait, bust shot, slight angle',
-  },
-];
-const MODEL_POSE_RECIPES_BY_ID = new Map(MODEL_POSE_RECIPES.map((recipe) => [recipe.id, recipe]));
-const MODEL_POSE_GROUPS = Array.from(
-  MODEL_POSE_RECIPES.reduce((groups, recipe) => {
-    const existing = groups.get(recipe.group) ?? [];
-    existing.push(recipe);
-    groups.set(recipe.group, existing);
-    return groups;
-  }, new Map<string, PoseRecipe[]>()),
-).map(([group, options]) => ({ group, options }));
-const toPoseGroupId = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-const MODEL_POSE_GROUP_OPTIONS: PoseGroupOption[] = MODEL_POSE_GROUPS.map(({ group, options }) => ({
-  id: toPoseGroupId(group),
-  label: group,
-  poseIds: options.map((pose) => pose.id),
-}));
-const DEFAULT_POSE_SELECTION_IDS: string[] = [];
-
-const AI_WIZARD_STEPS = [
-  { id: 1, name: 'Configurar' },
-  { id: 2, name: 'Candidatos' },
-  { id: 3, name: 'Poses' },
-];
-
-const SEX_OPTIONS = [
-  { value: 'female', label: 'Femenino' },
-  { value: 'male', label: 'Masculino' },
-  { value: 'non-binary', label: 'No binario' },
-];
-const AGE_OPTIONS = [
-  { value: 'baby, 0-12 months old', label: 'Bebé (0–12 meses)' },
-  { value: 'toddler, 1-3 years old', label: 'Bebé caminador (1–3 años)' },
-  { value: 'child, 4-7 years old', label: 'Niño/a (4–7 años)' },
-  { value: 'child, 8-12 years old', label: 'Niño/a (8–12 años)' },
-  { value: 'teen, 13-17 years old', label: 'Adolescente (13–17 años)' },
-  { value: '18-25', label: 'Adulto/a 18–25' },
-  { value: '25-35', label: 'Adulto/a 25–35' },
-  { value: '35-45', label: 'Adulto/a 35–45' },
-  { value: '45-55', label: 'Adulto/a 45–55' },
-  { value: '55-65', label: 'Adulto/a 55–65' },
-  { value: '65+', label: 'Adulto/a 65+' },
-];
-const SKIN_OPTIONS = [
-  { value: 'very fair', label: 'Muy claro' },
-  { value: 'fair', label: 'Claro' },
-  { value: 'medium', label: 'Medio' },
-  { value: 'olive', label: 'Oliva' },
-  { value: 'dark', label: 'Oscuro' },
-  { value: 'very dark', label: 'Muy oscuro' },
-];
-const HAIR_COLOR_OPTIONS = [
-  { value: 'blonde', label: 'Rubio' },
-  { value: 'brunette', label: 'Castaño' },
-  { value: 'black', label: 'Negro' },
-  { value: 'red', label: 'Pelirrojo' },
-  { value: 'gray', label: 'Gris' },
-  { value: 'white', label: 'Blanco' },
-];
-const HAIR_LENGTH_OPTIONS = [
-  { value: 'short', label: 'Corto' },
-  { value: 'medium-length', label: 'Medio' },
-  { value: 'long', label: 'Largo' },
-];
-const BUILD_OPTIONS = [
-  { value: 'slim', label: 'Delgado/a' },
-  { value: 'athletic', label: 'Atlético/a' },
-  { value: 'average', label: 'Normal' },
-  { value: 'curvy', label: 'Curvilíneo/a' },
-];
-const BACKGROUND_OPTIONS = [
-  { value: 'pure white seamless backdrop, no shadows', label: 'Blanco puro' },
-  { value: 'light gray seamless paper backdrop', label: 'Gris claro' },
-  { value: 'medium gray seamless studio backdrop', label: 'Gris medio' },
-  { value: 'warm beige seamless backdrop', label: 'Beige cálido' },
-  { value: 'cool sand-toned seamless backdrop', label: 'Arena fría' },
-  { value: 'soft off-white seamless backdrop', label: 'Blanco roto' },
-  { value: 'matte black seamless backdrop', label: 'Negro mate' },
-  { value: 'very light dusty rose seamless backdrop', label: 'Rosa pálido' },
-  { value: 'soft sage green seamless backdrop', label: 'Verde salvia' },
-  { value: 'pale powder blue seamless backdrop', label: 'Azul pálido' },
-  { value: 'subtle warm gradient from off-white to light beige', label: 'Degradado beige' },
-  { value: 'subtle cool gradient from white to light gray', label: 'Degradado gris' },
-  { value: 'smooth matte concrete texture, very minimal', label: 'Cemento suave' },
-  { value: 'clean white minimalist studio floor and wall corner', label: 'Estudio con piso' },
-];
-const TOP_OPTIONS = [
-  { value: '', label: 'Sin top' },
-  { value: 'plain white t-shirt', label: 'Playera blanca' },
-  { value: 'plain black t-shirt', label: 'Playera negra' },
-  { value: 'plain white tank top', label: 'Musculosa blanca' },
-  { value: 'plain black tank top', label: 'Musculosa negra' },
-  { value: 'plain white long-sleeve shirt', label: 'Manga larga blanca' },
-  { value: 'plain black long-sleeve shirt', label: 'Manga larga negra' },
-];
-const BOTTOM_OPTIONS = [
-  { value: '', label: 'Sin parte baja' },
-  { value: 'plain white shorts', label: 'Shorts blancos' },
-  { value: 'plain black shorts', label: 'Shorts negros' },
-  { value: 'plain white pants', label: 'Pantalón blanco' },
-  { value: 'plain black pants', label: 'Pantalón negro' },
-  { value: 'plain white skirt', label: 'Falda blanca' },
-  { value: 'plain black skirt', label: 'Falda negra' },
-];
-const FOOTWEAR_OPTIONS = [
-  { value: '', label: 'Sin calzado' },
-  { value: 'plain white sneakers', label: 'Zapatillas blancas' },
-  { value: 'plain black sneakers', label: 'Zapatillas negras' },
-];
-const ASPECT_OPTIONS: { value: AspectRatio; label: string }[] = [
-  { value: '3:4', label: '3:4 (retrato)' },
-  { value: '9:16', label: '9:16 (vertical)' },
-  { value: '2:3', label: '2:3' },
-  { value: '1:1', label: '1:1 (cuadrado)' },
-];
-const PROVIDER_OPTIONS: { value: ModelPhotoProvider; label: string; hint: string }[] = [
-  { value: 'fal-seedream-v4.5', label: 'Seedream v4.5 (fal.ai)',   hint: 'ByteDance mejorado · ~$0.04/foto' },
-  { value: 'fal-banana-pro',    label: 'Nano Banana Pro (fal.ai)', hint: 'Gemini 3 Pro · ~$0.04/foto' },
-  { value: 'openai-dalle',      label: 'OpenAI gpt-image-1.5',     hint: 'Alta fidelidad · ~$0.04/foto' },
-];
-
-const buildIdentityPrompt = (params: {
-  sex: string; age: string; skin: string;
-  hairColor: string; hairLength: string; build: string;
-  background: string; bokeh: number;
-  top: string; bottom: string; footwear: string;
-}): string => {
-  const isDescriptiveAge = params.age.includes(',');
-  const ageText = isDescriptiveAge
-    ? params.age
-    : params.age === '65+' ? 'over 65 years old' : `${params.age} years old`;
-
-  const clothingParts = [params.top, params.bottom, params.footwear].filter(Boolean);
-  const clothingText = clothingParts.length > 0
-    ? `Wearing ${clothingParts.join(', ')}.`
-    : 'Minimal plain clothing.';
-
-  const bokehText = params.bokeh === 0
-    ? 'Sharp, in-focus background.'
-    : params.bokeh <= 30
-    ? `Subtle bokeh blur on background (${params.bokeh}% intensity), subject sharp.`
-    : params.bokeh <= 60
-    ? `Moderate bokeh blur on background (${params.bokeh}% intensity), subject in sharp focus.`
-    : `Strong bokeh blur on background (${params.bokeh}% intensity), subject in crisp sharp focus, shallow depth of field.`;
-
-  return [
-    `Professional fashion catalog photo.`,
-    `A ${ageText} ${params.sex} with ${params.skin} skin tone,`,
-    `${params.hairLength} ${params.hairColor} hair, ${params.build} build.`,
-    clothingText,
-    `Clothing is plain, solid color, no patterns or prints, easy to digitally replace.`,
-    `${MODEL_POSE_RECIPES[0].shotType}.`,
-    `${params.background}.`,
-    bokehText,
-    `Photorealistic, professional catalog lighting, no text or watermarks.`,
-  ].join(' ');
-};
-
-const buildPosePrompt = (basePrompt: string, shotType: string): string =>
-  [
-    'Use the reference image as the exact same model identity.',
-    'Preserve the same face, hair, skin tone, body proportions, age, and overall appearance.',
-    'Change only the pose and camera angle while keeping the same plain replaceable clothing and studio style.',
-    basePrompt,
-    `Update the pose to: ${shotType}.`,
-  ].join(' ');
-
-const SelectField: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = ({
-  className = '',
-  children,
-  ...props
-}) => (
-  <div className="relative">
-    <select
-      {...props}
-      className={`${INPUT_BASE} appearance-none pr-10 ${className}`.trim()}
-    >
-      {children}
-    </select>
-    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-  </div>
-);
-
-const CandidatePhotoCard: React.FC<{
-  storagePath: string;
-  index: number;
-  isRegenerating: boolean;
-  isSelected: boolean;
-  disabled?: boolean;
-  onSelect: () => void;
-  onRegenerate: () => void;
-}> = ({ storagePath, index, isRegenerating, isSelected, disabled = false, onSelect, onRegenerate }) => {
-  const { url, loading } = useStorageAssetUrl(storagePath);
-
-  return (
-    <div className={`relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-100' : 'border-gray-200'}`}>
-      <div className="aspect-[3/4] bg-gray-100 relative overflow-hidden">
-        {isRegenerating ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/90">
-            <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
-            <p className="text-xs text-gray-500">Regenerando...</p>
-          </div>
-        ) : loading ? (
-          <div className="absolute inset-0 animate-pulse bg-gray-200" />
-        ) : url ? (
-          <HoverZoomImage src={url} alt={`Generada ${index + 1}`} containerClassName="absolute inset-0" imageClassName="h-full w-full object-cover" />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <AlertCircle className="w-6 h-6 text-red-400" />
-          </div>
-        )}
-        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
-          Candidato {index + 1}
-        </span>
-        {isSelected && !isRegenerating && (
-          <span className="absolute right-2 top-2 rounded-full bg-emerald-500/90 p-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-          </span>
-        )}
-      </div>
-      <div className="flex gap-1 p-2">
-        <button
-          type="button"
-          onClick={onSelect}
-          disabled={disabled}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-            isSelected
-              ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-              : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-          }`}
-        >
-          {isSelected ? 'Modelo base elegido' : 'Elegir este modelo'}
-        </button>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          disabled={disabled || isRegenerating}
-          className="rounded-lg bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100 transition disabled:opacity-50"
-          title="Regenerar esta foto"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const GeneratedPoseCard: React.FC<{
-  storagePath: string;
-  label: string;
-  hint?: string;
-  rejected: boolean;
-  isRegenerating: boolean;
-  isLoading?: boolean;
-  disabled?: boolean;
-  onReject: () => void;
-  onAccept: () => void;
-  onRegenerate?: () => void;
-}> = ({ storagePath, label, hint, rejected, isRegenerating, isLoading = false, disabled = false, onReject, onAccept, onRegenerate }) => {
-  const { url, loading: urlLoading } = useStorageAssetUrl(storagePath);
-
-  return (
-    <div className={`relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all ${rejected ? 'opacity-40 grayscale' : 'border-gray-200'}`}>
-      <div className="aspect-[3/4] bg-gray-100 relative overflow-hidden" title={hint}>
-        {(isRegenerating || isLoading) ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/90">
-            <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
-            <p className="text-xs text-gray-500">{isLoading ? 'Generando...' : 'Regenerando...'}</p>
-          </div>
-        ) : urlLoading ? (
-          <div className="absolute inset-0 animate-pulse bg-gray-200" />
-        ) : url ? (
-          <HoverZoomImage src={url} alt={label} containerClassName="absolute inset-0" imageClassName="h-full w-full object-cover" />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <AlertCircle className="w-6 h-6 text-red-400" />
-          </div>
-        )}
-        <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
-          {label}
-        </span>
-        {!rejected && !isRegenerating && (
-          <span className="absolute right-2 top-2 rounded-full bg-emerald-500/90 p-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-          </span>
-        )}
-      </div>
-      <div className="flex gap-1 p-2">
-        {rejected ? (
-          <button
-            type="button"
-            onClick={onAccept}
-            disabled={disabled}
-            className="flex-1 rounded-lg bg-emerald-50 px-2 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50"
-          >
-            Incluir
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onReject}
-            disabled={disabled}
-            className="flex-1 rounded-lg bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
-          >
-            Quitar
-          </button>
-        )}
-        {onRegenerate ? (
-          <button
-            type="button"
-            onClick={onRegenerate}
-            disabled={disabled || isRegenerating}
-            className="rounded-lg bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100 transition disabled:opacity-50"
-            title="Regenerar esta pose"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <div className="rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] font-medium text-gray-400">
-            Pose base
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 const formatDate = (timestamp: any) => {
   if (!timestamp) return '';
@@ -479,40 +51,6 @@ const formatDate = (timestamp: any) => {
   }).format(date);
 };
 
-const LocalFileThumb: React.FC<{ file: File; onRemove: () => void }> = ({ file, onRemove }) => {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const nextPreviewUrl = URL.createObjectURL(file);
-    setPreviewUrl(nextPreviewUrl);
-
-    return () => {
-      URL.revokeObjectURL(nextPreviewUrl);
-    };
-  }, [file]);
-
-  return (
-    <div className="aspect-[3/4] relative group rounded-md overflow-hidden border border-gray-200 bg-gray-50">
-      {previewUrl ? (
-        <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
-      ) : (
-        <div className="h-full w-full animate-pulse bg-gray-100" />
-      )}
-      <button
-        type="button"
-        onClick={onRemove}
-        className="absolute top-2 right-2 inline-flex items-center justify-center rounded-full bg-white/95 p-1.5 text-red-600 shadow-sm hover:bg-white"
-        aria-label={`Quitar ${file.name}`}
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-2">
-        <p className="truncate text-[11px] text-white">{file.name}</p>
-      </div>
-    </div>
-  );
-};
-
 export const Models: React.FC = () => {
   const location = useLocation();
   const toast = useToast();
@@ -521,7 +59,7 @@ export const Models: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Create state
   const [createTab, setCreateTab] = useState<CreateTab>('upload');
   const [newModelName, setNewModelName] = useState('');
@@ -1190,8 +728,8 @@ export const Models: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto">
       <PageHeader
-        title="Modelos" 
-        description="Gestiona los modelos y sus poses (imágenes base) para la generación de catálogo." 
+        title="Modelos"
+        description="Gestiona los modelos y sus poses (imágenes base) para la generación de catálogo."
       />
 
       {error && (
@@ -1352,56 +890,48 @@ export const Models: React.FC = () => {
                     <div className="space-y-5">
                     {/* Configurator grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {/* Sex */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Sexo</label>
                         <SelectField value={aiSex} onChange={(e) => setAiSex(e.target.value)} disabled={aiBusy}>
                           {SEX_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Age */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Edad</label>
                         <SelectField value={aiAge} onChange={(e) => setAiAge(e.target.value)} disabled={aiBusy}>
                           {AGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Skin */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Tono de piel</label>
                         <SelectField value={aiSkin} onChange={(e) => setAiSkin(e.target.value)} disabled={aiBusy}>
                           {SKIN_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Hair color */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Color de pelo</label>
                         <SelectField value={aiHairColor} onChange={(e) => setAiHairColor(e.target.value)} disabled={aiBusy}>
                           {HAIR_COLOR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Hair length */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Largo de pelo</label>
                         <SelectField value={aiHairLength} onChange={(e) => setAiHairLength(e.target.value)} disabled={aiBusy}>
                           {HAIR_LENGTH_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Build */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Complexión</label>
                         <SelectField value={aiBuild} onChange={(e) => setAiBuild(e.target.value)} disabled={aiBusy}>
                           {BUILD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Background */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Fondo</label>
                         <SelectField value={aiBackground} onChange={(e) => setAiBackground(e.target.value)} disabled={aiBusy}>
                           {BACKGROUND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Bokeh */}
                       <div className="col-span-3">
                         <label className="mb-1 flex items-center justify-between text-xs font-medium text-gray-600">
                           <span>Bokeh (desenfoque de fondo)</span>
@@ -1421,21 +951,18 @@ export const Models: React.FC = () => {
                           <span>Fuerte</span>
                         </div>
                       </div>
-                      {/* Top */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Top</label>
                         <SelectField value={aiTop} onChange={(e) => setAiTop(e.target.value)} disabled={aiBusy}>
                           {TOP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Bottom */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Parte baja</label>
                         <SelectField value={aiBottom} onChange={(e) => setAiBottom(e.target.value)} disabled={aiBusy}>
                           {BOTTOM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </SelectField>
                       </div>
-                      {/* Footwear */}
                       <div>
                         <label className="mb-1 block text-xs font-medium text-gray-600">Calzado</label>
                         <SelectField value={aiFootwear} onChange={(e) => setAiFootwear(e.target.value)} disabled={aiBusy}>

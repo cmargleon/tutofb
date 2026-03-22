@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Batch, Job, JobAutoReview, JobOutput, Provider } from '../../../shared/src/types';
+import { Batch, Job, JobAutoReview, JobAutoReviewMarketplaceData, JobOutput, Provider } from '../../../shared/src/types';
 import { StatusBadge } from '../ui';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Download,
   History,
   ImageIcon,
@@ -54,6 +56,18 @@ const reviewTitle = (review: JobAutoReview | null): string => {
 const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string =>
   output.generationAttempt ? `Intento ${output.generationAttempt}` : `Salida ${fallbackIndex + 1}`;
 
+const marketplaceFieldValue = (value: string | null | undefined): string => value?.trim() || 'Sin dato';
+const EMPTY_MARKETPLACE_DATA: JobAutoReviewMarketplaceData = {
+  title: null,
+  description: null,
+  brand: null,
+  gender: null,
+  garmentType: null,
+  primaryColor: null,
+  sport: null,
+  isSportswear: null,
+};
+
 export const JobEvaluationCard: React.FC<Props> = ({
   batch,
   job,
@@ -72,6 +86,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
+  const [marketplaceExpanded, setMarketplaceExpanded] = useState(false);
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
   const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
   const isExperimentJob = job.experimentEnabled === true;
@@ -93,6 +108,14 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const historyOutputs = useMemo(() => [...outputsDesc].reverse(), [outputsDesc]);
   const isViewingLatest = !selectedOutputId || displayedOutput?.id === currentOutput?.id;
   const activeReview = displayedOutput?.autoReview || (isViewingLatest ? job.latestAutoReview || currentOutput?.autoReview || null : null);
+  const activeReviewPrompt =
+    activeReview?.reviewPrompt
+    || displayedOutput?.autoReview?.reviewPrompt
+    || currentOutput?.autoReview?.reviewPrompt
+    || job.latestAutoReview?.reviewPrompt
+    || null;
+  const marketplaceData = activeReview?.marketplaceData || EMPTY_MARKETPLACE_DATA;
+  const hasMarketplaceData = Object.values(marketplaceData).some((value) => value !== null && value !== '');
   const failedCriteria = activeReview?.criteria.filter((criterion) => !criterion.passed) || [];
 
   const { url: displayedImageUrl } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
@@ -101,6 +124,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
 
   useEffect(() => {
     setCompareMode(false);
+    setMarketplaceExpanded(false);
     setSelectedOutputId(null);
   }, [job.id]);
 
@@ -369,6 +393,74 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </div>
         ) : null}
 
+        {activeReview ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setMarketplaceExpanded((current) => !current);
+              }}
+              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+              aria-expanded={marketplaceExpanded}
+            >
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Ficha marketplace</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {hasMarketplaceData
+                    ? 'Titulo, descripcion y atributos comerciales extraidos por Gemini.'
+                    : 'Esta revision no trae datos comerciales guardados todavia.'}
+                </p>
+              </div>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
+                {marketplaceExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </span>
+            </button>
+
+            {marketplaceExpanded ? (
+              <div className="border-t border-slate-200 px-3 py-3 text-xs text-slate-700">
+                {!hasMarketplaceData ? (
+                  <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                    Este intento no incluye `marketplaceData`. Suele pasar con imagenes evaluadas antes de este cambio o si Gemini no devolvio esos campos.
+                  </div>
+                ) : null}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <MarketplaceField label="Titulo" value={marketplaceFieldValue(marketplaceData.title)} />
+                  <MarketplaceField label="Marca" value={marketplaceFieldValue(marketplaceData.brand)} />
+                  <MarketplaceField label="Genero" value={marketplaceFieldValue(marketplaceData.gender)} />
+                  <MarketplaceField label="Tipo de prenda" value={marketplaceFieldValue(marketplaceData.garmentType)} />
+                  <MarketplaceField label="Color principal" value={marketplaceFieldValue(marketplaceData.primaryColor)} />
+                  <MarketplaceField label="Deporte / uso" value={marketplaceFieldValue(marketplaceData.sport)} />
+                  <MarketplaceField
+                    label="Es deportiva"
+                    value={
+                      marketplaceData.isSportswear === null
+                        ? 'Sin dato'
+                        : marketplaceData.isSportswear
+                          ? 'Si'
+                          : 'No'
+                    }
+                  />
+                </div>
+                <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Descripcion</p>
+                  <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">
+                    {marketplaceFieldValue(marketplaceData.description)}
+                  </p>
+                </div>
+                <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Prompt enviado a Gemini
+                  </p>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-3 py-3 text-[11px] leading-relaxed text-slate-700">
+                    {activeReviewPrompt || 'Sin prompt guardado en esta revision.'}
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">Proveedor IA</label>
           <select
@@ -443,6 +535,13 @@ export const JobEvaluationCard: React.FC<Props> = ({
     </div>
   );
 };
+
+const MarketplaceField: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+    <p className="mt-1 text-slate-700">{value}</p>
+  </div>
+);
 
 const AttemptThumbnail: React.FC<{
   output: JobOutput;

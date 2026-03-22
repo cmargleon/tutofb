@@ -210,12 +210,25 @@ export interface JobAutoReviewCriterion {
   notes: string;
 }
 
+export interface JobAutoReviewMarketplaceData {
+  title: string | null;
+  description: string | null;
+  brand: string | null;
+  gender: string | null;
+  garmentType: string | null;
+  primaryColor: string | null;
+  sport: string | null;
+  isSportswear: boolean | null;
+}
+
 export interface JobAutoReview {
   model: string;
   verdict: JobAutoReviewVerdict;
   summary: string;
+  reviewPrompt: string;
   revisedPrompt: string | null;
   criteria: JobAutoReviewCriterion[];
+  marketplaceData: JobAutoReviewMarketplaceData;
   attemptNumber: number;
   reviewedAt: TimestampLike;
 }

@@ -44,8 +44,46 @@ const REVIEW_RESPONSE_SCHEMA = {
                 required: ['key', 'label', 'passed', 'notes'],
             },
         },
+        marketplaceData: {
+            type: 'object',
+            properties: {
+                title: {
+                    type: ['string', 'null'],
+                    description: 'Marketplace title in Spanish. Return null when there is not enough evidence.',
+                },
+                description: {
+                    type: ['string', 'null'],
+                    description: 'Marketplace-style selling description in Spanish. Return null when there is not enough evidence.',
+                },
+                brand: {
+                    type: ['string', 'null'],
+                    description: 'Visible brand only. Return null if not clearly visible.',
+                },
+                gender: {
+                    type: ['string', 'null'],
+                    description: 'Target gender such as hombre, mujer or unisex. Return null if uncertain.',
+                },
+                garmentType: {
+                    type: ['string', 'null'],
+                    description: 'Specific garment type, for example camiseta, short, top deportivo, leggings.',
+                },
+                primaryColor: {
+                    type: ['string', 'null'],
+                    description: 'Primary visible color of the garment.',
+                },
+                sport: {
+                    type: ['string', 'null'],
+                    description: 'Sport or use case if it looks like sportswear, for example gym, running, ciclismo. Otherwise null.',
+                },
+                isSportswear: {
+                    type: ['boolean', 'null'],
+                    description: 'True if the garment is sportswear, false if it is not, null if unclear.',
+                },
+            },
+            required: ['title', 'description', 'brand', 'gender', 'garmentType', 'primaryColor', 'sport', 'isSportswear'],
+        },
     },
-    required: ['verdict', 'summary', 'revisedPrompt', 'criteria'],
+    required: ['verdict', 'summary', 'revisedPrompt', 'criteria', 'marketplaceData'],
 };
 const sanitizeText = (value, fallback) => typeof value === 'string' && value.trim() ? value.trim() : fallback;
 const sanitizeCriteria = (value) => {
@@ -66,18 +104,52 @@ const sanitizeCriteria = (value) => {
     })
         .filter((entry) => Boolean(entry));
 };
+const sanitizeNullableText = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
+const sanitizeMarketplaceData = (value) => {
+    if (!value || typeof value !== 'object') {
+        return {
+            title: null,
+            description: null,
+            brand: null,
+            gender: null,
+            garmentType: null,
+            primaryColor: null,
+            sport: null,
+            isSportswear: null,
+        };
+    }
+    const record = value;
+    return {
+        title: sanitizeNullableText(record.title),
+        description: sanitizeNullableText(record.description),
+        brand: sanitizeNullableText(record.brand),
+        gender: sanitizeNullableText(record.gender),
+        garmentType: sanitizeNullableText(record.garmentType),
+        primaryColor: sanitizeNullableText(record.primaryColor),
+        sport: sanitizeNullableText(record.sport),
+        isSportswear: typeof record.isSportswear === 'boolean' ? record.isSportswear : null,
+    };
+};
 const buildReviewPrompt = ({ requestedPromptBase, promptBase, finalPrompt, backgroundConfig, attemptNumber, maxAttempts, }) => {
     const originalPrompt = requestedPromptBase.trim() || domain_1.DEFAULT_TRY_ON_PROMPT;
     const currentPrompt = promptBase.trim() || domain_1.DEFAULT_TRY_ON_PROMPT;
     const backgroundPrompt = (0, domain_1.buildBackgroundPrompt)(backgroundConfig);
     return [
-        'Eres un evaluador estricto de resultados de edicion de imagen para catalogo de moda.',
+        'Eres un evaluador experto de resultados de edicion de imagen para catalogo de moda y marketplaces.',
         'Recibiras tres imagenes en este orden: 1) pose/base de la modelo, 2) prenda de referencia, 3) resultado generado.',
         'Debes revisar si el resultado generado cumple con la intencion original y con los detalles visibles de las referencias.',
         'Evalua de forma obligatoria: fondo, pose/cuerpo, fidelidad de la prenda, logos o graficos visibles, y cumplimiento general.',
+        'No seas excesivamente estricto con el fondo. El fondo no necesita ser identico. Si conserva el mismo tono, ambiente o intencion visual general, y se parece aproximadamente en un 70%, puede aprobarse si los otros criterios importantes tambien se cumplen.',
+        'No seas excesivamente estricto con la pose. La pose no necesita ser identica. Debe conservar un angulo general similar: si la persona esta de espalda, debe salir de espalda; si mira a camara, debe mirar a camara; si esta en tres cuartos, debe mantenerse un tres cuartos similar. Se aceptan pequenos cambios de postura, encuadre y zoom in o zoom out moderado.',
+        'Se mas estricto con la prenda: tipo de prenda, color principal, branding visible, logos, graficos y ubicacion de esos elementos si aparecen en la referencia.',
         'Si hay logos, estampados, textos o graficos en la prenda, comprueba que sigan presentes, bien colocados y sin deformaciones evidentes.',
         'Si el resultado no cumple, devuelve un revisedPrompt listo para reenviar a una API de generacion de imagen. Ese prompt debe ser autocontenido, en ingles, especifico y orientado a corregir solo lo que fallo sin perder la pose, la identidad ni la prenda.',
         'Si el resultado si cumple, revisedPrompt debe ser una cadena vacia.',
+        'Ademas, extrae informacion comercial sistematizada de la prenda para usar en marketplaces tipo Shein o TikTok Shop.',
+        'Genera un title y una description en espanol con tono comercial, claros y utiles para venta.',
+        'Identifica brand solo si es visible. Identifica gender solo si hay evidencia suficiente, y si no la hay devuelve null.',
+        'Identifica garmentType, primaryColor y, si es ropa deportiva, indica el sport o uso principal. Si no es deportiva, sport debe ser null e isSportswear debe ser false.',
+        'Cuando no tengas evidencia suficiente para algun campo comercial, devuelve null en vez de inventar datos.',
         `Intento actual: ${attemptNumber} de ${maxAttempts}.`,
         `Prompt original del usuario: ${originalPrompt}`,
         `Prompt usado en este intento: ${currentPrompt}`,
@@ -100,6 +172,7 @@ const extractResponseText = (payload) => {
         : `Gemini no devolvio texto utilizable. Prompt feedback: ${JSON.stringify(payload.promptFeedback || {})}`);
 };
 const reviewGeneratedImageWithGemini = async (request) => {
+    const reviewPrompt = buildReviewPrompt(request);
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${request.model}:generateContent`, {
         method: 'POST',
         headers: {
@@ -111,7 +184,7 @@ const reviewGeneratedImageWithGemini = async (request) => {
                 {
                     role: 'user',
                     parts: [
-                        { text: buildReviewPrompt(request) },
+                        { text: reviewPrompt },
                         {
                             inline_data: {
                                 mime_type: request.poseReference.mimeType,
@@ -152,12 +225,15 @@ const reviewGeneratedImageWithGemini = async (request) => {
         ? 'La imagen cumple con los criterios solicitados.'
         : 'La imagen no cumple con los criterios solicitados.');
     const revisedPrompt = sanitizeText(parsed.revisedPrompt, '');
+    const marketplaceData = sanitizeMarketplaceData(parsed.marketplaceData);
     return {
         model: request.model,
         verdict,
         summary,
+        reviewPrompt,
         revisedPrompt: verdict === 'rejected' && revisedPrompt ? revisedPrompt : null,
         criteria,
+        marketplaceData,
     };
 };
 exports.reviewGeneratedImageWithGemini = reviewGeneratedImageWithGemini;

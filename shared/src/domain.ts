@@ -16,26 +16,63 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 };
 
 export const DEFAULT_TRY_ON_PROMPT =
-  `Replace only the clothing worn by the person in the original image with the garment from the reference image.
+  `Replace the clothing worn by the model with the garment from the reference image.
 
-Strictly preserve:
-    •    the model's identity (face and body)
-    •    exact pose
-    •    original lighting
-    •    camera angle and framing
-    •    original background
+STRICT PRESERVATION (HARD CONSTRAINTS — DO NOT MODIFY):
+- Preserve 100% the model’s identity (face, body shape, skin tone, proportions)
+- Preserve EXACT body pose, including spine curvature, limb position, and weight distribution
+- Preserve EXACT head position and gaze direction:
+  • If the model is looking at the camera, KEEP eye contact
+  • If the head is tilted or rotated, KEEP the exact same angle
+  • DO NOT change where the model is looking
+- Preserve EXACT body orientation relative to the camera:
+  • If front-facing, KEEP front-facing
+  • If back-facing, KEEP back-facing
+  • If side profile, KEEP the same side and angle
+  • DO NOT rotate, mirror, or reinterpret the body
+- Preserve original lighting, shadows, and highlights
+- Preserve camera angle, lens perspective, framing, and depth of field
+- Preserve the original background exactly as is
 
-Fit the new garment naturally onto the model's body, ensuring:
-    •    correct anatomy and proportions
-    •    realistic fabric folds and tension
-    •    proper draping according to the pose
+GARMENT FITTING REQUIREMENTS:
+- Fit the garment naturally onto the body respecting the existing pose
+- Follow the exact body orientation and head direction without correction or completion
+- Maintain correct anatomy and proportions at all times
+- Apply realistic fabric behavior:
+  • natural folds based on tension and gravity
+  • correct stretching/compression at joints
+  • accurate contact with the body
 
-The garment must:
-    •    retain its original color, texture, and design
-    •    not be altered or stylized
-    •    match the perspective of the scene
+GARMENT INTEGRITY (CRITICAL):
+- Preserve the garment’s exact color, texture, stitching, and design
+- Do NOT redesign, stylize, or enhance the garment
+- Do NOT hallucinate missing parts — only use visible reference information
+- Ensure perspective consistency with the scene
 
-Output a photorealistic, high-detail fashion catalog image with consistent lighting and no visual artifacts.`;
+BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT):
+- Only place logos or branding that are explicitly visible in the reference image
+- If a logo is visible:
+  • Preserve its EXACT position, scale, and orientation
+  • Do NOT move or reinterpret it
+- If a logo is NOT visible (e.g., back side not shown):
+  • DO NOT generate, infer, or assume any logo placement
+  • DO NOT add logos to unseen areas (e.g., back, sleeves, sides)
+- Do NOT assume symmetry of branding (front ≠ back)
+- Do NOT reconstruct hidden branding
+
+STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS):
+- No adding logos to areas not visible in the reference
+- No “guessing” brand placement
+- No front/back symmetry assumptions
+- No change in gaze direction or head orientation
+- No pose correction or symmetry fixing
+- No identity drift
+- No lighting inconsistencies
+- No background changes
+- No artifacts or distortions
+
+OUTPUT:
+Generate a photorealistic, high-detail fashion catalog image with perfect pose preservation, correct gaze direction, and strictly accurate brand placement with zero hallucinations.`;
 
 export const isRole = (value: unknown): value is Role => ROLE_VALUES.includes(value as Role);
 export const isProvider = (value: unknown): value is Provider => PROVIDER_VALUES.includes(value as Provider);

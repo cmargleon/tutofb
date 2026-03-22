@@ -121,6 +121,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const { url: displayedImageUrl } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
   const { url: currentImageUrl } = useStorageAssetUrl(currentOutput?.resultImagePath || null);
   const { url: previousImageUrl } = useStorageAssetUrl(previousOutput?.resultImagePath || null);
+  const { url: poseThumbnailUrl } = useStorageAssetUrl(job.poseImagePath || null);
 
   useEffect(() => {
     setCompareMode(false);
@@ -182,15 +183,23 @@ export const JobEvaluationCard: React.FC<Props> = ({
               />
             </label>
           ) : null}
-          <div>
-            <p className="text-sm font-semibold text-gray-900">Pose {index + 1}</p>
-            <p className="mt-0.5 text-xs text-gray-500">
-              {job.modelNameSnapshot}
-              {isExperimentJob ? ` · Brazo ${job.experimentArmLabel} (${job.provider})` : ''}
-            </p>
-            <p className="text-xs text-gray-500">
-              {job.garmentName} · {PROVIDER_LABELS[job.provider]}
-            </p>
+          <div className="flex items-start gap-3">
+            <div className="h-14 w-11 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+              {poseThumbnailUrl ? (
+                <img
+                  src={poseThumbnailUrl}
+                  alt={job.poseFileName || `Pose ${index + 1}`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-slate-300">
+                  <ImageIcon className="h-4 w-4" />
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Pose {index + 1}</p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">

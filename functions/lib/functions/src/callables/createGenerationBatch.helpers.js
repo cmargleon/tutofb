@@ -105,7 +105,6 @@ const validateCreateGenerationBatchInput = (data, authUid, maxJobs) => {
         experiment,
         promptBase,
         aspectRatio,
-        backgroundConfig: (0, domain_1.normalizeBackgroundConfig)(data?.backgroundConfig),
         totalJobs,
     };
 };
@@ -133,7 +132,7 @@ const buildJobDraft = (job, provider, promptBase, autoReviewMaxAttempts = 3) => 
     requestedPromptBase: promptBase.trim(),
     provider,
     promptBase,
-    finalPrompt: (0, domain_1.buildFinalGenerationPrompt)(promptBase, job.backgroundConfig, job.garmentIsMultiAngle),
+    finalPrompt: (0, domain_1.buildFinalGenerationPrompt)(promptBase, job.garmentIsMultiAngle),
     status: 'pending',
     queuePriority: 1,
     retryCount: 0,

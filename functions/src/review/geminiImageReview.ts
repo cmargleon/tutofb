@@ -1,6 +1,5 @@
-import { buildBackgroundPrompt, DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
+import { DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
 import {
-  BackgroundConfig,
   JobAutoReviewCriterion,
   JobAutoReviewMarketplaceData,
   JobAutoReviewVerdict,
@@ -17,7 +16,6 @@ interface ReviewRequest {
   requestedPromptBase: string;
   promptBase: string;
   finalPrompt: string;
-  backgroundConfig: BackgroundConfig;
   attemptNumber: number;
   maxAttempts: number;
   poseReference: ReviewImageAsset;
@@ -203,16 +201,14 @@ const buildReviewPrompt = ({
   requestedPromptBase,
   promptBase,
   finalPrompt,
-  backgroundConfig,
   attemptNumber,
   maxAttempts,
 }: Pick<
   ReviewRequest,
-  'requestedPromptBase' | 'promptBase' | 'finalPrompt' | 'backgroundConfig' | 'attemptNumber' | 'maxAttempts'
+  'requestedPromptBase' | 'promptBase' | 'finalPrompt' | 'attemptNumber' | 'maxAttempts'
 >): string => {
   const originalPrompt = requestedPromptBase.trim() || DEFAULT_TRY_ON_PROMPT;
   const currentPrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
-  const backgroundPrompt = buildBackgroundPrompt(backgroundConfig);
 
   return [
     'Eres un evaluador experto de resultados de edicion de imagen para catalogo de moda y marketplaces.',
@@ -234,7 +230,6 @@ const buildReviewPrompt = ({
     `Prompt original del usuario: ${originalPrompt}`,
     `Prompt usado en este intento: ${currentPrompt}`,
     `Prompt final enviado al proveedor: ${finalPrompt}`,
-    `Instrucciones de fondo normalizadas: ${backgroundPrompt}`,
     'Responde solo con JSON valido que siga exactamente el schema solicitado.',
   ].join('\n\n');
 };

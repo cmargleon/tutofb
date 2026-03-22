@@ -265,11 +265,7 @@ const persistGeneratedAttempt = async ({
 
   if (nextStatus === 'pending') {
     baseJobUpdate.promptBase = resolvedPromptBase;
-    baseJobUpdate.finalPrompt = buildFinalGenerationPrompt(
-      resolvedPromptBase,
-      claimedJob.backgroundConfig,
-      claimedJob.garmentIsMultiAngle,
-    );
+    baseJobUpdate.finalPrompt = buildFinalGenerationPrompt(resolvedPromptBase, claimedJob.garmentIsMultiAngle);
   }
 
   const writeBatch = db.batch();
@@ -527,6 +523,8 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
       },
     });
 
+    console.log('[jobWorker] finalPrompt enviado al proveedor:', claimedJob.finalPrompt);
+
     const providerResult = await generateWithProvider(
       claimedJob.provider as Provider,
       {
@@ -559,7 +557,6 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
         requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
         promptBase: claimedJob.promptBase,
         finalPrompt: claimedJob.finalPrompt,
-        backgroundConfig: claimedJob.backgroundConfig,
         attemptNumber: generationAttempt,
         maxAttempts: maxAutoReviewAttempts,
         poseReference,

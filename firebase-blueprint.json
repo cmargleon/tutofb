@@ -69,7 +69,6 @@
         "provider": { "type": "string", "enum": ["fal-seedream", "fal-banana-pro", "openai-gpt-image-1.5"] },
         "aspectRatio": { "type": "string", "enum": ["9:16", "3:4", "2:3", "1:1", "4:3", "3:2", "16:9"] },
         "promptBase": { "type": "string" },
-        "backgroundConfig": { "type": "object" },
         "poseIds": { "type": "array", "items": { "type": "string" } },
         "garmentCount": { "type": "number" },
         "totalJobs": { "type": "number" },
@@ -84,7 +83,7 @@
         "updatedAt": { "type": "timestamp" },
         "createdByUid": { "type": "string" }
       },
-      "required": ["clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "provider", "aspectRatio", "promptBase", "backgroundConfig", "poseIds", "garmentCount", "totalJobs", "pendingJobs", "processingJobs", "completedJobs", "failedJobs", "status", "createdAt", "updatedAt", "createdByUid"]
+      "required": ["clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "provider", "aspectRatio", "promptBase", "poseIds", "garmentCount", "totalJobs", "pendingJobs", "processingJobs", "completedJobs", "failedJobs", "status", "createdAt", "updatedAt", "createdByUid"]
     },
     "Job": {
       "title": "Job",
@@ -106,7 +105,6 @@
         "provider": { "type": "string", "enum": ["fal-seedream", "fal-banana-pro", "openai-gpt-image-1.5"] },
         "promptBase": { "type": "string" },
         "finalPrompt": { "type": "string" },
-        "backgroundConfig": { "type": "object" },
         "status": { "type": "string", "enum": ["pending", "processing", "completed", "failed"] },
         "queuePriority": { "type": "number" },
         "retryCount": { "type": "number" },
@@ -136,7 +134,7 @@
         "createdByUid": { "type": "string" },
         "lastError": { "type": "string" }
       },
-      "required": ["batchId", "clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "poseImageId", "poseImagePath", "garmentId", "garmentName", "garmentFilePath", "garmentIsMultiAngle", "aspectRatio", "provider", "promptBase", "finalPrompt", "backgroundConfig", "status", "queuePriority", "retryCount", "maxRetries", "completedOutputCount", "totalCostUsd", "totalDurationSeconds", "createdAt", "updatedAt", "createdByUid"]
+      "required": ["batchId", "clientId", "clientNameSnapshot", "modelId", "modelNameSnapshot", "poseImageId", "poseImagePath", "garmentId", "garmentName", "garmentFilePath", "garmentIsMultiAngle", "aspectRatio", "provider", "promptBase", "finalPrompt", "status", "queuePriority", "retryCount", "maxRetries", "completedOutputCount", "totalCostUsd", "totalDurationSeconds", "createdAt", "updatedAt", "createdByUid"]
     }
   },
   "firestore": {

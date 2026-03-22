@@ -1,4 +1,3 @@
-import { normalizeBackgroundConfig } from '../../../../shared/src/domain';
 import { CreateGenerationBatchRequest } from '../../../../shared/src/types';
 import { UploadGarmentDraftsResult } from '../storage';
 import { GarmentUploadState, UploadedGarmentDraft, WizardState } from '../types';
@@ -99,5 +98,4 @@ export const buildCreateGenerationBatchRequest = (state: WizardState, garments: 
     : null,
   promptBase: state.prompt,
   aspectRatio: state.aspectRatio,
-  backgroundConfig: normalizeBackgroundConfig(state.backgroundConfig),
 });

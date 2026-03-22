@@ -1,7 +1,6 @@
 import {
   DEFAULT_TRY_ON_PROMPT,
   PROVIDER_LABELS,
-  defaultBackgroundConfig,
 } from '../../../../shared/src/domain';
 import { EXPERIMENT_ALLOWED_PROVIDERS } from '../../../../shared/src/experiments';
 import { WizardStepDefinition } from '../../wizard/types';
@@ -35,7 +34,6 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   },
   prompt: DEFAULT_TRY_ON_PROMPT,
   aspectRatio: '3:4',
-  backgroundConfig: defaultBackgroundConfig,
 });
 
 export const createEmptyUploadSummary = (): UploadSummary => ({

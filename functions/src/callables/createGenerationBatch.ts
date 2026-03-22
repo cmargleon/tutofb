@@ -76,7 +76,6 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
       experimentArms: validated.experiment?.arms || null,
       aspectRatio: validated.aspectRatio,
       promptBase: validated.promptBase,
-      backgroundConfig: validated.backgroundConfig,
       poseIds: validated.poseIds,
       garmentCount: validated.garments.length,
       totalJobs: validated.totalJobs,
@@ -122,9 +121,8 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
           const jobRef = db.collection('jobs').doc();
           const jobDraft = buildJobDraft(
             {
-              backgroundConfig: validated.backgroundConfig,
               garmentIsMultiAngle: garment.isMultiAngle,
-            } as Pick<Job, 'backgroundConfig' | 'garmentIsMultiAngle'>,
+            } as Pick<Job, 'garmentIsMultiAngle'>,
             selectedProvider,
             validated.promptBase,
             autoReviewMaxAttempts,
@@ -151,7 +149,6 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
             garmentOriginalFileNames: garment.originalFileNames || [],
             garmentIsMultiAngle: garment.isMultiAngle,
             aspectRatio: validated.aspectRatio,
-            backgroundConfig: validated.backgroundConfig,
             ...jobDraft,
             maxRetries,
             completedAt: null,

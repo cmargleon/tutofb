@@ -30,21 +30,6 @@ const job: Job = {
   provider: 'fal-seedream',
   promptBase: 'prompt anterior',
   finalPrompt: 'prompt anterior',
-  backgroundConfig: {
-    mode: 'white',
-    scene: 'none',
-    lighting: 'clear_soft_daylight',
-    bokehStrength: 0,
-    dominantColor: 'white',
-    prominence: 'minimal',
-    contrast: 'soft',
-    realism: 'catalogo_realista',
-    separation: 'strong',
-    avoidExtraPeople: true,
-    avoidDistractingProps: true,
-    avoidTextSignage: true,
-    customDetail: '',
-  },
   status: 'completed',
   queuePriority: 0,
   retryCount: 2,
@@ -77,6 +62,8 @@ test('buildRegenerateJobPatch reinicia el job y recompone el prompt final', () =
   assert.equal(patch.retryCount, 0);
   assert.match(patch.finalPrompt, /nuevo prompt/i);
   assert.match(patch.finalPrompt, /multiples angulos/i);
+  assert.doesNotMatch(patch.finalPrompt, /Instrucciones de fondo/i);
+  assert.doesNotMatch(patch.finalPrompt, /Evitar en el fondo/i);
 });
 
 test('buildRegenerateJobPatch rechaza provider invalido y prompt vacio', () => {

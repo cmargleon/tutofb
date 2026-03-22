@@ -15,7 +15,6 @@ import {
   isArchivedCatalogEntity,
   isAspectRatio,
   isProvider,
-  normalizeBackgroundConfig,
 } from '../../../shared/src/domain';
 import { buildExperimentArms, isExperimentEligibleProvider, isExperimentMode } from '../../../shared/src/experiments';
 
@@ -79,7 +78,6 @@ export interface ValidatedCreateGenerationBatchInput {
   } | null;
   promptBase: string;
   aspectRatio: CreateGenerationBatchRequest['aspectRatio'];
-  backgroundConfig: CreateGenerationBatchRequest['backgroundConfig'];
   totalJobs: number;
 }
 
@@ -171,7 +169,6 @@ export const validateCreateGenerationBatchInput = (
     experiment,
     promptBase,
     aspectRatio,
-    backgroundConfig: normalizeBackgroundConfig(data?.backgroundConfig),
     totalJobs,
   };
 };
@@ -204,7 +201,7 @@ export const assertModelOwnershipAndPoses = (
 };
 
 export const buildJobDraft = (
-  job: Pick<Job, 'backgroundConfig' | 'garmentIsMultiAngle'>,
+  job: Pick<Job, 'garmentIsMultiAngle'>,
   provider: Job['provider'],
   promptBase: string,
   autoReviewMaxAttempts: number = 3,
@@ -212,7 +209,7 @@ export const buildJobDraft = (
   requestedPromptBase: promptBase.trim(),
   provider,
   promptBase,
-  finalPrompt: buildFinalGenerationPrompt(promptBase, job.backgroundConfig, job.garmentIsMultiAngle),
+  finalPrompt: buildFinalGenerationPrompt(promptBase, job.garmentIsMultiAngle),
   status: 'pending' as const,
   queuePriority: 1,
   retryCount: 0,

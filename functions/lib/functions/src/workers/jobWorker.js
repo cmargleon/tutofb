@@ -244,7 +244,7 @@ const persistGeneratedAttempt = async ({ claimedJob, providerResult, durationSec
     }
     if (nextStatus === 'pending') {
         baseJobUpdate.promptBase = resolvedPromptBase;
-        baseJobUpdate.finalPrompt = (0, domain_1.buildFinalGenerationPrompt)(resolvedPromptBase, claimedJob.backgroundConfig, claimedJob.garmentIsMultiAngle);
+        baseJobUpdate.finalPrompt = (0, domain_1.buildFinalGenerationPrompt)(resolvedPromptBase, claimedJob.garmentIsMultiAngle);
     }
     const writeBatch = db.batch();
     writeBatch.set(outputRef, currentOutput);
@@ -482,7 +482,6 @@ const processJob = async (jobId, source) => {
                 requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
                 promptBase: claimedJob.promptBase,
                 finalPrompt: claimedJob.finalPrompt,
-                backgroundConfig: claimedJob.backgroundConfig,
                 attemptNumber: generationAttempt,
                 maxAttempts: maxAutoReviewAttempts,
                 poseReference,

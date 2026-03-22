@@ -1,6 +1,5 @@
 import {
   AspectRatio,
-  BackgroundConfig,
   ExperimentMode,
   GarmentSourceType,
   Provider,
@@ -68,5 +67,4 @@ export interface WizardState {
   experiment: WizardExperimentState;
   prompt: string;
   aspectRatio: AspectRatio;
-  backgroundConfig: BackgroundConfig;
 }

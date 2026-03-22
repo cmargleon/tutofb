@@ -27,7 +27,7 @@ const baseModel: Model = {
   createdByUid: 'admin',
 };
 
-test('validateCreateGenerationBatchInput usa datos reales del wizard y normaliza fondo', () => {
+test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el prompt', () => {
   const validated = validateCreateGenerationBatchInput(
     {
       clientId: 'client-1',
@@ -46,21 +46,6 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y normaliza
       provider: 'fal-banana-pro',
       promptBase: ' Prompt real ',
       aspectRatio: '9:16',
-      backgroundConfig: {
-        mode: 'white',
-        scene: 'bosque',
-        lighting: 'clear_soft_daylight',
-        bokehStrength: 80,
-        dominantColor: 'black',
-        prominence: 'editorial',
-        contrast: 'high',
-        realism: 'catalogo_realista',
-        separation: 'maximum',
-        avoidExtraPeople: true,
-        avoidDistractingProps: true,
-        avoidTextSignage: true,
-        customDetail: '  ',
-      },
     },
     'user-1',
     10,
@@ -70,9 +55,6 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y normaliza
   assert.equal(validated.aspectRatio, '9:16');
   assert.equal(validated.promptBase, 'Prompt real');
   assert.deepEqual(validated.poseIds, ['pose-1', 'pose-2']);
-  assert.equal(validated.backgroundConfig.mode, 'white');
-  assert.equal(validated.backgroundConfig.scene, 'none');
-  assert.equal(validated.backgroundConfig.bokehStrength, 0);
   assert.equal(validated.totalJobs, 2);
 });
 
@@ -98,7 +80,6 @@ test('validateCreateGenerationBatchInput soporta experimento A/B paired y excluy
       },
       promptBase: 'Prompt experimento',
       aspectRatio: '3:4',
-      backgroundConfig: undefined as never,
     },
     'user-1',
     20,
@@ -133,7 +114,6 @@ test('validateCreateGenerationBatchInput rechaza banana-pro en experimentos A/B'
           },
           promptBase: 'Prompt experimento',
           aspectRatio: '3:4',
-          backgroundConfig: undefined as never,
         },
         'user-1',
         20,
@@ -161,7 +141,6 @@ test('validateCreateGenerationBatchInput rechaza prendas fuera del draft del usu
           provider: 'fal-seedream',
           promptBase: '',
           aspectRatio: '3:4',
-          backgroundConfig: undefined as never,
         },
         'user-1',
         10,
@@ -197,21 +176,6 @@ test('assertModelOwnershipAndPoses rechaza poses ajenas o modelos de otro client
 test('buildJobDraft prepara el prompt final para multiangulo y deja el job en pending', () => {
   const draft = buildJobDraft(
     {
-      backgroundConfig: {
-        mode: 'white',
-        scene: 'none',
-        lighting: 'clear_soft_daylight',
-        bokehStrength: 0,
-        dominantColor: 'white',
-        prominence: 'minimal',
-        contrast: 'soft',
-        realism: 'catalogo_realista',
-        separation: 'strong',
-        avoidExtraPeople: true,
-        avoidDistractingProps: true,
-        avoidTextSignage: true,
-        customDetail: '',
-      },
       garmentIsMultiAngle: true,
     },
     'openai-gpt-image-1.5',
@@ -221,4 +185,6 @@ test('buildJobDraft prepara el prompt final para multiangulo y deja el job en pe
   assert.equal(draft.provider, 'openai-gpt-image-1.5');
   assert.equal(draft.status, 'pending');
   assert.match(draft.finalPrompt, /multiples angulos/i);
+  assert.doesNotMatch(draft.finalPrompt, /Instrucciones de fondo/i);
+  assert.doesNotMatch(draft.finalPrompt, /Evitar en el fondo/i);
 });

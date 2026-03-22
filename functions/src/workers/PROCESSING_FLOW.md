@@ -1,6 +1,6 @@
 # Processing Flow
 
-1. `createGenerationBatch` valida cliente, modelo, poses, prendas, provider, aspect ratio y `backgroundConfig`.
+1. `createGenerationBatch` valida cliente, modelo, poses, prendas, provider y aspect ratio.
 2. La callable crea un `batch` y un `job` por combinación pose-prenda.
 3. `processJobOnCreate` o `processJobOnRequeue` intenta reclamar el job por transacción.
 4. El worker marca el job en `processing`, genera signed URLs para pose y prenda y llama al provider real.

@@ -16,7 +16,7 @@ export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChang
       placeholder="Describe la instrucción base del try-on"
     />
     <p className="mt-2 text-xs text-slate-500">
-      Se combina con `backgroundConfig` normalizado y con una nota extra cuando la prenda es multiángulo.
+      Se usa como base directa del prompt final y agrega una nota extra cuando la prenda es multiangulo.
     </p>
   </div>
 );

@@ -90,7 +90,6 @@ exports.createGenerationBatch = (0, https_1.onCall)(async (request) => {
         experimentArms: validated.experiment?.arms || null,
         aspectRatio: validated.aspectRatio,
         promptBase: validated.promptBase,
-        backgroundConfig: validated.backgroundConfig,
         poseIds: validated.poseIds,
         garmentCount: validated.garments.length,
         totalJobs: validated.totalJobs,
@@ -128,7 +127,6 @@ exports.createGenerationBatch = (0, https_1.onCall)(async (request) => {
                 const selectedProvider = assignedArm?.provider || validated.provider;
                 const jobRef = db.collection('jobs').doc();
                 const jobDraft = (0, createGenerationBatch_helpers_1.buildJobDraft)({
-                    backgroundConfig: validated.backgroundConfig,
                     garmentIsMultiAngle: garment.isMultiAngle,
                 }, selectedProvider, validated.promptBase, autoReviewMaxAttempts);
                 const jobData = {
@@ -153,7 +151,6 @@ exports.createGenerationBatch = (0, https_1.onCall)(async (request) => {
                     garmentOriginalFileNames: garment.originalFileNames || [],
                     garmentIsMultiAngle: garment.isMultiAngle,
                     aspectRatio: validated.aspectRatio,
-                    backgroundConfig: validated.backgroundConfig,
                     ...jobDraft,
                     maxRetries,
                     completedAt: null,

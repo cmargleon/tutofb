@@ -9,76 +9,6 @@ export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type GarmentSourceType = 'single' | 'folder-root' | 'subfolder';
 export type CatalogEntityStatus = 'active' | 'archived';
 
-export type BackgroundMode =
-  | 'white'
-  | 'bokeh'
-  | 'studio'
-  | 'exterior_natural'
-  | 'exterior_urbano'
-  | 'interior_lifestyle'
-  | 'custom';
-
-export type BackgroundScene =
-  | 'none'
-  | 'arquitectura_moderna'
-  | 'calle_limpia'
-  | 'terraza'
-  | 'fachada_neutra'
-  | 'bosque'
-  | 'mar'
-  | 'sendero'
-  | 'jardin'
-  | 'campo'
-  | 'living_minimalista'
-  | 'estudio_creativo'
-  | 'cafe_elegante'
-  | 'vestidor'
-  | 'gimnasio_premium'
-  | 'papel_seamless'
-  | 'cemento_suave';
-
-export type BackgroundLighting =
-  | 'clear_soft_daylight'
-  | 'warm_soft_daylight'
-  | 'cool_soft_daylight'
-  | 'studio_diffused'
-  | 'high_key'
-  | 'editorial'
-  | 'dramatic'
-  | 'overcast_soft'
-  | 'golden_hour';
-
-export type BackgroundDominantColor =
-  | 'white'
-  | 'neutral gray'
-  | 'warm beige'
-  | 'soft blue'
-  | 'forest green'
-  | 'ocean blue'
-  | 'sand'
-  | 'black';
-
-export type BackgroundProminence = 'minimal' | 'medium' | 'editorial';
-export type BackgroundContrast = 'soft' | 'medium' | 'high';
-export type BackgroundRealism = 'catalogo_realista' | 'campana_lifestyle';
-export type BackgroundSeparation = 'standard' | 'strong' | 'maximum';
-
-export interface BackgroundConfig {
-  mode: BackgroundMode;
-  scene: BackgroundScene;
-  lighting: BackgroundLighting;
-  bokehStrength: number;
-  dominantColor: BackgroundDominantColor;
-  prominence: BackgroundProminence;
-  contrast: BackgroundContrast;
-  realism: BackgroundRealism;
-  separation: BackgroundSeparation;
-  avoidExtraPeople: boolean;
-  avoidDistractingProps: boolean;
-  avoidTextSignage: boolean;
-  customDetail: string;
-}
-
 export interface User {
   uid: string;
   email: string;
@@ -177,7 +107,6 @@ export interface Batch {
   experimentArms?: ExperimentArm[] | null;
   aspectRatio: AspectRatio;
   promptBase: string;
-  backgroundConfig: BackgroundConfig;
   poseIds: string[];
   garmentCount: number;
   totalJobs: number;
@@ -309,7 +238,6 @@ export interface Job {
   requestedPromptBase?: string;
   promptBase: string;
   finalPrompt: string;
-  backgroundConfig: BackgroundConfig;
   status: JobStatus;
   queuePriority: number;
   retryCount: number;
@@ -589,7 +517,6 @@ export interface CreateGenerationBatchRequest {
   experiment?: GenerationExperimentConfig | null;
   promptBase: string;
   aspectRatio: AspectRatio;
-  backgroundConfig: BackgroundConfig;
 }
 
 export interface CreateGenerationBatchResponse {

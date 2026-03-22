@@ -130,10 +130,9 @@ const sanitizeMarketplaceData = (value) => {
         isSportswear: typeof record.isSportswear === 'boolean' ? record.isSportswear : null,
     };
 };
-const buildReviewPrompt = ({ requestedPromptBase, promptBase, finalPrompt, backgroundConfig, attemptNumber, maxAttempts, }) => {
+const buildReviewPrompt = ({ requestedPromptBase, promptBase, finalPrompt, attemptNumber, maxAttempts, }) => {
     const originalPrompt = requestedPromptBase.trim() || domain_1.DEFAULT_TRY_ON_PROMPT;
     const currentPrompt = promptBase.trim() || domain_1.DEFAULT_TRY_ON_PROMPT;
-    const backgroundPrompt = (0, domain_1.buildBackgroundPrompt)(backgroundConfig);
     return [
         'Eres un evaluador experto de resultados de edicion de imagen para catalogo de moda y marketplaces.',
         'Recibiras tres imagenes en este orden: 1) pose/base de la modelo, 2) prenda de referencia, 3) resultado generado.',
@@ -154,7 +153,6 @@ const buildReviewPrompt = ({ requestedPromptBase, promptBase, finalPrompt, backg
         `Prompt original del usuario: ${originalPrompt}`,
         `Prompt usado en este intento: ${currentPrompt}`,
         `Prompt final enviado al proveedor: ${finalPrompt}`,
-        `Instrucciones de fondo normalizadas: ${backgroundPrompt}`,
         'Responde solo con JSON valido que siga exactamente el schema solicitado.',
     ].join('\n\n');
 };

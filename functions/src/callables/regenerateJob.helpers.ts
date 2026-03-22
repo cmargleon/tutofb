@@ -15,7 +15,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     provider,
     requestedPromptBase: trimmedPrompt,
     promptBase: trimmedPrompt,
-    finalPrompt: buildFinalGenerationPrompt(trimmedPrompt, job.backgroundConfig, job.garmentIsMultiAngle),
+    finalPrompt: buildFinalGenerationPrompt(trimmedPrompt, job.garmentIsMultiAngle),
     status: 'pending' as const,
     queuePriority: 1,
     retryCount: 0,

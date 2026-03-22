@@ -37,9 +37,11 @@ exports.processJob = exports.requeueExpiredJobs = void 0;
 const node_crypto_1 = require("node:crypto");
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
+const domain_1 = require("../../../shared/src/domain");
 const providers_1 = require("../providers");
 const runtime_1 = require("../config/runtime");
 const appFirestore_1 = require("../firebase/appFirestore");
+const geminiImageReview_1 = require("../review/geminiImageReview");
 const db = (0, appFirestore_1.getAppFirestore)();
 const bucket = admin.storage().bucket();
 const toMillis = (value) => {
@@ -71,6 +73,14 @@ const extensionForContentType = (contentType) => {
         return 'webp';
     return 'png';
 };
+const mimeTypeFromStoragePath = (storagePath) => {
+    const normalized = storagePath.toLowerCase();
+    if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg'))
+        return 'image/jpeg';
+    if (normalized.endsWith('.webp'))
+        return 'image/webp';
+    return 'image/png';
+};
 const serializeError = (error) => {
     if (error instanceof Error) {
         return {
@@ -94,6 +104,7 @@ const claimJob = async (jobId, workerId) => {
     const jobRef = db.collection('jobs').doc(jobId);
     const claimExpiresAt = firestore_1.Timestamp.fromMillis(Date.now() + (0, runtime_1.getJobTimeoutMs)());
     const claimToken = (0, node_crypto_1.randomUUID)();
+    const startedAt = firestore_1.Timestamp.now();
     return db.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(jobRef);
         if (!snapshot.exists) {
@@ -122,41 +133,30 @@ const claimJob = async (jobId, workerId) => {
             claimedBy: workerId,
             claimExpiresAt,
             timeoutAt: claimExpiresAt,
-            startedAt: claimExpiresAt,
-            lastAttemptStartedAt: claimExpiresAt,
+            startedAt,
+            lastAttemptStartedAt: startedAt,
             lastError: null,
         };
     });
 };
-const markCleanupResult = async (jobId, outputId, deleted, storagePath, error) => {
-    const outputRef = db.collection('jobs').doc(jobId).collection('outputs').doc(outputId);
-    if (deleted) {
-        await outputRef.set({
-            storageDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        await createLog(jobId, {
-            type: 'cleanup',
-            level: 'info',
-            message: 'Se eliminó el archivo previo del resultado regenerado.',
-            outputId,
-            payload: {
-                storagePath,
-            },
-        });
-        return;
-    }
-    await createLog(jobId, {
-        type: 'cleanup',
-        level: 'warn',
-        message: 'No se pudo eliminar el archivo previo del resultado regenerado.',
-        outputId,
-        payload: {
-            storagePath,
-            error: serializeError(error),
-        },
-    });
+const downloadStorageImage = async (storagePath) => {
+    const file = bucket.file(storagePath);
+    const [bytes] = await file.download();
+    return {
+        bytes,
+        mimeType: mimeTypeFromStoragePath(storagePath),
+    };
 };
-const completeJob = async (claimedJob, providerResult, durationSeconds) => {
+const buildStoredReview = (review, attemptNumber) => ({
+    model: review.model,
+    verdict: review.verdict,
+    summary: review.summary,
+    revisedPrompt: review.revisedPrompt,
+    criteria: review.criteria,
+    attemptNumber,
+    reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+});
+const persistGeneratedAttempt = async ({ claimedJob, providerResult, durationSeconds, generationAttempt, nextStatus, autoReview, lastError, nextPromptBase, }) => {
     const jobId = claimedJob.id;
     const jobRef = db.collection('jobs').doc(jobId);
     const outputRef = jobRef.collection('outputs').doc();
@@ -193,6 +193,7 @@ const completeJob = async (claimedJob, providerResult, durationSeconds) => {
         garmentId: claimedJob.garmentId,
         garmentName: claimedJob.garmentName,
         provider: providerResult.provider,
+        requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
         promptBase: claimedJob.promptBase,
         finalPrompt: claimedJob.finalPrompt,
         aspectRatio: claimedJob.aspectRatio,
@@ -203,25 +204,22 @@ const completeJob = async (claimedJob, providerResult, durationSeconds) => {
         costUsd,
         durationSeconds,
         providerResponseSummary: providerResult.responseSummary,
+        generationAttempt,
+        autoReview,
         isCurrent: true,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    const writeBatch = db.batch();
-    writeBatch.set(outputRef, currentOutput);
-    if (claimedJob.currentOutputId) {
-        writeBatch.set(jobRef.collection('outputs').doc(claimedJob.currentOutputId), {
-            isCurrent: false,
-        }, { merge: true });
-    }
-    writeBatch.update(jobRef, {
+    const resolvedPromptBase = typeof nextPromptBase === 'string' ? nextPromptBase.trim() : claimedJob.promptBase;
+    const shouldResetForNextAttempt = nextStatus === 'pending' || nextStatus === 'failed';
+    const baseJobUpdate = {
         provider: providerResult.provider,
-        status: 'completed',
-        queuePriority: 0,
+        status: nextStatus,
+        queuePriority: nextStatus === 'pending' ? 1 : 0,
         claimToken: null,
         claimedBy: null,
         claimExpiresAt: null,
         timeoutAt: null,
-        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        completedAt: nextStatus === 'completed' ? admin.firestore.FieldValue.serverTimestamp() : null,
         latestOutputCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
         currentOutputId: outputId,
         currentOutput,
@@ -231,45 +229,107 @@ const completeJob = async (claimedJob, providerResult, durationSeconds) => {
         [`providerUsage.${providerResult.provider}.completedOutputs`]: admin.firestore.FieldValue.increment(1),
         [`providerUsage.${providerResult.provider}.totalCostUsd`]: admin.firestore.FieldValue.increment(costUsd),
         [`providerUsage.${providerResult.provider}.totalDurationSeconds`]: admin.firestore.FieldValue.increment(durationSeconds || 0),
-        'traceability.lastCompletedAt': admin.firestore.FieldValue.serverTimestamp(),
+        generationAttemptCount: generationAttempt,
+        latestAutoReview: autoReview,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastError: null,
-    });
+        lastError,
+    };
+    if (nextStatus === 'completed') {
+        baseJobUpdate['traceability.lastCompletedAt'] = admin.firestore.FieldValue.serverTimestamp();
+    }
+    if (shouldResetForNextAttempt) {
+        baseJobUpdate.startedAt = null;
+    }
+    if (nextStatus === 'pending') {
+        baseJobUpdate.promptBase = resolvedPromptBase;
+        baseJobUpdate.finalPrompt = (0, domain_1.buildFinalGenerationPrompt)(resolvedPromptBase, claimedJob.backgroundConfig, claimedJob.garmentIsMultiAngle);
+    }
+    const writeBatch = db.batch();
+    writeBatch.set(outputRef, currentOutput);
+    if (claimedJob.currentOutputId) {
+        writeBatch.set(jobRef.collection('outputs').doc(claimedJob.currentOutputId), {
+            isCurrent: false,
+        }, { merge: true });
+    }
+    writeBatch.update(jobRef, baseJobUpdate);
     writeBatch.set(jobRef.collection('logs').doc(), {
         type: 'provider_response',
         level: 'info',
-        message: 'Proveedor completó la generación exitosamente.',
+        message: 'Proveedor completó la generación y el resultado fue guardado.',
         outputId,
         payload: {
             provider: providerResult.provider,
             requestId: providerResult.requestId,
             remoteUrl: providerResult.remoteUrl,
             summary: providerResult.responseSummary,
+            generationAttempt,
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    writeBatch.set(jobRef.collection('logs').doc(), {
-        type: 'completed',
-        level: 'info',
-        message: 'Trabajo completado y resultado guardado en Storage.',
-        outputId,
-        payload: {
-            destinationPath,
-            durationSeconds,
-            costUsd,
-        },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    await writeBatch.commit();
-    if (claimedJob.currentOutputId && claimedJob.currentOutput?.resultImagePath) {
-        try {
-            await bucket.file(claimedJob.currentOutput.resultImagePath).delete({ ignoreNotFound: true });
-            await markCleanupResult(jobId, claimedJob.currentOutputId, true, claimedJob.currentOutput.resultImagePath);
-        }
-        catch (error) {
-            await markCleanupResult(jobId, claimedJob.currentOutputId, false, claimedJob.currentOutput.resultImagePath, error);
-        }
+    if (autoReview) {
+        writeBatch.set(jobRef.collection('logs').doc(), {
+            type: 'quality_review',
+            level: autoReview.verdict === 'approved'
+                ? 'info'
+                : nextStatus === 'pending'
+                    ? 'warn'
+                    : 'error',
+            message: autoReview.verdict === 'approved'
+                ? 'Gemini aprobó la imagen generada.'
+                : nextStatus === 'pending'
+                    ? 'Gemini rechazó la imagen y programó un nuevo intento.'
+                    : 'Gemini rechazó la imagen y se agotó el máximo de intentos.',
+            outputId,
+            payload: {
+                model: autoReview.model,
+                verdict: autoReview.verdict,
+                summary: autoReview.summary,
+                revisedPrompt: autoReview.revisedPrompt,
+                criteria: autoReview.criteria,
+                attemptNumber: generationAttempt,
+            },
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
     }
+    if (nextStatus === 'completed') {
+        writeBatch.set(jobRef.collection('logs').doc(), {
+            type: 'completed',
+            level: 'info',
+            message: 'Trabajo completado y aprobado por la autoevaluación.',
+            outputId,
+            payload: {
+                destinationPath,
+                durationSeconds,
+                costUsd,
+                generationAttempt,
+            },
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    }
+    await writeBatch.commit();
+};
+const failGeneratedAttemptAfterReviewError = async ({ claimedJob, providerResult, durationSeconds, generationAttempt, error, }) => {
+    await persistGeneratedAttempt({
+        claimedJob,
+        providerResult,
+        durationSeconds,
+        generationAttempt,
+        nextStatus: 'failed',
+        autoReview: null,
+        lastError: error instanceof Error
+            ? `No se pudo validar la imagen con Gemini: ${error.message}`
+            : 'No se pudo validar la imagen con Gemini.',
+    });
+    await createLog(claimedJob.id, {
+        type: 'quality_review',
+        level: 'error',
+        message: 'La validación automática con Gemini falló después de generar la imagen.',
+        outputId: null,
+        payload: {
+            attemptNumber: generationAttempt,
+            error: serializeError(error),
+        },
+    });
 };
 const retryOrFailJob = async (claimedJob, error) => {
     const jobRef = db.collection('jobs').doc(claimedJob.id);
@@ -389,6 +449,8 @@ const processJob = async (jobId, source) => {
                 aspectRatio: claimedJob.aspectRatio,
                 poseImagePath: claimedJob.poseImagePath,
                 garmentFilePath: claimedJob.garmentFilePath,
+                requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
+                promptBase: claimedJob.promptBase,
             },
         });
         const providerResult = await (0, providers_1.generateWithProvider)(claimedJob.provider, {
@@ -403,7 +465,76 @@ const processJob = async (jobId, source) => {
         });
         const startedAtMs = toMillis(claimedJob.lastAttemptStartedAt) || Date.now();
         const durationSeconds = Math.max(0, Math.round((Date.now() - startedAtMs) / 1000));
-        await completeJob(claimedJob, providerResult, durationSeconds);
+        const generationAttempt = (claimedJob.generationAttemptCount || 0) + 1;
+        const maxAutoReviewAttempts = claimedJob.autoReviewMaxAttempts || (0, runtime_1.getJobAutoReviewMaxAttempts)();
+        try {
+            const [poseReference, garmentReference] = await Promise.all([
+                downloadStorageImage(claimedJob.poseImagePath),
+                downloadStorageImage(claimedJob.garmentFilePath),
+            ]);
+            const review = await (0, geminiImageReview_1.reviewGeneratedImageWithGemini)({
+                apiKey: runtime_1.GEMINI_API_KEY.value(),
+                model: (0, runtime_1.getGeminiImageReviewModel)(),
+                requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
+                promptBase: claimedJob.promptBase,
+                finalPrompt: claimedJob.finalPrompt,
+                backgroundConfig: claimedJob.backgroundConfig,
+                attemptNumber: generationAttempt,
+                maxAttempts: maxAutoReviewAttempts,
+                poseReference,
+                garmentReference,
+                generatedImage: {
+                    bytes: providerResult.imageBytes,
+                    mimeType: providerResult.contentType,
+                },
+                signal: controller.signal,
+            });
+            const storedReview = buildStoredReview(review, generationAttempt);
+            if (review.verdict === 'approved') {
+                await persistGeneratedAttempt({
+                    claimedJob,
+                    providerResult,
+                    durationSeconds,
+                    generationAttempt,
+                    nextStatus: 'completed',
+                    autoReview: storedReview,
+                    lastError: null,
+                });
+                return;
+            }
+            if (generationAttempt < maxAutoReviewAttempts) {
+                const revisedPrompt = (review.revisedPrompt || claimedJob.promptBase).trim() || claimedJob.promptBase;
+                await persistGeneratedAttempt({
+                    claimedJob,
+                    providerResult,
+                    durationSeconds,
+                    generationAttempt,
+                    nextStatus: 'pending',
+                    autoReview: storedReview,
+                    nextPromptBase: revisedPrompt,
+                    lastError: `Gemini rechazó el intento ${generationAttempt}/${maxAutoReviewAttempts}: ${review.summary}`,
+                });
+                return;
+            }
+            await persistGeneratedAttempt({
+                claimedJob,
+                providerResult,
+                durationSeconds,
+                generationAttempt,
+                nextStatus: 'failed',
+                autoReview: storedReview,
+                lastError: `Gemini rechazó la imagen tras ${generationAttempt} intentos: ${review.summary}`,
+            });
+        }
+        catch (reviewError) {
+            await failGeneratedAttemptAfterReviewError({
+                claimedJob,
+                providerResult,
+                durationSeconds,
+                generationAttempt,
+                error: reviewError,
+            });
+        }
     }
     catch (error) {
         await retryOrFailJob(claimedJob, error);

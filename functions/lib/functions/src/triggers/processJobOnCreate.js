@@ -8,7 +8,7 @@ exports.processJobOnCreate = (0, firestore_1.onDocumentCreated)({
     document: 'jobs/{jobId}',
     timeoutSeconds: 540,
     memory: '1GiB',
-    secrets: [runtime_1.FAL_KEY, runtime_1.OPENAI_API_KEY],
+    secrets: [runtime_1.FAL_KEY, runtime_1.OPENAI_API_KEY, runtime_1.GEMINI_API_KEY],
 }, async (event) => {
     const snapshot = event.data;
     if (!snapshot) {

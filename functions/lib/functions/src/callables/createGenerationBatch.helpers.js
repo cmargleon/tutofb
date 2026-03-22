@@ -129,13 +129,17 @@ const assertModelOwnershipAndPoses = (client, model, poseIds) => {
     return poseMap;
 };
 exports.assertModelOwnershipAndPoses = assertModelOwnershipAndPoses;
-const buildJobDraft = (job, provider, promptBase) => ({
+const buildJobDraft = (job, provider, promptBase, autoReviewMaxAttempts = 3) => ({
+    requestedPromptBase: promptBase.trim(),
     provider,
     promptBase,
     finalPrompt: (0, domain_1.buildFinalGenerationPrompt)(promptBase, job.backgroundConfig, job.garmentIsMultiAngle),
     status: 'pending',
     queuePriority: 1,
     retryCount: 0,
+    generationAttemptCount: 0,
+    autoReviewMaxAttempts,
+    latestAutoReview: null,
     claimToken: null,
     claimedBy: null,
     claimExpiresAt: null,

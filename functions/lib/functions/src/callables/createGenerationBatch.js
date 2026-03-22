@@ -110,6 +110,7 @@ exports.createGenerationBatch = (0, https_1.onCall)(async (request) => {
     const writeBatch = db.batch();
     writeBatch.set(batchRef, batchData);
     const maxRetries = (0, runtime_1.getJobMaxRetries)();
+    const autoReviewMaxAttempts = (0, runtime_1.getJobAutoReviewMaxAttempts)();
     let combinationIndex = 0;
     for (const garment of validated.garments) {
         for (const poseId of validated.poseIds) {
@@ -129,7 +130,7 @@ exports.createGenerationBatch = (0, https_1.onCall)(async (request) => {
                 const jobDraft = (0, createGenerationBatch_helpers_1.buildJobDraft)({
                     backgroundConfig: validated.backgroundConfig,
                     garmentIsMultiAngle: garment.isMultiAngle,
-                }, selectedProvider, validated.promptBase);
+                }, selectedProvider, validated.promptBase, autoReviewMaxAttempts);
                 const jobData = {
                     batchId: batchRef.id,
                     clientId: client.id,

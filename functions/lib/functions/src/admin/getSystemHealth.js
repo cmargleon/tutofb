@@ -11,6 +11,7 @@ const systemAlerts_1 = require("./systemAlerts");
 const SYSTEM_WINDOW_HOURS = 24;
 const REQUEST_TIMEOUT_MS = 8000;
 const FAL_HEALTHCHECK_URL = 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/health/status';
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const toMillis = (value) => {
     if (!value) {
         return null;
@@ -108,6 +109,38 @@ const checkFalHealth = async () => {
         return buildProviderResult('fal.ai', 'down', false, detail, null, null);
     }
 };
+const checkGeminiHealth = async () => {
+    const apiKey = runtime_1.GEMINI_API_KEY.value();
+    if (!apiKey) {
+        return buildProviderResult('Gemini', 'down', false, 'GEMINI_API_KEY no está configurada.', null, null);
+    }
+    const model = (0, runtime_1.getGeminiImageReviewModel)();
+    const normalizedModel = model.startsWith('models/') ? model : `models/${model}`;
+    const modelUrl = `${GEMINI_API_BASE_URL}/${normalizedModel}`;
+    try {
+        const { response, latencyMs } = await fetchWithTimeout(`${modelUrl}?key=${encodeURIComponent(apiKey)}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        if (response.ok) {
+            return buildProviderResult('Gemini', 'healthy', true, `API responde correctamente con el modelo ${model}.`, response.status, latencyMs);
+        }
+        const detail = response.status === 429
+            ? `Gemini respondió con rate limit para el modelo ${model}.`
+            : response.status === 404
+                ? `Gemini no encontró el modelo configurado (${model}).`
+                : `Gemini respondió con estado ${response.status} para el modelo ${model}.`;
+        return buildProviderResult('Gemini', response.status === 429 ? 'degraded' : 'down', false, detail, response.status, latencyMs);
+    }
+    catch (error) {
+        const detail = error?.name === 'AbortError'
+            ? 'Gemini no respondió dentro del tiempo esperado.'
+            : (error?.message || 'No se pudo contactar Gemini.');
+        return buildProviderResult('Gemini', 'down', false, detail, null, null);
+    }
+};
 const getQueueHealth = async () => {
     const db = (0, appFirestore_1.getAppFirestore)();
     const cutoff = firestore_1.Timestamp.fromMillis(Date.now() - SYSTEM_WINDOW_HOURS * 60 * 60 * 1000);
@@ -152,17 +185,18 @@ const getTodayCostUsd = async () => {
 };
 exports.getSystemHealth = (0, https_1.onCall)({
     timeoutSeconds: 30,
-    secrets: [runtime_1.FAL_KEY, runtime_1.OPENAI_API_KEY],
+    secrets: [runtime_1.FAL_KEY, runtime_1.OPENAI_API_KEY, runtime_1.GEMINI_API_KEY],
 }, async (request) => {
     await (0, roles_1.assertCallableRoles)(request, ['admin', 'revisor']);
-    const [openaiHealth, falHealth, queue, settings, todayCostUsd] = await Promise.all([
+    const [openaiHealth, falHealth, geminiHealth, queue, settings, todayCostUsd] = await Promise.all([
         checkOpenAIHealth(),
         checkFalHealth(),
+        checkGeminiHealth(),
         getQueueHealth(),
         (0, systemAlerts_1.getSystemAlertSettings)(),
         getTodayCostUsd(),
     ]);
-    const providers = [falHealth, openaiHealth];
+    const providers = [falHealth, openaiHealth, geminiHealth];
     const overall = (0, systemHealth_helpers_1.computeOverallHealth)(providers, queue);
     const checkedAt = new Date();
     const alerts = (0, systemAlerts_1.buildSystemAlerts)({

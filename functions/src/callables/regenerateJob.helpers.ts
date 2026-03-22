@@ -13,11 +13,15 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
 
   return {
     provider,
+    requestedPromptBase: trimmedPrompt,
     promptBase: trimmedPrompt,
     finalPrompt: buildFinalGenerationPrompt(trimmedPrompt, job.backgroundConfig, job.garmentIsMultiAngle),
     status: 'pending' as const,
     queuePriority: 1,
     retryCount: 0,
+    generationAttemptCount: 0,
+    autoReviewMaxAttempts: job.autoReviewMaxAttempts || 3,
+    latestAutoReview: null,
     claimToken: null,
     claimedBy: null,
     claimExpiresAt: null,

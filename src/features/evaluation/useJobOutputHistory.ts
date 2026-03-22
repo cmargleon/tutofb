@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { QueryConstraint, collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { JobOutput } from '../../../shared/src/types';
 import { db } from '../../firebase';
 
-export const useJobOutputHistory = (jobId: string | undefined, maxOutputs: number = 2) => {
+export const useJobOutputHistory = (jobId: string | undefined, maxOutputs?: number) => {
   const [outputs, setOutputs] = useState<JobOutput[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -16,11 +16,12 @@ export const useJobOutputHistory = (jobId: string | undefined, maxOutputs: numbe
 
     setLoading(true);
 
-    const outputsQuery = query(
-      collection(db, 'jobs', jobId, 'outputs'),
-      orderBy('createdAt', 'desc'),
-      limit(maxOutputs),
-    );
+    const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
+    if (typeof maxOutputs === 'number') {
+      constraints.push(limit(maxOutputs));
+    }
+
+    const outputsQuery = query(collection(db, 'jobs', jobId, 'outputs'), ...constraints);
 
     const unsubscribe = onSnapshot(
       outputsQuery,

@@ -27,7 +27,7 @@ const DEFAULT_SYSTEM_ALERT_SETTINGS: SystemAlertSettings = {
 };
 
 const VALID_HEALTH_STATUSES: HealthStatus[] = ['healthy', 'degraded', 'down'];
-const VALID_PROVIDER_NAMES: ProviderHealthCheck['provider'][] = ['fal.ai', 'OpenAI'];
+const VALID_PROVIDER_NAMES: ProviderHealthCheck['provider'][] = ['fal.ai', 'OpenAI', 'Gemini'];
 const VALID_ALERT_IDS: SystemAlertId[] = [
   'daily_cost',
   'recent_error_rate',

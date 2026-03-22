@@ -12,11 +12,15 @@ const buildRegenerateJobPatch = (job, provider, prompt) => {
     }
     return {
         provider,
+        requestedPromptBase: trimmedPrompt,
         promptBase: trimmedPrompt,
         finalPrompt: (0, domain_1.buildFinalGenerationPrompt)(trimmedPrompt, job.backgroundConfig, job.garmentIsMultiAngle),
         status: 'pending',
         queuePriority: 1,
         retryCount: 0,
+        generationAttemptCount: 0,
+        autoReviewMaxAttempts: job.autoReviewMaxAttempts || 3,
+        latestAutoReview: null,
         claimToken: null,
         claimedBy: null,
         claimExpiresAt: null,

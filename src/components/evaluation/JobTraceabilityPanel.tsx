@@ -62,6 +62,8 @@ const labelForLogType = (log: JobLog): string => {
       return 'Solicitud al proveedor';
     case 'provider_response':
       return 'Respuesta del proveedor';
+    case 'quality_review':
+      return 'Autoevaluación Gemini';
     case 'retry_scheduled':
       return 'Reintento programado';
     case 'completed':
@@ -97,6 +99,9 @@ const summarizePayload = (log: JobLog): string[] => {
   const items = [
     payload.provider ? `Proveedor: ${compactValue(payload.provider)}` : null,
     payload.requestId ? `Request: ${compactValue(payload.requestId)}` : null,
+    payload.model ? `Modelo: ${compactValue(payload.model)}` : null,
+    payload.verdict ? `Veredicto: ${compactValue(payload.verdict)}` : null,
+    payload.attemptNumber !== undefined ? `Intento: ${compactValue(payload.attemptNumber)}` : null,
     payload.retryCount !== undefined ? `Reintentos: ${compactValue(payload.retryCount)}` : null,
     payload.maxRetries !== undefined ? `Tope: ${compactValue(payload.maxRetries)}` : null,
     payload.costUsd !== undefined && typeof payload.costUsd === 'number'
@@ -139,14 +144,22 @@ export const JobTraceabilityPanel: React.FC<Props> = ({ batch, job }) => {
     return Boolean(payload && typeof payload.requestedByUid === 'string' && log.message.toLowerCase().includes('regeneración'));
   });
 
-  const latestProviderErrorLog = logs.find((log) =>
-    log.type === 'retry_scheduled' || log.type === 'failed' || log.level === 'error',
-  );
+  const latestProviderErrorLog = logs.find((log) => log.type === 'retry_scheduled' || log.type === 'failed');
+  const latestQualityReviewLog = logs.find((log) => log.type === 'quality_review');
+  const latestQualityReviewPayload = latestQualityReviewLog ? traceabilityPayload(latestQualityReviewLog.payload) : null;
 
   const latestProviderErrorMessage =
-    job.traceability?.lastProviderErrorMessage || traceabilityErrorMessage(latestProviderErrorLog) || job.lastError;
+    job.traceability?.lastProviderErrorMessage || traceabilityErrorMessage(latestProviderErrorLog);
 
   const latestProviderErrorAt = job.traceability?.lastProviderErrorAt || latestProviderErrorLog?.createdAt;
+  const latestQualityReview = job.latestAutoReview;
+  const latestQualityReviewSummary =
+    latestQualityReview?.summary
+    || (latestQualityReviewPayload && typeof latestQualityReviewPayload.summary === 'string'
+      ? latestQualityReviewPayload.summary
+      : null)
+    || 'Todavía no hay una autoevaluación registrada.';
+  const latestQualityReviewAt = latestQualityReview?.reviewedAt || latestQualityReviewLog?.createdAt;
 
   const latestRegenerationAt = job.traceability?.lastManualRegenerationAt || regenerationLog?.createdAt;
   const latestRegenerationByUid =
@@ -214,6 +227,23 @@ export const JobTraceabilityPanel: React.FC<Props> = ({ batch, job }) => {
                   : 'Sin incidentes de proveedor'
               }
               tone={latestProviderErrorMessage ? 'warning' : 'neutral'}
+            />
+            <SummaryCard
+              icon={<History className="h-4 w-4" />}
+              label="Autoevaluación Gemini"
+              value={
+                latestQualityReview
+                  ? latestQualityReview.verdict === 'approved'
+                    ? 'Aprobada'
+                    : 'Rechazada'
+                  : 'Sin autoevaluación'
+              }
+              detail={
+                latestQualityReviewAt
+                  ? `${latestQualityReviewSummary} · ${formatDateTime(latestQualityReviewAt)}`
+                  : latestQualityReviewSummary
+              }
+              tone={latestQualityReview?.verdict === 'rejected' ? 'warning' : 'neutral'}
             />
             <SummaryCard
               icon={<History className="h-4 w-4" />}

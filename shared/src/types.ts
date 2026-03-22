@@ -201,6 +201,25 @@ export interface ProviderUsageStats {
   totalDurationSeconds: number;
 }
 
+export type JobAutoReviewVerdict = 'approved' | 'rejected';
+
+export interface JobAutoReviewCriterion {
+  key: string;
+  label: string;
+  passed: boolean;
+  notes: string;
+}
+
+export interface JobAutoReview {
+  model: string;
+  verdict: JobAutoReviewVerdict;
+  summary: string;
+  revisedPrompt: string | null;
+  criteria: JobAutoReviewCriterion[];
+  attemptNumber: number;
+  reviewedAt: TimestampLike;
+}
+
 export interface JobTraceabilitySummary {
   batchCreatedAt?: TimestampLike | null;
   batchCreatedByUid?: string | null;
@@ -232,6 +251,7 @@ export interface JobOutput {
   garmentId: string;
   garmentName: string;
   provider: Provider;
+  requestedPromptBase?: string;
   promptBase: string;
   finalPrompt: string;
   aspectRatio: AspectRatio;
@@ -242,6 +262,8 @@ export interface JobOutput {
   costUsd: number;
   durationSeconds: number | null;
   providerResponseSummary?: Record<string, unknown> | null;
+  generationAttempt?: number | null;
+  autoReview?: JobAutoReview | null;
   isCurrent: boolean;
   storageDeletedAt?: TimestampLike | null;
   createdAt: TimestampLike;
@@ -271,6 +293,7 @@ export interface Job {
   garmentIsMultiAngle: boolean;
   aspectRatio: AspectRatio;
   provider: Provider;
+  requestedPromptBase?: string;
   promptBase: string;
   finalPrompt: string;
   backgroundConfig: BackgroundConfig;
@@ -292,6 +315,9 @@ export interface Job {
   totalCostUsd: number;
   totalDurationSeconds: number;
   providerUsage?: Partial<Record<Provider, ProviderUsageStats>>;
+  generationAttemptCount?: number;
+  autoReviewMaxAttempts?: number;
+  latestAutoReview?: JobAutoReview | null;
   manualRegenerationCount: number;
   traceability?: JobTraceabilitySummary;
   createdAt: TimestampLike;
@@ -304,6 +330,7 @@ export type JobLogType =
   | 'claim'
   | 'provider_request'
   | 'provider_response'
+  | 'quality_review'
   | 'retry_scheduled'
   | 'completed'
   | 'failed'
@@ -500,7 +527,7 @@ export interface SystemAlertSettings {
 }
 
 export interface ProviderHealthCheck {
-  provider: 'fal.ai' | 'OpenAI';
+  provider: 'fal.ai' | 'OpenAI' | 'Gemini';
   status: HealthStatus;
   ok: boolean;
   httpStatus: number | null;

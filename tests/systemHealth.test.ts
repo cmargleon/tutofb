@@ -36,7 +36,7 @@ const queue = (overrides: Partial<QueueHealthSnapshot>): QueueHealthSnapshot => 
 
 test('computeOverallHealth marca el sistema como healthy cuando no hay presión ni fallos', () => {
   const result = computeOverallHealth(
-    [provider({ provider: 'fal.ai' }), provider({ provider: 'OpenAI' })],
+    [provider({ provider: 'fal.ai' }), provider({ provider: 'OpenAI' }), provider({ provider: 'Gemini' })],
     queue({}),
   );
 
@@ -45,7 +45,7 @@ test('computeOverallHealth marca el sistema como healthy cuando no hay presión 
 
 test('computeOverallHealth marca el sistema como down cuando una API cae o la tasa de error es alta', () => {
   const result = computeOverallHealth(
-    [provider({ provider: 'fal.ai', status: 'down', ok: false }), provider({ provider: 'OpenAI' })],
+    [provider({ provider: 'fal.ai', status: 'down', ok: false }), provider({ provider: 'OpenAI' }), provider({ provider: 'Gemini' })],
     queue({ recentFailedJobs: 8, recentCompletedJobs: 12, recentTerminalJobs: 20, recentErrorRate: 40 }),
   );
 
@@ -71,4 +71,26 @@ test('normalizeSystemHealthSnapshot rellena bloques faltantes en payloads parcia
   assert.equal(snapshot.settings.recentErrorRateThreshold, 10);
   assert.equal(snapshot.settings.pendingJobsThreshold, 25);
   assert.equal(snapshot.todayCostUsd, 0);
+});
+
+test('normalizeSystemHealthSnapshot acepta Gemini como proveedor válido', () => {
+  const snapshot = normalizeSystemHealthSnapshot({
+    overallStatus: 'healthy',
+    summary: 'Todo en orden.',
+    providers: [
+      {
+        provider: 'Gemini',
+        status: 'healthy',
+        ok: true,
+        httpStatus: 200,
+        latencyMs: 180,
+        detail: 'API responde correctamente.',
+        checkedAt: new Date('2026-03-22T00:00:00Z'),
+      },
+    ],
+  });
+
+  assert.equal(snapshot.providers.length, 1);
+  assert.equal(snapshot.providers[0]?.provider, 'Gemini');
+  assert.equal(snapshot.providers[0]?.status, 'healthy');
 });

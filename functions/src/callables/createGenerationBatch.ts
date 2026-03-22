@@ -9,7 +9,7 @@ import {
   Model,
 } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
-import { getBatchMaxJobs, getJobMaxRetries } from '../config/runtime';
+import { getBatchMaxJobs, getJobAutoReviewMaxAttempts, getJobMaxRetries } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
 import {
   assertModelOwnershipAndPoses,
@@ -98,6 +98,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     writeBatch.set(batchRef, batchData);
 
     const maxRetries = getJobMaxRetries();
+    const autoReviewMaxAttempts = getJobAutoReviewMaxAttempts();
     let combinationIndex = 0;
 
     for (const garment of validated.garments) {
@@ -126,6 +127,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
             } as Pick<Job, 'backgroundConfig' | 'garmentIsMultiAngle'>,
             selectedProvider,
             validated.promptBase,
+            autoReviewMaxAttempts,
           );
           const jobData: Omit<Job, 'id'> = {
             batchId: batchRef.id,

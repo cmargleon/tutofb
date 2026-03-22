@@ -25,7 +25,7 @@ import {
   Bell,
 } from 'lucide-react';
 import { AnalyticsSummary, Job } from '../../shared/src/types';
-import { StatusBadge } from './ui';
+import { ImageThumb, StatusBadge } from './ui';
 
 export const Layout: React.FC = () => {
   const { appUser } = useAuth();
@@ -340,11 +340,16 @@ export const Layout: React.FC = () => {
                           <Link
                             to={`/evaluacion?batchId=${job.batchId}`}
                             onClick={() => setIsNotifOpen(false)}
-                            className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition"
+                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
                           >
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-100">
+                              {job.garmentFilePath
+                                ? <ImageThumb storagePath={job.garmentFilePath} alt="" fit="contain" />
+                                : null}
+                            </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-slate-900">{job.garmentName}</p>
-                              <p className="text-xs text-slate-500">{job.clientNameSnapshot} · {job.id?.slice(0, 8)}</p>
+                              <p className="truncate text-sm font-medium text-slate-900">{job.clientNameSnapshot}</p>
+                              <p className="truncate text-xs text-slate-500">{job.modelNameSnapshot} · {job.id?.slice(0, 8)}</p>
                             </div>
                             <StatusBadge status={job.status} />
                           </Link>

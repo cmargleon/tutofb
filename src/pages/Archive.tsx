@@ -305,7 +305,7 @@ export const Archive: React.FC = () => {
         type="button"
         onClick={() => void handleDownloadSelected()}
         disabled={selectedJobs.length === 0 || busyAction !== null}
-        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Download className="h-4 w-4" />
         Descargar selección
@@ -562,7 +562,7 @@ export const Archive: React.FC = () => {
                           type="button"
                           onClick={() => void handleDownloadAll()}
                           disabled={busyAction === 'download' || !visibleJobs.some((job) => job.currentOutput?.resultImagePath)}
-                          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Download className="h-4 w-4" />
                           {busyAction === 'download' ? 'Preparando descarga...' : 'Descargar visibles'}

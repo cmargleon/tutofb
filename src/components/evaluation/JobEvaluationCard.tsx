@@ -221,7 +221,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
               void handleDownload();
             }}
             disabled={downloading}
-            className="absolute bottom-3 right-3 p-2 bg-white/90 hover:bg-white text-gray-700 rounded-xl shadow-sm backdrop-blur transition-all disabled:opacity-50"
+            className="absolute bottom-3 right-3 cursor-pointer p-2 bg-white/90 hover:bg-white text-gray-700 rounded-xl shadow-sm backdrop-blur transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             title="Descargar imagen"
           >
             <Download className="w-4 h-4" />

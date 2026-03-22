@@ -25,7 +25,26 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 };
 
 export const DEFAULT_TRY_ON_PROMPT =
-  'Reemplaza la ropa que lleva la persona por la prenda de la imagen de referencia. Conserva la identidad, la pose, la iluminacion, el angulo de camara y el fondo.';
+  `Replace only the clothing worn by the person in the original image with the garment from the reference image.
+
+Strictly preserve:
+    •    the model's identity (face and body)
+    •    exact pose
+    •    original lighting
+    •    camera angle and framing
+    •    original background
+
+Fit the new garment naturally onto the model's body, ensuring:
+    •    correct anatomy and proportions
+    •    realistic fabric folds and tension
+    •    proper draping according to the pose
+
+The garment must:
+    •    retain its original color, texture, and design
+    •    not be altered or stylized
+    •    match the perspective of the scene
+
+Output a photorealistic, high-detail fashion catalog image with consistent lighting and no visual artifacts.`;
 
 export const BACKGROUND_MODE_VALUES: BackgroundMode[] = [
   'white',

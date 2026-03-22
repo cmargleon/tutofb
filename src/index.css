@@ -1,31 +1,100 @@
 @import "tailwindcss";
 
+/* ════════════════════════════════════════════════════════════════
+   MIDNIGHT BLUE DESIGN SYSTEM
+   4-Layer Depth Hierarchy
+   ─────────────────────────────────────────────────────────────
+   Capa 1 #0B0F1A  fondo de página        (deepest)
+   Capa 2 #0F1422  sidebar · topbar · cards
+   Capa 3 #131929  inputs · dropdowns · empty states
+   Capa 4 #1A2035  hover states · selecciones
+   Capa 5 #1E2A50  nav activo · stepper activo (tinted blue)
+   ════════════════════════════════════════════════════════════════ */
+
+/* ─── Dark theme tokens (default) ─────────────────────────────── */
 :root {
   color-scheme: dark;
-  --app-bg: #020617;
-  --app-surface: #0f172a;
-  --app-surface-muted: #111c31;
-  --app-surface-soft: #172036;
-  --app-border: #263247;
-  --app-border-strong: #334155;
-  --app-text: #f8fafc;
-  --app-text-muted: #cbd5e1;
-  --app-text-soft: #94a3b8;
+
+  /* Backgrounds */
+  --color-bg-base:     #0B0F1A;
+  --color-bg-surface:  #0F1422;
+  --color-bg-elevated: #131929;
+  --color-bg-hover:    #1A2035;
+  --color-bg-active:   #1E2A50;
+
+  /* Borders */
+  --color-border-subtle:  #1E2640;
+  --color-border-default: #2B3561;
+  --color-border-focus:   #4F6BDE;
+
+  /* Accent */
+  --color-accent:       #4F6BDE;
+  --color-accent-light: #7B9FFF;
+  --color-accent-dot:   #5B7FFF;
+
+  /* Text */
+  --color-text-primary:   #E8EEFF;
+  --color-text-secondary: #BFC7E0;
+  --color-text-muted:     #6B7A9E;
+  --color-text-dim:       #3A4560;
+
+  /* Semantic */
+  --color-success: #6EE3B0;
+  --color-warning: #F0A050;
+  --color-danger:  #E85D5D;
+
+  /* Legacy aliases — consumed by body & base styles */
+  --app-bg:            var(--color-bg-base);
+  --app-surface:       var(--color-bg-surface);
+  --app-surface-muted: var(--color-bg-elevated);
+  --app-surface-soft:  var(--color-bg-hover);
+  --app-border:        var(--color-border-subtle);
+  --app-border-strong: var(--color-border-default);
+  --app-text:          var(--color-text-primary);
+  --app-text-muted:    var(--color-text-secondary);
+  --app-text-soft:     var(--color-text-muted);
 }
 
+/* ─── Light theme overrides ────────────────────────────────────── */
 html.theme-light {
   color-scheme: light;
-  --app-bg: #f8fafc;
-  --app-surface: #ffffff;
-  --app-surface-muted: #f8fafc;
-  --app-surface-soft: #f1f5f9;
-  --app-border: #e2e8f0;
-  --app-border-strong: #cbd5e1;
-  --app-text: #0f172a;
-  --app-text-muted: #334155;
-  --app-text-soft: #64748b;
+
+  --color-bg-base:     #f8fafc;
+  --color-bg-surface:  #ffffff;
+  --color-bg-elevated: #f1f5f9;
+  --color-bg-hover:    #e8eef6;
+  --color-bg-active:   #eef2ff;
+
+  --color-border-subtle:  #e2e8f0;
+  --color-border-default: #cbd5e1;
+  --color-border-focus:   #4f6bde;
+
+  --color-accent:       #4f6bde;
+  --color-accent-light: #3b4fd4;
+  --color-accent-dot:   #5b7fff;
+
+  --color-text-primary:   #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-muted:     #64748b;
+  --color-text-dim:       #94a3b8;
+
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger:  #dc2626;
+
+  /* Legacy aliases */
+  --app-bg:            var(--color-bg-base);
+  --app-surface:       var(--color-bg-surface);
+  --app-surface-muted: var(--color-bg-elevated);
+  --app-surface-soft:  var(--color-bg-hover);
+  --app-border:        var(--color-border-subtle);
+  --app-border-strong: var(--color-border-default);
+  --app-text:          var(--color-text-primary);
+  --app-text-muted:    var(--color-text-secondary);
+  --app-text-soft:     var(--color-text-muted);
 }
 
+/* ─── Base ─────────────────────────────────────────────────────── */
 html,
 body,
 #root {
@@ -34,8 +103,8 @@ body,
 
 body {
   margin: 0;
-  background: var(--app-bg);
-  color: var(--app-text);
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
   transition: background-color 200ms ease, color 200ms ease;
 }
 
@@ -45,123 +114,338 @@ body {
   transition-timing-function: ease;
 }
 
+/* ─── Dark mode body gradient ──────────────────────────────────── */
 .theme-dark body {
   background:
-    radial-gradient(circle at top, rgba(79, 70, 229, 0.16), transparent 26rem),
-    linear-gradient(180deg, #020617 0%, #07111f 100%);
+    radial-gradient(circle at 50% 0%, rgba(79, 107, 222, 0.09), transparent 32rem),
+    linear-gradient(180deg, var(--color-bg-base) 0%, #090D16 100%);
 }
 
+/* ─── Selection ────────────────────────────────────────────────── */
 .theme-dark ::selection {
-  background: rgba(99, 102, 241, 0.35);
-  color: #f8fafc;
+  background: rgba(79, 107, 222, 0.35);
+  color: var(--color-text-primary);
 }
 
-.theme-dark input,
-.theme-dark select,
-.theme-dark textarea {
-  background-color: var(--app-surface);
-  color: var(--app-text);
-  border-color: var(--app-border-strong);
-}
+/* ════════════════════════════════════════════════════════════════
+   LAYER SYSTEM — The 4-layer depth separation
+   (This is the core fix for the "flat" look)
+   ════════════════════════════════════════════════════════════════ */
 
-.theme-dark input::placeholder,
-.theme-dark textarea::placeholder {
-  color: #64748b;
-}
-
-.theme-dark option {
-  background-color: var(--app-surface);
-  color: var(--app-text);
-}
-
-.theme-dark .bg-white,
+/* Layer 1 — Page / layout wrapper backgrounds (darkest) */
 .theme-dark .bg-gray-50,
 .theme-dark .bg-slate-50 {
-  background-color: var(--app-surface);
+  background-color: var(--color-bg-base);
 }
 
+/* Layer 2 — Surface: sidebar, topbar, cards */
+.theme-dark .bg-white {
+  background-color: var(--color-bg-surface);
+}
+
+/* Layer 3 — Elevated: inputs, dropdowns, empty states, inner elements */
 .theme-dark .bg-gray-100,
 .theme-dark .bg-slate-100 {
-  background-color: var(--app-surface-muted);
+  background-color: var(--color-bg-elevated);
 }
 
+/* Layer 4 — Hover / selection */
 .theme-dark .bg-gray-200,
 .theme-dark .bg-slate-200 {
-  background-color: var(--app-surface-soft);
+  background-color: var(--color-bg-hover);
 }
 
-.theme-dark .bg-white\/95 {
-  background-color: rgba(15, 23, 42, 0.95);
+/* Layer 5 — Active (nav item, stepper, accent containers) */
+.theme-dark .bg-indigo-50 {
+  background-color: var(--color-bg-active);
+}
+.theme-dark .bg-indigo-100 {
+  background-color: var(--color-bg-active);
 }
 
-.theme-dark .bg-white\/90 {
-  background-color: rgba(15, 23, 42, 0.9);
+/* ─── Deep accent panel (cola actual, very dark) ───────────────── */
+.theme-dark .bg-slate-950 {
+  background-color: #060A14;
+}
+.theme-dark .bg-slate-900 {
+  background-color: #0E1528;
 }
 
-.theme-dark .bg-white\/80 {
-  background-color: rgba(15, 23, 42, 0.8);
+/* ─── Alpha / translucent surfaces ────────────────────────────── */
+/* Used by: floating toolbar, processing overlay, etc. */
+.theme-dark .bg-white\/95 { background-color: rgba(15, 20, 34, 0.95); }
+.theme-dark .bg-white\/90 { background-color: rgba(15, 20, 34, 0.90); }
+.theme-dark .bg-white\/80 { background-color: rgba(15, 20, 34, 0.80); }
+
+/* ─── Semantic tone backgrounds ───────────────────────────────── */
+/* Sky / info */
+.theme-dark .bg-sky-50 { background-color: rgba(14, 165, 233, 0.09); }
+/* Emerald / success */
+.theme-dark .bg-emerald-50 { background-color: rgba(110, 227, 176, 0.08); }
+.theme-dark .bg-emerald-100 { background-color: rgba(110, 227, 176, 0.12); }
+/* Amber / warning */
+.theme-dark .bg-amber-50 { background-color: rgba(240, 160, 80, 0.08); }
+.theme-dark .bg-amber-100 { background-color: rgba(240, 160, 80, 0.12); }
+/* Rose / danger */
+.theme-dark .bg-rose-50 { background-color: rgba(232, 93, 93, 0.08); }
+.theme-dark .bg-rose-100 { background-color: rgba(232, 93, 93, 0.12); }
+/* Red */
+.theme-dark .bg-red-50 { background-color: rgba(232, 93, 93, 0.08); }
+.theme-dark .bg-red-100 { background-color: rgba(232, 93, 93, 0.12); }
+/* Violet */
+.theme-dark .bg-violet-50 { background-color: rgba(139, 92, 246, 0.09); }
+/* Yellow */
+.theme-dark .bg-yellow-100 { background-color: rgba(240, 180, 60, 0.10); }
+/* Green */
+.theme-dark .bg-green-100 { background-color: rgba(110, 227, 176, 0.12); }
+/* Blue */
+.theme-dark .bg-blue-100 { background-color: rgba(79, 107, 222, 0.14); }
+
+/* Opacity modifiers from SystemHealthPanel (bg-emerald-50/60, etc.) */
+.theme-dark .bg-emerald-50\/60 { background-color: rgba(110, 227, 176, 0.05); }
+.theme-dark .bg-amber-50\/70   { background-color: rgba(240, 160, 80, 0.06); }
+.theme-dark .bg-rose-50\/70    { background-color: rgba(232, 93, 93, 0.06); }
+.theme-dark .bg-slate-50\/80   { background-color: rgba(15, 20, 34, 0.80); }
+
+/* ─── Accent (indigo → electric blue) ─────────────────────────── */
+.theme-dark .bg-indigo-600 {
+  background-color: var(--color-accent);
+}
+.theme-dark .hover\:bg-indigo-700:hover {
+  background-color: #3d57c4;
+}
+.theme-dark .bg-indigo-500 {
+  background-color: var(--color-accent-light);
 }
 
+/* ════════════════════════════════════════════════════════════════
+   HOVER STATES
+   ════════════════════════════════════════════════════════════════ */
+.theme-dark .hover\:bg-gray-50:hover,
+.theme-dark .hover\:bg-gray-100:hover,
+.theme-dark .hover\:bg-slate-50:hover,
+.theme-dark .hover\:bg-slate-100:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.theme-dark .hover\:bg-slate-800:hover {
+  background-color: var(--color-bg-hover);
+}
+
+/* Semantic hover */
+.theme-dark .hover\:bg-red-50:hover   { background-color: rgba(232, 93, 93, 0.10); }
+.theme-dark .hover\:bg-red-200:hover  { background-color: rgba(232, 93, 93, 0.18); }
+.theme-dark .hover\:bg-amber-200:hover { background-color: rgba(240, 160, 80, 0.18); }
+.theme-dark .hover\:bg-emerald-50:hover  { background-color: rgba(110, 227, 176, 0.09); }
+.theme-dark .hover\:bg-emerald-200:hover { background-color: rgba(110, 227, 176, 0.18); }
+.theme-dark .hover\:bg-indigo-50:hover { background-color: var(--color-bg-active); }
+
+/* ════════════════════════════════════════════════════════════════
+   BORDERS
+   ════════════════════════════════════════════════════════════════ */
 .theme-dark .border-gray-100,
 .theme-dark .border-gray-200,
 .theme-dark .border-gray-300,
 .theme-dark .border-slate-100,
 .theme-dark .border-slate-200,
 .theme-dark .border-slate-300 {
-  border-color: var(--app-border);
+  border-color: var(--color-border-subtle);
 }
 
+.theme-dark .border-slate-400 {
+  border-color: var(--color-border-default);
+}
+
+/* Accent borders */
+.theme-dark .border-indigo-400 { border-color: var(--color-accent); }
+.theme-dark .border-indigo-500 { border-color: var(--color-border-focus); }
+.theme-dark .border-indigo-600 { border-color: var(--color-accent); }
+.theme-dark .border-sky-300 { border-color: rgba(56, 189, 248, 0.7); }
+
+/* Semantic borders */
+.theme-dark .border-emerald-200 { border-color: rgba(110, 227, 176, 0.20); }
+.theme-dark .border-emerald-400 { border-color: rgba(110, 227, 176, 0.45); }
+.theme-dark .border-amber-200   { border-color: rgba(240, 160, 80, 0.22); }
+.theme-dark .border-rose-200    { border-color: rgba(232, 93, 93, 0.22); }
+.theme-dark .border-red-100     { border-color: rgba(232, 93, 93, 0.18); }
+.theme-dark .border-red-200     { border-color: rgba(232, 93, 93, 0.22); }
+
+/* Translucent */
 .theme-dark .border-white\/20 {
-  border-color: rgba(148, 163, 184, 0.24);
+  border-color: rgba(184, 199, 224, 0.14);
 }
 
-.theme-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: var(--app-border);
+/* Hover border */
+.theme-dark .hover\:border-gray-400:hover,
+.theme-dark .hover\:border-slate-300:hover,
+.theme-dark .hover\:border-slate-950:hover {
+  border-color: var(--color-border-focus);
 }
 
+/* Divide */
+.theme-dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.theme-dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.theme-dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--color-border-subtle);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TEXT COLORS
+   ════════════════════════════════════════════════════════════════ */
+/* Primary — page titles, high emphasis */
 .theme-dark .text-gray-900,
 .theme-dark .text-slate-900,
 .theme-dark .text-slate-950 {
-  color: var(--app-text);
+  color: var(--color-text-primary);
 }
 
+/* Secondary — card headers, labels */
 .theme-dark .text-gray-700,
 .theme-dark .text-slate-700 {
-  color: #d9e4f5;
+  color: var(--color-text-secondary);
 }
 
 .theme-dark .text-gray-600,
 .theme-dark .text-slate-600 {
-  color: var(--app-text-muted);
+  color: var(--color-text-secondary);
 }
 
+/* Muted — nav inactive, subtitles */
 .theme-dark .text-gray-500,
+.theme-dark .text-slate-500 {
+  color: var(--color-text-muted);
+}
+
+/* Dim — placeholders, hints, very secondary info */
 .theme-dark .text-gray-400,
-.theme-dark .text-slate-500,
 .theme-dark .text-slate-400,
 .theme-dark .text-slate-300,
 .theme-dark .text-slate-200 {
-  color: var(--app-text-soft);
+  color: var(--color-text-dim);
 }
 
-.theme-dark .hover\:bg-gray-50:hover,
-.theme-dark .hover\:bg-gray-100:hover,
-.theme-dark .hover\:bg-slate-50:hover,
-.theme-dark .hover\:bg-slate-100:hover {
-  background-color: #17233a;
-}
-
-.theme-dark .hover\:border-gray-400:hover,
-.theme-dark .hover\:border-slate-300:hover,
-.theme-dark .hover\:border-slate-950:hover {
-  border-color: #4f5f78;
-}
-
+/* Hover text */
 .theme-dark .hover\:text-gray-700:hover,
 .theme-dark .hover\:text-slate-900:hover {
-  color: var(--app-text);
+  color: var(--color-text-primary);
 }
 
+/* ─── Accent text ──────────────────────────────────────────────── */
+.theme-dark .text-indigo-600 { color: var(--color-accent); }
+.theme-dark .text-indigo-700 { color: var(--color-accent-light); }
+.theme-dark .text-indigo-800 { color: var(--color-accent-light); }
+.theme-dark .text-indigo-500 { color: var(--color-accent-light); }
+.theme-dark .hover\:text-indigo-500:hover { color: var(--color-accent-light); }
+
+/* ─── Semantic text ────────────────────────────────────────────── */
+.theme-dark .text-sky-600    { color: #38bdf8; }
+.theme-dark .text-sky-700    { color: #7dd3fc; }
+.theme-dark .text-emerald-600 { color: var(--color-success); }
+.theme-dark .text-emerald-700 { color: var(--color-success); }
+.theme-dark .text-amber-600  { color: var(--color-warning); }
+.theme-dark .text-amber-700  { color: var(--color-warning); }
+.theme-dark .text-amber-800  { color: var(--color-warning); }
+.theme-dark .text-violet-600 { color: #a78bfa; }
+.theme-dark .text-rose-600   { color: var(--color-danger); }
+.theme-dark .text-rose-700   { color: var(--color-danger); }
+.theme-dark .text-red-400    { color: rgba(232, 93, 93, 0.85); }
+.theme-dark .text-red-500    { color: var(--color-danger); }
+.theme-dark .text-red-600    { color: var(--color-danger); }
+.theme-dark .text-red-700    { color: var(--color-danger); }
+.theme-dark .text-green-800  { color: var(--color-success); }
+.theme-dark .text-blue-800   { color: var(--color-accent-light); }
+.theme-dark .text-yellow-800 { color: var(--color-warning); }
+
+/* ════════════════════════════════════════════════════════════════
+   FORM ELEMENTS
+   ════════════════════════════════════════════════════════════════ */
+.theme-dark input,
+.theme-dark select,
+.theme-dark textarea {
+  background-color: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-default);
+}
+
+.theme-dark input::placeholder,
+.theme-dark textarea::placeholder {
+  color: var(--color-text-dim);
+}
+
+.theme-dark option {
+  background-color: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+/* Focus ring overrides */
+.theme-dark .focus\:border-indigo-500:focus {
+  border-color: var(--color-border-focus) !important;
+}
+
+.theme-dark .focus\:ring-indigo-200:focus {
+  --tw-ring-color: rgba(79, 107, 222, 0.28);
+}
+
+.theme-dark .focus\:ring-indigo-500:focus {
+  --tw-ring-color: rgba(79, 107, 222, 0.45);
+}
+
+/* Focus ring glow on cards */
+.theme-dark .ring-indigo-100 { --tw-ring-color: rgba(79, 107, 222, 0.14); }
+.theme-dark .ring-indigo-200 { --tw-ring-color: rgba(79, 107, 222, 0.22); }
+.theme-dark .ring-sky-100    { --tw-ring-color: rgba(14, 165, 233, 0.14); }
+
+/* ════════════════════════════════════════════════════════════════
+   COMPONENT-SPECIFIC OVERRIDES
+   (targeted CSS rules — no class changes needed in components)
+   ════════════════════════════════════════════════════════════════ */
+
+/* ─── WizardStepper active step ──────────────────────────────── */
+/* Targets aria-current="step" on the current step button */
+.theme-dark [aria-current="step"] {
+  background-color: var(--color-bg-active) !important;
+  border-color: var(--color-accent) !important;
+}
+
+/* ─── Checkbox ───────────────────────────────────────────────── */
+.theme-dark input[type="checkbox"] {
+  background-color: var(--color-bg-elevated);
+  border-color: var(--color-border-default);
+}
+
+/* ─── Shadow overrides ───────────────────────────────────────── */
 .theme-dark .shadow-slate-200\/60 {
-  --tw-shadow-color: rgba(2, 6, 23, 0.45);
+  --tw-shadow-color: rgba(2, 6, 23, 0.50);
+}
+
+.theme-dark .shadow-lg {
+  --tw-shadow: 0 10px 30px -6px rgba(0, 0, 0, 0.45);
+}
+
+/* ─── Disabled form elements ─────────────────────────────────── */
+.theme-dark input:disabled,
+.theme-dark select:disabled,
+.theme-dark textarea:disabled {
+  background-color: var(--color-bg-base);
+  color: var(--color-text-dim);
+  border-color: var(--color-border-subtle);
+}
+
+/* ─── Dashboard table row hover ──────────────────────────────── */
+/* bg-slate-50/80 opacity variant has no token mapping without this */
+.theme-dark .hover\:bg-slate-50\/80:hover {
+  background-color: var(--color-bg-hover) !important;
+}
+
+/* ─── Recharts tooltip dark mode ─────────────────────────────── */
+.theme-dark .recharts-default-tooltip {
+  background-color: var(--color-bg-elevated) !important;
+  border-color: var(--color-border-default) !important;
+  color: var(--color-text-primary) !important;
+}
+.theme-dark .recharts-tooltip-label {
+  color: var(--color-text-secondary) !important;
+}
+.theme-dark .recharts-tooltip-item {
+  color: var(--color-text-primary) !important;
 }

@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { AnalyticsData } from '../../../shared/src/types';
 import { mapSummary, mapDailyVolume, mapProviderStats, mapClientStats, mapClientProviderStats } from './mappers';
 
-export const useAnalyticsDashboard = () => {
+export const useAnalyticsDashboard = (daysBack: number = 30) => {
   const [data, setData] = useState<AnalyticsData>({
     summary: null,
     dailyVolume: [],
@@ -47,8 +47,8 @@ export const useAnalyticsDashboard = () => {
         setError("Error al cargar el resumen de analytics.");
       });
 
-      // 2. Daily Volume (last 30 days)
-      const dailyQuery = query(collection(db, 'analytics_daily'), orderBy('date', 'desc'), limit(30));
+      // 2. Daily Volume (configurable window)
+      const dailyQuery = query(collection(db, 'analytics_daily'), orderBy('date', 'desc'), limit(daysBack));
       unsubscribeDaily = onSnapshot(dailyQuery, (snapshot) => {
         const daily = snapshot.docs.map(doc => mapDailyVolume(doc.data())).reverse(); // Reverse to get chronological order
         
@@ -117,7 +117,7 @@ export const useAnalyticsDashboard = () => {
       if (unsubscribeClients) unsubscribeClients();
       if (unsubscribeClientProviders) unsubscribeClientProviders();
     };
-  }, []);
+  }, [daysBack]);
 
   return { data, loading, error };
 };

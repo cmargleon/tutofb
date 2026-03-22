@@ -108,7 +108,7 @@ export const JobBatchCarousel: React.FC<Props> = ({
         onGoTo={goToSlide}
       />
 
-      <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-6 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
         <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-900">{activeSlide.garmentName}</p>

@@ -364,13 +364,13 @@ export const Cola: React.FC = () => {
           tone="bg-sky-50 text-sky-600"
         />
         <SummaryCard
-          label="Jobs en cola"
+          label="Trabajos en cola"
           value={totals.pending + totals.processing}
           icon={Clock3}
           tone="bg-indigo-50 text-indigo-600"
         />
         <SummaryCard
-          label="Fallidos accionables"
+          label="Fallidos reintentables"
           value={totals.failed}
           icon={AlertCircle}
           tone="bg-amber-50 text-amber-600"
@@ -556,7 +556,7 @@ export const Cola: React.FC = () => {
                         {row.batch.pendingJobs + row.batch.processingJobs > 0 ? formatRelativeDuration(row.etaSeconds) : 'Sin cola'}
                       </div>
                       <div className="mt-1 text-xs text-slate-500">
-                        {row.batch.processingJobs > 0 ? 'estimación sobre jobs ya completados' : 'esperando salida inicial'}
+                        {row.batch.processingJobs > 0 ? 'estimación basada en trabajos completados' : 'esperando primer resultado'}
                       </div>
                     </td>
                     <td className="px-4 py-4">

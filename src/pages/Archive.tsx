@@ -256,8 +256,8 @@ export const Archive: React.FC = () => {
 
     const accepted = await confirm({
       title: 'Reencolar selección archivada',
-      description: `Vas a volver a encolar ${selectedJobs.length} job${selectedJobs.length === 1 ? '' : 's'} desde el archivo.`,
-      impact: 'Se usarán el proveedor y prompt vigentes de cada job. Las nuevas salidas reemplazarán el resultado actual cuando terminen.',
+      description: `Vas a volver a encolar ${selectedJobs.length} trabajo${selectedJobs.length === 1 ? '' : 's'} desde el archivo.`,
+      impact: 'Se usarán el proveedor y la configuración actual de cada trabajo. Las nuevas salidas reemplazarán el resultado actual cuando terminen.',
       confirmLabel: 'Sí, reencolar',
       cancelLabel: 'Cancelar',
       tone: 'warning',
@@ -281,14 +281,14 @@ export const Archive: React.FC = () => {
         title: 'Regeneraciones encoladas',
         description:
           result.skippedJobs > 0
-            ? `Se reencolaron ${result.queuedJobs} jobs y ${result.skippedJobs} se omitieron.`
-            : `Se reencolaron ${result.queuedJobs} job${result.queuedJobs === 1 ? '' : 's'} desde el archivo.`,
+            ? `Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} y ${result.skippedJobs} se omitieron.`
+            : `Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} desde el archivo.`,
       });
     } catch (error: any) {
       toast({
         tone: 'error',
         title: 'No pudimos reencolar la selección',
-        description: error.message || 'Revisa el estado de los jobs e inténtalo nuevamente.',
+        description: error.message || 'Revisa el estado de los trabajos e inténtalo nuevamente.',
       });
     } finally {
       setBusyAction(null);
@@ -328,7 +328,7 @@ export const Archive: React.FC = () => {
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
       <PageHeader
         title="Archivo"
-        description="Busca lotes reales por estado, cliente, modelo, prenda, fecha y proveedor. Cuando abras uno puedes comparar regeneraciones y actuar sobre múltiples jobs sin salir del historial."
+        description="Busca lotes reales por estado, cliente, modelo, prenda, fecha y proveedor. Cuando abras uno puedes comparar regeneraciones y actuar sobre múltiples trabajos sin salir del historial."
         icon={ArchiveIcon}
       />
 
@@ -590,7 +590,7 @@ export const Archive: React.FC = () => {
               ) : selectedResult ? (
                 <EmptyState
                   icon={<AlertCircle className="w-6 h-6" />}
-                  title="El lote no tiene jobs para este filtro"
+                  title="El lote no tiene trabajos para este filtro"
                   description="Prueba con otro estado o proveedor para volver a ver resultados."
                 />
               ) : null}

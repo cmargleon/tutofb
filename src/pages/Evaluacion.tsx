@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { PageHeader, LoadingBlock, EmptyState, StatusBadge } from '../components/ui';
+import { PageHeader, LoadingBlock, EmptyState, StatusBadge, Button } from '../components/ui';
 import { useEvaluationBatch } from '../features/evaluation/useEvaluationBatch';
 import { JobBatchCarousel } from '../components/evaluation/JobBatchCarousel';
 import { downloadBatchImages, downloadMultipleJobImages } from '../features/evaluation/downloadBatchImages';
 import { cancelPendingBatchJobs, regenerateFailedBatchJobs, regenerateJobsBulk } from '../features/evaluation/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
-import { Download, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Clock, RefreshCw } from 'lucide-react';
+import { Download, AlertCircle, ChevronDown, ChevronUp, Clock, RefreshCw, CheckSquare2 } from 'lucide-react';
 import { useAuth, useRole } from '../features/auth/AuthProvider';
 import { computeBatchExperimentAnalytics } from '../../shared/src/experiments';
 import { buildJobPoseIndexMap } from '../features/evaluation/jobSlides';
@@ -48,14 +48,8 @@ export const Evaluacion: React.FC = () => {
   const filteredJobs = useMemo(
     () =>
       jobs.filter((job) => {
-        if (providerFilter !== 'all' && job.provider !== providerFilter) {
-          return false;
-        }
-
-        if (statusFilter !== 'all' && job.status !== statusFilter) {
-          return false;
-        }
-
+        if (providerFilter !== 'all' && job.provider !== providerFilter) return false;
+        if (statusFilter !== 'all' && job.status !== statusFilter) return false;
         return true;
       }),
     [jobs, providerFilter, statusFilter],
@@ -84,9 +78,7 @@ export const Evaluacion: React.FC = () => {
   };
 
   const handleDownloadSelected = async () => {
-    if (!batch || selectedJobs.length === 0) {
-      return;
-    }
+    if (!batch || selectedJobs.length === 0) return;
 
     setBusySelectionAction('download');
     try {
@@ -108,22 +100,18 @@ export const Evaluacion: React.FC = () => {
   };
 
   const handleRequeueSelected = async () => {
-    if (selectedJobs.length === 0 || !role.canRegenerate) {
-      return;
-    }
+    if (selectedJobs.length === 0 || !role.canRegenerate) return;
 
     const accepted = await confirm({
-      title: 'Reencolar jobs seleccionados',
-      description: `Vas a reencolar ${selectedJobs.length} job${selectedJobs.length === 1 ? '' : 's'} del lote actual.`,
-      impact: 'Se respetarán el proveedor y el prompt vigentes en cada tarjeta seleccionada.',
+      title: 'Reintentar trabajos seleccionados',
+      description: `Vas a reintentar ${selectedJobs.length} trabajo${selectedJobs.length === 1 ? '' : 's'} del lote actual.`,
+      impact: 'Se usarán el proveedor y la configuración actual de cada imagen seleccionada.',
       confirmLabel: 'Sí, reencolar selección',
       cancelLabel: 'Cancelar',
       tone: 'warning',
     });
 
-    if (!accepted) {
-      return;
-    }
+    if (!accepted) return;
 
     setBusySelectionAction('requeue');
     setBatchActionMessage(null);
@@ -138,14 +126,14 @@ export const Evaluacion: React.FC = () => {
       );
       setBatchActionMessage(
         result.skippedJobs > 0
-          ? `Se reencolaron ${result.queuedJobs} jobs. ${result.skippedJobs} se omitieron por estado o datos inválidos.`
-          : `Se reencolaron ${result.queuedJobs} jobs seleccionados del lote.`,
+          ? `Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'}. ${result.skippedJobs} se omitieron por estado o datos inválidos.`
+          : `Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} seleccionados del lote.`,
       );
     } catch (err: any) {
       toast({
         tone: 'error',
-        title: 'No pudimos reencolar la selección',
-        description: err.message || 'Revisa el estado de los jobs e inténtalo nuevamente.',
+        title: 'No pudimos reintentar la selección',
+        description: err.message || 'Revisa el estado de los trabajos e inténtalo nuevamente.',
       });
     } finally {
       setBusySelectionAction(null);
@@ -154,9 +142,7 @@ export const Evaluacion: React.FC = () => {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) {
-        return;
-      }
+      if (isTypingTarget(event.target)) return;
 
       if ((event.key === 'a' || event.key === 'A') && filteredJobs.length > 0) {
         event.preventDefault();
@@ -207,15 +193,15 @@ export const Evaluacion: React.FC = () => {
           title={batchId ? 'Lote no encontrado' : 'No hay evaluaciones recientes'}
           description={error || 'No se ha especificado un lote válido para evaluar.'}
           icon={<AlertCircle className="w-6 h-6" />}
+          action={
+            <Link
+              to="/cola"
+              className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Abrir cola operativa
+            </Link>
+          }
         />
-        <div className="mt-4 flex justify-center">
-          <Link
-            to="/cola"
-            className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            Abrir cola operativa
-          </Link>
-        </div>
       </div>
     );
   }
@@ -258,18 +244,18 @@ export const Evaluacion: React.FC = () => {
       const result = await regenerateFailedBatchJobs(batch.id);
 
       if (result.queuedJobs === 0) {
-        setBatchActionMessage('No había jobs fallidos pendientes para reencolar.');
+        setBatchActionMessage('No había trabajos fallidos pendientes para reintentar.');
       } else if (result.skippedJobs > 0) {
         setBatchActionMessage(
-          `Se reencolaron ${result.queuedJobs} jobs fallidos. ${result.skippedJobs} se omitieron por datos inválidos.`,
+          `Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'}. ${result.skippedJobs} se omitieron por datos inválidos.`,
         );
       } else {
-        setBatchActionMessage(`Se reencolaron ${result.queuedJobs} jobs fallidos del lote.`);
+        setBatchActionMessage(`Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'} del lote.`);
       }
     } catch (err: any) {
       toast({
         tone: 'error',
-        title: 'No pudimos reencolar los jobs fallidos',
+        title: 'No pudimos reintentar los trabajos fallidos',
         description: err.message || 'Revisa el estado del lote e inténtalo nuevamente.',
       });
     } finally {
@@ -281,17 +267,15 @@ export const Evaluacion: React.FC = () => {
     if (!batch?.id) return;
 
     const accepted = await confirm({
-      title: 'Cancelar jobs pendientes',
-      description: `Vas a detener los ${batch.pendingJobs} jobs que siguen en cola para este lote.`,
-      impact: 'Los jobs pendientes dejarán de procesarse y tendrás que relanzarlos manualmente si todavía los necesitas.',
+      title: 'Cancelar trabajos pendientes',
+      description: `Vas a detener los ${batch.pendingJobs} trabajos que siguen en cola para este lote.`,
+      impact: 'Los trabajos pendientes dejarán de procesarse y tendrás que relanzarlos manualmente si todavía los necesitas.',
       confirmLabel: 'Sí, cancelar pendientes',
       cancelLabel: 'Mantener cola',
       tone: 'warning',
     });
 
-    if (!accepted) {
-      return;
-    }
+    if (!accepted) return;
 
     setIsCancellingPending(true);
     setBatchActionMessage(null);
@@ -299,14 +283,14 @@ export const Evaluacion: React.FC = () => {
     try {
       const result = await cancelPendingBatchJobs(batch.id);
       if (result.cancelledJobs === 0) {
-        setBatchActionMessage('No había jobs pendientes para cancelar.');
+        setBatchActionMessage('No había trabajos pendientes para cancelar.');
       } else {
-        setBatchActionMessage(`Se cancelaron ${result.cancelledJobs} jobs pendientes del lote.`);
+        setBatchActionMessage(`Se cancelaron ${result.cancelledJobs} trabajo${result.cancelledJobs === 1 ? '' : 's'} pendiente${result.cancelledJobs === 1 ? '' : 's'} del lote.`);
       }
     } catch (err: any) {
       toast({
         tone: 'error',
-        title: 'No pudimos cancelar los jobs pendientes',
+        title: 'No pudimos cancelar los trabajos pendientes',
         description: err.message || 'Inténtalo nuevamente cuando el sistema esté disponible.',
       });
     } finally {
@@ -317,77 +301,50 @@ export const Evaluacion: React.FC = () => {
   const hasCompletedImages = filteredJobs.some((job) => job.status === 'completed' && job.currentOutput?.resultImagePath);
   const canRegenerateFailed = role.canRegenerate && batch.failedJobs > 0;
   const canCancelPending = role.canRegenerate && batch.pendingJobs > 0;
-
-  const bulkActions = (
-    <>
-      <button
-        type="button"
-        onClick={() => void handleDownloadSelected()}
-        disabled={selectedJobs.length === 0 || busySelectionAction !== null}
-        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <Download className="h-4 w-4" />
-        Descargar selección
-      </button>
-      {role.canRegenerate ? (
-        <button
-          type="button"
-          onClick={() => void handleRequeueSelected()}
-          disabled={selectedJobs.length === 0 || busySelectionAction !== null}
-          className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${busySelectionAction === 'requeue' ? 'animate-spin' : ''}`} />
-          Reencolar selección
-        </button>
-      ) : null}
-    </>
-  );
+  const hasSelection = selectedJobIds.length > 0;
 
   return (
-    <div className="max-w-7xl mx-auto pb-12">
+    <div className={`max-w-7xl mx-auto transition-all ${hasSelection ? 'pb-28' : 'pb-12'}`}>
+      {/* Page header + batch-level actions */}
       <div className="flex justify-between items-start mb-8">
         <PageHeader
           title="Evaluación"
-          description="Revisa visualmente los resultados del lote seleccionado. Ahora puedes filtrar, comparar regeneraciones y actuar sobre varias tarjetas a la vez."
+          description="Revisa visualmente los resultados del lote seleccionado. Filtra, compara regeneraciones y actúa sobre varias tarjetas a la vez."
         />
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           {canCancelPending ? (
-            <button
-              onClick={handleCancelPendingJobs}
-              disabled={isCancellingPending}
-              className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors shadow-sm"
+            <Button
+              variant="secondary"
+              icon={Clock}
+              loading={isCancellingPending}
+              onClick={() => void handleCancelPendingJobs()}
             >
-              <Clock className={`w-5 h-5 mr-2 ${isCancellingPending ? 'animate-pulse' : ''}`} />
               Cancelar pendientes
-            </button>
+            </Button>
           ) : null}
 
           {canRegenerateFailed ? (
-            <button
-              onClick={handleRegenerateFailedJobs}
+            <Button
+              variant="warning"
+              onClick={() => void handleRegenerateFailedJobs()}
               disabled={isRegeneratingFailed}
-              className="flex items-center px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors shadow-sm"
             >
-              <RefreshCw className={`w-5 h-5 mr-2 ${isRegeneratingFailed ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isRegeneratingFailed ? 'animate-spin' : ''}`} />
               Reintentar fallidos
-            </button>
+            </Button>
           ) : null}
 
-          {hasCompletedImages && (
-            <button
-              onClick={handleDownloadAll}
-              disabled={downloading}
-              className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
+          {hasCompletedImages ? (
+            <Button
+              variant="primary"
+              onClick={() => void handleDownloadAll()}
+              loading={downloading}
+              icon={Download}
             >
-              {downloading ? (
-                <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-              ) : (
-                <Download className="w-5 h-5 mr-2" />
-              )}
               Guardar visibles
-            </button>
-          )}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -397,8 +354,9 @@ export const Evaluacion: React.FC = () => {
         </div>
       ) : null}
 
+      {/* Experiment A/B analytics */}
       {experimentAnalytics ? (
-        <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Experimento A/B</p>
@@ -407,7 +365,7 @@ export const Evaluacion: React.FC = () => {
               </h3>
               <p className="mt-2 text-sm text-slate-600">{experimentAnalytics.recommendation}</p>
             </div>
-            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
               {experimentAnalytics.comparableGroups} comparaciones · {experimentAnalytics.totalJobs} jobs
             </div>
           </div>
@@ -416,7 +374,7 @@ export const Evaluacion: React.FC = () => {
             {experimentAnalytics.arms.map((arm) => (
               <div
                 key={arm.armId}
-                className={`rounded-3xl border p-5 ${
+                className={`rounded-2xl border p-5 ${
                   experimentAnalytics.winningArmId === arm.armId
                     ? 'border-emerald-400 bg-emerald-900 text-white shadow-lg shadow-emerald-950/20'
                     : 'border-slate-200 bg-slate-50'
@@ -425,7 +383,7 @@ export const Evaluacion: React.FC = () => {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4
-                      className={`text-lg font-semibold ${
+                      className={`text-base font-semibold ${
                         experimentAnalytics.winningArmId === arm.armId ? 'text-white' : 'text-slate-900'
                       }`}
                     >
@@ -462,7 +420,8 @@ export const Evaluacion: React.FC = () => {
         </div>
       ) : null}
 
-      <div className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      {/* Batch summary + filters */}
+      <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <button
           type="button"
           onClick={() => setSummaryCollapsed((current) => !current)}
@@ -477,59 +436,51 @@ export const Evaluacion: React.FC = () => {
               </span>
               <StatusBadge status={batch.status} />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-xl font-bold text-gray-900">
               {batch.clientNameSnapshot} <span className="mx-2 font-normal text-gray-400">/</span> {batch.modelNameSnapshot}
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              ID: {batch.id} • Creado el {new Date(batch.createdAt?.toMillis ? batch.createdAt.toMillis() : batch.createdAt).toLocaleString()}
+              ID: {batch.id} · Creado el {new Date(batch.createdAt?.toMillis ? batch.createdAt.toMillis() : batch.createdAt).toLocaleString()}
             </p>
           </div>
 
-          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-500">
-            {summaryCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500">
+            {summaryCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </span>
         </button>
 
         {!summaryCollapsed ? (
-          <div id="evaluation-summary-panel" className="mt-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {selectedJobs.length > 0 ? `${selectedJobs.length} jobs seleccionados.` : 'Atajos: A selecciona visibles, D descarga, R reencola, Esc limpia.'}
-              </div>
-            </div>
+          <div id="evaluation-summary-panel" className="mt-6 grid gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Proveedor</span>
+              <select
+                value={providerFilter}
+                onChange={(event) => setProviderFilter(event.target.value as 'all' | Provider)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              >
+                <option value="all">Todos los proveedores</option>
+                {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
+                  <option key={providerValue} value={providerValue}>
+                    {PROVIDER_LABELS[providerValue]}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">Proveedor</span>
-                <select
-                  value={providerFilter}
-                  onChange={(event) => setProviderFilter(event.target.value as 'all' | Provider)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                >
-                  <option value="all">Todos los proveedores</option>
-                  {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
-                    <option key={providerValue} value={providerValue}>
-                      {PROVIDER_LABELS[providerValue]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-slate-700">Estado</span>
-                <select
-                  value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as 'all' | JobStatus)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                >
-                  <option value="all">Todos</option>
-                  <option value="pending">Pendiente</option>
-                  <option value="processing">Procesando</option>
-                  <option value="completed">Completado</option>
-                  <option value="failed">Fallido</option>
-                </select>
-              </label>
-            </div>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Estado</span>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as 'all' | JobStatus)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              >
+                <option value="all">Todos</option>
+                <option value="pending">Pendiente</option>
+                <option value="processing">Procesando</option>
+                <option value="completed">Completado</option>
+                <option value="failed">Fallido</option>
+              </select>
+            </label>
           </div>
         ) : null}
       </div>
@@ -549,10 +500,50 @@ export const Evaluacion: React.FC = () => {
           selectedJobIds={selectedJobIds}
           onToggleJob={toggleJob}
           onSelectJobs={selectJobs}
-          bulkActions={bulkActions}
           keyboardShortcutLabel="Flechas cambian de prenda. A selecciona visibles. D descarga. R reencola."
         />
       )}
+
+      {/* Floating selection toolbar — slides up when jobs are selected */}
+      {hasSelection ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 shadow-lg backdrop-blur-sm">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 xl:px-8">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1.5 text-sm font-semibold text-indigo-700">
+                <CheckSquare2 className="h-4 w-4" />
+                {selectedJobIds.length} {selectedJobIds.length === 1 ? 'trabajo seleccionado' : 'trabajos seleccionados'}
+              </span>
+              <span className="hidden text-xs text-slate-400 sm:block">
+                <kbd className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-mono text-[11px]">Esc</kbd>
+                {' '}para limpiar
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Download}
+                loading={busySelectionAction === 'download'}
+                disabled={busySelectionAction !== null}
+                onClick={() => void handleDownloadSelected()}
+              >
+                Descargar
+              </Button>
+              {role.canRegenerate ? (
+                <Button
+                  variant="warning"
+                  size="sm"
+                  disabled={busySelectionAction !== null}
+                  onClick={() => void handleRequeueSelected()}
+                >
+                  <RefreshCw className={`h-4 w-4 ${busySelectionAction === 'requeue' ? 'animate-spin' : ''}`} />
+                  Reencolar
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -563,13 +554,13 @@ const MetricPill: React.FC<{ label: string; value: string | number; highlighted:
   highlighted,
 }) => (
   <div
-    className={`rounded-2xl px-4 py-3 ${
+    className={`rounded-xl px-4 py-3 ${
       highlighted ? 'bg-white/10 text-white' : 'bg-white text-slate-700'
     }`}
   >
     <p className={`text-xs uppercase tracking-[0.12em] ${highlighted ? 'text-emerald-100' : 'text-slate-500'}`}>
       {label}
     </p>
-    <p className="mt-2 text-lg font-semibold">{value}</p>
+    <p className="mt-2 text-base font-semibold">{value}</p>
   </div>
 );

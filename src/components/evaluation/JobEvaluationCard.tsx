@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Batch, Job, Provider } from '../../../shared/src/types';
 import { StatusBadge } from '../ui';
-import { Download, RefreshCw, AlertCircle, History, Layers3 } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle, History, Layers3, XCircle } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
@@ -24,6 +24,8 @@ interface Props {
   focused?: boolean;
   onFocusTraceability?: () => void;
 }
+
+const INPUT_BASE = 'w-full rounded-xl border px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed';
 
 export const JobEvaluationCard: React.FC<Props> = ({
   batch,
@@ -71,13 +73,13 @@ export const JobEvaluationCard: React.FC<Props> = ({
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border bg-white shadow-sm transition ${
+      className={`overflow-hidden rounded-xl border bg-white shadow-sm transition-shadow flex flex-col ${
         focused
           ? 'border-indigo-400 ring-2 ring-indigo-100'
           : selected
             ? 'border-sky-300 ring-2 ring-sky-100'
-            : 'border-gray-200'
-      } flex flex-col`}
+            : 'border-gray-200 hover:shadow-md'
+      }`}
       onClick={() => onFocusTraceability?.()}
       onFocusCapture={() => onFocusTraceability?.()}
     >
@@ -96,13 +98,13 @@ export const JobEvaluationCard: React.FC<Props> = ({
               />
             </label>
           ) : null}
-          <h3 className="font-semibold text-gray-900">Pose {index + 1}</h3>
           <div>
-            <p className="text-xs text-gray-500">
+            <p className="text-sm font-semibold text-gray-900">Pose {index + 1}</p>
+            <p className="mt-0.5 text-xs text-gray-500">
               {job.modelNameSnapshot}
               {isExperimentJob ? ` · Brazo ${job.experimentArmLabel} (${job.provider})` : ''}
             </p>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="text-xs text-gray-500">
               {job.garmentName} · {PROVIDER_LABELS[job.provider]}
             </p>
           </div>
@@ -115,7 +117,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
                 event.stopPropagation();
                 onFocusTraceability();
               }}
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
                 focused ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
               title="Abrir trazabilidad del job"
@@ -131,7 +133,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
                 event.stopPropagation();
                 setCompareMode((current) => !current);
               }}
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
                 compareMode ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
               title="Comparar resultado actual con la regeneración anterior"
@@ -155,8 +157,8 @@ export const JobEvaluationCard: React.FC<Props> = ({
               imageClassName="object-cover"
               zoomScale={2.1}
             >
-              <span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
-                Regeneración anterior
+              <span className="absolute left-3 top-3 rounded-lg bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
+                Anterior
               </span>
             </HoverZoomImage>
             <HoverZoomImage
@@ -166,8 +168,8 @@ export const JobEvaluationCard: React.FC<Props> = ({
               imageClassName="object-cover"
               zoomScale={2.1}
             >
-              <span className="absolute left-3 top-3 rounded-full bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white">
-                Resultado actual
+              <span className="absolute left-3 top-3 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white">
+                Actual
               </span>
             </HoverZoomImage>
           </div>
@@ -184,11 +186,11 @@ export const JobEvaluationCard: React.FC<Props> = ({
             {job.status === 'failed' ? (
               <>
                 <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
-                <p className="text-sm text-red-600">Error en la generación</p>
-                {job.lastError && <p className="text-xs text-red-500 mt-1 line-clamp-2">{job.lastError}</p>}
+                <p className="text-sm font-medium text-red-600">Error en la generación</p>
+                {job.lastError && <p className="text-xs text-red-500 mt-1">{job.lastError}</p>}
               </>
             ) : (
-              <p className="text-sm">Esperando resultado...</p>
+              <p className="text-sm text-gray-400">Esperando resultado...</p>
             )}
           </div>
         )}
@@ -201,7 +203,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
               {isQueueing ? 'Encolando regeneración...' : 'Procesando imagen...'}
             </p>
             <p className="text-xs text-gray-500 mt-2">
-              Esta tarjeta se actualizará automáticamente cuando termine el proceso.
+              Esta tarjeta se actualizará automáticamente cuando termine.
             </p>
             {hasOutput && (
               <p className="text-xs text-indigo-600 font-medium mt-4 bg-indigo-50 px-3 py-1 rounded-full">
@@ -219,24 +221,25 @@ export const JobEvaluationCard: React.FC<Props> = ({
               void handleDownload();
             }}
             disabled={downloading}
-            className="absolute bottom-3 right-3 p-2 bg-white/90 hover:bg-white text-gray-700 rounded-full shadow-sm backdrop-blur transition-all disabled:opacity-50"
+            className="absolute bottom-3 right-3 p-2 bg-white/90 hover:bg-white text-gray-700 rounded-xl shadow-sm backdrop-blur transition-all disabled:opacity-50"
             title="Descargar imagen"
           >
-            <Download className="w-5 h-5" />
+            <Download className="w-4 h-4" />
           </button>
         )}
       </div>
 
       {/* Controls Area */}
-      <div className="p-4 flex flex-col flex-grow space-y-4">
+      <div className="p-4 flex flex-col flex-grow space-y-3">
+        {/* Provider select */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Proveedor IA</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Proveedor IA</label>
           <select
             value={draft.provider}
             onChange={(e) => onUpdateDraft({ provider: e.target.value as Provider })}
             onClick={(event) => event.stopPropagation()}
             disabled={isProcessing || isQueueing || !role.canRegenerate || isExperimentJob}
-            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-50 disabled:text-gray-500"
+            className={INPUT_BASE}
           >
             <option value="fal-seedream">{PROVIDER_LABELS['fal-seedream']}</option>
             <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
@@ -244,36 +247,49 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </select>
         </div>
 
+        {/* Prompt textarea */}
         <div className="flex-grow flex flex-col">
-          <label className="block text-xs font-medium text-gray-700 mb-1">Prompt</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">Prompt</label>
           <textarea
             value={draft.prompt}
             onChange={(e) => onUpdateDraft({ prompt: e.target.value })}
             onClick={(event) => event.stopPropagation()}
             disabled={isProcessing || isQueueing || !role.canRegenerate || isExperimentJob}
             rows={4}
-            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 resize-none flex-grow disabled:bg-gray-50 disabled:text-gray-500"
+            className={`${INPUT_BASE} resize-none flex-grow`}
             placeholder="Define el prompt base para regenerar..."
           />
           {isExperimentJob ? (
-            <p className="mt-2 text-xs text-amber-700">
+            <p className="mt-1.5 text-xs text-amber-700">
               El proveedor y el prompt quedan bloqueados para conservar la validez del experimento A/B.
             </p>
           ) : null}
         </div>
 
-        {regenerationError && (
-          <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-100">
-            {regenerationError}
+        {/* Last provider error (shown in footer when job failed but has a previous output) */}
+        {job.status === 'failed' && job.lastError && hasOutput && (
+          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" aria-hidden="true" />
+            <div><span className="font-medium">Error del proveedor: </span>{job.lastError}</div>
           </div>
         )}
 
+        {/* Inline regeneration error */}
+        {regenerationError && (
+          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" aria-hidden="true" />
+            <span>{regenerationError}</span>
+          </div>
+        )}
+
+        {/* Previous output hint */}
         {hasPreviousOutput ? (
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Esta pose tiene historial de regeneración. Usa <span className="font-semibold">Ver anterior</span> para comparar el resultado vigente contra la salida previa.
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Esta pose tiene historial de regeneración. Usa <span className="font-semibold">Ver anterior</span> para comparar.
           </div>
         ) : null}
 
+        {/* Regenerate / read-only message */}
         {role.canRegenerate ? (
           <button
             onClick={(event) => {
@@ -281,13 +297,13 @@ export const JobEvaluationCard: React.FC<Props> = ({
               onRegenerate();
             }}
             disabled={isProcessing || isQueueing || !draft.prompt.trim()}
-            className="w-full flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-transparent text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isQueueing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isQueueing ? 'animate-spin' : ''}`} />
             Regenerar foto
           </button>
         ) : (
-          <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
             Tu rol puede revisar y descargar resultados, pero no encolar regeneraciones.
           </div>
         )}

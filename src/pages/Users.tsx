@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Edit2, Plus, Trash2, Users as UsersIcon, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Edit2, Plus, Trash2, Users as UsersIcon, X } from 'lucide-react';
 import { isArchivedCatalogEntity, ROLE_VALUES } from '../../shared/src/domain';
 import { Role, User } from '../../shared/src/types';
 import { EmptyState, LoadingBlock, PageHeader } from '../components/ui';
@@ -150,11 +150,17 @@ export const Users: React.FC = () => {
   const [createSuccess, setCreateSuccess] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [editForm, setEditForm] = useState<EditFormState | null>(null);
   const [editTouched, setEditTouched] = useState<FieldTouched<EditFieldName>>({});
   const [editSubmitAttempted, setEditSubmitAttempted] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('all');
+  const [usersPage, setUsersPage] = useState(1);
+
+  const showArchived = statusFilter !== 'active';
 
   useEffect(() => {
     const unsubscribe = subscribeToUsers(
@@ -182,6 +188,30 @@ export const Users: React.FC = () => {
       }),
     [users],
   );
+
+  const USERS_PAGE_SIZE = 15;
+
+  const filteredUsers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return sortedUsers.filter((u) => {
+      if (query && !u.displayName.toLowerCase().includes(query) && !u.email.toLowerCase().includes(query)) {
+        return false;
+      }
+      if (roleFilter !== 'all' && u.role !== roleFilter) {
+        return false;
+      }
+      if (statusFilter === 'active' && isArchivedCatalogEntity(u)) {
+        return false;
+      }
+      if (statusFilter === 'archived' && !isArchivedCatalogEntity(u)) {
+        return false;
+      }
+      return true;
+    });
+  }, [sortedUsers, searchQuery, roleFilter, statusFilter]);
+
+  const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PAGE_SIZE));
+  const pagedUsers = filteredUsers.slice((usersPage - 1) * USERS_PAGE_SIZE, usersPage * USERS_PAGE_SIZE);
 
   const createErrors = useMemo<FieldErrors<CreateFieldName>>(
     () => ({
@@ -368,7 +398,7 @@ export const Users: React.FC = () => {
     const accepted = await confirm({
       title: 'Borrado permanente',
       description: `Vas a borrar definitivamente a "${selectedUser.displayName}".`,
-      impact: 'Esto elimina la cuenta en Firebase Auth y también su documento en Firestore. Solo úsalo después de archivar la cuenta.',
+      impact: 'Esto elimina la cuenta y todos sus datos de forma permanente. Solo úsalo después de archivarla.',
       confirmLabel: 'Continuar',
       cancelLabel: 'Cancelar',
       tone: 'danger',
@@ -398,7 +428,7 @@ export const Users: React.FC = () => {
       toast({
         tone: 'success',
         title: 'Usuario eliminado definitivamente',
-        description: `"${selectedUser.displayName}" se borró de Auth y Firestore.`,
+        description: `"${selectedUser.displayName}" se eliminó de forma permanente.`,
       });
     } catch (deleteError: any) {
       setError(deleteError.message || 'No se pudo borrar el usuario definitivamente.');
@@ -417,17 +447,31 @@ export const Users: React.FC = () => {
       ) : null}
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[360px,1fr]">
-        <section className="xl:sticky xl:top-8 xl:self-start">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-indigo-600" />
-              <h2 className="text-lg font-semibold text-slate-900">Nuevo usuario</h2>
-            </div>
-            <p className="mt-2 text-sm text-slate-500">
-              Crea accesos sin salir de la app. La cuenta se registra en Firebase Auth y en la colección `users`.
+        <section>
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={() => setIsCreateFormOpen((open) => !open)}
+              className="flex w-full items-center justify-between p-6 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-indigo-600" />
+                <h2 className="text-lg font-semibold text-slate-900">Nuevo usuario</h2>
+              </div>
+              {isCreateFormOpen ? (
+                <ChevronUp className="h-5 w-5 text-slate-400" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-slate-400" />
+              )}
+            </button>
+
+            {isCreateFormOpen && (
+            <div className="border-t border-slate-100 px-6 pb-6 pt-4">
+            <p className="mb-4 text-sm text-slate-500">
+              Crea accesos sin salir de la app. El usuario podrá iniciar sesión de inmediato con la contraseña temporal.
             </p>
 
-            <form onSubmit={handleCreate} className="mt-6 space-y-4">
+            <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label htmlFor="user-name" className="mb-1 block text-sm font-medium text-slate-700">
                   Nombre
@@ -531,35 +575,59 @@ export const Users: React.FC = () => {
                 </p>
               ) : null}
             </form>
+            </div>
+            )}
           </div>
         </section>
 
         <section className="space-y-4">
-          <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-5">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-                  <UsersIcon className="h-5 w-5 text-indigo-600" />
-                  Equipo
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">Administra roles, estado y datos básicos de acceso.</p>
-                <label className="mt-3 inline-flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={showArchived}
-                    onChange={(event) => setShowArchived(event.target.checked)}
-                  />
-                  Mostrar archivados
-                </label>
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-slate-100 bg-slate-50 px-6 py-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                    <UsersIcon className="h-5 w-5 text-indigo-600" />
+                    Equipo
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">Administra roles, estado y datos básicos de acceso.</p>
+                </div>
+                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                  {filteredUsers.length} usuarios
+                </span>
               </div>
-              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
-                {sortedUsers.length} usuarios
-              </span>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => { setSearchQuery(e.target.value); setUsersPage(1); }}
+                  placeholder="Buscar por nombre o email..."
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm placeholder-gray-400 shadow-sm transition-colors focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:flex-1"
+                />
+                <select
+                  value={roleFilter}
+                  onChange={(e) => { setRoleFilter(e.target.value as Role | 'all'); setUsersPage(1); }}
+                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="all">Todos los roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="operador">Operador</option>
+                  <option value="revisor">Revisor</option>
+                </select>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value as 'all' | 'active' | 'archived'); setUsersPage(1); }}
+                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="active">Solo activos</option>
+                  <option value="all">Todos</option>
+                  <option value="archived">Solo archivados</option>
+                </select>
+              </div>
             </div>
 
             {loading ? (
               <LoadingBlock />
-            ) : sortedUsers.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <div className="p-6">
                 <EmptyState
                   title="Todavía no hay usuarios"
@@ -569,7 +637,7 @@ export const Users: React.FC = () => {
               </div>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {sortedUsers.map((appUser) => {
+                {pagedUsers.map((appUser) => {
                   const isExpanded = expandedId === appUser.uid;
                   const isEditing = editingUserId === appUser.uid && editForm;
                   const isSelf = currentUser?.uid === appUser.uid;
@@ -825,6 +893,29 @@ export const Users: React.FC = () => {
                   );
                 })}
               </ul>
+            )}
+            {usersTotalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-100 px-6 py-4">
+                <button
+                  onClick={() => setUsersPage((p) => Math.max(1, p - 1))}
+                  disabled={usersPage === 1}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </button>
+                <span className="text-sm text-slate-500">
+                  Página {usersPage} de {usersTotalPages}
+                </span>
+                <button
+                  onClick={() => setUsersPage((p) => Math.min(usersTotalPages, p + 1))}
+                  disabled={usersPage === usersTotalPages}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             )}
           </div>
         </section>

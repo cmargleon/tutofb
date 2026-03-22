@@ -1,10 +1,10 @@
-import React from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  AreaChart, Area, PieChart, Pie, Cell 
+import React, { useState } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
-import { 
-  Activity, CheckCircle2, XCircle, Clock, DollarSign, TrendingUp, AlertTriangle 
+import {
+  Activity, CheckCircle2, XCircle, Clock, DollarSign, TrendingUp, AlertTriangle, Bell, BellOff
 } from 'lucide-react';
 import { useAnalyticsDashboard } from '../features/analytics/useAnalyticsDashboard';
 import { useExperimentAnalytics } from '../features/analytics/useExperimentAnalytics';
@@ -14,7 +14,17 @@ import { PROVIDER_COSTS } from '../../shared/src/constants/providerCosts';
 const COLORS = ['#10B981', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6'];
 
 export const Analytics: React.FC = () => {
-  const { data, loading, error } = useAnalyticsDashboard();
+  const [daysBack, setDaysBack] = useState(30);
+  const [costAlertThreshold, setCostAlertThreshold] = useState<number | null>(() => {
+    const stored = localStorage.getItem('dailyCostAlertThreshold');
+    return stored ? parseFloat(stored) : null;
+  });
+  const [alertInputValue, setAlertInputValue] = useState(() => {
+    return localStorage.getItem('dailyCostAlertThreshold') || '';
+  });
+  const [showAlertSettings, setShowAlertSettings] = useState(false);
+
+  const { data, loading, error } = useAnalyticsDashboard(daysBack);
   const {
     batches: experimentBatches,
     selectedBatchId,
@@ -74,12 +84,104 @@ export const Analytics: React.FC = () => {
     { name: 'Fallidos', value: summary.failedJobs },
   ];
 
+  const todayCostUsd = data.dailyVolume.length > 0 ? data.dailyVolume[data.dailyVolume.length - 1].costUsd : 0;
+  const costAlertTriggered = costAlertThreshold !== null && todayCostUsd >= costAlertThreshold;
+
+  const handleSaveAlertThreshold = () => {
+    const val = parseFloat(alertInputValue);
+    if (!isNaN(val) && val > 0) {
+      setCostAlertThreshold(val);
+      localStorage.setItem('dailyCostAlertThreshold', String(val));
+    } else {
+      setCostAlertThreshold(null);
+      localStorage.removeItem('dailyCostAlertThreshold');
+    }
+    setShowAlertSettings(false);
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
-      <PageHeader 
-        title="Analytics" 
-        description="Volumen de generación, costos por proveedor y actividad por cliente."
-      />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <PageHeader
+          title="Analytics"
+          description="Volumen de generación, costos por proveedor y actividad por cliente."
+        />
+        <div className="flex items-center gap-2">
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDaysBack(d)}
+              className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition ${
+                daysBack === d
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+          <button
+            onClick={() => setShowAlertSettings((s) => !s)}
+            title={costAlertThreshold !== null ? `Alerta: $${costAlertThreshold}/día` : 'Configurar alerta de costo'}
+            className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition ${
+              costAlertThreshold !== null
+                ? 'border-amber-300 bg-amber-50 text-amber-700'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {costAlertThreshold !== null ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Alert settings panel */}
+      {showAlertSettings && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="mb-3 text-sm font-medium text-amber-900">Alerta de gasto diario</p>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-500">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={alertInputValue}
+                onChange={(e) => setAlertInputValue(e.target.value)}
+                placeholder="Ej. 10.00"
+                className="w-36 rounded-xl border border-gray-300 py-2 pl-7 pr-3 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200"
+              />
+            </div>
+            <button
+              onClick={handleSaveAlertThreshold}
+              className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+            >
+              Guardar
+            </button>
+            {costAlertThreshold !== null && (
+              <button
+                onClick={() => { setCostAlertThreshold(null); localStorage.removeItem('dailyCostAlertThreshold'); setAlertInputValue(''); setShowAlertSettings(false); }}
+                className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Desactivar
+              </button>
+            )}
+            <p className="text-xs text-amber-700">Se mostrará un aviso cuando el gasto del día supere este umbral.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Cost alert banner */}
+      {costAlertTriggered && (
+        <div className="flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4">
+          <Bell className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+          <div>
+            <p className="text-sm font-semibold text-rose-800">Alerta de gasto diario</p>
+            <p className="mt-1 text-sm text-rose-700">
+              El gasto de hoy es <strong>${todayCostUsd.toFixed(2)}</strong>, superando el umbral configurado de <strong>${costAlertThreshold!.toFixed(2)}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Warning Banner */}
       {summary.failedJobs > 0 && (
@@ -144,7 +246,7 @@ export const Analytics: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Daily Volume Area Chart */}
         <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">Volumen diario (últimos 30 días)</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">Volumen diario (últimos {daysBack} días)</h3>
           {dailyVolume.length > 0 ? (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -281,7 +383,7 @@ export const Analytics: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Daily Cost Area Chart */}
           <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-4">Gasto diario (últimos 30 días)</h4>
+            <h4 className="text-sm font-medium text-gray-700 mb-4">Gasto diario (últimos {daysBack} días)</h4>
             {dailyVolume.length > 0 ? (
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">

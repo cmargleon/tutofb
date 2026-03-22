@@ -4,18 +4,43 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Package,
   LayoutList,
   RefreshCcw,
   Users,
   UserSquare2,
+  History,
 } from 'lucide-react';
+
+const formatActivityDate = (ts: any) => {
+  if (!ts) return '';
+  const date = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
+  return new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
 import { AnalyticsSummary, Batch, HealthStatus, Job, ProviderHealthCheck, SystemHealthSnapshot } from '../../shared/src/types';
-import { EmptyState, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
+import { EmptyState, ImageThumb, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
 import { DashboardSnapshot, subscribeToAnalyticsSummary, subscribeToDashboardData } from '../features/dashboard/firebase';
 import { getSystemHealth } from '../features/system/firebase';
 import { useRole } from '../features/auth/AuthProvider';
+
+const JOBS_PAGE_SIZE = 10;
+
+const GarmentThumb: React.FC<{ path: string | null | undefined }> = ({ path }) => {
+  if (!path) return <div className="h-10 w-10 shrink-0 rounded-lg bg-slate-100" />;
+  return (
+    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-100">
+      <ImageThumb storagePath={path} alt="" fit="contain" />
+    </div>
+  );
+};
 
 const StatCard: React.FC<{
   label: string;
@@ -23,7 +48,7 @@ const StatCard: React.FC<{
   icon: React.ElementType;
   tone: string;
 }> = ({ label, value, icon: Icon, tone }) => (
-  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="flex items-center justify-between">
       <div>
         <p className="text-sm text-slate-500">{label}</p>
@@ -50,6 +75,7 @@ export const Dashboard: React.FC = () => {
   const [systemHealthError, setSystemHealthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [jobsPage, setJobsPage] = useState(1);
 
   useEffect(() => {
     const unsubscribeDashboard = subscribeToDashboardData(
@@ -195,7 +221,7 @@ export const Dashboard: React.FC = () => {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
-        <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-slate-100 px-6 py-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -217,49 +243,80 @@ export const Dashboard: React.FC = () => {
             <div className="p-6">
               <EmptyState
                 title="Todavía no hay trabajos"
-                description="Cuando generes el primer lote aparecerán aquí los últimos jobs creados."
+                description="Cuando generes el primer lote aparecerán aquí los últimos trabajos creados."
                 icon={<LayoutList className="w-6 h-6" />}
               />
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-500">
-                  <tr>
-                    <th className="px-6 py-3">Job</th>
-                    <th className="px-6 py-3">Cliente / Modelo</th>
-                    <th className="px-6 py-3">Prenda</th>
-                    <th className="px-6 py-3">Proveedor</th>
-                    <th className="px-6 py-3">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.recentJobs.map((job) => (
-                    <tr key={job.id} className="hover:bg-slate-50/80">
-                      <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                        <Link to={`/evaluacion?batchId=${job.batchId}`} className="text-slate-900 hover:underline">
-                          {job.id?.slice(0, 8)}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900">{job.clientNameSnapshot}</div>
-                        <div className="text-slate-500">{job.modelNameSnapshot}</div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-700">{job.garmentName}</td>
-                      <td className="px-6 py-4 text-slate-500">{job.provider}</td>
-                      <td className="px-6 py-4">
-                        <StatusBadge status={job.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          ) : (() => {
+            const totalJobPages = Math.ceil(data.recentJobs.length / JOBS_PAGE_SIZE);
+            const pagedJobs = data.recentJobs.slice((jobsPage - 1) * JOBS_PAGE_SIZE, jobsPage * JOBS_PAGE_SIZE);
+            return (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="px-6 py-3">Trabajo</th>
+                        <th className="px-6 py-3">Cliente / Modelo</th>
+                        <th className="px-6 py-3">Prenda</th>
+                        <th className="px-6 py-3">Proveedor</th>
+                        <th className="px-6 py-3">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pagedJobs.map((job) => (
+                        <tr key={job.id} className="hover:bg-slate-50/80">
+                          <td className="px-6 py-4 font-mono text-xs text-slate-500">
+                            <Link to={`/evaluacion?batchId=${job.batchId}`} className="text-slate-900 hover:underline">
+                              {job.id?.slice(0, 8)}
+                            </Link>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-slate-900">{job.clientNameSnapshot}</div>
+                            <div className="text-slate-500">{job.modelNameSnapshot}</div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <GarmentThumb path={job.garmentFilePath} />
+                          </td>
+                          <td className="px-6 py-4 text-slate-500">{job.provider}</td>
+                          <td className="px-6 py-4">
+                            <StatusBadge status={job.status} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {totalJobPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+                    <button
+                      onClick={() => setJobsPage((p) => Math.max(1, p - 1))}
+                      disabled={jobsPage === 1}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Anterior
+                    </button>
+                    <span className="text-sm text-slate-500">
+                      Página {jobsPage} de {totalJobPages}
+                    </span>
+                    <button
+                      onClick={() => setJobsPage((p) => Math.min(totalJobPages, p + 1))}
+                      disabled={jobsPage === totalJobPages}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Flujo operativo</h2>
             <div className="mt-5 space-y-4 text-sm text-slate-600">
               <div>
@@ -272,20 +329,20 @@ export const Dashboard: React.FC = () => {
               </div>
               <div>
                 <strong className="block text-slate-900">3. Subir prendas</strong>
-                El wizard compone multiángulo, deduplica archivos y arma una prenda por regla de carpeta.
+                Sube archivos sueltos o en carpeta para componer las prendas automáticamente.
               </div>
               <div>
                 <strong className="block text-slate-900">4. Encolar combinaciones</strong>
-                Se crea un job por cada combinación pose-prenda respetando provider, prompt y aspect ratio.
+                Se genera una imagen por cada combinación de pose y prenda, según el proveedor y formato elegidos.
               </div>
               <div>
                 <strong className="block text-slate-900">5. Evaluar y regenerar</strong>
-                Revisas resultados, mantienes la imagen previa visible mientras procesa y descargas desde Storage real.
+                Revisas resultados, mantienes la imagen anterior visible mientras procesa y descargas las imágenes finales.
               </div>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-slate-950 p-6 text-white shadow-lg shadow-slate-900/10">
+          <div className="rounded-2xl border border-slate-200 bg-slate-950 p-6 text-white shadow-lg shadow-slate-900/10">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-white/10 p-3">
                 <Activity className="h-5 w-5" />
@@ -308,6 +365,41 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Activity log */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 bg-slate-50 px-6 py-5">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <History className="h-4 w-4 text-slate-500" />
+            Actividad reciente del equipo
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-500">Últimos lotes creados por los operadores</p>
+        </div>
+        {data.recentBatches.length === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-slate-400">Aún no hay actividad registrada.</div>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {data.recentBatches.map((batch) => (
+              <li key={batch.id}>
+                <Link
+                  to={`/evaluacion?batchId=${batch.id}`}
+                  className="flex items-center justify-between gap-4 px-6 py-3 hover:bg-slate-50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-900">
+                      {batch.clientNameSnapshot} / {batch.modelNameSnapshot}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {batch.createdByDisplayName || 'Desconocido'} · {formatActivityDate(batch.createdAt)} · {batch.totalJobs} trabajo{batch.totalJobs === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <StatusBadge status={batch.status} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -386,7 +478,7 @@ const SystemHealthPanel: React.FC<{
   const styles = HEALTH_STYLES[overallStatus];
 
   return (
-    <section className={`rounded-3xl border p-6 shadow-sm ${styles.panel}`}>
+    <section className={`rounded-2xl border p-6 shadow-sm ${styles.panel}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -473,7 +565,7 @@ const SystemHealthPanel: React.FC<{
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
                 <span className="flex items-center gap-2">
                   <Clock3 className="h-4 w-4 text-slate-500" />
-                  Jobs evaluados en ventana
+                  Trabajos evaluados en el período
                 </span>
                 <strong className="text-slate-900">{data.queue.recentTerminalJobs}</strong>
               </div>

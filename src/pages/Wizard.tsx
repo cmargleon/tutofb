@@ -29,7 +29,7 @@ const STEPS = [
 const PROVIDER_DESCRIPTIONS: Record<Provider, string> = {
   'fal-seedream': 'Ruta equilibrada para lotes de catálogo consistentes.',
   'fal-banana-pro': 'Mayor fidelidad en edición cuando la prenda necesita ajuste fino.',
-  'openai-gpt-image-1.5': 'Edición con OpenAI usando ambas referencias y Storage privado.',
+  'openai-gpt-image-1.5': 'Edición con OpenAI usando ambas referencias de imagen.',
 };
 
 const ratioLabels: Record<(typeof ASPECT_RATIO_VALUES)[number], string> = {
@@ -537,9 +537,7 @@ export const Wizard: React.FC = () => {
             ))}
           </select>
 
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            Primero se define la marca, luego el modelo y por último las poses que van al lote.
-          </div>
+
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -583,7 +581,7 @@ export const Wizard: React.FC = () => {
                     }
                     className={`overflow-hidden rounded-3xl border text-left transition ${
                       isSelected
-                        ? 'border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-900/20'
+                        ? 'border-emerald-700 bg-emerald-600 text-white shadow-lg shadow-emerald-900/20'
                         : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
                     }`}
                   >
@@ -597,6 +595,7 @@ export const Wizard: React.FC = () => {
                     <div className="p-4">
                       <div className="flex items-center justify-between">
                         <h3 className={`font-semibold ${isSelected ? 'text-white' : 'text-slate-900'}`}>{model.name}</h3>
+
                         <span
                           className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                             isSelected ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-600'
@@ -605,7 +604,7 @@ export const Wizard: React.FC = () => {
                           {model.poseCount} poses
                         </span>
                       </div>
-                      <p className={`mt-2 text-sm ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                      <p className={`mt-2 text-sm ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
                         {model.clientNameSnapshot}
                       </p>
                     </div>
@@ -656,7 +655,7 @@ export const Wizard: React.FC = () => {
                     }))
                   }
                   className={`relative overflow-hidden rounded-3xl border transition ${
-                    selected ? 'border-slate-950 ring-2 ring-slate-950/10' : 'border-slate-200 hover:border-slate-300'
+                    selected ? 'border-emerald-600 ring-2 ring-emerald-600/20' : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div className="aspect-[3/4] bg-slate-100">
@@ -668,7 +667,7 @@ export const Wizard: React.FC = () => {
                       <p className="text-xs text-slate-500">Pose {pose.id.slice(0, 6)}</p>
                     </div>
                     {selected && (
-                      <span className="rounded-full bg-slate-950 p-1 text-white">
+                      <span className="rounded-full bg-emerald-600 p-1 text-white">
                         <Check className="w-4 h-4" />
                       </span>
                     )}
@@ -799,7 +798,7 @@ export const Wizard: React.FC = () => {
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700">
               {uploadSummary.uploaded} listas
             </span>
-            <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-700">
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">
               {uploadSummary.inFlight + uploadSummary.queued} en proceso
             </span>
             <span className="rounded-full bg-rose-100 px-3 py-1 text-rose-700">
@@ -861,7 +860,7 @@ export const Wizard: React.FC = () => {
                 }
                 className={`rounded-full px-3 py-1.5 text-sm font-semibold transition ${
                   state.experiment.enabled
-                    ? 'bg-slate-950 text-white'
+                    ? 'bg-emerald-600 text-white'
                     : 'bg-white text-slate-700 border border-slate-200'
                 }`}
               >
@@ -886,7 +885,7 @@ export const Wizard: React.FC = () => {
                         }
                         className={`rounded-3xl border px-5 py-4 text-left transition ${
                           selected
-                            ? 'border-slate-950 bg-slate-950 text-white'
+                            ? 'border-emerald-700 bg-emerald-600 text-white'
                             : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
@@ -894,7 +893,7 @@ export const Wizard: React.FC = () => {
                           <span className="font-semibold">{EXPERIMENT_MODE_COPY[mode].title}</span>
                           {selected ? <Check className="w-4 h-4" /> : null}
                         </div>
-                        <p className={`mt-2 text-sm ${selected ? 'text-slate-300' : 'text-slate-500'}`}>
+                        <p className={`mt-2 text-sm ${selected ? 'text-emerald-100' : 'text-slate-500'}`}>
                           {EXPERIMENT_MODE_COPY[mode].description}
                         </p>
                       </button>
@@ -967,7 +966,7 @@ export const Wizard: React.FC = () => {
                       onClick={() => setState((current) => ({ ...current, provider }))}
                       className={`rounded-3xl border px-5 py-4 text-left transition ${
                         selected
-                          ? 'border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-900/10'
+                          ? 'border-emerald-700 bg-emerald-600 text-white shadow-lg shadow-emerald-900/10'
                           : 'border-slate-200 bg-white hover:border-slate-300'
                       }`}
                     >
@@ -975,7 +974,7 @@ export const Wizard: React.FC = () => {
                         <span className="font-semibold">{PROVIDER_LABELS[provider]}</span>
                         {selected && <Check className="w-4 h-4" />}
                       </div>
-                      <p className={`mt-2 text-sm ${selected ? 'text-slate-300' : 'text-slate-500'}`}>
+                      <p className={`mt-2 text-sm ${selected ? 'text-emerald-100' : 'text-slate-500'}`}>
                         {PROVIDER_DESCRIPTIONS[provider]}
                       </p>
                     </button>
@@ -996,12 +995,12 @@ export const Wizard: React.FC = () => {
                 onClick={() => setState((current) => ({ ...current, aspectRatio: ratio }))}
                 className={`rounded-2xl border px-4 py-3 text-left transition ${
                   state.aspectRatio === ratio
-                    ? 'border-slate-950 bg-slate-950 text-white'
+                    ? 'border-emerald-700 bg-emerald-600 text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                 }`}
               >
                 <div className="font-semibold">{ratio}</div>
-                <div className={`mt-1 text-xs ${state.aspectRatio === ratio ? 'text-slate-300' : 'text-slate-500'}`}>
+                <div className={`mt-1 text-xs ${state.aspectRatio === ratio ? 'text-emerald-100' : 'text-slate-500'}`}>
                   {ratioLabels[ratio]}
                 </div>
               </button>
@@ -1027,7 +1026,7 @@ export const Wizard: React.FC = () => {
           type="button"
           onClick={handleSubmit}
           disabled={isSubmitting || totalJobs === 0 || Boolean(experimentProviderError)}
-          className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitButtonLabel}
         </button>
@@ -1039,7 +1038,7 @@ export const Wizard: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <PageHeader
           title="Generar imágenes"
-          description="Configura el lote usando cliente, modelo, prendas y proveedor antes de mandarlo al worker de Firebase."
+          description="Configura el lote usando cliente, modelo, prendas y proveedor antes de mandarlo al sistema."
         />
         <LoadingBlock />
       </div>
@@ -1079,7 +1078,7 @@ export const Wizard: React.FC = () => {
             type="button"
             disabled={state.step === 1 || isSubmitting}
             onClick={() => goToStep(state.step - 1)}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Volver
           </button>
@@ -1089,7 +1088,7 @@ export const Wizard: React.FC = () => {
               type="button"
               disabled={!canAdvance || isSubmitting}
               onClick={() => goToStep(state.step + 1)}
-              className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Continuar
             </button>

@@ -50,7 +50,7 @@ export const subscribeToDashboardData = (
       onError,
     ),
     onSnapshot(
-      query(collection(db, 'batches'), orderBy('createdAt', 'desc'), limit(8)),
+      query(collection(db, 'batches'), orderBy('createdAt', 'desc'), limit(20)),
       (snapshot) => {
         latestBatches = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Batch));
         emit();
@@ -58,7 +58,7 @@ export const subscribeToDashboardData = (
       onError,
     ),
     onSnapshot(
-      query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(8)),
+      query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(50)),
       (snapshot) => {
         latestJobs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Job));
         emit();

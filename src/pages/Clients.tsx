@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { PageHeader, LoadingBlock, EmptyState } from '../components/ui';
+import React, { useState, useEffect, useMemo } from 'react';
+import { PageHeader, LoadingBlock, EmptyState, Button } from '../components/ui';
 import { subscribeToClients, createClient, updateClient, archiveClient, restoreClient, permanentlyDeleteClient } from '../features/clients/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { isArchivedCatalogEntity } from '../../shared/src/domain';
 import { Client } from '../../shared/src/types';
-import { Users, Plus, Edit2, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Plus, Edit2, Trash2, Check, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const formatDate = (timestamp: any) => {
   if (!timestamp) return '';
@@ -14,9 +14,12 @@ const formatDate = (timestamp: any) => {
     month: 'short',
     year: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   }).format(date);
 };
+
+const INPUT_BASE =
+  'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400';
 
 export const Clients: React.FC = () => {
   const toast = useToast();
@@ -24,17 +27,17 @@ export const Clients: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Create state
+
   const [newClientName, setNewClientName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
 
-  // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientsPage, setClientsPage] = useState(1);
 
   useEffect(() => {
     const unsubscribe = subscribeToClients(
@@ -43,8 +46,8 @@ export const Clients: React.FC = () => {
         setLoading(false);
       },
       (err) => {
-        console.error("Error subscribing to clients:", err);
-        setError("Error al cargar los clientes.");
+        console.error('Error subscribing to clients:', err);
+        setError('Error al cargar los clientes.');
         setLoading(false);
       },
       { includeArchived: showArchived },
@@ -104,9 +107,7 @@ export const Clients: React.FC = () => {
       tone: 'warning',
     });
 
-    if (!accepted || !client.id) {
-      return;
-    }
+    if (!accepted || !client.id) return;
 
     try {
       await archiveClient(client.id);
@@ -144,22 +145,18 @@ export const Clients: React.FC = () => {
   };
 
   const handlePermanentDelete = async (client: Client) => {
-    if (!client.id) {
-      return;
-    }
+    if (!client.id) return;
 
     const accepted = await confirm({
       title: 'Borrado permanente',
       description: `Vas a borrar definitivamente "${client.name}".`,
-      impact: 'Esto elimina el cliente de Firestore y dispara la limpieza en Firebase. Úsalo solo cuando estés completamente seguro.',
+      impact: 'Esto elimina todos los datos del cliente de forma permanente. No se puede deshacer.',
       confirmLabel: 'Continuar',
       cancelLabel: 'Cancelar',
       tone: 'danger',
     });
 
-    if (!accepted) {
-      return;
-    }
+    if (!accepted) return;
 
     const typedName = window.prompt(`Escribe el nombre exacto del cliente para confirmar el borrado permanente:\n${client.name}`);
     if (typedName !== client.name) {
@@ -176,7 +173,7 @@ export const Clients: React.FC = () => {
       toast({
         tone: 'success',
         title: 'Cliente eliminado definitivamente',
-        description: `"${client.name}" se borró de Firebase de forma permanente.`,
+        description: `"${client.name}" se eliminó de forma permanente.`,
       });
     } catch (err: any) {
       toast({
@@ -187,190 +184,235 @@ export const Clients: React.FC = () => {
     }
   };
 
+  const CLIENTS_PAGE_SIZE = 20;
+
+  const filteredClients = useMemo(() => {
+    const query = clientSearch.trim().toLowerCase();
+    if (!query) return clients;
+    return clients.filter((c) => c.name.toLowerCase().includes(query));
+  }, [clients, clientSearch]);
+
+  const clientsTotalPages = Math.max(1, Math.ceil(filteredClients.length / CLIENTS_PAGE_SIZE));
+  const pagedClients = filteredClients.slice((clientsPage - 1) * CLIENTS_PAGE_SIZE, clientsPage * CLIENTS_PAGE_SIZE);
+
   return (
     <div className="max-w-5xl mx-auto">
-      <PageHeader 
-        title="Clientes" 
-        description="Gestiona los clientes para los que generarás imágenes de catálogo." 
+      <PageHeader
+        title="Clientes"
+        description="Gestiona los clientes para los que generarás imágenes de catálogo."
+        icon={Users}
       />
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Create Form */}
-        <div className="lg:col-span-1">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 sticky top-8">
-            <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-indigo-600" />
+      <div className="space-y-8">
+        {/* Create form */}
+        <div>
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
+              <Plus className="w-4 h-4 text-indigo-600" />
               Nuevo cliente
             </h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-name" className="mb-1.5 block text-sm font-medium text-gray-700">
                   Nombre del cliente
                 </label>
                 <input
-                  id="name"
+                  id="client-name"
                   type="text"
                   required
                   value={newClientName}
                   onChange={(e) => setNewClientName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  className={INPUT_BASE}
                   placeholder="Ej. Zara, H&M..."
                   disabled={isCreating}
                 />
               </div>
-              <button
+              <Button
                 type="submit"
-                disabled={isCreating || !newClientName.trim()}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                variant="primary"
+                size="md"
+                loading={isCreating}
+                disabled={!newClientName.trim()}
+                className="w-full justify-center"
               >
-                {isCreating ? 'Guardando...' : 'Guardar cliente'}
-              </button>
+                Guardar cliente
+              </Button>
               {createSuccess && (
-                <p className="text-sm text-green-600 text-center flex items-center justify-center gap-1">
-                  <Check className="w-4 h-4" /> Cliente creado con éxito
+                <p className="flex items-center justify-center gap-1.5 text-sm text-emerald-600">
+                  <Check className="w-4 h-4" />
+                  Cliente creado con éxito
                 </p>
               )}
             </form>
           </div>
         </div>
 
-        {/* Right Column: List */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-200 bg-gray-50">
-              <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-600" />
-                Lista de clientes
-                <span className="ml-2 bg-indigo-100 text-indigo-700 py-0.5 px-2.5 rounded-full text-xs font-semibold">
-                  {clients.length}
-                </span>
-              </h2>
-              <div className="mt-3">
-                <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+        {/* Client list */}
+        <div>
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                  Lista de clientes
+                  <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+                    {filteredClients.length}
+                  </span>
+                </h2>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-600">
                   <input
                     type="checkbox"
                     checked={showArchived}
                     onChange={(e) => setShowArchived(e.target.checked)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
                   Mostrar archivados
                 </label>
+              </div>
+              <div className="mt-3">
+                <input
+                  type="search"
+                  value={clientSearch}
+                  onChange={(e) => { setClientSearch(e.target.value); setClientsPage(1); }}
+                  placeholder="Buscar cliente por nombre..."
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm placeholder-gray-400 shadow-sm transition-colors focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                />
               </div>
             </div>
 
             {loading ? (
               <LoadingBlock />
-            ) : clients.length === 0 ? (
-              <EmptyState 
-                title="No hay clientes" 
-                description="Crea tu primer cliente usando el formulario de la izquierda."
+            ) : filteredClients.length === 0 ? (
+              <EmptyState
+                title="No hay clientes"
+                description="Crea tu primer cliente usando el formulario de arriba."
                 icon={<Users className="w-6 h-6" />}
               />
             ) : (
-              <ul className="divide-y divide-gray-200">
-                {clients.map((client) => (
-                  <li key={client.id} className="hover:bg-gray-50 transition-colors">
-                    <div className="p-4 sm:px-6">
-                      {isArchivedCatalogEntity(client) && (
-                        <div className="mb-3 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
-                          Archivado
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <div 
-                          className="flex-1 cursor-pointer flex items-center gap-3"
-                          onClick={() => setExpandedId(expandedId === client.id ? null : client.id!)}
-                        >
-                          {expandedId === client.id ? (
-                            <ChevronUp className="w-5 h-5 text-gray-400" />
-                          ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-400" />
-                          )}
-                          <div>
-                            <p className="text-sm font-medium text-indigo-600 truncate">{client.name}</p>
-                            <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
-                              <span>ID: {client.id}</span>
-                              <span>•</span>
-                              <span>Alta: {formatDate(client.createdAt)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+              <ul className="divide-y divide-gray-100">
+                {pagedClients.map((client) => {
+                  const isExpanded = expandedId === client.id;
+                  const isEditing = editingId === client.id;
 
-                      {/* Expanded Content */}
-                      {expandedId === client.id && (
-                        <div className="mt-4 pt-4 border-t border-gray-100 pl-8">
-                          {editingId === client.id ? (
-                            <div className="flex items-center gap-3">
-                              <input
-                                type="text"
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                                autoFocus
-                              />
-                              <button
-                                onClick={() => handleSaveEdit(client.id!)}
-                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-                              >
-                                Guardar
-                              </button>
-                              <button
-                                onClick={() => setEditingId(null)}
-                                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50"
-                              >
-                                Cancelar
-                              </button>
+                  const actionButtons = !isArchivedCatalogEntity(client) ? (
+                    <>
+                      <Button variant="secondary" size="sm" icon={Edit2} onClick={() => handleStartEdit(client)}>
+                        Editar
+                      </Button>
+                      <Button variant="warning" size="sm" icon={Trash2} onClick={() => void handleArchive(client)}>
+                        Archivar
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void handleRestore(client)}
+                        className="text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                      >
+                        Reactivar
+                      </Button>
+                      <Button variant="danger" size="sm" icon={Trash2} onClick={() => void handlePermanentDelete(client)}>
+                        Borrar definitivo
+                      </Button>
+                    </>
+                  );
+
+                  return (
+                    <li key={client.id} className="transition-colors hover:bg-gray-50">
+                      <div className="px-6 py-4">
+                        {isArchivedCatalogEntity(client) && (
+                          <div className="mb-2 inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                            Archivado
+                          </div>
+                        )}
+
+                        {/* Edit form — replaces row on all screen sizes */}
+                        {isEditing ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              className={INPUT_BASE}
+                              autoFocus
+                            />
+                            <Button variant="primary" size="sm" icon={Check} onClick={() => void handleSaveEdit(client.id!)}>
+                              Guardar
+                            </Button>
+                            <Button variant="ghost" size="sm" icon={X} onClick={() => setEditingId(null)}>
+                              Cancelar
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Desktop: name + actions inline */}
+                            <div className="hidden md:flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">{client.name}</p>
+                                <p className="mt-0.5 text-xs text-gray-500">Alta: {formatDate(client.createdAt)}</p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">{actionButtons}</div>
                             </div>
-                          ) : (
-                            <div className="flex items-center gap-3">
-                              {!isArchivedCatalogEntity(client) ? (
-                                <>
-                                  <button
-                                    onClick={() => handleStartEdit(client)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                    Editar
-                                  </button>
-                                  <button
-                                    onClick={() => handleArchive(client)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-amber-800 bg-amber-100 hover:bg-amber-200"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    Archivar
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => handleRestore(client)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
-                                  >
-                                    Reactivar
-                                  </button>
-                                  <button
-                                    onClick={() => handlePermanentDelete(client)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-red-700 bg-red-100 hover:bg-red-200"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    Borrar definitivo
-                                  </button>
-                                </>
+
+                            {/* Mobile: collapsible */}
+                            <div className="md:hidden">
+                              <button
+                                type="button"
+                                className="flex w-full items-center gap-3 text-left"
+                                onClick={() => setExpandedId(isExpanded ? null : client.id!)}
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4 shrink-0 text-gray-400" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 shrink-0 text-gray-400" />
+                                )}
+                                <div>
+                                  <p className="text-sm font-medium text-slate-900">{client.name}</p>
+                                  <p className="mt-0.5 text-xs text-gray-500">Alta: {formatDate(client.createdAt)}</p>
+                                </div>
+                              </button>
+
+                              {isExpanded && (
+                                <div className="mt-3 flex items-center gap-2 pl-7">{actionButtons}</div>
                               )}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
+            )}
+            {clientsTotalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-100 px-6 py-4">
+                <button
+                  onClick={() => setClientsPage((p) => Math.max(1, p - 1))}
+                  disabled={clientsPage === 1}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Anterior
+                </button>
+                <span className="text-sm text-slate-500">
+                  Página {clientsPage} de {clientsTotalPages}
+                </span>
+                <button
+                  onClick={() => setClientsPage((p) => Math.min(clientsTotalPages, p + 1))}
+                  disabled={clientsPage === clientsTotalPages}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             )}
           </div>
         </div>

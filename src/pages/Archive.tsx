@@ -13,7 +13,7 @@ import { buildJobPoseIndexMap } from '../features/evaluation/jobSlides';
 import { PROVIDER_LABELS } from '../../shared/src/domain';
 import { Batch, Job, JobStatus, Provider } from '../../shared/src/types';
 
-const WINDOW_SIZE = 400;
+const SEARCH_PAGE_SIZE = 40;
 
 const toDate = (value: unknown): Date | null => {
   if (!value) {
@@ -72,7 +72,7 @@ export const Archive: React.FC = () => {
 
   const archiveSearchEnabled = !authLoading && Boolean(user && appUser?.active);
 
-  const { results, loading: resultsLoading, error: resultsError, scannedBatches, truncated } = useArchiveSearch(
+  const { results, loading: resultsLoading, loadingMore, error: resultsError, scannedBatches, hasMore, loadMore } = useArchiveSearch(
     {
       clientId,
       provider,
@@ -83,7 +83,7 @@ export const Archive: React.FC = () => {
       dateTo,
     },
     archiveSearchEnabled,
-    WINDOW_SIZE,
+    SEARCH_PAGE_SIZE,
   );
 
   useEffect(() => {
@@ -472,11 +472,24 @@ export const Archive: React.FC = () => {
             ) : null}
 
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-              <span>{results.length} lotes coinciden en la ventana consultada.</span>
-              <span>La búsqueda corre en Firebase y revisó {scannedBatches} lote{scannedBatches === 1 ? '' : 's'}.</span>
-              {truncated ? <span>La ventana se recortó para responder rápido; afina filtros si necesitas ir más lejos.</span> : null}
+              <span>{results.length} lote{results.length === 1 ? '' : 's'} cargado{results.length === 1 ? '' : 's'} hasta ahora.</span>
+              <span>La búsqueda corre en Firebase y revisó {scannedBatches} lote{scannedBatches === 1 ? '' : 's'} acumulado{scannedBatches === 1 ? '' : 's'}.</span>
+              {hasMore ? <span>Hay más historial disponible para estos filtros.</span> : <span>Llegaste al final del historial para esta búsqueda.</span>}
               <span>Atajos: `/` enfoca modelo, `A` selecciona visibles, `D` descarga, `R` reencola, `Esc` limpia.</span>
             </div>
+            {hasMore ? (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => void loadMore()}
+                  disabled={resultsLoading || loadingMore}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loadingMore ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
+                  {loadingMore ? 'Buscando más lotes...' : 'Cargar más resultados'}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {resultsLoading ? (

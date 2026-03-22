@@ -38,10 +38,10 @@ exports.searchArchive = (0, https_1.onCall)(async (request) => {
     const batchStatus = asTrimmedString(request.data?.batchStatus);
     const jobStatus = asTrimmedString(request.data?.jobStatus);
     const modelQuery = asTrimmedString(request.data?.modelQuery).toLocaleLowerCase();
-    const garmentQuery = asTrimmedString(request.data?.garmentQuery).toLocaleLowerCase();
     const limit = clamp(request.data?.limit, 1, 40, 20);
-    const scanLimit = clamp(request.data?.scanLimit, limit, 160, Math.max(limit * 4, 80));
-    let batchesQuery = db.collection('batches').orderBy('createdAt', 'desc').limit(scanLimit);
+    const batchPageSize = clamp(request.data?.batchPageSize, limit, 160, Math.max(limit * 2, 80));
+    const cursorBatchId = asTrimmedString(request.data?.cursor?.batchId);
+    let batchesQuery = db.collection('batches').orderBy('createdAt', 'desc');
     const dateFrom = asTrimmedString(request.data?.dateFrom);
     const dateTo = asTrimmedString(request.data?.dateTo);
     if (dateFrom) {
@@ -58,29 +58,32 @@ exports.searchArchive = (0, https_1.onCall)(async (request) => {
         }
         batchesQuery = batchesQuery.where('createdAt', '<=', toDate);
     }
-    const batchesSnapshot = await batchesQuery.get();
-    const scannedBatches = batchesSnapshot.size;
-    const candidateBatches = batchesSnapshot.docs
-        .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }))
-        .filter((batch) => {
+    if (cursorBatchId) {
+        const cursorSnapshot = await db.collection('batches').doc(cursorBatchId).get();
+        if (!cursorSnapshot.exists) {
+            throw new https_1.HttpsError('invalid-argument', 'El cursor de la búsqueda ya no es válido.');
+        }
+        batchesQuery = batchesQuery.startAfter(cursorSnapshot);
+    }
+    const batchesSnapshot = await batchesQuery.limit(batchPageSize).get();
+    const batchDocs = batchesSnapshot.docs;
+    const results = [];
+    let lastProcessedIndex = -1;
+    for (let index = 0; index < batchDocs.length; index += 1) {
+        const docSnapshot = batchDocs[index];
+        const batch = { id: docSnapshot.id, ...docSnapshot.data() };
+        lastProcessedIndex = index;
         if (clientId && batch.clientId !== clientId) {
-            return false;
+            continue;
         }
         if (provider && batch.provider !== provider) {
-            return false;
+            continue;
         }
         if (batchStatus && batch.status !== batchStatus) {
-            return false;
+            continue;
         }
         if (!matchesText(batch.modelNameSnapshot, modelQuery)) {
-            return false;
-        }
-        return true;
-    });
-    const results = [];
-    for (const batch of candidateBatches) {
-        if (results.length >= limit) {
-            break;
+            continue;
         }
         const jobsSnapshot = await db.collection('jobs').where('batchId', '==', batch.id).get();
         const matchedJobs = jobsSnapshot.docs
@@ -90,9 +93,6 @@ exports.searchArchive = (0, https_1.onCall)(async (request) => {
                 return false;
             }
             if (provider && job.provider !== provider) {
-                return false;
-            }
-            if (!matchesText(job.garmentName, garmentQuery)) {
                 return false;
             }
             return true;
@@ -112,12 +112,24 @@ exports.searchArchive = (0, https_1.onCall)(async (request) => {
                 return toMillis(current) > toMillis(latest) ? current : latest;
             }, batch.updatedAt || batch.createdAt),
         });
+        if (results.length >= limit) {
+            break;
+        }
     }
+    const scannedBatches = lastProcessedIndex + 1;
+    const stoppedEarly = lastProcessedIndex >= 0 && lastProcessedIndex < batchDocs.length - 1;
+    const hasMore = stoppedEarly || batchDocs.length === batchPageSize;
+    const nextCursor = hasMore && lastProcessedIndex >= 0
+        ? {
+            batchId: batchDocs[lastProcessedIndex].id,
+        }
+        : null;
     return {
         success: true,
         results,
         scannedBatches,
-        truncated: candidateBatches.length > results.length || scannedBatches >= scanLimit,
+        hasMore,
+        nextCursor,
     };
 });
 //# sourceMappingURL=searchArchive.js.map

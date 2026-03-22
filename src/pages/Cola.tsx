@@ -17,6 +17,8 @@ interface QueueRow {
   ageStartedAt: number | null;
 }
 
+type KanbanStage = 'pending' | 'processing' | 'evaluation';
+
 const toDate = (value: unknown): Date | null => {
   if (!value) {
     return null;
@@ -119,6 +121,175 @@ const SummaryCard: React.FC<{
   </div>
 );
 
+const KANBAN_COLUMNS: Array<{
+  id: KanbanStage;
+  title: string;
+  description: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  icon: React.ElementType;
+  accentClassName: string;
+  badgeClassName: string;
+}> = [
+  {
+    id: 'pending',
+    title: 'Pendiente',
+    description: 'Lotes esperando su primer turno de ejecución.',
+    emptyTitle: 'Nada pendiente',
+    emptyDescription: 'Los lotes nuevos aparecerán aquí apenas entren a la cola.',
+    icon: Clock3,
+    accentClassName: 'from-amber-100 via-amber-50 to-white',
+    badgeClassName: 'bg-amber-100 text-amber-800',
+  },
+  {
+    id: 'processing',
+    title: 'Procesando',
+    description: 'Lotes con jobs activos generando resultados ahora.',
+    emptyTitle: 'Sin procesamiento',
+    emptyDescription: 'Cuando la IA esté trabajando en un lote, lo verás en esta columna.',
+    icon: RefreshCw,
+    accentClassName: 'from-sky-100 via-sky-50 to-white',
+    badgeClassName: 'bg-sky-100 text-sky-800',
+  },
+  {
+    id: 'evaluation',
+    title: 'Evaluación',
+    description: 'Lotes con resultados o fallos listos para revisar.',
+    emptyTitle: 'Sin revisión pendiente',
+    emptyDescription: 'Los lotes con salidas parciales, completas o fallidas caerán aquí.',
+    icon: CheckCircle2,
+    accentClassName: 'from-emerald-100 via-emerald-50 to-white',
+    badgeClassName: 'bg-emerald-100 text-emerald-800',
+  },
+];
+
+const getKanbanStage = (row: QueueRow): KanbanStage => {
+  if (row.batch.processingJobs > 0 || row.batch.status === 'processing') {
+    return 'processing';
+  }
+
+  if (
+    row.batch.completedJobs > 0 ||
+    row.batch.failedJobs > 0 ||
+    row.batch.status === 'partial_failed' ||
+    row.batch.status === 'failed'
+  ) {
+    return 'evaluation';
+  }
+
+  return 'pending';
+};
+
+const BatchCard: React.FC<{
+  row: QueueRow;
+  selected: boolean;
+  busyAction: 'retry' | 'cancel' | null;
+  canRegenerate: boolean;
+  onToggle: (batchId: string) => void;
+  onRetry: (batchIds: string[]) => Promise<void>;
+  onCancel: (batchIds: string[]) => Promise<void>;
+}> = ({ row, selected, busyAction, canRegenerate, onToggle, onRetry, onCancel }) => (
+  <article
+    className={`rounded-3xl border p-4 shadow-sm transition ${
+      selected
+        ? 'border-indigo-300 bg-indigo-50/60 shadow-indigo-100/80'
+        : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md'
+    }`}
+  >
+    <div className="flex items-start justify-between gap-3">
+      <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggle(row.id)}
+          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+        />
+        Seleccionar
+      </label>
+      <StatusBadge status={row.batch.status} />
+    </div>
+
+    <div className="mt-4">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        {PROVIDER_LABELS[row.batch.provider]}
+      </div>
+      <div className="mt-2 text-base font-semibold text-slate-900">{row.batch.clientNameSnapshot}</div>
+      <div className="text-sm text-slate-600">{row.batch.modelNameSnapshot}</div>
+      <div className="mt-1 text-xs text-slate-500">
+        <span className="font-mono">{row.id.slice(0, 8)}</span> · actualizado {formatDateTime(row.batch.updatedAt)}
+      </div>
+    </div>
+
+    <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+      <div className="rounded-2xl bg-slate-50 px-2 py-3">
+        <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Pend</div>
+        <div className="mt-1 text-lg font-semibold text-slate-900">{row.batch.pendingJobs}</div>
+      </div>
+      <div className="rounded-2xl bg-slate-50 px-2 py-3">
+        <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Proc</div>
+        <div className="mt-1 text-lg font-semibold text-slate-900">{row.batch.processingJobs}</div>
+      </div>
+      <div className="rounded-2xl bg-slate-50 px-2 py-3">
+        <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Total</div>
+        <div className="mt-1 text-lg font-semibold text-slate-900">{row.batch.totalJobs}</div>
+      </div>
+    </div>
+
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+        <div className="text-xs uppercase tracking-[0.12em] text-slate-500">ETA</div>
+        <div className="mt-1 font-medium text-slate-900">
+          {row.batch.pendingJobs + row.batch.processingJobs > 0 ? formatRelativeDuration(row.etaSeconds) : 'Sin cola'}
+        </div>
+        <div className="mt-1 text-xs text-slate-500">
+          {row.batch.processingJobs > 0 ? 'basada en trabajos completados' : 'esperando primer resultado'}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+        <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Antigüedad</div>
+        <div className="mt-1 font-medium text-slate-900">{formatElapsedSince(row.ageStartedAt)}</div>
+        <div className="mt-1 text-xs text-slate-500">creado {formatDateTime(row.batch.createdAt)}</div>
+      </div>
+    </div>
+
+    <div className="mt-4 text-xs text-slate-500">
+      {row.batch.completedJobs} completados · {row.batch.failedJobs} fallidos
+    </div>
+
+    <div className="mt-4 flex flex-col gap-2">
+      <Link
+        to={`/evaluacion?batchId=${row.id}`}
+        className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Abrir lote
+      </Link>
+
+      {canRegenerate ? (
+        <>
+          <button
+            type="button"
+            onClick={() => void onRetry([row.id])}
+            disabled={busyAction !== null || row.batch.failedJobs === 0}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-2 font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${busyAction === 'retry' ? 'animate-spin' : ''}`} />
+            Reintentar fallidos
+          </button>
+          <button
+            type="button"
+            onClick={() => void onCancel([row.id])}
+            disabled={busyAction !== null || row.batch.pendingJobs === 0}
+            className="rounded-xl bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancelar pendientes
+          </button>
+        </>
+      ) : null}
+    </div>
+  </article>
+);
+
 export const Cola: React.FC = () => {
   const role = useRole();
   const toast = useToast();
@@ -211,6 +382,18 @@ export const Cola: React.FC = () => {
         return true;
       }),
     [clientFilter, providerFilter, rows, statusFilter],
+  );
+
+  const rowsByStage = useMemo<Record<KanbanStage, QueueRow[]>>(
+    () =>
+      filteredRows.reduce(
+        (acc, row) => {
+          acc[getKanbanStage(row)].push(row);
+          return acc;
+        },
+        { pending: [], processing: [], evaluation: [] } as Record<KanbanStage, QueueRow[]>,
+      ),
+    [filteredRows],
   );
 
   const selectedRows = useMemo(
@@ -447,6 +630,32 @@ export const Cola: React.FC = () => {
           </div>
         </div>
 
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSelectAllFiltered}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {allFilteredSelected ? 'Quitar visibles' : `Seleccionar ${filteredRows.length} visibles`}
+          </button>
+
+          {selectedRows.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setSelectedBatchIds([])}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Limpiar selección
+            </button>
+          ) : null}
+        </div>
+
+        {!role.canRegenerate ? (
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Tu rol puede monitorear la cola y abrir lotes, pero no ejecutar reintentos ni cancelaciones.
+          </div>
+        ) : null}
+
         {selectedRows.length > 0 ? (
           <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-sm text-slate-700">
@@ -475,14 +684,6 @@ export const Cola: React.FC = () => {
                   </button>
                 </>
               ) : null}
-
-              <button
-                type="button"
-                onClick={() => setSelectedBatchIds([])}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Limpiar selección
-              </button>
             </div>
           </div>
         ) : null}
@@ -496,119 +697,65 @@ export const Cola: React.FC = () => {
             />
           </div>
         ) : (
-          <div className="mt-6 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.12em] text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={allFilteredSelected}
-                      onChange={handleSelectAllFiltered}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                  </th>
-                  <th className="px-4 py-3">Lote</th>
-                  <th className="px-4 py-3">Proveedor</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3">Cola</th>
-                  <th className="px-4 py-3">ETA</th>
-                  <th className="px-4 py-3">Antigüedad</th>
-                  <th className="px-4 py-3">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredRows.map((row) => (
-                  <tr key={row.id} className="align-top hover:bg-slate-50/80">
-                    <td className="px-4 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedBatchIds.includes(row.id)}
-                        onChange={() => handleToggleBatch(row.id)}
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="font-semibold text-slate-900">{row.batch.clientNameSnapshot}</div>
-                      <div className="text-slate-600">{row.batch.modelNameSnapshot}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        <span className="font-mono">{row.id.slice(0, 8)}</span> · actualizado {formatDateTime(row.batch.updatedAt)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-slate-600">{PROVIDER_LABELS[row.batch.provider]}</td>
-                    <td className="px-4 py-4">
-                      <div className="space-y-2">
-                        <StatusBadge status={row.batch.status} />
-                        <div className="text-xs text-slate-500">
-                          {row.batch.completedJobs} completados · {row.batch.failedJobs} fallidos
+          <div className="mt-6 grid gap-4 xl:grid-cols-3">
+            {KANBAN_COLUMNS.map((column) => {
+              const Icon = column.icon;
+              const columnRows = rowsByStage[column.id];
+
+              return (
+                <section
+                  key={column.id}
+                  className={`rounded-3xl border border-slate-200 bg-gradient-to-b ${column.accentClassName} p-4 shadow-sm`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <div className={`rounded-2xl p-2 ${column.badgeClassName}`}>
+                          <Icon className={`h-4 w-4 ${column.id === 'processing' ? 'animate-spin' : ''}`} />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-semibold text-slate-900">{column.title}</h3>
+                          <p className="text-sm text-slate-600">{column.description}</p>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="space-y-1 text-slate-600">
-                        <div>Pendientes: <strong className="text-slate-900">{row.batch.pendingJobs}</strong></div>
-                        <div>Procesando: <strong className="text-slate-900">{row.batch.processingJobs}</strong></div>
-                        <div>Total: <strong className="text-slate-900">{row.batch.totalJobs}</strong></div>
+                    </div>
+
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${column.badgeClassName}`}>
+                      {columnRows.length} lote{columnRows.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    {columnRows.length === 0 ? (
+                      <div className="rounded-3xl border border-dashed border-slate-300 bg-white/80 px-4 py-8 text-center">
+                        <div className="text-sm font-semibold text-slate-900">{column.emptyTitle}</div>
+                        <div className="mt-2 text-sm text-slate-500">{column.emptyDescription}</div>
                       </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="font-medium text-slate-900">
-                        {row.batch.pendingJobs + row.batch.processingJobs > 0 ? formatRelativeDuration(row.etaSeconds) : 'Sin cola'}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {row.batch.processingJobs > 0 ? 'estimación basada en trabajos completados' : 'esperando primer resultado'}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="font-medium text-slate-900">{formatElapsedSince(row.ageStartedAt)}</div>
-                      <div className="mt-1 text-xs text-slate-500">creado {formatDateTime(row.batch.createdAt)}</div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex min-w-[240px] flex-col gap-2">
-                        <Link
-                          to={`/evaluacion?batchId=${row.id}`}
-                          className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          Abrir lote
-                        </Link>
-                        {role.canRegenerate ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => void handleRetryFailed([row.id])}
-                              disabled={busyAction !== null || row.batch.failedJobs === 0}
-                              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 px-3 py-2 font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              <RefreshCw className={`h-4 w-4 ${busyAction === 'retry' ? 'animate-spin' : ''}`} />
-                              Reintentar fallidos
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleCancelPending([row.id])}
-                              disabled={busyAction !== null || row.batch.pendingJobs === 0}
-                              className="rounded-xl bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              Cancelar pendientes
-                            </button>
-                          </>
-                        ) : (
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                            Tu rol puede monitorear la cola y abrir lotes, pero no ejecutar acciones masivas.
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    ) : (
+                      columnRows.map((row) => (
+                        <BatchCard
+                          key={row.id}
+                          row={row}
+                          selected={selectedBatchIds.includes(row.id)}
+                          busyAction={busyAction}
+                          canRegenerate={role.canRegenerate}
+                          onToggle={handleToggleBatch}
+                          onRetry={handleRetryFailed}
+                          onCancel={handleCancelPending}
+                        />
+                      ))
+                    )}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         )}
 
         {filteredRows.length > 0 ? (
           <div className="mt-5 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-            Abrir un lote desde aquí siempre envía `batchId` explícito a Evaluación, así que ya no dependemos del “último mío”.
+            Abrir un lote desde aquí siempre envía `batchId` explícito a Evaluación. La columna “Evaluación” agrupa lotes con resultados o fallos ya listos para revisar.
           </div>
         ) : null}
       </section>

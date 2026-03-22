@@ -306,13 +306,13 @@ export const Evaluacion: React.FC = () => {
   return (
     <div className={`max-w-7xl mx-auto transition-all ${hasSelection ? 'pb-28' : 'pb-12'}`}>
       {/* Page header + batch-level actions */}
-      <div className="flex justify-between items-start mb-8">
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <PageHeader
           title="Evaluación"
           description="Revisa visualmente los resultados del lote seleccionado. Filtra, compara regeneraciones y actúa sobre varias tarjetas a la vez."
         />
 
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="sticky top-4 z-20 flex flex-wrap items-center gap-2 self-end rounded-2xl bg-slate-950/80 py-2 backdrop-blur-sm lg:pt-1">
           {canCancelPending ? (
             <Button
               variant="secondary"
@@ -342,7 +342,7 @@ export const Evaluacion: React.FC = () => {
               loading={downloading}
               icon={Download}
             >
-              Guardar visibles
+              Guardar todas
             </Button>
           ) : null}
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { PageHeader, LoadingBlock, EmptyState, Button } from '../components/ui';
 import { subscribeToClients, createClient, updateClient, archiveClient, restoreClient, permanentlyDeleteClient } from '../features/clients/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
@@ -22,6 +23,7 @@ const INPUT_BASE =
   'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400';
 
 export const Clients: React.FC = () => {
+  const location = useLocation();
   const toast = useToast();
   const confirm = useConfirm();
   const [clients, setClients] = useState<Client[]>([]);
@@ -194,6 +196,39 @@ export const Clients: React.FC = () => {
 
   const clientsTotalPages = Math.max(1, Math.ceil(filteredClients.length / CLIENTS_PAGE_SIZE));
   const pagedClients = filteredClients.slice((clientsPage - 1) * CLIENTS_PAGE_SIZE, clientsPage * CLIENTS_PAGE_SIZE);
+  const highlightedClientId = location.hash.startsWith('#client-') ? location.hash.slice('#client-'.length) : null;
+
+  useEffect(() => {
+    if (!highlightedClientId) return;
+
+    const targetIndex = clients.findIndex((client) => client.id === highlightedClientId);
+    if (targetIndex < 0) return;
+
+    if (clientSearch) {
+      setClientSearch('');
+    }
+
+    if (clientsPage !== Math.floor(targetIndex / CLIENTS_PAGE_SIZE) + 1) {
+      setClientsPage(Math.floor(targetIndex / CLIENTS_PAGE_SIZE) + 1);
+    }
+
+    setExpandedId(highlightedClientId);
+
+    const scrollTarget = () => {
+      const element = document.getElementById(`client-${highlightedClientId}`);
+      if (!element) return false;
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return true;
+    };
+
+    if (scrollTarget()) return;
+
+    const timeoutId = window.setTimeout(() => {
+      scrollTarget();
+    }, 120);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [clientSearch, clients, clientsPage, highlightedClientId]);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -325,7 +360,13 @@ export const Clients: React.FC = () => {
                   );
 
                   return (
-                    <li key={client.id} className="transition-colors hover:bg-gray-50">
+                    <li
+                      key={client.id}
+                      id={client.id ? `client-${client.id}` : undefined}
+                      className={`scroll-mt-28 transition-colors hover:bg-gray-50 ${
+                        highlightedClientId === client.id ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200' : ''
+                      }`}
+                    >
                       <div className="px-6 py-4">
                         {isArchivedCatalogEntity(client) && (
                           <div className="mb-2 inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">

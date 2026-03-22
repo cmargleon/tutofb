@@ -20,6 +20,7 @@ export * from './callables/restoreAppUser';
 export * from './callables/permanentlyDeleteAppUser';
 export * from './callables/permanentlyDeleteClient';
 export * from './callables/permanentlyDeleteModel';
+export * from './callables/generateModelPose';
 export * from './admin/rebuildAnalytics';
 export * from './admin/getSystemHealth';
 export * from './http/downloadBatchZip';

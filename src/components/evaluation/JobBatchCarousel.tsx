@@ -7,6 +7,7 @@ import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRege
 import { FloatingGarmentPreview } from './FloatingGarmentPreview';
 import { CheckSquare2, Keyboard, Square } from 'lucide-react';
 import { JobTraceabilityPanel } from './JobTraceabilityPanel';
+import { BatchErrorLogPanel } from './BatchErrorLogPanel';
 
 interface Props {
   batch: Batch;
@@ -93,6 +94,14 @@ export const JobBatchCarousel: React.FC<Props> = ({
     }
   }, [activeSlide, focusedJobId]);
 
+  const handleFocusJob = (jobId: string) => {
+    const targetSlideIndex = slides.findIndex((slide) => slide.jobs.some((job) => job.id === jobId));
+    if (targetSlideIndex >= 0) {
+      goToSlide(targetSlideIndex);
+    }
+    setFocusedJobId(jobId);
+  };
+
   if (!activeSlide) return null;
 
   const activeSlideJobIds = activeSlide.jobs.map((job) => job.id).filter((jobId): jobId is string => Boolean(jobId));
@@ -134,6 +143,12 @@ export const JobBatchCarousel: React.FC<Props> = ({
         </div>
 
         <div className="space-y-6">
+          <BatchErrorLogPanel
+            jobs={jobs}
+            focusedJobId={activeFocusedJob?.id || null}
+            onFocusJob={handleFocusJob}
+          />
+
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {activeSlide.jobs.map((job, index) => (
               <JobEvaluationCard
@@ -149,7 +164,7 @@ export const JobBatchCarousel: React.FC<Props> = ({
                 selected={job.id ? selectedJobIds.includes(job.id) : false}
                 onToggleSelected={job.id && onToggleJob ? () => onToggleJob(job.id!) : undefined}
                 focused={job.id === activeFocusedJob?.id}
-                onFocusTraceability={job.id ? () => setFocusedJobId(job.id!) : undefined}
+                onFocusTraceability={job.id ? () => handleFocusJob(job.id!) : undefined}
               />
             ))}
           </div>

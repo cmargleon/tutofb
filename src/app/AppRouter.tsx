@@ -12,6 +12,7 @@ import { Archive } from '../pages/Archive';
 import { Analytics } from '../pages/Analytics';
 import { Evaluacion } from '../pages/Evaluacion';
 import { Cola } from '../pages/Cola';
+import { Docs } from '../pages/Docs';
 import { LoadingBlock } from '../components/ui';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, roles?: string[] }> = ({ children, roles }) => {
@@ -55,6 +56,7 @@ export const AppRouter: React.FC = () => {
           <Route path="evaluacion" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Evaluacion /></ProtectedRoute>} />
           <Route path="archivo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Archive /></ProtectedRoute>} />
           <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><Analytics /></ProtectedRoute>} />
+          <Route path="docs" element={<ProtectedRoute><Docs /></ProtectedRoute>} />
         </Route>
       </Routes>
     </BrowserRouter>

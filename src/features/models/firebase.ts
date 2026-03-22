@@ -1,7 +1,15 @@
 import { db, auth, storage } from '../../firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Model, Pose, Client, PermanentDeleteCatalogEntityRequest, PermanentDeleteCatalogEntityResponse } from '../../../shared/src/types';
+import {
+  Model,
+  Pose,
+  Client,
+  PermanentDeleteCatalogEntityRequest,
+  PermanentDeleteCatalogEntityResponse,
+  GenerateModelPhotoRequest,
+  GenerateModelPhotoResponse,
+} from '../../../shared/src/types';
 import { v4 as uuidv4 } from 'uuid';
 import { isActiveCatalogEntity, isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { functions } from '../../firebase';
@@ -12,6 +20,12 @@ interface UpdateModelInput {
   clientId: string;
   filesToAdd?: File[];
   poseIdsToRemove?: string[];
+}
+
+interface CreateGeneratedModelOptions {
+  modelId?: string;
+  generatedPhotoCount?: number;
+  generatedPhotoCostUsd?: number;
 }
 
 const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -105,6 +119,8 @@ export const createModel = async (clientId: string, name: string, files: File[])
       poseCount: poses.length,
       coverPoseId: poses[0]?.id || null,
       coverPosePath: poses[0]?.storagePath || null,
+      generatedPhotoCount: 0,
+      generatedPhotoCostUsd: 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       createdByUid: auth.currentUser.uid
@@ -248,6 +264,67 @@ export const permanentlyDeleteModel = async (id: string) => {
     'permanentlyDeleteModel',
   );
   await callable({ id });
+};
+
+export const generateModelPoses = async (
+  data: GenerateModelPhotoRequest,
+): Promise<GenerateModelPhotoResponse> => {
+  const callable = httpsCallable<GenerateModelPhotoRequest, GenerateModelPhotoResponse>(
+    functions,
+    'generateModelPose',
+  );
+  const result = await callable(data);
+  return result.data;
+};
+
+export const createModelFromPaths = async (
+  clientId: string,
+  name: string,
+  poses: Array<{ storagePath: string; contentType: string }>,
+  options: CreateGeneratedModelOptions = {},
+): Promise<string> => {
+  if (!auth.currentUser) throw new Error('Usuario no autenticado');
+
+  const clientRef = doc(db, 'clients', clientId);
+  const clientSnap = await getDoc(clientRef);
+  if (!clientSnap.exists()) throw new Error('Cliente no encontrado');
+  const client = clientSnap.data() as Client;
+  if (isArchivedCatalogEntity(client)) throw new Error('No puedes crear modelos para un cliente archivado.');
+
+  const newModelRef = options.modelId
+    ? doc(collection(db, 'models'), options.modelId)
+    : doc(collection(db, 'models'));
+  const modelId = newModelRef.id;
+  const storageRootPath = getModelStorageRootPath(modelId, clientId);
+
+  const poseEntries: Pose[] = poses.map(({ storagePath, contentType: _ct }, i) => ({
+    id: uuidv4(),
+    storagePath,
+    fileName: storagePath.split('/').pop() ?? `pose_${i}`,
+    createdAt: new Date().toISOString(),
+  }));
+
+  const modelData: Omit<Model, 'id'> = {
+    clientId,
+    clientNameSnapshot: client.name,
+    name: name.trim(),
+    status: 'active',
+    archivedAt: null,
+    archivedByUid: null,
+    storageRootPath,
+    poses: poseEntries,
+    poseCount: poseEntries.length,
+    coverPoseId: poseEntries[0]?.id ?? null,
+    coverPosePath: poseEntries[0]?.storagePath ?? null,
+    generatedPhotoCount: options.generatedPhotoCount ?? 0,
+    generatedPhotoCostUsd: options.generatedPhotoCostUsd ?? 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    createdByUid: auth.currentUser.uid,
+  };
+
+  await setDoc(newModelRef, modelData);
+  return modelId;
 };
 
 export const getImageUrl = async (storagePath: string): Promise<string> => {

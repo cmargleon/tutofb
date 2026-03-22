@@ -50,9 +50,10 @@ export const searchArchive = onCall<ArchiveSearchRequest, Promise<ArchiveSearchR
   const jobStatus = asTrimmedString(request.data?.jobStatus);
   const modelQuery = asTrimmedString(request.data?.modelQuery).toLocaleLowerCase();
   const limit = clamp(request.data?.limit, 1, 40, 20);
-  const scanLimit = clamp(request.data?.scanLimit, limit, 160, Math.max(limit * 4, 80));
+  const batchPageSize = clamp(request.data?.batchPageSize, limit, 160, Math.max(limit * 2, 80));
+  const cursorBatchId = asTrimmedString(request.data?.cursor?.batchId);
 
-  let batchesQuery = db.collection('batches').orderBy('createdAt', 'desc').limit(scanLimit);
+  let batchesQuery = db.collection('batches').orderBy('createdAt', 'desc');
   const dateFrom = asTrimmedString(request.data?.dateFrom);
   const dateTo = asTrimmedString(request.data?.dateTo);
 
@@ -74,35 +75,40 @@ export const searchArchive = onCall<ArchiveSearchRequest, Promise<ArchiveSearchR
     batchesQuery = batchesQuery.where('createdAt', '<=', toDate);
   }
 
-  const batchesSnapshot = await batchesQuery.get();
-  const scannedBatches = batchesSnapshot.size;
-  const candidateBatches = batchesSnapshot.docs
-    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Batch)
-    .filter((batch) => {
-      if (clientId && batch.clientId !== clientId) {
-        return false;
-      }
+  if (cursorBatchId) {
+    const cursorSnapshot = await db.collection('batches').doc(cursorBatchId).get();
+    if (!cursorSnapshot.exists) {
+      throw new HttpsError('invalid-argument', 'El cursor de la búsqueda ya no es válido.');
+    }
 
-      if (provider && batch.provider !== provider) {
-        return false;
-      }
+    batchesQuery = batchesQuery.startAfter(cursorSnapshot);
+  }
 
-      if (batchStatus && batch.status !== batchStatus) {
-        return false;
-      }
-
-      if (!matchesText(batch.modelNameSnapshot, modelQuery)) {
-        return false;
-      }
-
-      return true;
-    });
+  const batchesSnapshot = await batchesQuery.limit(batchPageSize).get();
+  const batchDocs = batchesSnapshot.docs;
 
   const results: ArchiveSearchResponse['results'] = [];
+  let lastProcessedIndex = -1;
 
-  for (const batch of candidateBatches) {
-    if (results.length >= limit) {
-      break;
+  for (let index = 0; index < batchDocs.length; index += 1) {
+    const docSnapshot = batchDocs[index];
+    const batch = { id: docSnapshot.id, ...docSnapshot.data() } as Batch;
+    lastProcessedIndex = index;
+
+    if (clientId && batch.clientId !== clientId) {
+      continue;
+    }
+
+    if (provider && batch.provider !== provider) {
+      continue;
+    }
+
+    if (batchStatus && batch.status !== batchStatus) {
+      continue;
+    }
+
+    if (!matchesText(batch.modelNameSnapshot, modelQuery)) {
+      continue;
     }
 
     const jobsSnapshot = await db.collection('jobs').where('batchId', '==', batch.id).get();
@@ -140,12 +146,27 @@ export const searchArchive = onCall<ArchiveSearchRequest, Promise<ArchiveSearchR
         return toMillis(current) > toMillis(latest) ? current : latest;
       }, batch.updatedAt || batch.createdAt) as Batch['updatedAt'],
     });
+
+    if (results.length >= limit) {
+      break;
+    }
   }
+
+  const scannedBatches = lastProcessedIndex + 1;
+  const stoppedEarly = lastProcessedIndex >= 0 && lastProcessedIndex < batchDocs.length - 1;
+  const hasMore = stoppedEarly || batchDocs.length === batchPageSize;
+  const nextCursor =
+    hasMore && lastProcessedIndex >= 0
+      ? {
+          batchId: batchDocs[lastProcessedIndex].id,
+        }
+      : null;
 
   return {
     success: true,
     results,
     scannedBatches,
-    truncated: candidateBatches.length > results.length || scannedBatches >= scanLimit,
+    hasMore,
+    nextCursor,
   };
 });

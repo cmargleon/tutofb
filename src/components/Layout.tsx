@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, useRole } from '../features/auth/AuthProvider';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { useTheme } from '../features/theme/ThemeProvider';
+import { useGlobalSearch, type GlobalSearchResult } from '../features/search/useGlobalSearch';
 import {
   LayoutDashboard,
   Users,
@@ -23,9 +24,12 @@ import {
   Sun,
   Moon,
   Bell,
+  BookOpen,
+  Search,
 } from 'lucide-react';
-import { AnalyticsSummary, Job } from '../../shared/src/types';
+import { AnalyticsSummary, Batch, Job } from '../../shared/src/types';
 import { ImageThumb, StatusBadge } from './ui';
+import { useToast } from '../features/feedback/FeedbackProvider';
 
 export const Layout: React.FC = () => {
   const { appUser } = useAuth();
@@ -47,6 +51,17 @@ export const Layout: React.FC = () => {
   const sessionStartRef = useRef(Date.now());
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
+  const toast = useToast();
+  const isFirstBatchSnapshotRef = useRef(true);
+  const { recentResults, search } = useGlobalSearch({
+    enabledClients: role.canManageClients,
+    enabledModels: role.canManageModels,
+    enabledBatches: role.canEvaluate,
+  });
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 1280px)');
@@ -72,6 +87,12 @@ export const Layout: React.FC = () => {
     }
   }, [location.pathname, isDesktop]);
 
+  useEffect(() => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setSelectedSearchIndex(0);
+  }, [location.pathname, location.search, location.hash]);
+
   // Firebase subscriptions: queue count + notifications
   useEffect(() => {
     const unsubQueue = onSnapshot(doc(db, 'analytics_summary', 'global'), (snap) => {
@@ -93,8 +114,46 @@ export const Layout: React.FC = () => {
       },
     );
 
-    return () => { unsubQueue(); unsubNotif(); };
-  }, []);
+    const unsubBatches = onSnapshot(
+      query(collection(db, 'batches'), orderBy('updatedAt', 'desc'), limit(20)),
+      (snap) => {
+        if (isFirstBatchSnapshotRef.current) {
+          isFirstBatchSnapshotRef.current = false;
+          return;
+        }
+        snap.docChanges().forEach((change) => {
+          if (change.type !== 'modified') return;
+          const batch = { id: change.doc.id, ...change.doc.data() } as Batch;
+          const client = batch.clientNameSnapshot;
+          const model = batch.modelNameSnapshot;
+          if (batch.status === 'completed') {
+            toast({
+              title: 'Lote completado',
+              description: `${client} · ${model} · ${batch.completedJobs} imágenes`,
+              tone: 'success',
+              durationMs: 6000,
+            });
+          } else if (batch.status === 'partial_failed') {
+            toast({
+              title: 'Lote parcialmente completado',
+              description: `${client} · ${model} · ${batch.failedJobs} jobs fallaron`,
+              tone: 'warning',
+              durationMs: 6000,
+            });
+          } else if (batch.status === 'failed') {
+            toast({
+              title: 'Lote fallido',
+              description: `${client} · ${model}`,
+              tone: 'error',
+              durationMs: 6000,
+            });
+          }
+        });
+      },
+    );
+
+    return () => { unsubQueue(); unsubNotif(); unsubBatches(); };
+  }, [toast]);
 
   // Click-outside to close notification dropdown
   useEffect(() => {
@@ -107,6 +166,36 @@ export const Layout: React.FC = () => {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [isNotifOpen]);
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
+
+    const focusId = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+
+    return () => window.cancelAnimationFrame(focusId);
+  }, [isSearchOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsNotifOpen(false);
+        setIsSearchOpen((open) => !open);
+        return;
+      }
+
+      if (event.key === 'Escape' && isSearchOpen) {
+        event.preventDefault();
+        setIsSearchOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isSearchOpen]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -123,6 +212,7 @@ export const Layout: React.FC = () => {
     { name: 'Archivo',     path: '/archivo',    icon: Archive,         visible: role.canAccessArchive   },
     { name: 'Analíticas',  path: '/analytics',  icon: BarChart3,       visible: role.canAccessAnalytics },
     { name: 'Usuarios',    path: '/users',      icon: Shield,          visible: role.canManageUsers     },
+    { name: 'Documentación', path: '/docs',     icon: BookOpen,        visible: role.isActive           },
   ];
 
   const filteredNav = navItems.filter((item) => item.visible);
@@ -146,10 +236,94 @@ export const Layout: React.FC = () => {
   }).length;
 
   const handleBellClick = () => {
+    setIsSearchOpen(false);
     setIsNotifOpen((open) => !open);
     const now = Date.now();
     setNotifSeenAt(now);
     localStorage.setItem('notifSeenAt', String(now));
+  };
+
+  const searchResults = useMemo(() => search(searchQuery), [search, searchQuery]);
+  const hasSearchResults = searchResults.length > 0;
+  const selectedSearchResult = searchResults[selectedSearchIndex] ?? null;
+
+  useEffect(() => {
+    setSelectedSearchIndex(0);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (selectedSearchIndex <= searchResults.length - 1) return;
+    setSelectedSearchIndex(0);
+  }, [searchResults.length, selectedSearchIndex]);
+
+  const openSearch = () => {
+    setIsNotifOpen(false);
+    setSearchQuery('');
+    setSelectedSearchIndex(0);
+    setIsSearchOpen(true);
+  };
+
+  const closeSearch = () => {
+    setIsSearchOpen(false);
+  };
+
+  const submitSearchResult = (result: GlobalSearchResult | null) => {
+    if (!result) return;
+    closeSearch();
+    navigate(result.href);
+  };
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (!hasSearchResults) return;
+      setSelectedSearchIndex((current) => (current + 1) % searchResults.length);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!hasSearchResults) return;
+      setSelectedSearchIndex((current) => (current - 1 + searchResults.length) % searchResults.length);
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitSearchResult(selectedSearchResult);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSearch();
+    }
+  };
+
+  const getSearchResultIcon = (type: GlobalSearchResult['type']) => {
+    switch (type) {
+      case 'client':
+        return Users;
+      case 'model':
+        return UserSquare2;
+      case 'batch':
+        return Rows3;
+      default:
+        return Search;
+    }
+  };
+
+  const getSearchResultTypeLabel = (type: GlobalSearchResult['type']) => {
+    switch (type) {
+      case 'client':
+        return 'Cliente';
+      case 'model':
+        return 'Modelo';
+      case 'batch':
+        return 'Batch';
+      default:
+        return 'Resultado';
+    }
   };
 
   const renderSidebarContent = (collapsed: boolean) => (
@@ -290,6 +464,19 @@ export const Layout: React.FC = () => {
 
           {/* Right */}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openSearch}
+              className="inline-flex min-w-0 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm transition hover:border-gray-300 hover:text-slate-700"
+              aria-label="Abrir búsqueda global"
+            >
+              <Search className="h-4 w-4 shrink-0" />
+              <span className="hidden md:inline">Buscar clientes, modelos, batches</span>
+              <span className="hidden rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[11px] font-semibold text-slate-400 md:inline-flex">
+                ⌘K
+              </span>
+            </button>
+
             {/* Nuevo lote */}
             {role.canCreateBatches && location.pathname !== '/generate' && (
               <Link
@@ -338,7 +525,7 @@ export const Layout: React.FC = () => {
                       {notifications.map((job) => (
                         <li key={job.id}>
                           <Link
-                            to={`/evaluacion?batchId=${job.batchId}`}
+                            to={`/archivo?batchId=${job.batchId}`}
                             onClick={() => setIsNotifOpen(false)}
                             className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
                           >
@@ -360,11 +547,11 @@ export const Layout: React.FC = () => {
                   {/* Footer */}
                   <div className="border-t border-gray-100 px-4 py-3">
                     <Link
-                      to="/evaluacion"
+                      to="/archivo"
                       onClick={() => setIsNotifOpen(false)}
                       className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
                     >
-                      Ver evaluación →
+                      Ver archivo →
                     </Link>
                   </div>
                 </div>
@@ -376,6 +563,99 @@ export const Layout: React.FC = () => {
           <Outlet />
         </div>
       </main>
+
+      {isSearchOpen ? (
+        <div className="fixed inset-0 z-[70] bg-slate-950/45 px-4 py-8 backdrop-blur-sm sm:px-6" onClick={closeSearch}>
+          <div
+            className="mx-auto mt-[8vh] w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
+              <div className="flex items-center gap-3">
+                <Search className="h-5 w-5 shrink-0 text-slate-400" />
+                <input
+                  ref={searchInputRef}
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Busca clientes, modelos o batches por nombre, cliente o ID..."
+                  className="w-full border-0 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={closeSearch}
+                  className="inline-flex items-center rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+                >
+                  Esc
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto p-2">
+              {hasSearchResults ? (
+                <ul className="space-y-1">
+                  {searchResults.map((result, index) => {
+                    const Icon = getSearchResultIcon(result.type);
+                    const isSelected = index === selectedSearchIndex;
+                    return (
+                      <li key={`${result.type}-${result.id}`}>
+                        <button
+                          type="button"
+                          onClick={() => submitSearchResult(result)}
+                          onMouseEnter={() => setSelectedSearchIndex(index)}
+                          className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
+                            isSelected ? 'bg-indigo-50 text-indigo-950' : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+                            isSelected ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-semibold">{result.title}</p>
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                                {getSearchResultTypeLabel(result.type)}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 truncate text-sm text-slate-500">{result.subtitle}</p>
+                          </div>
+                          {result.meta ? (
+                            <div className="hidden shrink-0 text-right text-xs text-slate-400 sm:block">
+                              {result.meta}
+                            </div>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="px-4 py-10 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                    <Search className="h-5 w-5" />
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-slate-900">
+                    {searchQuery.trim() ? 'No encontramos coincidencias' : 'Empieza a escribir para buscar'}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {searchQuery.trim()
+                      ? 'Prueba con nombre de cliente, modelo o ID del batch.'
+                      : 'Puedes abrir clientes, modelos y batches recientes desde aquí.'}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-400 sm:px-5">
+              <span>{searchQuery.trim() ? `${searchResults.length} resultado${searchResults.length === 1 ? '' : 's'}` : `${recentResults.length} accesos rápidos`}</span>
+              <span>Usa ↑ ↓ para navegar y Enter para abrir</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

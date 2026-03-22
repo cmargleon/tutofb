@@ -55,6 +55,7 @@ __exportStar(require("./callables/restoreAppUser"), exports);
 __exportStar(require("./callables/permanentlyDeleteAppUser"), exports);
 __exportStar(require("./callables/permanentlyDeleteClient"), exports);
 __exportStar(require("./callables/permanentlyDeleteModel"), exports);
+__exportStar(require("./callables/generateModelPose"), exports);
 __exportStar(require("./admin/rebuildAnalytics"), exports);
 __exportStar(require("./admin/getSystemHealth"), exports);
 __exportStar(require("./http/downloadBatchZip"), exports);

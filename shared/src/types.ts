@@ -129,6 +129,8 @@ export interface Model {
   poseCount: number;
   coverPoseId?: string | null;
   coverPosePath?: string | null;
+  generatedPhotoCount?: number;
+  generatedPhotoCostUsd?: number;
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
   createdByUid: string;
@@ -570,7 +572,12 @@ export interface ArchiveSearchRequest {
   dateFrom?: string | null;
   dateTo?: string | null;
   limit?: number | null;
-  scanLimit?: number | null;
+  batchPageSize?: number | null;
+  cursor?: ArchiveSearchCursor | null;
+}
+
+export interface ArchiveSearchCursor {
+  batchId: string;
 }
 
 export interface ArchiveSearchBatchMatch {
@@ -585,7 +592,8 @@ export interface ArchiveSearchResponse {
   success: boolean;
   results: ArchiveSearchBatchMatch[];
   scannedBatches: number;
-  truncated: boolean;
+  hasMore: boolean;
+  nextCursor: ArchiveSearchCursor | null;
 }
 
 export interface RegenerateJobsBulkItem {
@@ -603,4 +611,60 @@ export interface RegenerateJobsBulkResponse {
   queuedJobs: number;
   skippedJobs: number;
   skippedJobIds: string[];
+}
+
+export type ModelPhotoProvider =
+  | 'fal-flux-pro'
+  | 'fal-flux-schnell'
+  | 'fal-seedream-v4'
+  | 'fal-seedream-v4.5'
+  | 'fal-banana'
+  | 'fal-banana-pro'
+  | 'fal-banana-2'
+  | 'openai-dalle';
+
+export type ModelPhotoGenerationStage = 'identity' | 'pose';
+
+export interface GenerateModelPhotoRequest {
+  prompt: string;
+  provider: ModelPhotoProvider;
+  aspectRatio: AspectRatio;
+  count: number;
+  tempSessionId: string;
+  clientId: string;
+  modelId?: string | null;
+  stage?: ModelPhotoGenerationStage | null;
+  referenceStoragePath?: string | null;
+}
+
+export interface GeneratedModelPhoto {
+  index: number;
+  storagePath: string;
+  contentType: string;
+}
+
+export interface GeneratedModelPhotoError {
+  index: number;
+  message: string;
+}
+
+export interface GenerateModelPhotoResponse {
+  success: boolean;
+  photos: GeneratedModelPhoto[];
+  errors: GeneratedModelPhotoError[];
+  estimatedCostUsd: number;
+}
+
+export interface ModelGenerationLog {
+  id?: string;
+  provider: ModelPhotoProvider;
+  requestedPhotos: number;
+  completedPhotos: number;
+  estimatedCostUsd: number;
+  clientId: string;
+  modelId?: string | null;
+  stage?: ModelPhotoGenerationStage | null;
+  createdByUid: string;
+  createdByDisplayName?: string | null;
+  createdAt: TimestampLike;
 }

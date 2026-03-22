@@ -116,5 +116,10 @@ service cloud.firestore {
       allow read: if canReadAnalytics();
       allow write: if false;
     }
+
+    match /model_generation_logs/{logId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
   }
 }

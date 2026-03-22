@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { Client } from '../../../shared/src/types';
+import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 
 export const useArchiveClients = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -30,7 +31,7 @@ export const useArchiveClients = () => {
       const fetchedClients = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      } as Client)).filter(c => (c.batchCount || 0) > 0);
+      } as Client)).filter(c => (c.batchCount || 0) > 0 || isArchivedCatalogEntity(c));
       
       setClients(fetchedClients);
       setLoading(false);

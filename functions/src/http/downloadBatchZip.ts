@@ -19,7 +19,7 @@ const db = getAppFirestore();
 export const downloadBatchZip = onRequest(
   {
     timeoutSeconds: 300,
-    cors: [/localhost:\d+$/, /127\.0\.0\.1:\d+$/],
+    cors: true,
   },
   async (request: Request, response: Response) => {
   setCorsHeaders(request.headers.origin, response);

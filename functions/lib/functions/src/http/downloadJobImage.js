@@ -42,7 +42,7 @@ const downloadAssets_helpers_1 = require("./downloadAssets.helpers");
 const db = (0, appFirestore_1.getAppFirestore)();
 exports.downloadJobImage = (0, https_1.onRequest)({
     timeoutSeconds: 120,
-    cors: [/localhost:\d+$/, /127\.0\.0\.1:\d+$/],
+    cors: true,
 }, async (request, response) => {
     (0, downloadAssets_helpers_1.setCorsHeaders)(request.headers.origin, response);
     if (request.method === 'OPTIONS') {

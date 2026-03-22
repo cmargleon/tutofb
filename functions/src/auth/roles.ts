@@ -1,5 +1,6 @@
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import { Role, User } from '../../../shared/src/types';
+import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 const loadUserDoc = async (uid: string): Promise<User | null> => {
@@ -25,7 +26,7 @@ export const getUserRole = async (uid: string, tokenRole?: unknown): Promise<Rol
   }
 
   const user = await loadUserDoc(uid);
-  if (!user || !user.active) {
+  if (!user || !user.active || isArchivedCatalogEntity(user)) {
     return null;
   }
 

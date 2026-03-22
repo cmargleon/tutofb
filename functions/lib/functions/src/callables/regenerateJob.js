@@ -49,7 +49,8 @@ exports.regenerateJob = (0, https_1.onCall)(async (request) => {
     }
     const db = (0, appFirestore_1.getAppFirestore)();
     const jobRef = db.collection('jobs').doc(jobId);
-    const snapshot = await jobRef.get();
+    const userRef = db.collection('users').doc(request.auth.uid);
+    const [snapshot, userSnapshot] = await Promise.all([jobRef.get(), userRef.get()]);
     if (!snapshot.exists) {
         throw new https_1.HttpsError('not-found', 'Trabajo no encontrado.');
     }
@@ -57,10 +58,25 @@ exports.regenerateJob = (0, https_1.onCall)(async (request) => {
     if (job.status === 'processing') {
         throw new https_1.HttpsError('failed-precondition', 'Este trabajo ya se está procesando. Espera a que termine antes de regenerarlo.');
     }
+    if (job.experimentEnabled) {
+        if (provider !== job.provider) {
+            throw new https_1.HttpsError('invalid-argument', 'Los jobs de un experimento A/B deben mantener el modelo asignado a su brazo.');
+        }
+        if (prompt !== (job.promptBase || '').trim()) {
+            throw new https_1.HttpsError('invalid-argument', 'Los jobs de un experimento A/B deben mantener el prompt original para conservar la comparación.');
+        }
+    }
     const now = admin.firestore.FieldValue.serverTimestamp();
+    const requestedByDisplayName = userSnapshot.exists && typeof userSnapshot.data()?.displayName === 'string'
+        ? userSnapshot.data().displayName
+        : null;
     try {
         await jobRef.update({
             ...(0, regenerateJob_helpers_1.buildRegenerateJobPatch)(job, provider || '', prompt),
+            manualRegenerationCount: admin.firestore.FieldValue.increment(1),
+            'traceability.lastManualRegenerationAt': now,
+            'traceability.lastManualRegeneratedByUid': request.auth.uid,
+            'traceability.lastManualRegeneratedByDisplayName': requestedByDisplayName,
             updatedAt: now,
         });
     }
@@ -73,6 +89,7 @@ exports.regenerateJob = (0, https_1.onCall)(async (request) => {
         message: 'Regeneración encolada desde la aplicación.',
         payload: {
             requestedByUid: request.auth.uid,
+            requestedByDisplayName,
             provider,
             prompt,
         },

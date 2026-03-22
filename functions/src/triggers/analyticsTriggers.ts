@@ -6,6 +6,8 @@ import { getAppFirestore } from '../firebase/appFirestore';
 
 const db = getAppFirestore();
 
+const getClientProviderDocId = (clientId: string, provider: JobOutput['provider']) => `${clientId}__${provider}`;
+
 const updateDailyDoc = (
   batch: FirebaseFirestore.WriteBatch,
   date: string,
@@ -140,6 +142,19 @@ export const onJobOutputAnalyticsCreate = onDocumentCreated('jobs/{jobId}/output
     { merge: true },
   );
 
+  batch.set(
+    db.collection('analytics_client_providers').doc(getClientProviderDocId(output.clientId, output.provider)),
+    {
+      clientId: output.clientId,
+      clientNameSnapshot: output.clientNameSnapshot,
+      provider: output.provider,
+      completed: admin.firestore.FieldValue.increment(1),
+      totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
   await batch.commit();
 });
 
@@ -188,6 +203,19 @@ export const onJobOutputAnalyticsDelete = onDocumentDeleted('jobs/{jobId}/output
     {
       clientId: output.clientId,
       clientNameSnapshot: output.clientNameSnapshot,
+      completed: admin.firestore.FieldValue.increment(-1),
+      totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection('analytics_client_providers').doc(getClientProviderDocId(output.clientId, output.provider)),
+    {
+      clientId: output.clientId,
+      clientNameSnapshot: output.clientNameSnapshot,
+      provider: output.provider,
       completed: admin.firestore.FieldValue.increment(-1),
       totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

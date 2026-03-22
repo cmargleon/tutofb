@@ -51,6 +51,24 @@ const deleteCollectionDocs = async (collectionName) => {
         await batch.commit();
     }
 };
+const commitWritersInChunks = async (writers) => {
+    const db = (0, appFirestore_1.getAppFirestore)();
+    const batchSize = 400;
+    let batch = db.batch();
+    let operationCount = 0;
+    for (const writer of writers) {
+        writer(batch);
+        operationCount += 1;
+        if (operationCount >= batchSize) {
+            await batch.commit();
+            batch = db.batch();
+            operationCount = 0;
+        }
+    }
+    if (operationCount > 0) {
+        await batch.commit();
+    }
+};
 exports.rebuildAnalytics = (0, https_1.onCall)(async (request) => {
     await (0, roles_1.assertCallableRoles)(request, ['admin']);
     const db = (0, appFirestore_1.getAppFirestore)();
@@ -65,32 +83,34 @@ exports.rebuildAnalytics = (0, https_1.onCall)(async (request) => {
         deleteCollectionDocs('analytics_daily'),
         deleteCollectionDocs('analytics_providers'),
         deleteCollectionDocs('analytics_clients'),
+        deleteCollectionDocs('analytics_client_providers'),
     ]);
-    const batch = db.batch();
     const timestamp = admin.firestore.FieldValue.serverTimestamp();
-    batch.set(db.collection('analytics_summary').doc('global'), {
-        ...rebuilt.summary,
-        updatedAt: timestamp,
-    });
-    rebuilt.daily.forEach((daily) => {
-        batch.set(db.collection('analytics_daily').doc(daily.date), {
+    const writers = [
+        (batch) => {
+            batch.set(db.collection('analytics_summary').doc('global'), {
+                ...rebuilt.summary,
+                updatedAt: timestamp,
+            });
+        },
+        ...rebuilt.daily.map((daily) => (batch) => batch.set(db.collection('analytics_daily').doc(daily.date), {
             ...daily,
             updatedAt: timestamp,
-        });
-    });
-    rebuilt.providers.forEach((providerStats) => {
-        batch.set(db.collection('analytics_providers').doc(providerStats.provider), {
+        })),
+        ...rebuilt.providers.map((providerStats) => (batch) => batch.set(db.collection('analytics_providers').doc(providerStats.provider), {
             ...providerStats,
             updatedAt: timestamp,
-        });
-    });
-    rebuilt.clients.forEach((clientStats) => {
-        batch.set(db.collection('analytics_clients').doc(clientStats.clientId), {
+        })),
+        ...rebuilt.clients.map((clientStats) => (batch) => batch.set(db.collection('analytics_clients').doc(clientStats.clientId), {
             ...clientStats,
             updatedAt: timestamp,
-        });
-    });
-    await batch.commit();
+        })),
+        ...rebuilt.clientProviders.map((clientProviderStats) => (batch) => batch.set(db.collection('analytics_client_providers').doc(clientProviderStats.id), {
+            ...clientProviderStats,
+            updatedAt: timestamp,
+        })),
+    ];
+    await commitWritersInChunks(writers);
     return {
         success: true,
         summary: {

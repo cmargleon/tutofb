@@ -1,6 +1,7 @@
 import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { AnalyticsSummary, Batch, Client, Job, Model } from '../../../shared/src/types';
 import { db } from '../../firebase';
+import { isActiveCatalogEntity } from '../../../shared/src/domain';
 
 export interface DashboardSnapshot {
   clients: Client[];
@@ -31,7 +32,9 @@ export const subscribeToDashboardData = (
     onSnapshot(
       query(collection(db, 'clients'), orderBy('createdAt', 'desc')),
       (snapshot) => {
-        latestClients = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Client));
+        latestClients = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() } as Client))
+          .filter(isActiveCatalogEntity);
         emit();
       },
       onError,
@@ -39,7 +42,9 @@ export const subscribeToDashboardData = (
     onSnapshot(
       query(collection(db, 'models'), orderBy('createdAt', 'desc')),
       (snapshot) => {
-        latestModels = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Model));
+        latestModels = snapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() } as Model))
+          .filter(isActiveCatalogEntity);
         emit();
       },
       onError,

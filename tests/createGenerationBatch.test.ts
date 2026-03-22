@@ -76,6 +76,72 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y normaliza
   assert.equal(validated.totalJobs, 2);
 });
 
+test('validateCreateGenerationBatchInput soporta experimento A/B paired y excluye banana-pro', () => {
+  const validated = validateCreateGenerationBatchInput(
+    {
+      clientId: 'client-1',
+      modelId: 'model-1',
+      poseIds: ['pose-1', 'pose-2'],
+      garments: [
+        {
+          id: 'gar-1',
+          name: 'Vestido Azul',
+          storagePath: 'garments/drafts/user-1/draft-1/gar-1.jpg',
+          isMultiAngle: false,
+        },
+      ],
+      provider: 'fal-seedream',
+      experiment: {
+        enabled: true,
+        mode: 'ab_paired',
+        providers: ['fal-seedream', 'openai-gpt-image-1.5'],
+      },
+      promptBase: 'Prompt experimento',
+      aspectRatio: '3:4',
+      backgroundConfig: undefined as never,
+    },
+    'user-1',
+    20,
+  );
+
+  assert.equal(validated.experiment?.mode, 'ab_paired');
+  assert.equal(validated.experiment?.arms.length, 2);
+  assert.equal(validated.totalJobs, 4);
+});
+
+test('validateCreateGenerationBatchInput rechaza banana-pro en experimentos A/B', () => {
+  assert.throws(
+    () =>
+      validateCreateGenerationBatchInput(
+        {
+          clientId: 'client-1',
+          modelId: 'model-1',
+          poseIds: ['pose-1'],
+          garments: [
+            {
+              id: 'gar-1',
+              name: 'Vestido Azul',
+              storagePath: 'garments/drafts/user-1/draft-1/gar-1.jpg',
+              isMultiAngle: false,
+            },
+          ],
+          provider: 'fal-seedream',
+          experiment: {
+            enabled: true,
+            mode: 'ab_interleaved',
+            providers: ['fal-seedream', 'fal-banana-pro'],
+          },
+          promptBase: 'Prompt experimento',
+          aspectRatio: '3:4',
+          backgroundConfig: undefined as never,
+        },
+        'user-1',
+        20,
+      ),
+    /no está habilitado para experimentos/i,
+  );
+});
+
 test('validateCreateGenerationBatchInput rechaza prendas fuera del draft del usuario', () => {
   assert.throws(
     () =>

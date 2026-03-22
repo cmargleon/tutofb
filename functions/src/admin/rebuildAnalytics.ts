@@ -19,6 +19,30 @@ const deleteCollectionDocs = async (collectionName: string): Promise<void> => {
   }
 };
 
+const commitWritersInChunks = async (
+  writers: Array<(batch: FirebaseFirestore.WriteBatch) => void>,
+): Promise<void> => {
+  const db = getAppFirestore();
+  const batchSize = 400;
+  let batch = db.batch();
+  let operationCount = 0;
+
+  for (const writer of writers) {
+    writer(batch);
+    operationCount += 1;
+
+    if (operationCount >= batchSize) {
+      await batch.commit();
+      batch = db.batch();
+      operationCount = 0;
+    }
+  }
+
+  if (operationCount > 0) {
+    await batch.commit();
+  }
+};
+
 export const rebuildAnalytics = onCall(async (request) => {
   await assertCallableRoles(request, ['admin']);
 
@@ -39,38 +63,48 @@ export const rebuildAnalytics = onCall(async (request) => {
     deleteCollectionDocs('analytics_daily'),
     deleteCollectionDocs('analytics_providers'),
     deleteCollectionDocs('analytics_clients'),
+    deleteCollectionDocs('analytics_client_providers'),
   ]);
 
-  const batch = db.batch();
   const timestamp = admin.firestore.FieldValue.serverTimestamp();
+  const writers: Array<(batch: FirebaseFirestore.WriteBatch) => void> = [
+    (batch) => {
+      batch.set(db.collection('analytics_summary').doc('global'), {
+        ...rebuilt.summary,
+        updatedAt: timestamp,
+      });
+    },
+    ...rebuilt.daily.map(
+      (daily) => (batch: FirebaseFirestore.WriteBatch) =>
+        batch.set(db.collection('analytics_daily').doc(daily.date), {
+          ...daily,
+          updatedAt: timestamp,
+        }),
+    ),
+    ...rebuilt.providers.map(
+      (providerStats) => (batch: FirebaseFirestore.WriteBatch) =>
+        batch.set(db.collection('analytics_providers').doc(providerStats.provider), {
+          ...providerStats,
+          updatedAt: timestamp,
+        }),
+    ),
+    ...rebuilt.clients.map(
+      (clientStats) => (batch: FirebaseFirestore.WriteBatch) =>
+        batch.set(db.collection('analytics_clients').doc(clientStats.clientId), {
+          ...clientStats,
+          updatedAt: timestamp,
+        }),
+    ),
+    ...rebuilt.clientProviders.map(
+      (clientProviderStats) => (batch: FirebaseFirestore.WriteBatch) =>
+        batch.set(db.collection('analytics_client_providers').doc(clientProviderStats.id), {
+          ...clientProviderStats,
+          updatedAt: timestamp,
+        }),
+    ),
+  ];
 
-  batch.set(db.collection('analytics_summary').doc('global'), {
-    ...rebuilt.summary,
-    updatedAt: timestamp,
-  });
-
-  rebuilt.daily.forEach((daily) => {
-    batch.set(db.collection('analytics_daily').doc(daily.date), {
-      ...daily,
-      updatedAt: timestamp,
-    });
-  });
-
-  rebuilt.providers.forEach((providerStats) => {
-    batch.set(db.collection('analytics_providers').doc(providerStats.provider), {
-      ...providerStats,
-      updatedAt: timestamp,
-    });
-  });
-
-  rebuilt.clients.forEach((clientStats) => {
-    batch.set(db.collection('analytics_clients').doc(clientStats.clientId), {
-      ...clientStats,
-      updatedAt: timestamp,
-    });
-  });
-
-  await batch.commit();
+  await commitWritersInChunks(writers);
 
   return {
     success: true,

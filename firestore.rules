@@ -59,7 +59,7 @@ service cloud.firestore {
       allow update: if isAdmin()
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.role in ['admin', 'operador', 'revisor'];
-      allow delete: if isAdmin();
+      allow delete: if false;
     }
 
     match /clients/{clientId} {
@@ -108,6 +108,11 @@ service cloud.firestore {
     }
 
     match /analytics_providers/{docId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
+
+    match /analytics_client_providers/{docId} {
       allow read: if canReadAnalytics();
       allow write: if false;
     }

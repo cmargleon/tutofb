@@ -43,3 +43,10 @@ export const buildGarmentSlides = (jobs: Job[]): GarmentSlide[] => {
 
   return slides;
 };
+
+export const buildJobPoseIndexMap = (jobs: Job[]): Record<string, number> =>
+  Object.fromEntries(
+    buildGarmentSlides(jobs).flatMap((slide) =>
+      slide.jobs.map((job, index) => [job.id, index]).filter((entry): entry is [string, number] => Boolean(entry[0])),
+    ),
+  );

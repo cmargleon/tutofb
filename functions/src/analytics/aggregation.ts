@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import {
   AnalyticsClientStats,
+  AnalyticsClientProviderStats,
   AnalyticsDailyVolume,
   AnalyticsProviderStats,
   AnalyticsSummary,
@@ -15,6 +16,7 @@ export interface AnalyticsRebuildData {
   daily: AnalyticsDailyVolume[];
   providers: AnalyticsProviderStats[];
   clients: AnalyticsClientStats[];
+  clientProviders: AnalyticsClientProviderStats[];
 }
 
 export interface JobStateDelta {
@@ -142,6 +144,7 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
   const dailyMap = new Map<string, AnalyticsDailyVolume>();
   const providerMap = new Map<Provider, AnalyticsProviderStats>();
   const clientMap = new Map<string, AnalyticsClientStats>();
+  const clientProviderMap = new Map<string, AnalyticsClientProviderStats>();
 
   jobs.forEach((job) => {
     summary.totalJobs += 1;
@@ -210,6 +213,21 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     clientStats.updatedAt = new Date();
     clientMap.set(output.clientId, clientStats);
 
+    const clientProviderKey = `${output.clientId}__${output.provider}`;
+    const clientProviderStats = clientProviderMap.get(clientProviderKey) || {
+      id: clientProviderKey,
+      clientId: output.clientId,
+      clientNameSnapshot: output.clientNameSnapshot,
+      provider: output.provider,
+      completed: 0,
+      totalCostUsd: 0,
+      updatedAt: new Date(),
+    };
+    clientProviderStats.completed += 1;
+    clientProviderStats.totalCostUsd += output.costUsd || 0;
+    clientProviderStats.updatedAt = new Date();
+    clientProviderMap.set(clientProviderKey, clientProviderStats);
+
     const date = formatMexicoCityDate(output.createdAt);
     const daily = dailyMap.get(date) || {
       date,
@@ -256,6 +274,14 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       updatedAt: new Date(),
     }));
 
+  const clientProviders = Array.from(clientProviderMap.values())
+    .sort((left, right) => right.totalCostUsd - left.totalCostUsd)
+    .map((entry) => ({
+      ...entry,
+      totalCostUsd: Number(entry.totalCostUsd.toFixed(4)),
+      updatedAt: new Date(),
+    }));
+
   const daily = Array.from(dailyMap.values())
     .sort((left, right) => left.date.localeCompare(right.date))
     .map((entry) => ({
@@ -272,5 +298,6 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     daily,
     providers,
     clients,
+    clientProviders,
   };
 };

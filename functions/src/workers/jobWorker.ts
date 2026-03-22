@@ -93,6 +93,7 @@ const claimJob = async (jobId: string, workerId: string): Promise<Job | null> =>
       timeoutAt: claimExpiresAt,
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastAttemptStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+      'traceability.lastAttemptStartedAt': admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastError: null,
     });
@@ -180,6 +181,12 @@ const completeJob = async (
     clientNameSnapshot: claimedJob.clientNameSnapshot,
     modelId: claimedJob.modelId,
     modelNameSnapshot: claimedJob.modelNameSnapshot,
+    experimentEnabled: claimedJob.experimentEnabled || false,
+    experimentId: claimedJob.experimentId || null,
+    experimentMode: claimedJob.experimentMode || null,
+    experimentArmId: claimedJob.experimentArmId || null,
+    experimentArmLabel: claimedJob.experimentArmLabel || null,
+    experimentComparisonKey: claimedJob.experimentComparisonKey || null,
     poseImageId: claimedJob.poseImageId,
     garmentId: claimedJob.garmentId,
     garmentName: claimedJob.garmentName,
@@ -231,6 +238,7 @@ const completeJob = async (
     [`providerUsage.${providerResult.provider}.totalDurationSeconds`]: admin.firestore.FieldValue.increment(
       durationSeconds || 0,
     ),
+    'traceability.lastCompletedAt': admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     lastError: null,
   });
@@ -297,6 +305,8 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
     claimExpiresAt: null,
     timeoutAt: null,
     startedAt: null,
+    'traceability.lastProviderErrorAt': admin.firestore.FieldValue.serverTimestamp(),
+    'traceability.lastProviderErrorMessage': errorMessage,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     lastError: errorMessage,
   });
@@ -344,6 +354,10 @@ export const requeueExpiredJobs = async (): Promise<number> => {
       claimExpiresAt: null,
       timeoutAt: null,
       startedAt: null,
+      'traceability.lastProviderErrorAt': admin.firestore.FieldValue.serverTimestamp(),
+      'traceability.lastProviderErrorMessage': shouldRetry
+        ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
+        : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastError: shouldRetry
         ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'

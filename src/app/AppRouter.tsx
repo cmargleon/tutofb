@@ -4,12 +4,14 @@ import { useAuth } from '../features/auth/AuthProvider';
 import { Layout } from '../components/Layout';
 import { Login } from '../pages/Login';
 import { Dashboard } from '../pages/Dashboard';
+import { Users } from '../pages/Users';
 import { Clients } from '../pages/Clients';
 import { Models } from '../pages/Models';
 import { Wizard } from '../pages/Wizard';
 import { Archive } from '../pages/Archive';
 import { Analytics } from '../pages/Analytics';
 import { Evaluacion } from '../pages/Evaluacion';
+import { Cola } from '../pages/Cola';
 import { LoadingBlock } from '../components/ui';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, roles?: string[] }> = ({ children, roles }) => {
@@ -45,9 +47,11 @@ export const AppRouter: React.FC = () => {
         
         <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
+          <Route path="users" element={<ProtectedRoute roles={['admin']}><Users /></ProtectedRoute>} />
           <Route path="clients" element={<ProtectedRoute roles={['admin']}><Clients /></ProtectedRoute>} />
           <Route path="models" element={<ProtectedRoute roles={['admin']}><Models /></ProtectedRoute>} />
           <Route path="generate" element={<ProtectedRoute roles={['admin', 'operador']}><Wizard /></ProtectedRoute>} />
+          <Route path="cola" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Cola /></ProtectedRoute>} />
           <Route path="evaluacion" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Evaluacion /></ProtectedRoute>} />
           <Route path="archivo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Archive /></ProtectedRoute>} />
           <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><Analytics /></ProtectedRoute>} />

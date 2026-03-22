@@ -7,6 +7,7 @@ import {
   Activity, CheckCircle2, XCircle, Clock, DollarSign, TrendingUp, AlertTriangle 
 } from 'lucide-react';
 import { useAnalyticsDashboard } from '../features/analytics/useAnalyticsDashboard';
+import { useExperimentAnalytics } from '../features/analytics/useExperimentAnalytics';
 import { PageHeader, LoadingBlock, EmptyState } from '../components/ui';
 import { PROVIDER_COSTS } from '../../shared/src/constants/providerCosts';
 
@@ -14,6 +15,14 @@ const COLORS = ['#10B981', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6'];
 
 export const Analytics: React.FC = () => {
   const { data, loading, error } = useAnalyticsDashboard();
+  const {
+    batches: experimentBatches,
+    selectedBatchId,
+    setSelectedBatchId,
+    comparison: experimentComparison,
+    loading: experimentLoading,
+    error: experimentError,
+  } = useExperimentAnalytics();
 
   if (loading) {
     return (
@@ -42,7 +51,7 @@ export const Analytics: React.FC = () => {
     );
   }
 
-  const { summary, dailyVolume, byProvider, topClients } = data;
+  const { summary, dailyVolume, byProvider, topClients, costByClientProvider } = data;
 
   if (!summary) {
     return (
@@ -348,6 +357,172 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <div className="mt-8 border-t border-gray-100 pt-8">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700">Historial de costos por cliente y modelo LLM</h4>
+              <p className="mt-1 text-sm text-gray-500">
+                Desglose acumulado usando el proveedor/modelo real guardado en cada output.
+              </p>
+            </div>
+            <div className="text-xs text-gray-400">Top 50 combinaciones por costo</div>
+          </div>
+
+          {costByClientProvider.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-gray-500">Cliente</th>
+                    <th className="px-4 py-3 text-left font-medium text-gray-500">Modelo LLM</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-500">Imágenes</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-500">Costo total</th>
+                    <th className="px-4 py-3 text-right font-medium text-gray-500">Costo promedio</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {costByClientProvider.map((entry) => {
+                    const avgCost = entry.completed > 0 ? entry.totalCostUsd / entry.completed : 0;
+
+                    return (
+                      <tr key={entry.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-gray-900">{entry.clientNameSnapshot}</div>
+                          <div className="text-xs text-gray-400">{entry.clientId}</div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{entry.provider}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{entry.completed.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900">${entry.totalCostUsd.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">${avgCost.toFixed(3)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-400">
+              Sin desglose de cliente y modelo todavía.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Experimentos A/B</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Comparativa de eficiencia entre modelos considerando regeneraciones, tiempo total y costo acumulado.
+            </p>
+          </div>
+
+          {experimentBatches.length > 0 ? (
+            <select
+              value={selectedBatchId || ''}
+              onChange={(event) => setSelectedBatchId(event.target.value)}
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700"
+            >
+              {experimentBatches.map((batch) => (
+                <option key={batch.id} value={batch.id}>
+                  {batch.clientNameSnapshot} / {batch.modelNameSnapshot} / {batch.id?.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+
+        {experimentError ? (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {experimentError}
+          </div>
+        ) : experimentLoading ? (
+          <LoadingBlock />
+        ) : !experimentComparison ? (
+          <div className="mt-4 rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-400">
+            Todavía no hay experimentos A/B disponibles para comparar.
+          </div>
+        ) : (
+          <div className="mt-6 space-y-5">
+            <div className="rounded-2xl border border-gray-200 bg-slate-50 px-5 py-4">
+              <p className="text-sm font-medium text-slate-900">{experimentComparison.recommendation}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {experimentComparison.mode === 'ab_paired' ? 'Paired' : 'Interleaved'} · {experimentComparison.comparableGroups} comparaciones · {experimentComparison.totalJobs} jobs
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              {experimentComparison.arms.map((arm) => (
+                <div
+                  key={arm.armId}
+                  className={`rounded-3xl border p-5 ${
+                    experimentComparison.winningArmId === arm.armId
+                      ? 'border-emerald-400 bg-emerald-900 text-white shadow-lg shadow-emerald-950/20'
+                      : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4
+                        className={`text-lg font-semibold ${
+                          experimentComparison.winningArmId === arm.armId ? 'text-white' : 'text-gray-900'
+                        }`}
+                      >
+                        {arm.label} · {arm.provider}
+                      </h4>
+                      <p
+                        className={`mt-1 text-sm ${
+                          experimentComparison.winningArmId === arm.armId ? 'text-emerald-100' : 'text-gray-500'
+                        }`}
+                      >
+                        Score eficiencia: {arm.efficiencyScore.toFixed(3)}
+                      </p>
+                    </div>
+                    {experimentComparison.winningArmId === arm.armId ? (
+                      <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
+                        Mejor balance
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <ExperimentMetric
+                      label="Regeneraciones"
+                      value={arm.manualRegenerationCount}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="Tasa regen."
+                      value={`${arm.regenerationRatePct}%`}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="Costo total"
+                      value={`$${arm.totalCostUsd.toFixed(2)}`}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="Costo/job"
+                      value={`$${arm.avgCostPerJobUsd.toFixed(3)}`}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="Duración total"
+                      value={`${arm.totalDurationSeconds}s`}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="Media/job"
+                      value={`${arm.avgDurationPerJobSeconds.toFixed(1)}s`}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -363,6 +538,29 @@ function StatCard({ title, value, icon: Icon, color, bg }: { title: string, valu
         <h3 className="text-sm font-medium text-gray-500">{title}</h3>
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function ExperimentMetric({
+  label,
+  value,
+  highlighted = false,
+}: {
+  label: string;
+  value: string | number;
+  highlighted?: boolean;
+}) {
+  return (
+    <div className={`rounded-2xl px-4 py-3 ${highlighted ? 'bg-white/10' : 'bg-white'}`}>
+      <p
+        className={`text-xs uppercase tracking-[0.12em] ${
+          highlighted ? 'text-emerald-100/80' : 'text-gray-400'
+        }`}
+      >
+        {label}
+      </p>
+      <p className={`mt-1 text-sm font-semibold ${highlighted ? 'text-white' : 'text-gray-900'}`}>{value}</p>
     </div>
   );
 }

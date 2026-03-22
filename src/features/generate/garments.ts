@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { UploadedGarmentDraft, SourceType } from './types';
+import { UploadedGarmentDraft, SourceType, createInitialGarmentUploadState } from './types';
 
 interface FileLike {
   name: string;
@@ -231,6 +231,7 @@ export const handleGarmentFiles = async (
         previewUrl,
         isMultiAngle: group.files.length > 1,
         originalFileNames: group.files.map((file) => file.name),
+        upload: createInitialGarmentUploadState(),
       } satisfies UploadedGarmentDraft;
     }),
   );

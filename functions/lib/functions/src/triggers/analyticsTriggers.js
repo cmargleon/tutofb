@@ -39,6 +39,7 @@ const firestore_1 = require("firebase-functions/v2/firestore");
 const aggregation_1 = require("../analytics/aggregation");
 const appFirestore_1 = require("../firebase/appFirestore");
 const db = (0, appFirestore_1.getAppFirestore)();
+const getClientProviderDocId = (clientId, provider) => `${clientId}__${provider}`;
 const updateDailyDoc = (batch, date, updates) => {
     const ref = db.collection('analytics_daily').doc(date);
     const payload = {
@@ -131,6 +132,14 @@ exports.onJobOutputAnalyticsCreate = (0, firestore_1.onDocumentCreated)('jobs/{j
         totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+    batch.set(db.collection('analytics_client_providers').doc(getClientProviderDocId(output.clientId, output.provider)), {
+        clientId: output.clientId,
+        clientNameSnapshot: output.clientNameSnapshot,
+        provider: output.provider,
+        completed: admin.firestore.FieldValue.increment(1),
+        totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
     await batch.commit();
 });
 exports.onJobOutputAnalyticsDelete = (0, firestore_1.onDocumentDeleted)('jobs/{jobId}/outputs/{outputId}', async (event) => {
@@ -163,6 +172,14 @@ exports.onJobOutputAnalyticsDelete = (0, firestore_1.onDocumentDeleted)('jobs/{j
     batch.set(db.collection('analytics_clients').doc(output.clientId), {
         clientId: output.clientId,
         clientNameSnapshot: output.clientNameSnapshot,
+        completed: admin.firestore.FieldValue.increment(-1),
+        totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(db.collection('analytics_client_providers').doc(getClientProviderDocId(output.clientId, output.provider)), {
+        clientId: output.clientId,
+        clientNameSnapshot: output.clientNameSnapshot,
+        provider: output.provider,
         completed: admin.firestore.FieldValue.increment(-1),
         totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

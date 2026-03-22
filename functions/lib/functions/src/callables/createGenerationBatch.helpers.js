@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildJobDraft = exports.assertModelOwnershipAndPoses = exports.validateCreateGenerationBatchInput = exports.getPoseMap = exports.ensureDraftOwnership = exports.normalizeGarment = exports.requireNonEmptyString = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const domain_1 = require("../../../shared/src/domain");
+const experiments_1 = require("../../../shared/src/experiments");
 const requireNonEmptyString = (value, label) => {
     const normalized = typeof value === 'string' ? value.trim() : '';
     if (!normalized) {
@@ -42,13 +43,38 @@ const ensureDraftOwnership = (uid, garment) => {
 exports.ensureDraftOwnership = ensureDraftOwnership;
 const getPoseMap = (model) => new Map(model.poses.map((pose) => [pose.id, pose]));
 exports.getPoseMap = getPoseMap;
+const validateExperimentConfig = (value) => {
+    if (!value?.enabled) {
+        return null;
+    }
+    if (!(0, experiments_1.isExperimentMode)(value.mode)) {
+        throw new https_1.HttpsError('invalid-argument', 'El modo del experimento A/B no es válido.');
+    }
+    const providers = Array.isArray(value.providers)
+        ? [...new Set(value.providers.filter((provider) => (0, domain_1.isProvider)(provider)))]
+        : [];
+    if (providers.length !== 2) {
+        throw new https_1.HttpsError('invalid-argument', 'El experimento A/B requiere exactamente 2 modelos por ahora.');
+    }
+    providers.forEach((provider) => {
+        if (!(0, experiments_1.isExperimentEligibleProvider)(provider)) {
+            throw new https_1.HttpsError('invalid-argument', `El proveedor ${provider} no está habilitado para experimentos A/B.`);
+        }
+    });
+    return {
+        enabled: true,
+        mode: value.mode,
+        arms: (0, experiments_1.buildExperimentArms)(providers),
+    };
+};
 const validateCreateGenerationBatchInput = (data, authUid, maxJobs) => {
     const clientId = (0, exports.requireNonEmptyString)(data?.clientId, 'El cliente');
     const modelId = (0, exports.requireNonEmptyString)(data?.modelId, 'El modelo');
     const promptBase = typeof data?.promptBase === 'string' ? data.promptBase.trim() : '';
     const provider = data?.provider;
     const aspectRatio = data?.aspectRatio;
-    if (!(0, domain_1.isProvider)(provider)) {
+    const experiment = validateExperimentConfig(data?.experiment);
+    if (!experiment && !(0, domain_1.isProvider)(provider)) {
         throw new https_1.HttpsError('invalid-argument', 'Se seleccionó un proveedor no compatible.');
     }
     if (!(0, domain_1.isAspectRatio)(aspectRatio)) {
@@ -65,7 +91,8 @@ const validateCreateGenerationBatchInput = (data, authUid, maxJobs) => {
         throw new https_1.HttpsError('invalid-argument', 'Debes subir al menos una prenda.');
     }
     garments.forEach((garment) => (0, exports.ensureDraftOwnership)(authUid, garment));
-    const totalJobs = poseIds.length * garments.length;
+    const experimentMultiplier = experiment?.mode === 'ab_paired' ? experiment.arms.length : 1;
+    const totalJobs = poseIds.length * garments.length * experimentMultiplier;
     if (totalJobs > maxJobs) {
         throw new https_1.HttpsError('out-of-range', `El lote excede el límite configurado de ${maxJobs} trabajos (${totalJobs} solicitados).`);
     }
@@ -74,7 +101,8 @@ const validateCreateGenerationBatchInput = (data, authUid, maxJobs) => {
         modelId,
         poseIds,
         garments,
-        provider,
+        provider: experiment ? experiment.arms[0].provider : provider,
+        experiment,
         promptBase,
         aspectRatio,
         backgroundConfig: (0, domain_1.normalizeBackgroundConfig)(data?.backgroundConfig),
@@ -83,6 +111,12 @@ const validateCreateGenerationBatchInput = (data, authUid, maxJobs) => {
 };
 exports.validateCreateGenerationBatchInput = validateCreateGenerationBatchInput;
 const assertModelOwnershipAndPoses = (client, model, poseIds) => {
+    if ((0, domain_1.isArchivedCatalogEntity)(client)) {
+        throw new https_1.HttpsError('failed-precondition', 'El cliente seleccionado está archivado y ya no admite nuevos lotes.');
+    }
+    if ((0, domain_1.isArchivedCatalogEntity)(model)) {
+        throw new https_1.HttpsError('failed-precondition', 'El modelo seleccionado está archivado y ya no admite nuevos lotes.');
+    }
     if (model.clientId !== client.id) {
         throw new https_1.HttpsError('invalid-argument', 'El modelo seleccionado no pertenece al cliente elegido.');
     }

@@ -43,10 +43,23 @@ admin.initializeApp();
 // Export callables
 __exportStar(require("./callables/createGenerationBatch"), exports);
 __exportStar(require("./callables/regenerateJob"), exports);
+__exportStar(require("./callables/regenerateFailedBatchJobs"), exports);
+__exportStar(require("./callables/cancelPendingBatchJobs"), exports);
+__exportStar(require("./callables/regenerateJobsBulk"), exports);
+__exportStar(require("./callables/searchArchive"), exports);
 __exportStar(require("./callables/syncUserClaims"), exports);
+__exportStar(require("./callables/createAppUser"), exports);
+__exportStar(require("./callables/updateAppUser"), exports);
+__exportStar(require("./callables/archiveAppUser"), exports);
+__exportStar(require("./callables/restoreAppUser"), exports);
+__exportStar(require("./callables/permanentlyDeleteAppUser"), exports);
+__exportStar(require("./callables/permanentlyDeleteClient"), exports);
+__exportStar(require("./callables/permanentlyDeleteModel"), exports);
 __exportStar(require("./admin/rebuildAnalytics"), exports);
+__exportStar(require("./admin/getSystemHealth"), exports);
 __exportStar(require("./http/downloadBatchZip"), exports);
 __exportStar(require("./http/downloadJobImage"), exports);
+__exportStar(require("./http/downloadSelectedJobsZip"), exports);
 // Export triggers
 __exportStar(require("./triggers/onJobStatusChange"), exports);
 __exportStar(require("./triggers/onClientDelete"), exports);

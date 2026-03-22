@@ -1,0 +1,103 @@
+import * as admin from 'firebase-admin';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import {
+  Job,
+  RegenerateFailedBatchJobsRequest,
+  RegenerateFailedBatchJobsResponse,
+} from '../../../shared/src/types';
+import { assertCallableRoles } from '../auth/roles';
+import { getAppFirestore } from '../firebase/appFirestore';
+import { buildRegenerateJobPatch } from './regenerateJob.helpers';
+
+export const regenerateFailedBatchJobs = onCall<
+  RegenerateFailedBatchJobsRequest,
+  Promise<RegenerateFailedBatchJobsResponse>
+>(async (request) => {
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
+
+  const batchId = typeof request.data?.batchId === 'string' ? request.data.batchId.trim() : '';
+  if (!batchId) {
+    throw new HttpsError('invalid-argument', 'Debes indicar un lote válido.');
+  }
+
+  const db = getAppFirestore();
+  const batchSnapshot = await db.collection('batches').doc(batchId).get();
+  if (!batchSnapshot.exists) {
+    throw new HttpsError('not-found', 'Lote no encontrado.');
+  }
+
+  const userSnapshot = await db.collection('users').doc(request.auth!.uid).get();
+  const requestedByDisplayName =
+    userSnapshot.exists && typeof userSnapshot.data()?.displayName === 'string'
+      ? userSnapshot.data()!.displayName
+      : null;
+
+  const jobsSnapshot = await db.collection('jobs').where('batchId', '==', batchId).get();
+  const failedJobs = jobsSnapshot.docs
+    .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Job))
+    .filter((job) => job.status === 'failed');
+
+  if (failedJobs.length === 0) {
+    return {
+      success: true,
+      batchId,
+      queuedJobs: 0,
+      skippedJobs: 0,
+      skippedJobIds: [],
+    };
+  }
+
+  const writeBatch = db.batch();
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  const skippedJobIds: string[] = [];
+  let queuedJobs = 0;
+
+  failedJobs.forEach((job) => {
+    const prompt = (job.promptBase || job.finalPrompt || '').trim();
+
+    try {
+      const patch = buildRegenerateJobPatch(job, job.provider, prompt);
+      const jobRef = db.collection('jobs').doc(job.id!);
+
+      writeBatch.update(jobRef, {
+        ...patch,
+        manualRegenerationCount: admin.firestore.FieldValue.increment(1),
+        'traceability.lastManualRegenerationAt': now,
+        'traceability.lastManualRegeneratedByUid': request.auth!.uid,
+        'traceability.lastManualRegeneratedByDisplayName': requestedByDisplayName,
+        updatedAt: now,
+      });
+
+      writeBatch.set(jobRef.collection('logs').doc(), {
+        type: 'system',
+        level: 'info',
+        message: 'Regeneración masiva de fallidos encolada desde la aplicación.',
+        payload: {
+          requestedByUid: request.auth!.uid,
+          requestedByDisplayName,
+          source: 'batch_failed_retry',
+          batchId,
+          provider: job.provider,
+          prompt,
+        },
+        createdAt: now,
+      });
+
+      queuedJobs += 1;
+    } catch {
+      skippedJobIds.push(job.id!);
+    }
+  });
+
+  if (queuedJobs > 0) {
+    await writeBatch.commit();
+  }
+
+  return {
+    success: true,
+    batchId,
+    queuedJobs,
+    skippedJobs: skippedJobIds.length,
+    skippedJobIds,
+  };
+});

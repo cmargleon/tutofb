@@ -1,19 +1,41 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Batch, Job } from '../../../shared/src/types';
 import { useGarmentCarousel } from '../../features/evaluation/useGarmentCarousel';
 import { GarmentCarouselControls } from './GarmentCarouselControls';
 import { JobEvaluationCard } from './JobEvaluationCard';
 import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRegenerationFirebase';
 import { FloatingGarmentPreview } from './FloatingGarmentPreview';
+import { CheckSquare2, Keyboard, Square } from 'lucide-react';
+import { JobTraceabilityPanel } from './JobTraceabilityPanel';
 
 interface Props {
   batch: Batch;
   jobs: Job[];
+  initialFocusJobId?: string | null;
   showFloatingGarment?: boolean;
+  selectedJobIds?: string[];
+  onToggleJob?: (jobId: string) => void;
+  onSelectJobs?: (jobIds: string[], selected: boolean) => void;
+  bulkActions?: React.ReactNode;
+  keyboardShortcutLabel?: string;
 }
 
-export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs, showFloatingGarment = false }) => {
-  const { slides, activeSlideIndex, activeSlide, nextSlide, prevSlide, goToSlide } = useGarmentCarousel(jobs);
+const isTypingTarget = (target: EventTarget | null) =>
+  target instanceof HTMLElement
+  && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
+export const JobBatchCarousel: React.FC<Props> = ({
+  batch,
+  jobs,
+  initialFocusJobId = null,
+  showFloatingGarment = false,
+  selectedJobIds = [],
+  onToggleJob,
+  onSelectJobs,
+  bulkActions,
+  keyboardShortcutLabel = 'Usa flechas izquierda/derecha para cambiar de prenda.',
+}) => {
+  const { slides, activeSlideIndex, activeSlide, nextSlide, prevSlide, goToSlide } = useGarmentCarousel(jobs, initialFocusJobId);
   const {
     localDrafts,
     queueingJobs,
@@ -30,7 +52,51 @@ export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs, showFloatingGar
     }
   }, [activeSlide, initializeDraft]);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        prevSlide();
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        nextSlide();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [nextSlide, prevSlide]);
+
+  const [focusedJobId, setFocusedJobId] = useState<string | null>(initialFocusJobId);
+
+  useEffect(() => {
+    if (initialFocusJobId) {
+      setFocusedJobId(initialFocusJobId);
+    }
+  }, [initialFocusJobId]);
+
+  const activeFocusedJob = useMemo(
+    () => activeSlide?.jobs.find((job) => job.id === focusedJobId) || activeSlide?.jobs[0] || null,
+    [activeSlide, focusedJobId],
+  );
+
+  useEffect(() => {
+    if (activeSlide && !activeSlide.jobs.some((job) => job.id === focusedJobId)) {
+      setFocusedJobId(activeSlide.jobs[0]?.id || null);
+    }
+  }, [activeSlide, focusedJobId]);
+
   if (!activeSlide) return null;
+
+  const activeSlideJobIds = activeSlide.jobs.map((job) => job.id).filter((jobId): jobId is string => Boolean(jobId));
+  const allActiveSelected = activeSlideJobIds.length > 0 && activeSlideJobIds.every((jobId) => selectedJobIds.includes(jobId));
 
   return (
     <div className="flex flex-col space-y-8">
@@ -43,20 +109,52 @@ export const JobBatchCarousel: React.FC<Props> = ({ batch, jobs, showFloatingGar
       />
 
       <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-6 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {activeSlide.jobs.map((job, index) => (
-            <JobEvaluationCard
-              key={job.id}
-              batch={batch}
-              job={job}
-              index={index}
-              draft={localDrafts[job.id!] || { provider: job.provider, prompt: job.promptBase || job.finalPrompt || '' }}
-              isQueueing={!!queueingJobs[job.id!]}
-              regenerationError={regenerationErrors[job.id!] || null}
-              onUpdateDraft={(updates) => updateDraft(job.id!, updates)}
-              onRegenerate={() => handleRegenerate(job.id!)}
-            />
-          ))}
+        <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{activeSlide.garmentName}</p>
+            <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+              <Keyboard className="h-3.5 w-3.5" />
+              {keyboardShortcutLabel}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {onSelectJobs ? (
+              <button
+                type="button"
+                onClick={() => onSelectJobs(activeSlideJobIds, !allActiveSelected)}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                {allActiveSelected ? <CheckSquare2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                {allActiveSelected ? 'Quitar selección de la prenda' : 'Seleccionar toda la prenda'}
+              </button>
+            ) : null}
+            {bulkActions}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {activeSlide.jobs.map((job, index) => (
+              <JobEvaluationCard
+                key={job.id}
+                batch={batch}
+                job={job}
+                index={index}
+                draft={localDrafts[job.id!] || { provider: job.provider, prompt: job.promptBase || job.finalPrompt || '' }}
+                isQueueing={!!queueingJobs[job.id!]}
+                regenerationError={regenerationErrors[job.id!] || null}
+                onUpdateDraft={(updates) => updateDraft(job.id!, updates)}
+                onRegenerate={() => handleRegenerate(job.id!)}
+                selected={job.id ? selectedJobIds.includes(job.id) : false}
+                onToggleSelected={job.id && onToggleJob ? () => onToggleJob(job.id!) : undefined}
+                focused={job.id === activeFocusedJob?.id}
+                onFocusTraceability={job.id ? () => setFocusedJobId(job.id!) : undefined}
+              />
+            ))}
+          </div>
+
+          {activeFocusedJob ? <JobTraceabilityPanel batch={batch} job={activeFocusedJob} /> : null}
         </div>
       </div>
 

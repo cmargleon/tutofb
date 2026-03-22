@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, LoadingBlock, EmptyState, ImageThumb } from '../components/ui';
-import { subscribeToModels, createModel, updateModel, deleteModel } from '../features/models/firebase';
+import { subscribeToModels, createModel, updateModel, archiveModel, restoreModel, permanentlyDeleteModel } from '../features/models/firebase';
 import { subscribeToClients } from '../features/clients/firebase';
+import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { Model, Client } from '../../shared/src/types';
+import { isActiveCatalogEntity, isArchivedCatalogEntity } from '../../shared/src/domain';
 import { UserSquare2, Plus, Edit2, Trash2, Check, ChevronDown, ChevronUp, Image as ImageIcon, Upload, X } from 'lucide-react';
 
 const formatDate = (timestamp: any) => {
@@ -52,6 +54,8 @@ const LocalFileThumb: React.FC<{ file: File; onRemove: () => void }> = ({ file, 
 };
 
 export const Models: React.FC = () => {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [models, setModels] = useState<Model[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +76,7 @@ export const Models: React.FC = () => {
   const [editPoseIdsToRemove, setEditPoseIdsToRemove] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     let modelsLoaded = false;
@@ -92,12 +97,13 @@ export const Models: React.FC = () => {
         setError("Error al cargar los modelos.");
         modelsLoaded = true;
         checkLoading();
-      }
+      },
+      { includeArchived: showArchived },
     );
 
     const unsubClients = subscribeToClients(
       (data) => {
-        setClients(data);
+        setClients(data.filter(isActiveCatalogEntity));
         clientsLoaded = true;
         checkLoading();
       },
@@ -112,7 +118,7 @@ export const Models: React.FC = () => {
       unsubModels();
       unsubClients();
     };
-  }, []);
+  }, [showArchived]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -188,7 +194,11 @@ export const Models: React.FC = () => {
       (model.poses?.filter((pose) => !editPoseIdsToRemove.includes(pose.id)).length || 0) + editFilesToAdd.length;
 
     if (remainingPoseCount === 0) {
-      alert('Debes dejar al menos una pose o agregar una nueva foto antes de guardar.');
+      toast({
+        tone: 'warning',
+        title: 'El modelo no puede quedarse sin poses',
+        description: 'Debes conservar al menos una pose existente o subir una nueva foto antes de guardar.',
+      });
       return;
     }
 
@@ -202,19 +212,106 @@ export const Models: React.FC = () => {
       });
       handleCancelEdit();
     } catch (err: any) {
-      alert(err.message || 'Error al actualizar modelo');
+      toast({
+        tone: 'error',
+        title: 'No pudimos actualizar el modelo',
+        description: err.message || 'Revisa los cambios e inténtalo nuevamente.',
+      });
     } finally {
       setIsSavingEdit(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de eliminar este modelo? Esto eliminará sus poses y puede afectar trabajos asociados.')) {
-      try {
-        await deleteModel(id);
-      } catch (err: any) {
-        alert(err.message || 'Error al eliminar modelo');
-      }
+  const handleArchive = async (model: Model) => {
+    const accepted = await confirm({
+      title: 'Archivar modelo',
+      description: `Vas a archivar "${model.name}" y retirarlo de los flujos de generación.`,
+      impact: 'El modelo deja de estar disponible para nuevos lotes, pero conserva su historial y sus referencias hasta que decidas borrarlo definitivamente.',
+      confirmLabel: 'Sí, archivar modelo',
+      cancelLabel: 'Mantener activo',
+      tone: 'warning',
+    });
+
+    if (!accepted || !model.id) {
+      return;
+    }
+
+    try {
+      await archiveModel(model.id);
+      toast({
+        tone: 'success',
+        title: 'Modelo archivado',
+        description: `"${model.name}" salió de la biblioteca operativa.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos archivar el modelo',
+        description: err.message || 'Comprueba si aún tiene dependencias activas e inténtalo otra vez.',
+      });
+    }
+  };
+
+  const handleRestore = async (model: Model) => {
+    if (!model.id) return;
+
+    try {
+      await restoreModel(model.id);
+      toast({
+        tone: 'success',
+        title: 'Modelo reactivado',
+        description: `"${model.name}" volvió a la biblioteca operativa.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos reactivar el modelo',
+        description: err.message || 'Inténtalo otra vez en un momento.',
+      });
+    }
+  };
+
+  const handlePermanentDelete = async (model: Model) => {
+    if (!model.id) {
+      return;
+    }
+
+    const accepted = await confirm({
+      title: 'Borrado permanente',
+      description: `Vas a borrar definitivamente "${model.name}".`,
+      impact: 'Esta acción elimina el documento, sus poses y dispara la limpieza en Firebase. Solo úsala para una depuración consciente.',
+      confirmLabel: 'Continuar',
+      cancelLabel: 'Cancelar',
+      tone: 'danger',
+    });
+
+    if (!accepted) {
+      return;
+    }
+
+    const typedName = window.prompt(`Escribe el nombre exacto del modelo para confirmar el borrado permanente:\n${model.name}`);
+    if (typedName !== model.name) {
+      toast({
+        tone: 'warning',
+        title: 'Borrado cancelado',
+        description: 'El nombre no coincidió. No se eliminó nada.',
+      });
+      return;
+    }
+
+    try {
+      await permanentlyDeleteModel(model.id);
+      toast({
+        tone: 'success',
+        title: 'Modelo eliminado definitivamente',
+        description: `"${model.name}" se borró de Firebase de forma permanente.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos borrar el modelo definitivamente',
+        description: err.message || 'Comprueba dependencias o permisos e inténtalo otra vez.',
+      });
     }
   };
 
@@ -344,6 +441,16 @@ export const Models: React.FC = () => {
                   {models.length}
                 </span>
               </h2>
+              <div className="mt-3">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                  />
+                  Mostrar archivados
+                </label>
+              </div>
             </div>
 
             {loading ? (
@@ -359,6 +466,11 @@ export const Models: React.FC = () => {
                 {models.map((model) => (
                   <li key={model.id} className="hover:bg-gray-50 transition-colors">
                     <div className="p-4 sm:px-6">
+                      {isArchivedCatalogEntity(model) && (
+                        <div className="mb-3 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                          Archivado
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <div 
                           className="flex-1 cursor-pointer flex items-center gap-3"
@@ -468,20 +580,40 @@ export const Models: React.FC = () => {
                             </div>
                           ) : (
                             <div className="flex items-center gap-3 mb-4">
-                              <button
-                                onClick={() => handleStartEdit(model)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => handleDelete(model.id!)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-red-700 bg-red-100 hover:bg-red-200"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Eliminar
-                              </button>
+                              {!isArchivedCatalogEntity(model) ? (
+                                <>
+                                  <button
+                                    onClick={() => handleStartEdit(model)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleArchive(model)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-amber-800 bg-amber-100 hover:bg-amber-200"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Archivar
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleRestore(model)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
+                                  >
+                                    Reactivar
+                                  </button>
+                                  <button
+                                    onClick={() => handlePermanentDelete(model)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-red-700 bg-red-100 hover:bg-red-200"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Borrar definitivo
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
 

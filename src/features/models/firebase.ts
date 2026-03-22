@@ -1,8 +1,11 @@
 import { db, auth, storage } from '../../firebase';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { Model, Pose, Client } from '../../../shared/src/types';
+import { Model, Pose, Client, PermanentDeleteCatalogEntityRequest, PermanentDeleteCatalogEntityResponse } from '../../../shared/src/types';
 import { v4 as uuidv4 } from 'uuid';
+import { isActiveCatalogEntity, isArchivedCatalogEntity } from '../../../shared/src/domain';
+import { functions } from '../../firebase';
+import { httpsCallable } from 'firebase/functions';
 
 interface UpdateModelInput {
   name: string;
@@ -16,13 +19,23 @@ const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9.-]/
 const getModelStorageRootPath = (modelId: string, clientId: string, existingRootPath?: string) =>
   existingRootPath || `models/${clientId}/${modelId}`;
 
-export const subscribeToModels = (callback: (models: Model[]) => void, onError: (error: Error) => void) => {
+interface SubscribeModelsOptions {
+  includeArchived?: boolean;
+}
+
+export const subscribeToModels = (
+  callback: (models: Model[]) => void,
+  onError: (error: Error) => void,
+  options: SubscribeModelsOptions = {},
+) => {
   const q = query(collection(db, 'models'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snapshot) => {
-    const models = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Model));
+    const models = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Model))
+      .filter((model) => options.includeArchived ? true : isActiveCatalogEntity(model));
     callback(models);
   }, onError);
 };
@@ -36,7 +49,9 @@ export const createModel = async (clientId: string, name: string, files: File[])
   const clientRef = doc(db, 'clients', clientId);
   const clientSnap = await getDoc(clientRef);
   if (!clientSnap.exists()) throw new Error('Cliente no encontrado');
-  const clientName = (clientSnap.data() as Client).name;
+  const client = clientSnap.data() as Client;
+  if (isArchivedCatalogEntity(client)) throw new Error('No puedes crear modelos para un cliente archivado.');
+  const clientName = client.name;
   console.log('Client info fetched:', clientName);
 
   // Generate model ID
@@ -82,6 +97,9 @@ export const createModel = async (clientId: string, name: string, files: File[])
       clientId,
       clientNameSnapshot: clientName,
       name: name.trim(),
+      status: 'active',
+      archivedAt: null,
+      archivedByUid: null,
       storageRootPath,
       poses,
       poseCount: poses.length,
@@ -131,7 +149,14 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
   }
 
   const model = modelSnap.data() as Model;
-  const clientNameSnapshot = (clientSnap.data() as Client).name;
+  const client = clientSnap.data() as Client;
+  if (isArchivedCatalogEntity(model)) {
+    throw new Error('No puedes editar un modelo archivado. Reactívalo primero.');
+  }
+  if (isArchivedCatalogEntity(client)) {
+    throw new Error('No puedes mover un modelo a un cliente archivado.');
+  }
+  const clientNameSnapshot = client.name;
   const storageRootPath = getModelStorageRootPath(id, model.clientId, model.storageRootPath);
   const filesToAdd = input.filesToAdd || [];
   const poseIdsToRemove = new Set(input.poseIdsToRemove || []);
@@ -168,6 +193,7 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
       clientId: input.clientId,
       clientNameSnapshot,
       name: trimmedName,
+      status: model.status ?? 'active',
       storageRootPath,
       poses: nextPoses,
       poseCount: nextPoses.length,
@@ -190,12 +216,38 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
   }
 };
 
-export const deleteModel = async (id: string) => {
+export const archiveModel = async (id: string) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
-  
+
   const modelRef = doc(db, 'models', id);
-  await deleteDoc(modelRef);
-  // Note: Backend triggers should handle cascading deletes (storage, jobs, etc.)
+  await updateDoc(modelRef, {
+    status: 'archived',
+    archivedAt: serverTimestamp(),
+    archivedByUid: auth.currentUser.uid,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const restoreModel = async (id: string) => {
+  if (!auth.currentUser) throw new Error('Usuario no autenticado');
+
+  const modelRef = doc(db, 'models', id);
+  await updateDoc(modelRef, {
+    status: 'active',
+    archivedAt: null,
+    archivedByUid: null,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const permanentlyDeleteModel = async (id: string) => {
+  if (!auth.currentUser) throw new Error('Usuario no autenticado');
+
+  const callable = httpsCallable<PermanentDeleteCatalogEntityRequest, PermanentDeleteCatalogEntityResponse>(
+    functions,
+    'permanentlyDeleteModel',
+  );
+  await callable({ id });
 };
 
 export const getImageUrl = async (storagePath: string): Promise<string> => {

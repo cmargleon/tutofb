@@ -18,7 +18,8 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
 
   const db = getAppFirestore();
   const jobRef = db.collection('jobs').doc(jobId);
-  const snapshot = await jobRef.get();
+  const userRef = db.collection('users').doc(request.auth!.uid);
+  const [snapshot, userSnapshot] = await Promise.all([jobRef.get(), userRef.get()]);
 
   if (!snapshot.exists) {
     throw new HttpsError('not-found', 'Trabajo no encontrado.');
@@ -32,10 +33,34 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
     );
   }
 
+  if (job.experimentEnabled) {
+    if (provider !== job.provider) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Los jobs de un experimento A/B deben mantener el modelo asignado a su brazo.',
+      );
+    }
+
+    if (prompt !== (job.promptBase || '').trim()) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Los jobs de un experimento A/B deben mantener el prompt original para conservar la comparación.',
+      );
+    }
+  }
+
   const now = admin.firestore.FieldValue.serverTimestamp();
+  const requestedByDisplayName =
+    userSnapshot.exists && typeof userSnapshot.data()?.displayName === 'string'
+      ? userSnapshot.data()!.displayName
+      : null;
   try {
     await jobRef.update({
       ...buildRegenerateJobPatch(job, provider || '', prompt),
+      manualRegenerationCount: admin.firestore.FieldValue.increment(1),
+      'traceability.lastManualRegenerationAt': now,
+      'traceability.lastManualRegeneratedByUid': request.auth!.uid,
+      'traceability.lastManualRegeneratedByDisplayName': requestedByDisplayName,
       updatedAt: now,
     });
   } catch (error) {
@@ -47,10 +72,11 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
     level: 'info',
     message: 'Regeneración encolada desde la aplicación.',
     payload: {
-      requestedByUid: request.auth!.uid,
-      provider,
-      prompt,
-    },
+        requestedByUid: request.auth!.uid,
+        requestedByDisplayName,
+        provider,
+        prompt,
+      },
     createdAt: now,
   });
 

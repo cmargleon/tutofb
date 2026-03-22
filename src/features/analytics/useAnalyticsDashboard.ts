@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { AnalyticsData } from '../../../shared/src/types';
-import { mapSummary, mapDailyVolume, mapProviderStats, mapClientStats } from './mappers';
+import { mapSummary, mapDailyVolume, mapProviderStats, mapClientStats, mapClientProviderStats } from './mappers';
 
 export const useAnalyticsDashboard = () => {
   const [data, setData] = useState<AnalyticsData>({
@@ -10,6 +10,7 @@ export const useAnalyticsDashboard = () => {
     dailyVolume: [],
     byProvider: [],
     topClients: [],
+    costByClientProvider: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +20,7 @@ export const useAnalyticsDashboard = () => {
     let unsubscribeDaily: () => void;
     let unsubscribeProviders: () => void;
     let unsubscribeClients: () => void;
+    let unsubscribeClientProviders: () => void;
 
     try {
       // 1. Summary
@@ -87,6 +89,20 @@ export const useAnalyticsDashboard = () => {
         setError("Error al cargar el top de clientes.");
       });
 
+      // 5. Cost by client + provider/model
+      const clientProvidersQuery = query(
+        collection(db, 'analytics_client_providers'),
+        orderBy('totalCostUsd', 'desc'),
+        limit(50),
+      );
+      unsubscribeClientProviders = onSnapshot(clientProvidersQuery, (snapshot) => {
+        const rows = snapshot.docs.map((doc) => mapClientProviderStats(doc.id, doc.data()));
+        setData(prev => ({ ...prev, costByClientProvider: rows }));
+      }, (err) => {
+        console.error("Error fetching cost by client/provider:", err);
+        setError("Error al cargar el desglose por cliente y modelo.");
+      });
+
       setLoading(false);
     } catch (err: any) {
       console.error("Error setting up analytics listeners:", err);
@@ -99,6 +115,7 @@ export const useAnalyticsDashboard = () => {
       if (unsubscribeDaily) unsubscribeDaily();
       if (unsubscribeProviders) unsubscribeProviders();
       if (unsubscribeClients) unsubscribeClients();
+      if (unsubscribeClientProviders) unsubscribeClientProviders();
     };
   }, []);
 

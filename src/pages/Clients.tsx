@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, LoadingBlock, EmptyState } from '../components/ui';
-import { subscribeToClients, createClient, updateClient, deleteClient } from '../features/clients/firebase';
+import { subscribeToClients, createClient, updateClient, archiveClient, restoreClient, permanentlyDeleteClient } from '../features/clients/firebase';
+import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
+import { isArchivedCatalogEntity } from '../../shared/src/domain';
 import { Client } from '../../shared/src/types';
 import { Users, Plus, Edit2, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -17,6 +19,8 @@ const formatDate = (timestamp: any) => {
 };
 
 export const Clients: React.FC = () => {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,6 +34,7 @@ export const Clients: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeToClients(
@@ -41,10 +46,11 @@ export const Clients: React.FC = () => {
         console.error("Error subscribing to clients:", err);
         setError("Error al cargar los clientes.");
         setLoading(false);
-      }
+      },
+      { includeArchived: showArchived },
     );
     return () => unsubscribe();
-  }, []);
+  }, [showArchived]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,17 +86,104 @@ export const Clients: React.FC = () => {
       await updateClient(id, trimmedName);
       setEditingId(null);
     } catch (err: any) {
-      alert(err.message || 'Error al actualizar cliente');
+      toast({
+        tone: 'error',
+        title: 'No pudimos actualizar el cliente',
+        description: err.message || 'Vuelve a intentarlo en un momento.',
+      });
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('¿Estás seguro de eliminar este cliente? Esto también puede afectar modelos, poses y trabajos asociados.')) {
-      try {
-        await deleteClient(id);
-      } catch (err: any) {
-        alert(err.message || 'Error al eliminar cliente');
-      }
+  const handleArchive = async (client: Client) => {
+    const accepted = await confirm({
+      title: 'Archivar cliente',
+      description: `Vas a archivar "${client.name}" y sacarlo del catálogo operativo.`,
+      impact: 'El cliente dejará de aparecer en los flujos de generación. Su historial se conserva y podrás restaurarlo después.',
+      confirmLabel: 'Sí, archivar cliente',
+      cancelLabel: 'Mantener activo',
+      tone: 'warning',
+    });
+
+    if (!accepted || !client.id) {
+      return;
+    }
+
+    try {
+      await archiveClient(client.id);
+      toast({
+        tone: 'success',
+        title: 'Cliente archivado',
+        description: `"${client.name}" salió del catálogo operativo pero su historial sigue disponible.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos archivar el cliente',
+        description: err.message || 'Inténtalo de nuevo en un momento.',
+      });
+    }
+  };
+
+  const handleRestore = async (client: Client) => {
+    if (!client.id) return;
+
+    try {
+      await restoreClient(client.id);
+      toast({
+        tone: 'success',
+        title: 'Cliente reactivado',
+        description: `"${client.name}" volvió al catálogo operativo.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos reactivar el cliente',
+        description: err.message || 'Inténtalo de nuevo en un momento.',
+      });
+    }
+  };
+
+  const handlePermanentDelete = async (client: Client) => {
+    if (!client.id) {
+      return;
+    }
+
+    const accepted = await confirm({
+      title: 'Borrado permanente',
+      description: `Vas a borrar definitivamente "${client.name}".`,
+      impact: 'Esto elimina el cliente de Firestore y dispara la limpieza en Firebase. Úsalo solo cuando estés completamente seguro.',
+      confirmLabel: 'Continuar',
+      cancelLabel: 'Cancelar',
+      tone: 'danger',
+    });
+
+    if (!accepted) {
+      return;
+    }
+
+    const typedName = window.prompt(`Escribe el nombre exacto del cliente para confirmar el borrado permanente:\n${client.name}`);
+    if (typedName !== client.name) {
+      toast({
+        tone: 'warning',
+        title: 'Borrado cancelado',
+        description: 'El nombre no coincidió. No se eliminó nada.',
+      });
+      return;
+    }
+
+    try {
+      await permanentlyDeleteClient(client.id);
+      toast({
+        tone: 'success',
+        title: 'Cliente eliminado definitivamente',
+        description: `"${client.name}" se borró de Firebase de forma permanente.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos borrar el cliente definitivamente',
+        description: err.message || 'Revisa dependencias o permisos e inténtalo de nuevo.',
+      });
     }
   };
 
@@ -158,6 +251,16 @@ export const Clients: React.FC = () => {
                   {clients.length}
                 </span>
               </h2>
+              <div className="mt-3">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(e) => setShowArchived(e.target.checked)}
+                  />
+                  Mostrar archivados
+                </label>
+              </div>
             </div>
 
             {loading ? (
@@ -173,6 +276,11 @@ export const Clients: React.FC = () => {
                 {clients.map((client) => (
                   <li key={client.id} className="hover:bg-gray-50 transition-colors">
                     <div className="p-4 sm:px-6">
+                      {isArchivedCatalogEntity(client) && (
+                        <div className="mb-3 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                          Archivado
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <div 
                           className="flex-1 cursor-pointer flex items-center gap-3"
@@ -221,20 +329,40 @@ export const Clients: React.FC = () => {
                             </div>
                           ) : (
                             <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => handleStartEdit(client)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => handleDelete(client.id!)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-red-700 bg-red-100 hover:bg-red-200"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Eliminar
-                              </button>
+                              {!isArchivedCatalogEntity(client) ? (
+                                <>
+                                  <button
+                                    onClick={() => handleStartEdit(client)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-xs font-medium rounded shadow-sm text-gray-700 bg-white hover:bg-gray-50"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleArchive(client)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-amber-800 bg-amber-100 hover:bg-amber-200"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Archivar
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleRestore(client)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-emerald-700 bg-emerald-100 hover:bg-emerald-200"
+                                  >
+                                    Reactivar
+                                  </button>
+                                  <button
+                                    onClick={() => handlePermanentDelete(client)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-red-700 bg-red-100 hover:bg-red-200"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Borrar definitivo
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>

@@ -2,10 +2,12 @@ export type TimestampLike = any;
 
 export type Role = 'admin' | 'operador' | 'revisor';
 export type Provider = 'fal-seedream' | 'fal-banana-pro' | 'openai-gpt-image-1.5';
+export type ExperimentMode = 'ab_paired' | 'ab_interleaved';
 export type AspectRatio = '9:16' | '3:4' | '2:3' | '1:1' | '4:3' | '3:2' | '16:9';
 export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_failed' | 'failed';
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type GarmentSourceType = 'single' | 'folder-root' | 'subfolder';
+export type CatalogEntityStatus = 'active' | 'archived';
 
 export type BackgroundMode =
   | 'white'
@@ -83,6 +85,9 @@ export interface User {
   displayName: string;
   role: Role;
   active: boolean;
+  status?: CatalogEntityStatus;
+  archivedAt?: TimestampLike | null;
+  archivedByUid?: string | null;
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
   lastLoginAt?: TimestampLike | null;
@@ -91,6 +96,9 @@ export interface User {
 export interface Client {
   id?: string;
   name: string;
+  status?: CatalogEntityStatus;
+  archivedAt?: TimestampLike | null;
+  archivedByUid?: string | null;
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
   batchCount: number;
@@ -113,6 +121,9 @@ export interface Model {
   clientId: string;
   clientNameSnapshot: string;
   name: string;
+  status?: CatalogEntityStatus;
+  archivedAt?: TimestampLike | null;
+  archivedByUid?: string | null;
   storageRootPath?: string;
   poses: Pose[];
   poseCount: number;
@@ -137,6 +148,18 @@ export interface BatchModelSnapshot {
   coverPosePath: string | null;
 }
 
+export interface ExperimentArm {
+  id: string;
+  provider: Provider;
+  label: string;
+}
+
+export interface GenerationExperimentConfig {
+  enabled: boolean;
+  mode: ExperimentMode;
+  providers: Provider[];
+}
+
 export interface Batch {
   id?: string;
   clientId: string;
@@ -146,6 +169,10 @@ export interface Batch {
   modelNameSnapshot: string;
   modelSnapshot?: BatchModelSnapshot;
   provider: Provider;
+  experimentEnabled?: boolean;
+  experimentId?: string | null;
+  experimentMode?: ExperimentMode | null;
+  experimentArms?: ExperimentArm[] | null;
   aspectRatio: AspectRatio;
   promptBase: string;
   backgroundConfig: BackgroundConfig;
@@ -163,12 +190,26 @@ export interface Batch {
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
   createdByUid: string;
+  createdByDisplayName?: string | null;
 }
 
 export interface ProviderUsageStats {
   completedOutputs: number;
   totalCostUsd: number;
   totalDurationSeconds: number;
+}
+
+export interface JobTraceabilitySummary {
+  batchCreatedAt?: TimestampLike | null;
+  batchCreatedByUid?: string | null;
+  batchCreatedByDisplayName?: string | null;
+  lastAttemptStartedAt?: TimestampLike | null;
+  lastCompletedAt?: TimestampLike | null;
+  lastManualRegenerationAt?: TimestampLike | null;
+  lastManualRegeneratedByUid?: string | null;
+  lastManualRegeneratedByDisplayName?: string | null;
+  lastProviderErrorAt?: TimestampLike | null;
+  lastProviderErrorMessage?: string | null;
 }
 
 export interface JobOutput {
@@ -179,6 +220,12 @@ export interface JobOutput {
   clientNameSnapshot: string;
   modelId: string;
   modelNameSnapshot: string;
+  experimentEnabled?: boolean;
+  experimentId?: string | null;
+  experimentMode?: ExperimentMode | null;
+  experimentArmId?: string | null;
+  experimentArmLabel?: string | null;
+  experimentComparisonKey?: string | null;
   poseImageId: string;
   garmentId: string;
   garmentName: string;
@@ -205,6 +252,12 @@ export interface Job {
   clientNameSnapshot: string;
   modelId: string;
   modelNameSnapshot: string;
+  experimentEnabled?: boolean;
+  experimentId?: string | null;
+  experimentMode?: ExperimentMode | null;
+  experimentArmId?: string | null;
+  experimentArmLabel?: string | null;
+  experimentComparisonKey?: string | null;
   poseImageId: string;
   poseImagePath: string;
   poseFileName?: string;
@@ -237,6 +290,8 @@ export interface Job {
   totalCostUsd: number;
   totalDurationSeconds: number;
   providerUsage?: Partial<Record<Provider, ProviderUsageStats>>;
+  manualRegenerationCount: number;
+  traceability?: JobTraceabilitySummary;
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
   createdByUid: string;
@@ -329,12 +384,86 @@ export interface AnalyticsClientStats {
   updatedAt: TimestampLike;
 }
 
+export interface AnalyticsClientProviderStats {
+  id: string;
+  clientId: string;
+  clientNameSnapshot: string;
+  provider: Provider;
+  completed: number;
+  totalCostUsd: number;
+  updatedAt: TimestampLike;
+}
+
 export interface AnalyticsData {
   summary: AnalyticsSummary | null;
   dailyVolume: AnalyticsDailyVolume[];
   dailyCost?: AnalyticsDailyCost[];
   byProvider: AnalyticsProviderStats[];
   topClients: AnalyticsClientStats[];
+  costByClientProvider: AnalyticsClientProviderStats[];
+}
+
+export interface ExperimentArmAnalytics {
+  armId: string;
+  label: string;
+  provider: Provider;
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  pendingJobs: number;
+  processingJobs: number;
+  manualRegenerationCount: number;
+  regeneratedJobs: number;
+  regenerationRatePct: number;
+  totalCostUsd: number;
+  avgCostPerJobUsd: number;
+  avgCostPerCompletedJobUsd: number;
+  totalDurationSeconds: number;
+  avgDurationPerJobSeconds: number;
+  efficiencyScore: number;
+}
+
+export interface BatchExperimentAnalytics {
+  batchId: string;
+  experimentId: string;
+  mode: ExperimentMode;
+  totalJobs: number;
+  comparableGroups: number;
+  arms: ExperimentArmAnalytics[];
+  winningArmId: string | null;
+  winningProvider: Provider | null;
+  recommendation: string;
+}
+
+export type HealthStatus = 'healthy' | 'degraded' | 'down';
+
+export interface ProviderHealthCheck {
+  provider: 'fal.ai' | 'OpenAI';
+  status: HealthStatus;
+  ok: boolean;
+  httpStatus: number | null;
+  latencyMs: number | null;
+  detail: string;
+  checkedAt: TimestampLike;
+}
+
+export interface QueueHealthSnapshot {
+  pendingJobs: number;
+  processingJobs: number;
+  staleProcessingJobs: number;
+  recentCompletedJobs: number;
+  recentFailedJobs: number;
+  recentTerminalJobs: number;
+  recentErrorRate: number;
+  windowHours: number;
+}
+
+export interface SystemHealthSnapshot {
+  overallStatus: HealthStatus;
+  summary: string;
+  providers: ProviderHealthCheck[];
+  queue: QueueHealthSnapshot;
+  checkedAt: TimestampLike;
 }
 
 export interface UploadedGarmentInput {
@@ -352,6 +481,7 @@ export interface CreateGenerationBatchRequest {
   poseIds: string[];
   garments: UploadedGarmentInput[];
   provider: Provider;
+  experiment?: GenerationExperimentConfig | null;
   promptBase: string;
   aspectRatio: AspectRatio;
   backgroundConfig: BackgroundConfig;
@@ -360,6 +490,42 @@ export interface CreateGenerationBatchRequest {
 export interface CreateGenerationBatchResponse {
   batchId: string;
   createdJobs: number;
+}
+
+export interface PermanentDeleteCatalogEntityRequest {
+  id: string;
+}
+
+export interface PermanentDeleteCatalogEntityResponse {
+  success: boolean;
+  id: string;
+}
+
+export interface PermanentDeleteAppUserRequest {
+  uid: string;
+}
+
+export interface PermanentDeleteAppUserResponse {
+  success: boolean;
+  uid: string;
+}
+
+export interface ArchiveAppUserRequest {
+  uid: string;
+}
+
+export interface ArchiveAppUserResponse {
+  success: boolean;
+  uid: string;
+}
+
+export interface RestoreAppUserRequest {
+  uid: string;
+}
+
+export interface RestoreAppUserResponse {
+  success: boolean;
+  uid: string;
 }
 
 export interface RegenerateJobRequest {
@@ -371,4 +537,70 @@ export interface RegenerateJobRequest {
 export interface RegenerateJobResponse {
   success: boolean;
   jobId: string;
+}
+
+export interface RegenerateFailedBatchJobsRequest {
+  batchId: string;
+}
+
+export interface RegenerateFailedBatchJobsResponse {
+  success: boolean;
+  batchId: string;
+  queuedJobs: number;
+  skippedJobs: number;
+  skippedJobIds: string[];
+}
+
+export interface CancelPendingBatchJobsRequest {
+  batchId: string;
+}
+
+export interface CancelPendingBatchJobsResponse {
+  success: boolean;
+  batchId: string;
+  cancelledJobs: number;
+}
+
+export interface ArchiveSearchRequest {
+  clientId?: string | null;
+  provider?: Provider | null;
+  batchStatus?: BatchStatus | null;
+  jobStatus?: JobStatus | null;
+  modelQuery?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  limit?: number | null;
+  scanLimit?: number | null;
+}
+
+export interface ArchiveSearchBatchMatch {
+  batch: Batch;
+  matchedJobCount: number;
+  matchedJobIds: string[];
+  matchedGarments: string[];
+  latestMatchedAt: TimestampLike | null;
+}
+
+export interface ArchiveSearchResponse {
+  success: boolean;
+  results: ArchiveSearchBatchMatch[];
+  scannedBatches: number;
+  truncated: boolean;
+}
+
+export interface RegenerateJobsBulkItem {
+  jobId: string;
+  provider?: Provider | null;
+  prompt?: string | null;
+}
+
+export interface RegenerateJobsBulkRequest {
+  jobs: RegenerateJobsBulkItem[];
+}
+
+export interface RegenerateJobsBulkResponse {
+  success: boolean;
+  queuedJobs: number;
+  skippedJobs: number;
+  skippedJobIds: string[];
 }

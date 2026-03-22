@@ -2,6 +2,9 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import {
   Client,
   CreateGenerationBatchRequest,
+  ExperimentArm,
+  ExperimentMode,
+  GenerationExperimentConfig,
   Job,
   Model,
   Pose,
@@ -9,10 +12,12 @@ import {
 } from '../../../shared/src/types';
 import {
   buildFinalGenerationPrompt,
+  isArchivedCatalogEntity,
   isAspectRatio,
   isProvider,
   normalizeBackgroundConfig,
 } from '../../../shared/src/domain';
+import { buildExperimentArms, isExperimentEligibleProvider, isExperimentMode } from '../../../shared/src/experiments';
 
 export const requireNonEmptyString = (value: unknown, label: string): string => {
   const normalized = typeof value === 'string' ? value.trim() : '';
@@ -67,11 +72,51 @@ export interface ValidatedCreateGenerationBatchInput {
   poseIds: string[];
   garments: UploadedGarmentInput[];
   provider: CreateGenerationBatchRequest['provider'];
+  experiment: {
+    enabled: boolean;
+    mode: ExperimentMode;
+    arms: ExperimentArm[];
+  } | null;
   promptBase: string;
   aspectRatio: CreateGenerationBatchRequest['aspectRatio'];
   backgroundConfig: CreateGenerationBatchRequest['backgroundConfig'];
   totalJobs: number;
 }
+
+const validateExperimentConfig = (
+  value: GenerationExperimentConfig | null | undefined,
+): ValidatedCreateGenerationBatchInput['experiment'] => {
+  if (!value?.enabled) {
+    return null;
+  }
+
+  if (!isExperimentMode(value.mode)) {
+    throw new HttpsError('invalid-argument', 'El modo del experimento A/B no es válido.');
+  }
+
+  const providers = Array.isArray(value.providers)
+    ? [...new Set(value.providers.filter((provider): provider is CreateGenerationBatchRequest['provider'] => isProvider(provider)))]
+    : [];
+
+  if (providers.length !== 2) {
+    throw new HttpsError('invalid-argument', 'El experimento A/B requiere exactamente 2 modelos por ahora.');
+  }
+
+  providers.forEach((provider) => {
+    if (!isExperimentEligibleProvider(provider)) {
+      throw new HttpsError(
+        'invalid-argument',
+        `El proveedor ${provider} no está habilitado para experimentos A/B.`,
+      );
+    }
+  });
+
+  return {
+    enabled: true,
+    mode: value.mode,
+    arms: buildExperimentArms(providers),
+  };
+};
 
 export const validateCreateGenerationBatchInput = (
   data: Partial<CreateGenerationBatchRequest> | null | undefined,
@@ -83,8 +128,9 @@ export const validateCreateGenerationBatchInput = (
   const promptBase = typeof data?.promptBase === 'string' ? data.promptBase.trim() : '';
   const provider = data?.provider;
   const aspectRatio = data?.aspectRatio;
+  const experiment = validateExperimentConfig(data?.experiment);
 
-  if (!isProvider(provider)) {
+  if (!experiment && !isProvider(provider)) {
     throw new HttpsError('invalid-argument', 'Se seleccionó un proveedor no compatible.');
   }
 
@@ -107,7 +153,8 @@ export const validateCreateGenerationBatchInput = (
 
   garments.forEach((garment) => ensureDraftOwnership(authUid, garment));
 
-  const totalJobs = poseIds.length * garments.length;
+  const experimentMultiplier = experiment?.mode === 'ab_paired' ? experiment.arms.length : 1;
+  const totalJobs = poseIds.length * garments.length * experimentMultiplier;
   if (totalJobs > maxJobs) {
     throw new HttpsError(
       'out-of-range',
@@ -120,7 +167,8 @@ export const validateCreateGenerationBatchInput = (
     modelId,
     poseIds,
     garments,
-    provider,
+    provider: experiment ? experiment.arms[0].provider : provider!,
+    experiment,
     promptBase,
     aspectRatio,
     backgroundConfig: normalizeBackgroundConfig(data?.backgroundConfig),
@@ -133,6 +181,14 @@ export const assertModelOwnershipAndPoses = (
   model: Model,
   poseIds: string[],
 ): Map<string, Pose> => {
+  if (isArchivedCatalogEntity(client)) {
+    throw new HttpsError('failed-precondition', 'El cliente seleccionado está archivado y ya no admite nuevos lotes.');
+  }
+
+  if (isArchivedCatalogEntity(model)) {
+    throw new HttpsError('failed-precondition', 'El modelo seleccionado está archivado y ya no admite nuevos lotes.');
+  }
+
   if (model.clientId !== client.id) {
     throw new HttpsError('invalid-argument', 'El modelo seleccionado no pertenece al cliente elegido.');
   }

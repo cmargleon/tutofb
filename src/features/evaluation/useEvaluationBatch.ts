@@ -1,60 +1,82 @@
-import { useState, useEffect } from 'react';
-import { db, auth } from '../../firebase';
-import { doc, collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { db } from '../../firebase';
+import { collection, doc, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { Batch, Job } from '../../../shared/src/types';
 
-export const useEvaluationBatch = (initialBatchId: string | null) => {
-  const [batchId, setBatchId] = useState<string | null>(initialBatchId);
+export const useEvaluationBatch = (initialBatchId: string | null, userUid: string | null) => {
   const [batch, setBatch] = useState<Batch | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [resolvedBatchId, setResolvedBatchId] = useState<string | null>(initialBatchId);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialBatchId) {
-      setBatchId(initialBatchId);
-    } else {
-      // Find the most recent batch for the user
-      if (!auth.currentUser) {
-        setLoading(false);
-        setError('Usuario no autenticado');
-        return;
-      }
-      
-      const recentBatchQuery = query(
-        collection(db, 'batches'),
-        where('createdByUid', '==', auth.currentUser.uid),
-        orderBy('createdAt', 'desc'),
-        limit(1)
-      );
-      
-      const unsubscribeRecent = onSnapshot(recentBatchQuery, (snapshot) => {
-        if (!snapshot.empty) {
-          setBatchId(snapshot.docs[0].id);
-        } else {
-          setLoading(false);
-          setError('No hay lotes recientes');
-        }
-      }, (err) => {
-        console.error('Error fetching recent batch:', err);
-        setLoading(false);
-        setError('Error al buscar lote reciente');
-      });
-      
-      return () => unsubscribeRecent();
+      setResolvedBatchId(initialBatchId);
+      setError(null);
+      return undefined;
     }
-  }, [initialBatchId]);
 
-  useEffect(() => {
-    if (!batchId) {
-      return;
+    if (!userUid) {
+      setResolvedBatchId(null);
+      setBatch(null);
+      setJobs([]);
+      setLoading(false);
+      setError('Inicia sesión para abrir tu última evaluación.');
+      return undefined;
     }
 
     setLoading(true);
     setError(null);
 
-    // Subscribe to batch
-    const batchRef = doc(db, 'batches', batchId);
+    const latestBatchQuery = query(
+      collection(db, 'batches'),
+      where('createdByUid', '==', userUid),
+      orderBy('createdAt', 'desc'),
+      limit(1),
+    );
+
+    const unsubscribeLatestBatch = onSnapshot(
+      latestBatchQuery,
+      (snapshot) => {
+        const latestBatchDoc = snapshot.docs[0];
+
+        if (!latestBatchDoc) {
+          setResolvedBatchId(null);
+          setBatch(null);
+          setJobs([]);
+          setLoading(false);
+          setError('Todavía no has creado jobs para evaluar.');
+          return;
+        }
+
+        setResolvedBatchId(latestBatchDoc.id);
+        setError(null);
+      },
+      (err) => {
+        console.error('Error fetching latest user batch:', err);
+        setResolvedBatchId(null);
+        setBatch(null);
+        setJobs([]);
+        setLoading(false);
+        setError('Error al buscar tu último lote.');
+      },
+    );
+
+    return () => {
+      unsubscribeLatestBatch();
+    };
+  }, [initialBatchId, userUid]);
+
+  useEffect(() => {
+    if (!resolvedBatchId) {
+      return undefined;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const batchRef = doc(db, 'batches', resolvedBatchId);
     const unsubscribeBatch = onSnapshot(batchRef, (docSnap) => {
       if (docSnap.exists()) {
         setBatch({ id: docSnap.id, ...docSnap.data() } as Batch);
@@ -70,7 +92,7 @@ export const useEvaluationBatch = (initialBatchId: string | null) => {
     // Subscribe to jobs
     const jobsQuery = query(
       collection(db, 'jobs'),
-      where('batchId', '==', batchId),
+      where('batchId', '==', resolvedBatchId),
       orderBy('createdAt', 'asc')
     );
 
@@ -91,7 +113,7 @@ export const useEvaluationBatch = (initialBatchId: string | null) => {
       unsubscribeBatch();
       unsubscribeJobs();
     };
-  }, [batchId]);
+  }, [resolvedBatchId]);
 
-  return { batch, jobs, loading, error };
+  return { batch, jobs, loading, error, resolvedBatchId };
 };

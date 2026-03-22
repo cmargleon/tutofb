@@ -8,10 +8,23 @@ setGlobalOptions({ maxInstances: 10 });
 // Export callables
 export * from './callables/createGenerationBatch';
 export * from './callables/regenerateJob';
+export * from './callables/regenerateFailedBatchJobs';
+export * from './callables/cancelPendingBatchJobs';
+export * from './callables/regenerateJobsBulk';
+export * from './callables/searchArchive';
 export * from './callables/syncUserClaims';
+export * from './callables/createAppUser';
+export * from './callables/updateAppUser';
+export * from './callables/archiveAppUser';
+export * from './callables/restoreAppUser';
+export * from './callables/permanentlyDeleteAppUser';
+export * from './callables/permanentlyDeleteClient';
+export * from './callables/permanentlyDeleteModel';
 export * from './admin/rebuildAnalytics';
+export * from './admin/getSystemHealth';
 export * from './http/downloadBatchZip';
 export * from './http/downloadJobImage';
+export * from './http/downloadSelectedJobsZip';
 
 // Export triggers
 export * from './triggers/onJobStatusChange';

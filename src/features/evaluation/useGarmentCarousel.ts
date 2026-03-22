@@ -1,10 +1,24 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Job } from '../../../shared/src/types';
 import { buildGarmentSlides, GarmentSlide } from './jobSlides';
 
-export const useGarmentCarousel = (jobs: Job[]) => {
+export const useGarmentCarousel = (jobs: Job[], initialFocusJobId?: string | null) => {
   const slides = useMemo(() => buildGarmentSlides(jobs), [jobs]);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+
+  useEffect(() => {
+    if (!initialFocusJobId) {
+      return;
+    }
+
+    const targetSlideIndex = slides.findIndex((slide) =>
+      slide.jobs.some((job) => job.id === initialFocusJobId),
+    );
+
+    if (targetSlideIndex >= 0) {
+      setActiveSlideIndex(targetSlideIndex);
+    }
+  }, [initialFocusJobId, slides]);
 
   // Ensure activeSlideIndex is within bounds if slides change
   const safeActiveSlideIndex = Math.min(activeSlideIndex, Math.max(0, slides.length - 1));

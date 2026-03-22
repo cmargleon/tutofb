@@ -4,21 +4,30 @@ import { useStorageAssetUrl } from '../features/storage/useStorageAssetUrl';
 interface PageHeaderProps {
   title: string;
   description?: string;
+  icon?: React.ElementType;
 }
 
-export const PageHeader: React.FC<PageHeaderProps> = ({ title, description }) => {
+export const PageHeader: React.FC<PageHeaderProps> = ({ title, description, icon: Icon }) => {
   return (
-    <div className="mb-8">
-      <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
-      {description && <p className="mt-2 text-sm text-gray-600">{description}</p>}
+    <div className="mb-8 flex items-start gap-4">
+      {Icon ? (
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
+          <Icon className="h-5 w-5" />
+        </div>
+      ) : null}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
+        {description && <p className="mt-2 text-sm text-gray-600">{description}</p>}
+      </div>
     </div>
   );
 };
 
-export const LoadingBlock: React.FC = () => {
+export const LoadingBlock: React.FC<{ message?: string }> = ({ message }) => {
   return (
-    <div className="flex justify-center items-center p-12">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+    <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600"></div>
+      {message ? <p className="text-sm text-gray-500">{message}</p> : null}
     </div>
   );
 };
@@ -53,9 +62,12 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
         return { bg: 'bg-green-100', text: 'text-green-800', label: 'Completado' };
       case 'processing':
         return { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Procesando' };
-      case 'failed':
       case 'partial_failed':
+        return { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Parcial' };
+      case 'failed':
         return { bg: 'bg-red-100', text: 'text-red-800', label: 'Fallido' };
+      case 'cancelled':
+        return { bg: 'bg-slate-200', text: 'text-slate-700', label: 'Cancelado' };
       case 'pending':
       default:
         return { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pendiente' };

@@ -1,9 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, CheckCircle2, Package, LayoutList, Users, UserSquare2 } from 'lucide-react';
-import { AnalyticsSummary, Batch, Job } from '../../shared/src/types';
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Package,
+  LayoutList,
+  RefreshCcw,
+  Users,
+  UserSquare2,
+} from 'lucide-react';
+import { AnalyticsSummary, Batch, HealthStatus, Job, ProviderHealthCheck, SystemHealthSnapshot } from '../../shared/src/types';
 import { EmptyState, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
 import { DashboardSnapshot, subscribeToAnalyticsSummary, subscribeToDashboardData } from '../features/dashboard/firebase';
+import { getSystemHealth } from '../features/system/firebase';
+import { useRole } from '../features/auth/AuthProvider';
 
 const StatCard: React.FC<{
   label: string;
@@ -25,6 +37,7 @@ const StatCard: React.FC<{
 );
 
 export const Dashboard: React.FC = () => {
+  const role = useRole();
   const [data, setData] = useState<DashboardSnapshot>({
     clients: [],
     models: [],
@@ -32,6 +45,9 @@ export const Dashboard: React.FC = () => {
     recentJobs: [],
   });
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [systemHealth, setSystemHealth] = useState<SystemHealthSnapshot | null>(null);
+  const [systemHealthLoading, setSystemHealthLoading] = useState(false);
+  const [systemHealthError, setSystemHealthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +76,49 @@ export const Dashboard: React.FC = () => {
       unsubscribeSummary();
     };
   }, []);
+
+  useEffect(() => {
+    if (!role.canAccessAnalytics) {
+      setSystemHealth(null);
+      setSystemHealthError(null);
+      setSystemHealthLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSystemHealth = async () => {
+      if (!cancelled) {
+        setSystemHealthLoading(true);
+      }
+
+      try {
+        const snapshot = await getSystemHealth();
+        if (!cancelled) {
+          setSystemHealth(snapshot);
+          setSystemHealthError(null);
+        }
+      } catch (loadError: any) {
+        if (!cancelled) {
+          setSystemHealthError(loadError?.message || 'No se pudo cargar el estado del sistema.');
+        }
+      } finally {
+        if (!cancelled) {
+          setSystemHealthLoading(false);
+        }
+      }
+    };
+
+    void loadSystemHealth();
+    const intervalId = window.setInterval(() => {
+      void loadSystemHealth();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [role.canAccessAnalytics]);
 
   const garmentCount = useMemo(
     () => new Set(data.recentJobs.map((job) => `${job.garmentFilePath}::${job.garmentName}`)).size,
@@ -90,6 +149,15 @@ export const Dashboard: React.FC = () => {
         description="Vista operativa del catálogo: volumen de preparación, cola activa y últimos trabajos procesados."
       />
 
+      <div className="flex justify-end">
+        <Link
+          to="/cola"
+          className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+        >
+          Abrir cola operativa
+        </Link>
+      </div>
+
       {error && (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
       )}
@@ -106,13 +174,43 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
+      {role.canAccessAnalytics ? (
+        <SystemHealthPanel
+          data={systemHealth}
+          loading={systemHealthLoading}
+          error={systemHealthError}
+          onRefresh={async () => {
+            setSystemHealthLoading(true);
+            try {
+              const snapshot = await getSystemHealth();
+              setSystemHealth(snapshot);
+              setSystemHealthError(null);
+            } catch (loadError: any) {
+              setSystemHealthError(loadError?.message || 'No se pudo actualizar el estado del sistema.');
+            } finally {
+              setSystemHealthLoading(false);
+            }
+          }}
+        />
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-slate-100 px-6 py-5">
-            <h2 className="text-lg font-semibold text-slate-900">Trabajos recientes</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              La cola se actualiza en tiempo real desde Firestore y refleja el estado actual de cada job.
-            </p>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Trabajos recientes</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  El panel sigue siendo resumen; la operación detallada ahora vive en la vista de cola.
+                </p>
+              </div>
+              <Link
+                to="/cola"
+                className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Ver cola
+              </Link>
+            </div>
           </div>
 
           {data.recentJobs.length === 0 ? (
@@ -214,3 +312,182 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+const HEALTH_STYLES: Record<HealthStatus, { pill: string; panel: string; dot: string; label: string }> = {
+  healthy: {
+    pill: 'bg-emerald-100 text-emerald-700',
+    panel: 'border-emerald-200 bg-emerald-50/60',
+    dot: 'bg-emerald-500',
+    label: 'Saludable',
+  },
+  degraded: {
+    pill: 'bg-amber-100 text-amber-700',
+    panel: 'border-amber-200 bg-amber-50/70',
+    dot: 'bg-amber-500',
+    label: 'Degradado',
+  },
+  down: {
+    pill: 'bg-rose-100 text-rose-700',
+    panel: 'border-rose-200 bg-rose-50/70',
+    dot: 'bg-rose-500',
+    label: 'Crítico',
+  },
+};
+
+const formatHealthDate = (value: unknown) => {
+  if (!value) return 'sin registro';
+  const date = typeof (value as { toDate?: () => Date }).toDate === 'function'
+    ? (value as { toDate: () => Date }).toDate()
+    : new Date(value as string | number | Date);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'sin registro';
+  }
+
+  return new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const ProviderStatusCard: React.FC<{ provider: ProviderHealthCheck }> = ({ provider }) => {
+  const styles = HEALTH_STYLES[provider.status];
+
+  return (
+    <div className={`rounded-2xl border p-4 ${styles.panel}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${styles.dot}`} />
+            <p className="font-medium text-slate-900">{provider.provider}</p>
+          </div>
+          <p className="mt-1 text-sm text-slate-600">{provider.detail}</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${styles.pill}`}>{styles.label}</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+        <span>HTTP: {provider.httpStatus ?? 'n/a'}</span>
+        <span>Latencia: {provider.latencyMs ? `${provider.latencyMs} ms` : 'n/a'}</span>
+        <span>Chequeo: {formatHealthDate(provider.checkedAt)}</span>
+      </div>
+    </div>
+  );
+};
+
+const SystemHealthPanel: React.FC<{
+  data: SystemHealthSnapshot | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void | Promise<void>;
+}> = ({ data, loading, error, onRefresh }) => {
+  const overallStatus = data?.overallStatus || 'degraded';
+  const styles = HEALTH_STYLES[overallStatus];
+
+  return (
+    <section className={`rounded-3xl border p-6 shadow-sm ${styles.panel}`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className={`rounded-2xl p-3 ${styles.pill}`}>
+              <Activity className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Estado del sistema</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${styles.dot}`} />
+                <h2 className="text-xl font-semibold text-slate-900">{styles.label}</h2>
+              </div>
+            </div>
+          </div>
+          <p className="mt-4 max-w-3xl text-sm text-slate-600">
+            {data?.summary || 'Cargando verificación de APIs, cola y tasa reciente de errores.'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {data ? (
+            <p className="text-xs text-slate-500">Última lectura: {formatHealthDate(data.checkedAt)}</p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        </div>
+      </div>
+
+      {error ? (
+        <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
+
+      {loading && !data ? (
+        <LoadingBlock />
+      ) : data ? (
+        <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+          <div className="space-y-4">
+            {data.providers.map((provider) => (
+              <ProviderStatusCard key={provider.provider} provider={provider} />
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Cola y errores</h3>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <QueueMetricCard label="Pendientes" value={data.queue.pendingJobs} tone="bg-sky-50 text-sky-700" />
+              <QueueMetricCard label="Procesando" value={data.queue.processingJobs} tone="bg-indigo-50 text-indigo-700" />
+              <QueueMetricCard
+                label="Atascados"
+                value={data.queue.staleProcessingJobs}
+                tone={data.queue.staleProcessingJobs > 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}
+              />
+              <QueueMetricCard
+                label={`Error ${data.queue.windowHours}h`}
+                value={`${data.queue.recentErrorRate}%`}
+                tone={data.queue.recentErrorRate >= 10 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}
+              />
+            </div>
+
+            <div className="mt-5 space-y-3 text-sm text-slate-600">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Completados recientes
+                </span>
+                <strong className="text-slate-900">{data.queue.recentCompletedJobs}</strong>
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                <span className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-600" />
+                  Fallidos recientes
+                </span>
+                <strong className="text-slate-900">{data.queue.recentFailedJobs}</strong>
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                <span className="flex items-center gap-2">
+                  <Clock3 className="h-4 w-4 text-slate-500" />
+                  Jobs evaluados en ventana
+                </span>
+                <strong className="text-slate-900">{data.queue.recentTerminalJobs}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+const QueueMetricCard: React.FC<{ label: string; value: string | number; tone: string }> = ({ label, value, tone }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>{label}</div>
+    <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
+  </div>
+);

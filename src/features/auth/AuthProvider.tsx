@@ -22,6 +22,7 @@ export const useRole = () => {
     isOperador: appUser?.role === 'operador',
     isRevisor: appUser?.role === 'revisor',
     isActive: appUser?.active === true,
+    canManageUsers: appUser?.role === 'admin',
     canManageClients: appUser?.role === 'admin',
     canManageModels: appUser?.role === 'admin',
     canCreateBatches: appUser?.role === 'admin' || appUser?.role === 'operador',

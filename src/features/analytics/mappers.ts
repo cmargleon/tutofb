@@ -2,7 +2,8 @@ import {
   AnalyticsSummary, 
   AnalyticsDailyVolume, 
   AnalyticsProviderStats, 
-  AnalyticsClientStats 
+  AnalyticsClientStats,
+  AnalyticsClientProviderStats,
 } from '../../../shared/src/types';
 
 export const mapSummary = (data: any): AnalyticsSummary => {
@@ -57,6 +58,18 @@ export const mapClientStats = (data: any): AnalyticsClientStats => {
   return {
     clientId: data.clientId,
     clientNameSnapshot: data.clientNameSnapshot || 'Cliente Desconocido',
+    completed: data.completed || 0,
+    totalCostUsd: data.totalCostUsd || 0,
+    updatedAt: data.updatedAt?.toDate() || new Date(),
+  };
+};
+
+export const mapClientProviderStats = (id: string, data: any): AnalyticsClientProviderStats => {
+  return {
+    id,
+    clientId: data.clientId,
+    clientNameSnapshot: data.clientNameSnapshot || 'Cliente Desconocido',
+    provider: data.provider,
     completed: data.completed || 0,
     totalCostUsd: data.totalCostUsd || 0,
     updatedAt: data.updatedAt?.toDate() || new Date(),

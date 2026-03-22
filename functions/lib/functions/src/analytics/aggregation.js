@@ -97,6 +97,7 @@ const buildAnalyticsSnapshot = (jobs, outputs) => {
     const dailyMap = new Map();
     const providerMap = new Map();
     const clientMap = new Map();
+    const clientProviderMap = new Map();
     jobs.forEach((job) => {
         summary.totalJobs += 1;
         if (job.status === 'completed') {
@@ -161,6 +162,20 @@ const buildAnalyticsSnapshot = (jobs, outputs) => {
         clientStats.totalCostUsd += output.costUsd || 0;
         clientStats.updatedAt = new Date();
         clientMap.set(output.clientId, clientStats);
+        const clientProviderKey = `${output.clientId}__${output.provider}`;
+        const clientProviderStats = clientProviderMap.get(clientProviderKey) || {
+            id: clientProviderKey,
+            clientId: output.clientId,
+            clientNameSnapshot: output.clientNameSnapshot,
+            provider: output.provider,
+            completed: 0,
+            totalCostUsd: 0,
+            updatedAt: new Date(),
+        };
+        clientProviderStats.completed += 1;
+        clientProviderStats.totalCostUsd += output.costUsd || 0;
+        clientProviderStats.updatedAt = new Date();
+        clientProviderMap.set(clientProviderKey, clientProviderStats);
         const date = (0, exports.formatMexicoCityDate)(output.createdAt);
         const daily = dailyMap.get(date) || {
             date,
@@ -202,6 +217,13 @@ const buildAnalyticsSnapshot = (jobs, outputs) => {
         totalCostUsd: Number(client.totalCostUsd.toFixed(4)),
         updatedAt: new Date(),
     }));
+    const clientProviders = Array.from(clientProviderMap.values())
+        .sort((left, right) => right.totalCostUsd - left.totalCostUsd)
+        .map((entry) => ({
+        ...entry,
+        totalCostUsd: Number(entry.totalCostUsd.toFixed(4)),
+        updatedAt: new Date(),
+    }));
     const daily = Array.from(dailyMap.values())
         .sort((left, right) => left.date.localeCompare(right.date))
         .map((entry) => ({
@@ -217,6 +239,7 @@ const buildAnalyticsSnapshot = (jobs, outputs) => {
         daily,
         providers,
         clients,
+        clientProviders,
     };
 };
 exports.buildAnalyticsSnapshot = buildAnalyticsSnapshot;

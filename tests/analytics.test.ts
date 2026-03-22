@@ -15,6 +15,12 @@ const baseJob = (overrides: Partial<Job>): Job => ({
   clientNameSnapshot: 'Cliente Uno',
   modelId: 'model-1',
   modelNameSnapshot: 'Modelo Uno',
+  experimentEnabled: false,
+  experimentId: null,
+  experimentMode: null,
+  experimentArmId: null,
+  experimentArmLabel: null,
+  experimentComparisonKey: null,
   poseImageId: 'pose-1',
   poseImagePath: 'pose.jpg',
   garmentId: 'gar-1',
@@ -56,6 +62,7 @@ const baseJob = (overrides: Partial<Job>): Job => ({
   completedOutputCount: 0,
   totalCostUsd: 0,
   totalDurationSeconds: 0,
+  manualRegenerationCount: 0,
   createdAt: new Date('2026-03-01T00:00:00Z'),
   updatedAt: new Date('2026-03-02T00:00:00Z'),
   createdByUid: 'user-1',
@@ -129,4 +136,9 @@ test('buildAnalyticsSnapshot calcula estado actual de jobs y costo acumulado por
   assert.equal(snapshot.summary.totalCostUsd, 0.07);
   assert.equal(snapshot.providers.find((provider) => provider.provider === 'fal-banana-pro')?.failed, 1);
   assert.equal(snapshot.providers.find((provider) => provider.provider === 'openai-gpt-image-1.5')?.completed, 1);
+  assert.equal(snapshot.clientProviders.find((entry) => entry.id === 'client-1__fal-seedream')?.totalCostUsd, 0.03);
+  assert.equal(
+    snapshot.clientProviders.find((entry) => entry.id === 'client-1__openai-gpt-image-1.5')?.completed,
+    1,
+  );
 });

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildFinalGenerationPrompt = exports.buildNegativeBackgroundPrompt = exports.buildBackgroundPrompt = exports.normalizeBackgroundConfig = exports.isAspectRatio = exports.isProvider = exports.isRole = exports.defaultBackgroundConfig = exports.BACKGROUND_SEPARATION_VALUES = exports.BACKGROUND_REALISM_VALUES = exports.BACKGROUND_CONTRAST_VALUES = exports.BACKGROUND_PROMINENCE_VALUES = exports.BACKGROUND_DOMINANT_COLOR_VALUES = exports.BACKGROUND_LIGHTING_VALUES = exports.BACKGROUND_SCENE_VALUES = exports.BACKGROUND_MODE_VALUES = exports.DEFAULT_TRY_ON_PROMPT = exports.PROVIDER_LABELS = exports.ASPECT_RATIO_VALUES = exports.PROVIDER_VALUES = exports.ROLE_VALUES = void 0;
+exports.buildFinalGenerationPrompt = exports.buildNegativeBackgroundPrompt = exports.buildBackgroundPrompt = exports.normalizeBackgroundConfig = exports.isActiveCatalogEntity = exports.isArchivedCatalogEntity = exports.isCatalogEntityStatus = exports.isAspectRatio = exports.isProvider = exports.isRole = exports.defaultBackgroundConfig = exports.BACKGROUND_SEPARATION_VALUES = exports.BACKGROUND_REALISM_VALUES = exports.BACKGROUND_CONTRAST_VALUES = exports.BACKGROUND_PROMINENCE_VALUES = exports.BACKGROUND_DOMINANT_COLOR_VALUES = exports.BACKGROUND_LIGHTING_VALUES = exports.BACKGROUND_SCENE_VALUES = exports.BACKGROUND_MODE_VALUES = exports.DEFAULT_TRY_ON_PROMPT = exports.PROVIDER_LABELS = exports.ASPECT_RATIO_VALUES = exports.PROVIDER_VALUES = exports.ROLE_VALUES = void 0;
 exports.ROLE_VALUES = ['admin', 'operador', 'revisor'];
 exports.PROVIDER_VALUES = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5'];
 exports.ASPECT_RATIO_VALUES = ['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'];
@@ -145,6 +145,12 @@ const isProvider = (value) => exports.PROVIDER_VALUES.includes(value);
 exports.isProvider = isProvider;
 const isAspectRatio = (value) => exports.ASPECT_RATIO_VALUES.includes(value);
 exports.isAspectRatio = isAspectRatio;
+const isCatalogEntityStatus = (value) => value === 'active' || value === 'archived';
+exports.isCatalogEntityStatus = isCatalogEntityStatus;
+const isArchivedCatalogEntity = (value) => value?.status === 'archived';
+exports.isArchivedCatalogEntity = isArchivedCatalogEntity;
+const isActiveCatalogEntity = (value) => !(0, exports.isArchivedCatalogEntity)(value);
+exports.isActiveCatalogEntity = isActiveCatalogEntity;
 const normalizeBackgroundConfig = (value) => {
     const config = value ?? {};
     const normalized = {

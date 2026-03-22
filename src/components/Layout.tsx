@@ -10,7 +10,9 @@ import {
   Wand2,
   Archive,
   Eye,
+  Rows3,
   BarChart3,
+  Shield,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -58,9 +60,11 @@ export const Layout: React.FC = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: role.isActive },
+    { name: 'Usuarios', path: '/users', icon: Shield, visible: role.canManageUsers },
     { name: 'Clientes', path: '/clients', icon: Users, visible: role.canManageClients },
     { name: 'Modelos', path: '/models', icon: UserSquare2, visible: role.canManageModels },
     { name: 'Generar', path: '/generate', icon: Wand2, visible: role.canCreateBatches },
+    { name: 'Cola', path: '/cola', icon: Rows3, visible: role.canEvaluate },
     { name: 'Evaluación', path: '/evaluacion', icon: Eye, visible: role.canEvaluate },
     { name: 'Archivo', path: '/archivo', icon: Archive, visible: role.canAccessArchive },
     { name: 'Analíticas', path: '/analytics', icon: BarChart3, visible: role.canAccessAnalytics },

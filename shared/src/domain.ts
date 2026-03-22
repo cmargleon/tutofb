@@ -11,6 +11,7 @@ import {
   BackgroundSeparation,
   Provider,
   Role,
+  CatalogEntityStatus,
 } from './types';
 
 export const ROLE_VALUES: Role[] = ['admin', 'operador', 'revisor'];
@@ -176,6 +177,12 @@ const pickBoolean = (value: unknown, fallback: boolean): boolean =>
 export const isRole = (value: unknown): value is Role => ROLE_VALUES.includes(value as Role);
 export const isProvider = (value: unknown): value is Provider => PROVIDER_VALUES.includes(value as Provider);
 export const isAspectRatio = (value: unknown): value is AspectRatio => ASPECT_RATIO_VALUES.includes(value as AspectRatio);
+export const isCatalogEntityStatus = (value: unknown): value is CatalogEntityStatus =>
+  value === 'active' || value === 'archived';
+export const isArchivedCatalogEntity = (value: { status?: CatalogEntityStatus | null } | null | undefined): boolean =>
+  value?.status === 'archived';
+export const isActiveCatalogEntity = (value: { status?: CatalogEntityStatus | null } | null | undefined): boolean =>
+  !isArchivedCatalogEntity(value);
 
 export const normalizeBackgroundConfig = (value: Partial<BackgroundConfig> | null | undefined): BackgroundConfig => {
   const config = value ?? {};

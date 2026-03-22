@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.assertUserRoles = exports.assertCallableRoles = exports.getUserRole = exports.getRequestRole = void 0;
 const https_1 = require("firebase-functions/v2/https");
+const domain_1 = require("../../../shared/src/domain");
 const appFirestore_1 = require("../firebase/appFirestore");
 const loadUserDoc = async (uid) => {
     const snapshot = await (0, appFirestore_1.getAppFirestore)().collection('users').doc(uid).get();
@@ -22,7 +23,7 @@ const getUserRole = async (uid, tokenRole) => {
         return tokenRole;
     }
     const user = await loadUserDoc(uid);
-    if (!user || !user.active) {
+    if (!user || !user.active || (0, domain_1.isArchivedCatalogEntity)(user)) {
         return null;
     }
     return user.role;

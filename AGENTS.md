@@ -16,6 +16,10 @@ Cada agente:
 - debe escalar cambios en `shared/` o flujos transversales
 - debe proponer pruebas o validaciones relacionadas con su cambio
 
+Regla operativa de deploy:
+- si un cambio afecta codigo ejecutado en `functions/src/`, no alcanza con editar TypeScript: hay que hacer `build` de Functions y, cuando se necesite verlo en Firebase/produccion, tambien `deploy` de Functions
+- si el frontend solo muestra datos persistidos por una Function, verificar si hace falta generar una nueva ejecucion para ver el cambio reflejado
+
 Cambios transversales:
 - si una tarea toca frontend + functions + `shared/`, debe pasar por un agente coordinador
 - si una tarea modifica tipos compartidos, contratos de Firestore o permisos, requiere revision extra

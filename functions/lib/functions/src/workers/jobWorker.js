@@ -457,6 +457,7 @@ const processJob = async (jobId, source) => {
                 promptBase: claimedJob.promptBase,
             },
         });
+        console.log('[jobWorker] finalPrompt enviado al proveedor:', claimedJob.finalPrompt);
         const providerResult = await (0, providers_1.generateWithProvider)(claimedJob.provider, {
             poseImageUrl,
             garmentImageUrl,

@@ -7,6 +7,100 @@ import { getAppFirestore } from '../firebase/appFirestore';
 const db = getAppFirestore();
 
 const getClientProviderDocId = (clientId: string, provider: JobOutput['provider']) => `${clientId}__${provider}`;
+const getClientModelDocId = (clientId: string, modelId: string) => `${clientId}__${modelId}`;
+
+type JobContribution = {
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  pendingJobs: number;
+  processingJobs: number;
+  firstPassApprovedJobs: number;
+  regeneratedCompletedJobs: number;
+  manualRegenerationCount: number;
+};
+
+const getJobContribution = (job: Job | undefined): JobContribution => {
+  if (!job) {
+    return {
+      totalJobs: 0,
+      completedJobs: 0,
+      failedJobs: 0,
+      pendingJobs: 0,
+      processingJobs: 0,
+      firstPassApprovedJobs: 0,
+      regeneratedCompletedJobs: 0,
+      manualRegenerationCount: 0,
+    };
+  }
+
+  const manualRegenerationCount = job.manualRegenerationCount || 0;
+  return {
+    totalJobs: 1,
+    completedJobs: job.status === 'completed' ? 1 : 0,
+    failedJobs: job.status === 'failed' ? 1 : 0,
+    pendingJobs: job.status === 'pending' ? 1 : 0,
+    processingJobs: job.status === 'processing' ? 1 : 0,
+    firstPassApprovedJobs: job.status === 'completed' && manualRegenerationCount === 0 ? 1 : 0,
+    regeneratedCompletedJobs: job.status === 'completed' && manualRegenerationCount > 0 ? 1 : 0,
+    manualRegenerationCount,
+  };
+};
+
+const diffJobContribution = (before: Job | undefined, after: Job | undefined): JobContribution => {
+  const previous = getJobContribution(before);
+  const next = getJobContribution(after);
+
+  return {
+    totalJobs: next.totalJobs - previous.totalJobs,
+    completedJobs: next.completedJobs - previous.completedJobs,
+    failedJobs: next.failedJobs - previous.failedJobs,
+    pendingJobs: next.pendingJobs - previous.pendingJobs,
+    processingJobs: next.processingJobs - previous.processingJobs,
+    firstPassApprovedJobs: next.firstPassApprovedJobs - previous.firstPassApprovedJobs,
+    regeneratedCompletedJobs: next.regeneratedCompletedJobs - previous.regeneratedCompletedJobs,
+    manualRegenerationCount: next.manualRegenerationCount - previous.manualRegenerationCount,
+  };
+};
+
+const setIncrementIfNeeded = (
+  payload: Record<string, unknown>,
+  field: keyof JobContribution,
+  value: number,
+): void => {
+  if (value) {
+    payload[field] = admin.firestore.FieldValue.increment(value);
+  }
+};
+
+const updateJobAggregationDoc = (
+  batch: FirebaseFirestore.WriteBatch,
+  ref: FirebaseFirestore.DocumentReference,
+  before: Job | undefined,
+  after: Job | undefined,
+  basePayload: Record<string, unknown>,
+): void => {
+  const delta = diffJobContribution(before, after);
+  const payload: Record<string, unknown> = {
+    ...basePayload,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  setIncrementIfNeeded(payload, 'totalJobs', delta.totalJobs);
+  setIncrementIfNeeded(payload, 'completedJobs', delta.completedJobs);
+  setIncrementIfNeeded(payload, 'failedJobs', delta.failedJobs);
+  setIncrementIfNeeded(payload, 'pendingJobs', delta.pendingJobs);
+  setIncrementIfNeeded(payload, 'processingJobs', delta.processingJobs);
+  setIncrementIfNeeded(payload, 'firstPassApprovedJobs', delta.firstPassApprovedJobs);
+  setIncrementIfNeeded(payload, 'regeneratedCompletedJobs', delta.regeneratedCompletedJobs);
+  setIncrementIfNeeded(payload, 'manualRegenerationCount', delta.manualRegenerationCount);
+
+  if (Object.keys(payload).length <= Object.keys(basePayload).length + 1) {
+    return;
+  }
+
+  batch.set(ref, payload, { merge: true });
+};
 
 const updateDailyDoc = (
   batch: FirebaseFirestore.WriteBatch,
@@ -36,12 +130,14 @@ export const onJobAnalyticsUpdate = onDocumentWritten('jobs/{jobId}', async (eve
   const before = event.data?.before.data() as Job | undefined;
   const after = event.data?.after.data() as Job | undefined;
   const delta = getJobStateDelta(before, after);
+  const jobContributionDelta = diffJobContribution(before, after);
 
   const hasSummaryChanges = Object.values(delta.summary).some((value) => (value || 0) !== 0);
   const hasProviderChanges = Object.values(delta.providerFailed).some((value) => (value || 0) !== 0);
   const hasDailyChanges = delta.dailyFailed.some((entry) => entry.delta !== 0);
+  const hasProductivityChanges = Object.values(jobContributionDelta).some((value) => value !== 0);
 
-  if (!hasSummaryChanges && !hasProviderChanges && !hasDailyChanges) {
+  if (!hasSummaryChanges && !hasProviderChanges && !hasDailyChanges && !hasProductivityChanges) {
     return;
   }
 
@@ -58,6 +154,9 @@ export const onJobAnalyticsUpdate = onDocumentWritten('jobs/{jobId}', async (eve
       ...(delta.summary.pendingJobs ? { pendingJobs: admin.firestore.FieldValue.increment(delta.summary.pendingJobs) } : {}),
       ...(delta.summary.processingJobs
         ? { processingJobs: admin.firestore.FieldValue.increment(delta.summary.processingJobs) }
+        : {}),
+      ...(jobContributionDelta.firstPassApprovedJobs
+        ? { firstPassApprovedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.firstPassApprovedJobs) }
         : {}),
     },
     { merge: true },
@@ -85,6 +184,56 @@ export const onJobAnalyticsUpdate = onDocumentWritten('jobs/{jobId}', async (eve
     }
 
     updateDailyDoc(batch, entry.date, { failed: entry.delta });
+  });
+
+  const clientIds = new Set([before?.clientId, after?.clientId].filter((value): value is string => Boolean(value)));
+  clientIds.forEach((clientId) => {
+    const beforeForClient = before?.clientId === clientId ? before : undefined;
+    const afterForClient = after?.clientId === clientId ? after : undefined;
+    const clientNameSnapshot = afterForClient?.clientNameSnapshot || beforeForClient?.clientNameSnapshot || 'Cliente desconocido';
+
+    updateJobAggregationDoc(
+      batch,
+      db.collection('analytics_clients').doc(clientId),
+      beforeForClient,
+      afterForClient,
+      {
+        clientId,
+        clientNameSnapshot,
+      },
+    );
+  });
+
+  const clientModelKeys = new Set(
+    [
+      before ? getClientModelDocId(before.clientId, before.modelId) : null,
+      after ? getClientModelDocId(after.clientId, after.modelId) : null,
+    ].filter((value): value is string => Boolean(value)),
+  );
+
+  clientModelKeys.forEach((key) => {
+    const [clientId, modelId] = key.split('__');
+    const beforeForKey = before && before.clientId === clientId && before.modelId === modelId ? before : undefined;
+    const afterForKey = after && after.clientId === clientId && after.modelId === modelId ? after : undefined;
+    const source = afterForKey || beforeForKey;
+
+    if (!source) {
+      return;
+    }
+
+    updateJobAggregationDoc(
+      batch,
+      db.collection('analytics_client_models').doc(key),
+      beforeForKey,
+      afterForKey,
+      {
+        id: key,
+        clientId,
+        clientNameSnapshot: source.clientNameSnapshot,
+        modelId,
+        modelNameSnapshot: source.modelNameSnapshot,
+      },
+    );
   });
 
   await batch.commit();
@@ -137,6 +286,7 @@ export const onJobOutputAnalyticsCreate = onDocumentCreated('jobs/{jobId}/output
       clientNameSnapshot: output.clientNameSnapshot,
       completed: admin.firestore.FieldValue.increment(1),
       totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+      totalDurationSeconds: admin.firestore.FieldValue.increment(durationSeconds),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },
@@ -150,6 +300,22 @@ export const onJobOutputAnalyticsCreate = onDocumentCreated('jobs/{jobId}/output
       provider: output.provider,
       completed: admin.firestore.FieldValue.increment(1),
       totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection('analytics_client_models').doc(getClientModelDocId(output.clientId, output.modelId)),
+    {
+      id: getClientModelDocId(output.clientId, output.modelId),
+      clientId: output.clientId,
+      clientNameSnapshot: output.clientNameSnapshot,
+      modelId: output.modelId,
+      modelNameSnapshot: output.modelNameSnapshot,
+      totalCompletedOutputs: admin.firestore.FieldValue.increment(1),
+      totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+      totalDurationSeconds: admin.firestore.FieldValue.increment(durationSeconds),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },
@@ -205,6 +371,7 @@ export const onJobOutputAnalyticsDelete = onDocumentDeleted('jobs/{jobId}/output
       clientNameSnapshot: output.clientNameSnapshot,
       completed: admin.firestore.FieldValue.increment(-1),
       totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+      totalDurationSeconds: admin.firestore.FieldValue.increment(-durationSeconds),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },
@@ -218,6 +385,22 @@ export const onJobOutputAnalyticsDelete = onDocumentDeleted('jobs/{jobId}/output
       provider: output.provider,
       completed: admin.firestore.FieldValue.increment(-1),
       totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  batch.set(
+    db.collection('analytics_client_models').doc(getClientModelDocId(output.clientId, output.modelId)),
+    {
+      id: getClientModelDocId(output.clientId, output.modelId),
+      clientId: output.clientId,
+      clientNameSnapshot: output.clientNameSnapshot,
+      modelId: output.modelId,
+      modelNameSnapshot: output.modelNameSnapshot,
+      totalCompletedOutputs: admin.firestore.FieldValue.increment(-1),
+      totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+      totalDurationSeconds: admin.firestore.FieldValue.increment(-durationSeconds),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true },

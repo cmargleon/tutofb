@@ -58,6 +58,7 @@ __exportStar(require("./callables/permanentlyDeleteModel"), exports);
 __exportStar(require("./callables/generateModelPose"), exports);
 __exportStar(require("./admin/rebuildAnalytics"), exports);
 __exportStar(require("./admin/getSystemHealth"), exports);
+__exportStar(require("./admin/updateSystemAlertSettings"), exports);
 __exportStar(require("./http/downloadBatchZip"), exports);
 __exportStar(require("./http/downloadJobImage"), exports);
 __exportStar(require("./http/downloadSelectedJobsZip"), exports);

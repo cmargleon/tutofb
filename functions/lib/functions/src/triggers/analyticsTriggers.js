@@ -40,6 +40,70 @@ const aggregation_1 = require("../analytics/aggregation");
 const appFirestore_1 = require("../firebase/appFirestore");
 const db = (0, appFirestore_1.getAppFirestore)();
 const getClientProviderDocId = (clientId, provider) => `${clientId}__${provider}`;
+const getClientModelDocId = (clientId, modelId) => `${clientId}__${modelId}`;
+const getJobContribution = (job) => {
+    if (!job) {
+        return {
+            totalJobs: 0,
+            completedJobs: 0,
+            failedJobs: 0,
+            pendingJobs: 0,
+            processingJobs: 0,
+            firstPassApprovedJobs: 0,
+            regeneratedCompletedJobs: 0,
+            manualRegenerationCount: 0,
+        };
+    }
+    const manualRegenerationCount = job.manualRegenerationCount || 0;
+    return {
+        totalJobs: 1,
+        completedJobs: job.status === 'completed' ? 1 : 0,
+        failedJobs: job.status === 'failed' ? 1 : 0,
+        pendingJobs: job.status === 'pending' ? 1 : 0,
+        processingJobs: job.status === 'processing' ? 1 : 0,
+        firstPassApprovedJobs: job.status === 'completed' && manualRegenerationCount === 0 ? 1 : 0,
+        regeneratedCompletedJobs: job.status === 'completed' && manualRegenerationCount > 0 ? 1 : 0,
+        manualRegenerationCount,
+    };
+};
+const diffJobContribution = (before, after) => {
+    const previous = getJobContribution(before);
+    const next = getJobContribution(after);
+    return {
+        totalJobs: next.totalJobs - previous.totalJobs,
+        completedJobs: next.completedJobs - previous.completedJobs,
+        failedJobs: next.failedJobs - previous.failedJobs,
+        pendingJobs: next.pendingJobs - previous.pendingJobs,
+        processingJobs: next.processingJobs - previous.processingJobs,
+        firstPassApprovedJobs: next.firstPassApprovedJobs - previous.firstPassApprovedJobs,
+        regeneratedCompletedJobs: next.regeneratedCompletedJobs - previous.regeneratedCompletedJobs,
+        manualRegenerationCount: next.manualRegenerationCount - previous.manualRegenerationCount,
+    };
+};
+const setIncrementIfNeeded = (payload, field, value) => {
+    if (value) {
+        payload[field] = admin.firestore.FieldValue.increment(value);
+    }
+};
+const updateJobAggregationDoc = (batch, ref, before, after, basePayload) => {
+    const delta = diffJobContribution(before, after);
+    const payload = {
+        ...basePayload,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    setIncrementIfNeeded(payload, 'totalJobs', delta.totalJobs);
+    setIncrementIfNeeded(payload, 'completedJobs', delta.completedJobs);
+    setIncrementIfNeeded(payload, 'failedJobs', delta.failedJobs);
+    setIncrementIfNeeded(payload, 'pendingJobs', delta.pendingJobs);
+    setIncrementIfNeeded(payload, 'processingJobs', delta.processingJobs);
+    setIncrementIfNeeded(payload, 'firstPassApprovedJobs', delta.firstPassApprovedJobs);
+    setIncrementIfNeeded(payload, 'regeneratedCompletedJobs', delta.regeneratedCompletedJobs);
+    setIncrementIfNeeded(payload, 'manualRegenerationCount', delta.manualRegenerationCount);
+    if (Object.keys(payload).length <= Object.keys(basePayload).length + 1) {
+        return;
+    }
+    batch.set(ref, payload, { merge: true });
+};
 const updateDailyDoc = (batch, date, updates) => {
     const ref = db.collection('analytics_daily').doc(date);
     const payload = {
@@ -61,10 +125,12 @@ exports.onJobAnalyticsUpdate = (0, firestore_1.onDocumentWritten)('jobs/{jobId}'
     const before = event.data?.before.data();
     const after = event.data?.after.data();
     const delta = (0, aggregation_1.getJobStateDelta)(before, after);
+    const jobContributionDelta = diffJobContribution(before, after);
     const hasSummaryChanges = Object.values(delta.summary).some((value) => (value || 0) !== 0);
     const hasProviderChanges = Object.values(delta.providerFailed).some((value) => (value || 0) !== 0);
     const hasDailyChanges = delta.dailyFailed.some((entry) => entry.delta !== 0);
-    if (!hasSummaryChanges && !hasProviderChanges && !hasDailyChanges) {
+    const hasProductivityChanges = Object.values(jobContributionDelta).some((value) => value !== 0);
+    if (!hasSummaryChanges && !hasProviderChanges && !hasDailyChanges && !hasProductivityChanges) {
         return;
     }
     const batch = db.batch();
@@ -78,6 +144,9 @@ exports.onJobAnalyticsUpdate = (0, firestore_1.onDocumentWritten)('jobs/{jobId}'
         ...(delta.summary.pendingJobs ? { pendingJobs: admin.firestore.FieldValue.increment(delta.summary.pendingJobs) } : {}),
         ...(delta.summary.processingJobs
             ? { processingJobs: admin.firestore.FieldValue.increment(delta.summary.processingJobs) }
+            : {}),
+        ...(jobContributionDelta.firstPassApprovedJobs
+            ? { firstPassApprovedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.firstPassApprovedJobs) }
             : {}),
     }, { merge: true });
     Object.entries(delta.providerFailed).forEach(([provider, failedDelta]) => {
@@ -95,6 +164,36 @@ exports.onJobAnalyticsUpdate = (0, firestore_1.onDocumentWritten)('jobs/{jobId}'
             return;
         }
         updateDailyDoc(batch, entry.date, { failed: entry.delta });
+    });
+    const clientIds = new Set([before?.clientId, after?.clientId].filter((value) => Boolean(value)));
+    clientIds.forEach((clientId) => {
+        const beforeForClient = before?.clientId === clientId ? before : undefined;
+        const afterForClient = after?.clientId === clientId ? after : undefined;
+        const clientNameSnapshot = afterForClient?.clientNameSnapshot || beforeForClient?.clientNameSnapshot || 'Cliente desconocido';
+        updateJobAggregationDoc(batch, db.collection('analytics_clients').doc(clientId), beforeForClient, afterForClient, {
+            clientId,
+            clientNameSnapshot,
+        });
+    });
+    const clientModelKeys = new Set([
+        before ? getClientModelDocId(before.clientId, before.modelId) : null,
+        after ? getClientModelDocId(after.clientId, after.modelId) : null,
+    ].filter((value) => Boolean(value)));
+    clientModelKeys.forEach((key) => {
+        const [clientId, modelId] = key.split('__');
+        const beforeForKey = before && before.clientId === clientId && before.modelId === modelId ? before : undefined;
+        const afterForKey = after && after.clientId === clientId && after.modelId === modelId ? after : undefined;
+        const source = afterForKey || beforeForKey;
+        if (!source) {
+            return;
+        }
+        updateJobAggregationDoc(batch, db.collection('analytics_client_models').doc(key), beforeForKey, afterForKey, {
+            id: key,
+            clientId,
+            clientNameSnapshot: source.clientNameSnapshot,
+            modelId,
+            modelNameSnapshot: source.modelNameSnapshot,
+        });
     });
     await batch.commit();
 });
@@ -130,6 +229,7 @@ exports.onJobOutputAnalyticsCreate = (0, firestore_1.onDocumentCreated)('jobs/{j
         clientNameSnapshot: output.clientNameSnapshot,
         completed: admin.firestore.FieldValue.increment(1),
         totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+        totalDurationSeconds: admin.firestore.FieldValue.increment(durationSeconds),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     batch.set(db.collection('analytics_client_providers').doc(getClientProviderDocId(output.clientId, output.provider)), {
@@ -138,6 +238,17 @@ exports.onJobOutputAnalyticsCreate = (0, firestore_1.onDocumentCreated)('jobs/{j
         provider: output.provider,
         completed: admin.firestore.FieldValue.increment(1),
         totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(db.collection('analytics_client_models').doc(getClientModelDocId(output.clientId, output.modelId)), {
+        id: getClientModelDocId(output.clientId, output.modelId),
+        clientId: output.clientId,
+        clientNameSnapshot: output.clientNameSnapshot,
+        modelId: output.modelId,
+        modelNameSnapshot: output.modelNameSnapshot,
+        totalCompletedOutputs: admin.firestore.FieldValue.increment(1),
+        totalCostUsd: admin.firestore.FieldValue.increment(output.costUsd || 0),
+        totalDurationSeconds: admin.firestore.FieldValue.increment(durationSeconds),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     await batch.commit();
@@ -174,6 +285,7 @@ exports.onJobOutputAnalyticsDelete = (0, firestore_1.onDocumentDeleted)('jobs/{j
         clientNameSnapshot: output.clientNameSnapshot,
         completed: admin.firestore.FieldValue.increment(-1),
         totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+        totalDurationSeconds: admin.firestore.FieldValue.increment(-durationSeconds),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     batch.set(db.collection('analytics_client_providers').doc(getClientProviderDocId(output.clientId, output.provider)), {
@@ -182,6 +294,17 @@ exports.onJobOutputAnalyticsDelete = (0, firestore_1.onDocumentDeleted)('jobs/{j
         provider: output.provider,
         completed: admin.firestore.FieldValue.increment(-1),
         totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    batch.set(db.collection('analytics_client_models').doc(getClientModelDocId(output.clientId, output.modelId)), {
+        id: getClientModelDocId(output.clientId, output.modelId),
+        clientId: output.clientId,
+        clientNameSnapshot: output.clientNameSnapshot,
+        modelId: output.modelId,
+        modelNameSnapshot: output.modelNameSnapshot,
+        totalCompletedOutputs: admin.firestore.FieldValue.increment(-1),
+        totalCostUsd: admin.firestore.FieldValue.increment(-(output.costUsd || 0)),
+        totalDurationSeconds: admin.firestore.FieldValue.increment(-durationSeconds),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
     await batch.commit();

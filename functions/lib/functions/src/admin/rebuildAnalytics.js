@@ -84,6 +84,7 @@ exports.rebuildAnalytics = (0, https_1.onCall)(async (request) => {
         deleteCollectionDocs('analytics_providers'),
         deleteCollectionDocs('analytics_clients'),
         deleteCollectionDocs('analytics_client_providers'),
+        deleteCollectionDocs('analytics_client_models'),
     ]);
     const timestamp = admin.firestore.FieldValue.serverTimestamp();
     const writers = [
@@ -107,6 +108,10 @@ exports.rebuildAnalytics = (0, https_1.onCall)(async (request) => {
         })),
         ...rebuilt.clientProviders.map((clientProviderStats) => (batch) => batch.set(db.collection('analytics_client_providers').doc(clientProviderStats.id), {
             ...clientProviderStats,
+            updatedAt: timestamp,
+        })),
+        ...rebuilt.clientModels.map((clientModelStats) => (batch) => batch.set(db.collection('analytics_client_models').doc(clientModelStats.id), {
+            ...clientModelStats,
             updatedAt: timestamp,
         })),
     ];

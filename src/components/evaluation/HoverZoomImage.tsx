@@ -7,6 +7,7 @@ interface Props {
   imageClassName?: string;
   zoomScale?: number;
   referrerPolicy?: React.ImgHTMLAttributes<HTMLImageElement>['referrerPolicy'];
+  preserveNaturalAspectRatio?: boolean;
   children?: React.ReactNode;
 }
 
@@ -17,6 +18,7 @@ export const HoverZoomImage: React.FC<Props> = ({
   imageClassName = '',
   zoomScale = 1.9,
   referrerPolicy = 'no-referrer',
+  preserveNaturalAspectRatio = false,
   children,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -108,6 +110,10 @@ export const HoverZoomImage: React.FC<Props> = ({
       style={{
         ['--zoom-origin-x' as string]: '50%',
         ['--zoom-origin-y' as string]: '50%',
+        aspectRatio:
+          preserveNaturalAspectRatio && naturalSize.width > 0 && naturalSize.height > 0
+            ? `${naturalSize.width} / ${naturalSize.height}`
+            : undefined,
       }}
     >
       <img

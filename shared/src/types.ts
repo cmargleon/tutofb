@@ -347,6 +347,8 @@ export interface AnalyticsSummary {
   failedJobs: number;
   pendingJobs: number;
   processingJobs: number;
+  firstPassApprovedJobs: number;
+  firstPassApprovalRatePct: number;
   successRate: number;
   avgDurationSeconds: number | null;
   totalCompletedOutputs: number;
@@ -382,7 +384,16 @@ export interface AnalyticsClientStats {
   clientId: string;
   clientNameSnapshot: string;
   completed: number;
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  pendingJobs: number;
+  processingJobs: number;
+  firstPassApprovedJobs: number;
+  regeneratedCompletedJobs: number;
+  manualRegenerationCount: number;
   totalCostUsd: number;
+  totalDurationSeconds: number;
   updatedAt: TimestampLike;
 }
 
@@ -396,6 +407,26 @@ export interface AnalyticsClientProviderStats {
   updatedAt: TimestampLike;
 }
 
+export interface AnalyticsClientModelStats {
+  id: string;
+  clientId: string;
+  clientNameSnapshot: string;
+  modelId: string;
+  modelNameSnapshot: string;
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  pendingJobs: number;
+  processingJobs: number;
+  firstPassApprovedJobs: number;
+  regeneratedCompletedJobs: number;
+  manualRegenerationCount: number;
+  totalCompletedOutputs: number;
+  totalCostUsd: number;
+  totalDurationSeconds: number;
+  updatedAt: TimestampLike;
+}
+
 export interface AnalyticsData {
   summary: AnalyticsSummary | null;
   dailyVolume: AnalyticsDailyVolume[];
@@ -403,6 +434,7 @@ export interface AnalyticsData {
   byProvider: AnalyticsProviderStats[];
   topClients: AnalyticsClientStats[];
   costByClientProvider: AnalyticsClientProviderStats[];
+  productivityByClientModel: AnalyticsClientModelStats[];
 }
 
 export interface ExperimentArmAnalytics {
@@ -439,6 +471,34 @@ export interface BatchExperimentAnalytics {
 
 export type HealthStatus = 'healthy' | 'degraded' | 'down';
 
+export type SystemAlertId =
+  | 'daily_cost'
+  | 'recent_error_rate'
+  | 'queue_backlog'
+  | 'stale_processing_jobs'
+  | 'provider_status';
+
+export interface SystemAlert {
+  id: SystemAlertId;
+  status: HealthStatus;
+  title: string;
+  description: string;
+  metricLabel?: string | null;
+  currentValue?: number | string | null;
+  thresholdValue?: number | string | null;
+  checkedAt: TimestampLike;
+}
+
+export interface SystemAlertSettings {
+  dailyCostUsdThreshold: number | null;
+  recentErrorRateThreshold: number;
+  pendingJobsThreshold: number;
+  staleProcessingJobsThreshold: number;
+  updatedAt?: TimestampLike;
+  updatedByUid?: string | null;
+  updatedByDisplayName?: string | null;
+}
+
 export interface ProviderHealthCheck {
   provider: 'fal.ai' | 'OpenAI';
   status: HealthStatus;
@@ -465,6 +525,9 @@ export interface SystemHealthSnapshot {
   summary: string;
   providers: ProviderHealthCheck[];
   queue: QueueHealthSnapshot;
+  alerts: SystemAlert[];
+  settings: SystemAlertSettings;
+  todayCostUsd: number;
   checkedAt: TimestampLike;
 }
 
@@ -501,6 +564,18 @@ export interface PermanentDeleteCatalogEntityRequest {
 export interface PermanentDeleteCatalogEntityResponse {
   success: boolean;
   id: string;
+}
+
+export interface UpdateSystemAlertSettingsRequest {
+  dailyCostUsdThreshold: number | null;
+  recentErrorRateThreshold: number;
+  pendingJobsThreshold: number;
+  staleProcessingJobsThreshold: number;
+}
+
+export interface UpdateSystemAlertSettingsResponse {
+  success: boolean;
+  settings: SystemAlertSettings;
 }
 
 export interface PermanentDeleteAppUserRequest {

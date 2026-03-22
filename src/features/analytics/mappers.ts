@@ -4,6 +4,7 @@ import {
   AnalyticsProviderStats, 
   AnalyticsClientStats,
   AnalyticsClientProviderStats,
+  AnalyticsClientModelStats,
 } from '../../../shared/src/types';
 
 export const mapSummary = (data: any): AnalyticsSummary => {
@@ -11,6 +12,7 @@ export const mapSummary = (data: any): AnalyticsSummary => {
   const failed = data.failedJobs || 0;
   const totalDuration = data.totalDurationSeconds || 0;
   const totalCompletedOutputs = data.totalCompletedOutputs || completed; // fallback
+  const firstPassApprovedJobs = data.firstPassApprovedJobs || 0;
 
   return {
     totalJobs: data.totalJobs || 0,
@@ -18,6 +20,8 @@ export const mapSummary = (data: any): AnalyticsSummary => {
     failedJobs: failed,
     pendingJobs: data.pendingJobs || 0,
     processingJobs: data.processingJobs || 0,
+    firstPassApprovedJobs,
+    firstPassApprovalRatePct: completed > 0 ? Math.round((firstPassApprovedJobs / completed) * 100) : 0,
     successRate: (completed + failed) > 0 ? Math.round((completed / (completed + failed)) * 100) : 0,
     avgDurationSeconds: totalCompletedOutputs > 0 ? Math.round(totalDuration / totalCompletedOutputs) : 0,
     totalCompletedOutputs: totalCompletedOutputs,
@@ -59,7 +63,16 @@ export const mapClientStats = (data: any): AnalyticsClientStats => {
     clientId: data.clientId,
     clientNameSnapshot: data.clientNameSnapshot || 'Cliente Desconocido',
     completed: data.completed || 0,
+    totalJobs: data.totalJobs || 0,
+    completedJobs: data.completedJobs || 0,
+    failedJobs: data.failedJobs || 0,
+    pendingJobs: data.pendingJobs || 0,
+    processingJobs: data.processingJobs || 0,
+    firstPassApprovedJobs: data.firstPassApprovedJobs || 0,
+    regeneratedCompletedJobs: data.regeneratedCompletedJobs || 0,
+    manualRegenerationCount: data.manualRegenerationCount || 0,
     totalCostUsd: data.totalCostUsd || 0,
+    totalDurationSeconds: data.totalDurationSeconds || 0,
     updatedAt: data.updatedAt?.toDate() || new Date(),
   };
 };
@@ -72,6 +85,28 @@ export const mapClientProviderStats = (id: string, data: any): AnalyticsClientPr
     provider: data.provider,
     completed: data.completed || 0,
     totalCostUsd: data.totalCostUsd || 0,
+    updatedAt: data.updatedAt?.toDate() || new Date(),
+  };
+};
+
+export const mapClientModelStats = (id: string, data: any): AnalyticsClientModelStats => {
+  return {
+    id,
+    clientId: data.clientId,
+    clientNameSnapshot: data.clientNameSnapshot || 'Cliente Desconocido',
+    modelId: data.modelId,
+    modelNameSnapshot: data.modelNameSnapshot || 'Modelo desconocido',
+    totalJobs: data.totalJobs || 0,
+    completedJobs: data.completedJobs || 0,
+    failedJobs: data.failedJobs || 0,
+    pendingJobs: data.pendingJobs || 0,
+    processingJobs: data.processingJobs || 0,
+    firstPassApprovedJobs: data.firstPassApprovedJobs || 0,
+    regeneratedCompletedJobs: data.regeneratedCompletedJobs || 0,
+    manualRegenerationCount: data.manualRegenerationCount || 0,
+    totalCompletedOutputs: data.totalCompletedOutputs || 0,
+    totalCostUsd: data.totalCostUsd || 0,
+    totalDurationSeconds: data.totalDurationSeconds || 0,
     updatedAt: data.updatedAt?.toDate() || new Date(),
   };
 };

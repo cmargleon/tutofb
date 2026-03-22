@@ -154,7 +154,8 @@ export const JobEvaluationCard: React.FC<Props> = ({
               src={previousImageUrl!}
               alt={`Pose ${index + 1} anterior`}
               containerClassName="aspect-[3/4] bg-slate-100"
-              imageClassName="object-cover"
+              imageClassName="bg-white object-contain"
+              preserveNaturalAspectRatio
               zoomScale={2.1}
             >
               <span className="absolute left-3 top-3 rounded-lg bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
@@ -165,7 +166,8 @@ export const JobEvaluationCard: React.FC<Props> = ({
               src={imageUrl!}
               alt={`Pose ${index + 1} actual`}
               containerClassName="aspect-[3/4] bg-slate-100"
-              imageClassName="object-cover"
+              imageClassName="bg-white object-contain"
+              preserveNaturalAspectRatio
               zoomScale={2.1}
             >
               <span className="absolute left-3 top-3 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white">
@@ -178,7 +180,8 @@ export const JobEvaluationCard: React.FC<Props> = ({
             src={imageUrl!}
             alt={`Pose ${index + 1}`}
             containerClassName="aspect-[3/4]"
-            imageClassName="object-cover"
+            imageClassName="bg-white object-contain"
+            preserveNaturalAspectRatio
             zoomScale={1.95}
           />
         ) : (

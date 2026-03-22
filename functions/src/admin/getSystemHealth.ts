@@ -5,6 +5,7 @@ import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { HealthStatus, Job, ProviderHealthCheck, QueueHealthSnapshot, SystemHealthSnapshot } from '../../../shared/src/types';
 import { computeOverallHealth } from './systemHealth.helpers';
+import { buildSystemAlerts, getSystemAlertSettings } from './systemAlerts';
 
 const SYSTEM_WINDOW_HOURS = 24;
 const REQUEST_TIMEOUT_MS = 8000;
@@ -193,6 +194,18 @@ const getQueueHealth = async (): Promise<QueueHealthSnapshot> => {
   };
 };
 
+const getTodayCostUsd = async (): Promise<number> => {
+  const db = getAppFirestore();
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+  const snapshot = await db.collection('analytics_daily').doc(today).get();
+  if (!snapshot.exists) {
+    return 0;
+  }
+
+  const raw = snapshot.data()?.costUsd;
+  return typeof raw === 'number' && Number.isFinite(raw) ? Number(raw.toFixed(2)) : 0;
+};
+
 export const getSystemHealth = onCall(
   {
     timeoutSeconds: 30,
@@ -201,21 +214,34 @@ export const getSystemHealth = onCall(
   async (request): Promise<SystemHealthSnapshot> => {
     await assertCallableRoles(request, ['admin', 'revisor']);
 
-    const [openaiHealth, falHealth, queue] = await Promise.all([
+    const [openaiHealth, falHealth, queue, settings, todayCostUsd] = await Promise.all([
       checkOpenAIHealth(),
       checkFalHealth(),
       getQueueHealth(),
+      getSystemAlertSettings(),
+      getTodayCostUsd(),
     ]);
 
     const providers = [falHealth, openaiHealth];
     const overall = computeOverallHealth(providers, queue);
+    const checkedAt = new Date();
+    const alerts = buildSystemAlerts({
+      settings,
+      queue,
+      providers,
+      todayCostUsd,
+      checkedAt,
+    });
 
     return {
       overallStatus: overall.overallStatus,
       summary: overall.summary,
       providers,
       queue,
-      checkedAt: new Date(),
+      alerts,
+      settings,
+      todayCostUsd,
+      checkedAt,
     };
   },
 );

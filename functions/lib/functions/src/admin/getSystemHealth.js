@@ -7,6 +7,7 @@ const runtime_1 = require("../config/runtime");
 const roles_1 = require("../auth/roles");
 const appFirestore_1 = require("../firebase/appFirestore");
 const systemHealth_helpers_1 = require("./systemHealth.helpers");
+const systemAlerts_1 = require("./systemAlerts");
 const SYSTEM_WINDOW_HOURS = 24;
 const REQUEST_TIMEOUT_MS = 8000;
 const FAL_HEALTHCHECK_URL = 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/health/status';
@@ -139,24 +140,47 @@ const getQueueHealth = async () => {
         windowHours: SYSTEM_WINDOW_HOURS,
     };
 };
+const getTodayCostUsd = async () => {
+    const db = (0, appFirestore_1.getAppFirestore)();
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+    const snapshot = await db.collection('analytics_daily').doc(today).get();
+    if (!snapshot.exists) {
+        return 0;
+    }
+    const raw = snapshot.data()?.costUsd;
+    return typeof raw === 'number' && Number.isFinite(raw) ? Number(raw.toFixed(2)) : 0;
+};
 exports.getSystemHealth = (0, https_1.onCall)({
     timeoutSeconds: 30,
     secrets: [runtime_1.FAL_KEY, runtime_1.OPENAI_API_KEY],
 }, async (request) => {
     await (0, roles_1.assertCallableRoles)(request, ['admin', 'revisor']);
-    const [openaiHealth, falHealth, queue] = await Promise.all([
+    const [openaiHealth, falHealth, queue, settings, todayCostUsd] = await Promise.all([
         checkOpenAIHealth(),
         checkFalHealth(),
         getQueueHealth(),
+        (0, systemAlerts_1.getSystemAlertSettings)(),
+        getTodayCostUsd(),
     ]);
     const providers = [falHealth, openaiHealth];
     const overall = (0, systemHealth_helpers_1.computeOverallHealth)(providers, queue);
+    const checkedAt = new Date();
+    const alerts = (0, systemAlerts_1.buildSystemAlerts)({
+        settings,
+        queue,
+        providers,
+        todayCostUsd,
+        checkedAt,
+    });
     return {
         overallStatus: overall.overallStatus,
         summary: overall.summary,
         providers,
         queue,
-        checkedAt: new Date(),
+        alerts,
+        settings,
+        todayCostUsd,
+        checkedAt,
     };
 });
 //# sourceMappingURL=getSystemHealth.js.map

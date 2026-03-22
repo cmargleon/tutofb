@@ -23,6 +23,7 @@ export * from './callables/permanentlyDeleteModel';
 export * from './callables/generateModelPose';
 export * from './admin/rebuildAnalytics';
 export * from './admin/getSystemHealth';
+export * from './admin/updateSystemAlertSettings';
 export * from './http/downloadBatchZip';
 export * from './http/downloadJobImage';
 export * from './http/downloadSelectedJobsZip';

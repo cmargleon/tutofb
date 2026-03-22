@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import {
   AnalyticsClientStats,
+  AnalyticsClientModelStats,
   AnalyticsClientProviderStats,
   AnalyticsDailyVolume,
   AnalyticsProviderStats,
@@ -17,6 +18,7 @@ export interface AnalyticsRebuildData {
   providers: AnalyticsProviderStats[];
   clients: AnalyticsClientStats[];
   clientProviders: AnalyticsClientProviderStats[];
+  clientModels: AnalyticsClientModelStats[];
 }
 
 export interface JobStateDelta {
@@ -53,6 +55,8 @@ const emptyStateSummary = (): AnalyticsSummary => ({
   failedJobs: 0,
   pendingJobs: 0,
   processingJobs: 0,
+  firstPassApprovedJobs: 0,
+  firstPassApprovalRatePct: 0,
   successRate: 0,
   avgDurationSeconds: null,
   totalCompletedOutputs: 0,
@@ -60,6 +64,11 @@ const emptyStateSummary = (): AnalyticsSummary => ({
   projectedMonthlyCostUsd: null,
   updatedAt: new Date(),
 });
+
+const isFirstPassApprovedJob = (job: Job): boolean => job.status === 'completed' && (job.manualRegenerationCount || 0) === 0;
+
+const isRegeneratedCompletedJob = (job: Job): boolean =>
+  job.status === 'completed' && (job.manualRegenerationCount || 0) > 0;
 
 const increment = <T extends string>(target: Partial<Record<T, number>>, key: T, delta: number): void => {
   target[key] = (target[key] || 0) + delta;
@@ -145,11 +154,15 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
   const providerMap = new Map<Provider, AnalyticsProviderStats>();
   const clientMap = new Map<string, AnalyticsClientStats>();
   const clientProviderMap = new Map<string, AnalyticsClientProviderStats>();
+  const clientModelMap = new Map<string, AnalyticsClientModelStats>();
 
   jobs.forEach((job) => {
     summary.totalJobs += 1;
     if (job.status === 'completed') {
       summary.completedJobs += 1;
+      if (isFirstPassApprovedJob(job)) {
+        summary.firstPassApprovedJobs += 1;
+      }
     } else if (job.status === 'failed') {
       summary.failedJobs += 1;
 
@@ -180,6 +193,64 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     } else {
       summary.pendingJobs += 1;
     }
+
+    const clientStats = clientMap.get(job.clientId) || {
+      clientId: job.clientId,
+      clientNameSnapshot: job.clientNameSnapshot,
+      completed: 0,
+      totalJobs: 0,
+      completedJobs: 0,
+      failedJobs: 0,
+      pendingJobs: 0,
+      processingJobs: 0,
+      firstPassApprovedJobs: 0,
+      regeneratedCompletedJobs: 0,
+      manualRegenerationCount: 0,
+      totalCostUsd: 0,
+      totalDurationSeconds: 0,
+      updatedAt: new Date(),
+    };
+    clientStats.totalJobs += 1;
+    clientStats.manualRegenerationCount += job.manualRegenerationCount || 0;
+    if (job.status === 'completed') clientStats.completedJobs += 1;
+    if (job.status === 'failed') clientStats.failedJobs += 1;
+    if (job.status === 'pending') clientStats.pendingJobs += 1;
+    if (job.status === 'processing') clientStats.processingJobs += 1;
+    if (isFirstPassApprovedJob(job)) clientStats.firstPassApprovedJobs += 1;
+    if (isRegeneratedCompletedJob(job)) clientStats.regeneratedCompletedJobs += 1;
+    clientStats.updatedAt = new Date();
+    clientMap.set(job.clientId, clientStats);
+
+    const clientModelKey = `${job.clientId}__${job.modelId}`;
+    const clientModelStats = clientModelMap.get(clientModelKey) || {
+      id: clientModelKey,
+      clientId: job.clientId,
+      clientNameSnapshot: job.clientNameSnapshot,
+      modelId: job.modelId,
+      modelNameSnapshot: job.modelNameSnapshot,
+      totalJobs: 0,
+      completedJobs: 0,
+      failedJobs: 0,
+      pendingJobs: 0,
+      processingJobs: 0,
+      firstPassApprovedJobs: 0,
+      regeneratedCompletedJobs: 0,
+      manualRegenerationCount: 0,
+      totalCompletedOutputs: 0,
+      totalCostUsd: 0,
+      totalDurationSeconds: 0,
+      updatedAt: new Date(),
+    };
+    clientModelStats.totalJobs += 1;
+    clientModelStats.manualRegenerationCount += job.manualRegenerationCount || 0;
+    if (job.status === 'completed') clientModelStats.completedJobs += 1;
+    if (job.status === 'failed') clientModelStats.failedJobs += 1;
+    if (job.status === 'pending') clientModelStats.pendingJobs += 1;
+    if (job.status === 'processing') clientModelStats.processingJobs += 1;
+    if (isFirstPassApprovedJob(job)) clientModelStats.firstPassApprovedJobs += 1;
+    if (isRegeneratedCompletedJob(job)) clientModelStats.regeneratedCompletedJobs += 1;
+    clientModelStats.updatedAt = new Date();
+    clientModelMap.set(clientModelKey, clientModelStats);
   });
 
   outputs.forEach((output) => {
@@ -205,11 +276,21 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       clientId: output.clientId,
       clientNameSnapshot: output.clientNameSnapshot,
       completed: 0,
+      totalJobs: 0,
+      completedJobs: 0,
+      failedJobs: 0,
+      pendingJobs: 0,
+      processingJobs: 0,
+      firstPassApprovedJobs: 0,
+      regeneratedCompletedJobs: 0,
+      manualRegenerationCount: 0,
       totalCostUsd: 0,
+      totalDurationSeconds: 0,
       updatedAt: new Date(),
     };
     clientStats.completed += 1;
     clientStats.totalCostUsd += output.costUsd || 0;
+    clientStats.totalDurationSeconds += output.durationSeconds || 0;
     clientStats.updatedAt = new Date();
     clientMap.set(output.clientId, clientStats);
 
@@ -227,6 +308,32 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     clientProviderStats.totalCostUsd += output.costUsd || 0;
     clientProviderStats.updatedAt = new Date();
     clientProviderMap.set(clientProviderKey, clientProviderStats);
+
+    const clientModelKey = `${output.clientId}__${output.modelId}`;
+    const clientModelStats = clientModelMap.get(clientModelKey) || {
+      id: clientModelKey,
+      clientId: output.clientId,
+      clientNameSnapshot: output.clientNameSnapshot,
+      modelId: output.modelId,
+      modelNameSnapshot: output.modelNameSnapshot,
+      totalJobs: 0,
+      completedJobs: 0,
+      failedJobs: 0,
+      pendingJobs: 0,
+      processingJobs: 0,
+      firstPassApprovedJobs: 0,
+      regeneratedCompletedJobs: 0,
+      manualRegenerationCount: 0,
+      totalCompletedOutputs: 0,
+      totalCostUsd: 0,
+      totalDurationSeconds: 0,
+      updatedAt: new Date(),
+    };
+    clientModelStats.totalCompletedOutputs += 1;
+    clientModelStats.totalCostUsd += output.costUsd || 0;
+    clientModelStats.totalDurationSeconds += output.durationSeconds || 0;
+    clientModelStats.updatedAt = new Date();
+    clientModelMap.set(clientModelKey, clientModelStats);
 
     const date = formatMexicoCityDate(output.createdAt);
     const daily = dailyMap.get(date) || {
@@ -247,6 +354,8 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     summary.completedJobs + summary.failedJobs > 0
       ? Math.round((summary.completedJobs / (summary.completedJobs + summary.failedJobs)) * 100)
       : 0;
+  summary.firstPassApprovalRatePct =
+    summary.completedJobs > 0 ? Math.round((summary.firstPassApprovedJobs / summary.completedJobs) * 100) : 0;
   summary.avgDurationSeconds =
     summary.totalCompletedOutputs > 0 ? Math.round(totalDuration / summary.totalCompletedOutputs) : null;
   summary.updatedAt = new Date();
@@ -271,6 +380,7 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     .map((client) => ({
       ...client,
       totalCostUsd: Number(client.totalCostUsd.toFixed(4)),
+      totalDurationSeconds: Math.round(client.totalDurationSeconds),
       updatedAt: new Date(),
     }));
 
@@ -279,6 +389,21 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     .map((entry) => ({
       ...entry,
       totalCostUsd: Number(entry.totalCostUsd.toFixed(4)),
+      updatedAt: new Date(),
+    }));
+
+  const clientModels = Array.from(clientModelMap.values())
+    .sort((left, right) => {
+      if (right.completedJobs !== left.completedJobs) {
+        return right.completedJobs - left.completedJobs;
+      }
+
+      return right.totalCostUsd - left.totalCostUsd;
+    })
+    .map((entry) => ({
+      ...entry,
+      totalCostUsd: Number(entry.totalCostUsd.toFixed(4)),
+      totalDurationSeconds: Math.round(entry.totalDurationSeconds),
       updatedAt: new Date(),
     }));
 
@@ -299,5 +424,6 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     providers,
     clients,
     clientProviders,
+    clientModels,
   };
 };

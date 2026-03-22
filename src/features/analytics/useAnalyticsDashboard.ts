@@ -2,7 +2,14 @@ import { useState, useEffect } from 'react';
 import { collection, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { AnalyticsData } from '../../../shared/src/types';
-import { mapSummary, mapDailyVolume, mapProviderStats, mapClientStats, mapClientProviderStats } from './mappers';
+import {
+  mapSummary,
+  mapDailyVolume,
+  mapProviderStats,
+  mapClientStats,
+  mapClientProviderStats,
+  mapClientModelStats,
+} from './mappers';
 
 export const useAnalyticsDashboard = (daysBack: number = 30) => {
   const [data, setData] = useState<AnalyticsData>({
@@ -11,6 +18,7 @@ export const useAnalyticsDashboard = (daysBack: number = 30) => {
     byProvider: [],
     topClients: [],
     costByClientProvider: [],
+    productivityByClientModel: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +29,7 @@ export const useAnalyticsDashboard = (daysBack: number = 30) => {
     let unsubscribeProviders: () => void;
     let unsubscribeClients: () => void;
     let unsubscribeClientProviders: () => void;
+    let unsubscribeClientModels: () => void;
 
     try {
       // 1. Summary
@@ -103,6 +112,19 @@ export const useAnalyticsDashboard = (daysBack: number = 30) => {
         setError("Error al cargar el desglose por cliente y modelo.");
       });
 
+      const clientModelsQuery = query(
+        collection(db, 'analytics_client_models'),
+        orderBy('completedJobs', 'desc'),
+        limit(25),
+      );
+      unsubscribeClientModels = onSnapshot(clientModelsQuery, (snapshot) => {
+        const rows = snapshot.docs.map((doc) => mapClientModelStats(doc.id, doc.data()));
+        setData(prev => ({ ...prev, productivityByClientModel: rows }));
+      }, (err) => {
+        console.error("Error fetching client/model productivity:", err);
+        setError("Error al cargar la productividad por cliente y modelo.");
+      });
+
       setLoading(false);
     } catch (err: any) {
       console.error("Error setting up analytics listeners:", err);
@@ -116,6 +138,7 @@ export const useAnalyticsDashboard = (daysBack: number = 30) => {
       if (unsubscribeProviders) unsubscribeProviders();
       if (unsubscribeClients) unsubscribeClients();
       if (unsubscribeClientProviders) unsubscribeClientProviders();
+      if (unsubscribeClientModels) unsubscribeClientModels();
     };
   }, [daysBack]);
 

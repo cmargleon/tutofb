@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
+  Bell,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -25,11 +26,11 @@ const formatActivityDate = (ts: any) => {
     minute: '2-digit',
   }).format(date);
 };
-import { AnalyticsSummary, Batch, HealthStatus, Job, ProviderHealthCheck, SystemHealthSnapshot } from '../../shared/src/types';
+import { AnalyticsSummary, Batch, HealthStatus, Job, ProviderHealthCheck, SystemAlert, SystemHealthSnapshot } from '../../shared/src/types';
 import { EmptyState, ImageThumb, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
 import { DashboardSnapshot, subscribeToAnalyticsSummary, subscribeToDashboardData } from '../features/dashboard/firebase';
-import { getSystemHealth } from '../features/system/firebase';
 import { useRole } from '../features/auth/AuthProvider';
+import { useSystemHealth } from '../features/system/useSystemHealth';
 
 const JOBS_PAGE_SIZE = 10;
 
@@ -70,12 +71,15 @@ export const Dashboard: React.FC = () => {
     recentJobs: [],
   });
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [systemHealth, setSystemHealth] = useState<SystemHealthSnapshot | null>(null);
-  const [systemHealthLoading, setSystemHealthLoading] = useState(false);
-  const [systemHealthError, setSystemHealthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jobsPage, setJobsPage] = useState(1);
+  const {
+    data: systemHealth,
+    loading: systemHealthLoading,
+    error: systemHealthError,
+    refresh: refreshSystemHealth,
+  } = useSystemHealth(role.canAccessAnalytics);
 
   useEffect(() => {
     const unsubscribeDashboard = subscribeToDashboardData(
@@ -102,49 +106,6 @@ export const Dashboard: React.FC = () => {
       unsubscribeSummary();
     };
   }, []);
-
-  useEffect(() => {
-    if (!role.canAccessAnalytics) {
-      setSystemHealth(null);
-      setSystemHealthError(null);
-      setSystemHealthLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadSystemHealth = async () => {
-      if (!cancelled) {
-        setSystemHealthLoading(true);
-      }
-
-      try {
-        const snapshot = await getSystemHealth();
-        if (!cancelled) {
-          setSystemHealth(snapshot);
-          setSystemHealthError(null);
-        }
-      } catch (loadError: any) {
-        if (!cancelled) {
-          setSystemHealthError(loadError?.message || 'No se pudo cargar el estado del sistema.');
-        }
-      } finally {
-        if (!cancelled) {
-          setSystemHealthLoading(false);
-        }
-      }
-    };
-
-    void loadSystemHealth();
-    const intervalId = window.setInterval(() => {
-      void loadSystemHealth();
-    }, 60_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [role.canAccessAnalytics]);
 
   const garmentCount = useMemo(
     () => new Set(data.recentJobs.map((job) => `${job.garmentFilePath}::${job.garmentName}`)).size,
@@ -205,18 +166,7 @@ export const Dashboard: React.FC = () => {
           data={systemHealth}
           loading={systemHealthLoading}
           error={systemHealthError}
-          onRefresh={async () => {
-            setSystemHealthLoading(true);
-            try {
-              const snapshot = await getSystemHealth();
-              setSystemHealth(snapshot);
-              setSystemHealthError(null);
-            } catch (loadError: any) {
-              setSystemHealthError(loadError?.message || 'No se pudo actualizar el estado del sistema.');
-            } finally {
-              setSystemHealthLoading(false);
-            }
-          }}
+          onRefresh={refreshSystemHealth}
         />
       ) : null}
 
@@ -426,6 +376,12 @@ const HEALTH_STYLES: Record<HealthStatus, { pill: string; panel: string; dot: st
   },
 };
 
+const ALERT_CARD_STYLES: Record<HealthStatus, string> = {
+  healthy: 'border-emerald-200 bg-emerald-50',
+  degraded: 'border-amber-200 bg-amber-50',
+  down: 'border-rose-200 bg-rose-50',
+};
+
 const formatHealthDate = (value: unknown) => {
   if (!value) return 'sin registro';
   const date = typeof (value as { toDate?: () => Date }).toDate === 'function'
@@ -442,6 +398,11 @@ const formatHealthDate = (value: unknown) => {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+};
+
+const formatUsd = (value: unknown) => {
+  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return amount.toFixed(2);
 };
 
 const ProviderStatusCard: React.FC<{ provider: ProviderHealthCheck }> = ({ provider }) => {
@@ -468,6 +429,27 @@ const ProviderStatusCard: React.FC<{ provider: ProviderHealthCheck }> = ({ provi
   );
 };
 
+const SystemAlertCard: React.FC<{ alert: SystemAlert }> = ({ alert }) => (
+  <div className={`rounded-2xl border p-4 ${ALERT_CARD_STYLES[alert.status]}`}>
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
+        <p className="mt-1 text-sm text-slate-600">{alert.description}</p>
+      </div>
+      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${HEALTH_STYLES[alert.status].pill}`}>
+        {HEALTH_STYLES[alert.status].label}
+      </span>
+    </div>
+    {(alert.metricLabel || alert.thresholdValue !== null) ? (
+      <div className="mt-3 text-xs text-slate-500">
+        {alert.metricLabel ? `${alert.metricLabel}: ${alert.currentValue ?? 'n/a'}` : null}
+        {alert.metricLabel && alert.thresholdValue !== null && alert.thresholdValue !== undefined ? ' · ' : null}
+        {alert.thresholdValue !== null && alert.thresholdValue !== undefined ? `Umbral: ${alert.thresholdValue}` : null}
+      </div>
+    ) : null}
+  </div>
+);
+
 const SystemHealthPanel: React.FC<{
   data: SystemHealthSnapshot | null;
   loading: boolean;
@@ -476,6 +458,8 @@ const SystemHealthPanel: React.FC<{
 }> = ({ data, loading, error, onRefresh }) => {
   const overallStatus = data?.overallStatus || 'degraded';
   const styles = HEALTH_STYLES[overallStatus];
+  const recentErrorRateThreshold = data?.settings?.recentErrorRateThreshold ?? 10;
+  const pendingJobsThreshold = data?.settings?.pendingJobsThreshold ?? 25;
 
   return (
     <section className={`rounded-2xl border p-6 shadow-sm ${styles.panel}`}>
@@ -523,51 +507,82 @@ const SystemHealthPanel: React.FC<{
       {loading && !data ? (
         <LoadingBlock />
       ) : data ? (
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
-          <div className="space-y-4">
+        <div className="mt-6 space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  <Bell className="h-4 w-4" />
+                  Alertas compartidas
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Umbrales vigentes para todo el equipo. Costo del día: <strong className="text-slate-900">${formatUsd(data.todayCostUsd)}</strong>
+                </p>
+              </div>
+              <div className="text-xs text-slate-500">
+                Error {recentErrorRateThreshold}% · Pendientes {pendingJobsThreshold}
+              </div>
+            </div>
+
+            {data.alerts.length > 0 ? (
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {data.alerts.map((alert) => (
+                  <SystemAlertCard key={alert.id} alert={alert} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                No hay alertas activas con los umbrales compartidos actuales.
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+            <div className="space-y-4">
             {data.providers.map((provider) => (
               <ProviderStatusCard key={provider.provider} provider={provider} />
             ))}
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Cola y errores</h3>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <QueueMetricCard label="Pendientes" value={data.queue.pendingJobs} tone="bg-sky-50 text-sky-700" />
-              <QueueMetricCard label="Procesando" value={data.queue.processingJobs} tone="bg-indigo-50 text-indigo-700" />
-              <QueueMetricCard
-                label="Atascados"
-                value={data.queue.staleProcessingJobs}
-                tone={data.queue.staleProcessingJobs > 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}
-              />
-              <QueueMetricCard
-                label={`Error ${data.queue.windowHours}h`}
-                value={`${data.queue.recentErrorRate}%`}
-                tone={data.queue.recentErrorRate >= 10 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}
-              />
             </div>
 
-            <div className="mt-5 space-y-3 text-sm text-slate-600">
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  Completados recientes
-                </span>
-                <strong className="text-slate-900">{data.queue.recentCompletedJobs}</strong>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Cola y errores</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <QueueMetricCard label="Pendientes" value={data.queue.pendingJobs} tone="bg-sky-50 text-sky-700" />
+                <QueueMetricCard label="Procesando" value={data.queue.processingJobs} tone="bg-indigo-50 text-indigo-700" />
+                <QueueMetricCard
+                  label="Atascados"
+                  value={data.queue.staleProcessingJobs}
+                  tone={data.queue.staleProcessingJobs > 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}
+                />
+                <QueueMetricCard
+                  label={`Error ${data.queue.windowHours}h`}
+                  value={`${data.queue.recentErrorRate}%`}
+                  tone={data.queue.recentErrorRate >= recentErrorRateThreshold ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}
+                />
               </div>
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-rose-600" />
-                  Fallidos recientes
-                </span>
-                <strong className="text-slate-900">{data.queue.recentFailedJobs}</strong>
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="flex items-center gap-2">
-                  <Clock3 className="h-4 w-4 text-slate-500" />
-                  Trabajos evaluados en el período
-                </span>
-                <strong className="text-slate-900">{data.queue.recentTerminalJobs}</strong>
+
+              <div className="mt-5 space-y-3 text-sm text-slate-600">
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                  <span className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    Completados recientes
+                  </span>
+                  <strong className="text-slate-900">{data.queue.recentCompletedJobs}</strong>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                  <span className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-600" />
+                    Fallidos recientes
+                  </span>
+                  <strong className="text-slate-900">{data.queue.recentFailedJobs}</strong>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+                  <span className="flex items-center gap-2">
+                    <Clock3 className="h-4 w-4 text-slate-500" />
+                    Trabajos evaluados en el período
+                  </span>
+                  <strong className="text-slate-900">{data.queue.recentTerminalJobs}</strong>
+                </div>
               </div>
             </div>
           </div>

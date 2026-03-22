@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { ProviderHealthCheck, QueueHealthSnapshot } from '../shared/src/types';
+import { normalizeSystemHealthSnapshot } from '../src/features/system/normalize';
 
 const require = createRequire(import.meta.url);
 const { computeOverallHealth } = require('../functions/lib/functions/src/admin/systemHealth.helpers.js') as {
@@ -49,4 +50,25 @@ test('computeOverallHealth marca el sistema como down cuando una API cae o la ta
   );
 
   assert.equal(result.overallStatus, 'down');
+});
+
+test('normalizeSystemHealthSnapshot rellena bloques faltantes en payloads parciales', () => {
+  const snapshot = normalizeSystemHealthSnapshot({
+    overallStatus: 'healthy',
+    summary: 'Todo en orden.',
+    queue: {
+      pendingJobs: 4,
+    },
+  });
+
+  assert.equal(snapshot.overallStatus, 'healthy');
+  assert.equal(snapshot.summary, 'Todo en orden.');
+  assert.deepEqual(snapshot.providers, []);
+  assert.deepEqual(snapshot.alerts, []);
+  assert.equal(snapshot.queue.pendingJobs, 4);
+  assert.equal(snapshot.queue.processingJobs, 0);
+  assert.equal(snapshot.queue.windowHours, 24);
+  assert.equal(snapshot.settings.recentErrorRateThreshold, 10);
+  assert.equal(snapshot.settings.pendingJobsThreshold, 25);
+  assert.equal(snapshot.todayCostUsd, 0);
 });

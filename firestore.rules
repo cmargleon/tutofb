@@ -117,6 +117,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /analytics_client_models/{docId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
+
+    match /system_alert_settings/{docId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
+
     match /model_generation_logs/{logId} {
       allow read: if canReadAnalytics();
       allow write: if false;

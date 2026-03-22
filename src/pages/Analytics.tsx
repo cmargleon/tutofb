@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area, PieChart, Pie, Cell
@@ -11,21 +11,37 @@ import { useExperimentAnalytics } from '../features/analytics/useExperimentAnaly
 import { useModelGenerationLogs } from '../features/analytics/useModelGenerationLogs';
 import { PageHeader, LoadingBlock, EmptyState } from '../components/ui';
 import { PROVIDER_COSTS } from '../../shared/src/constants/providerCosts';
+import { useSystemHealth } from '../features/system/useSystemHealth';
+import { updateSystemAlertSettings as saveSystemAlertSettings } from '../features/system/firebase';
+import { useRole } from '../features/auth/AuthProvider';
+import { useToast } from '../features/feedback/FeedbackProvider';
 
 const COLORS = ['#10B981', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6'];
 
+const formatUsd = (value: unknown, digits: number = 2) => {
+  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return amount.toFixed(digits);
+};
+
 export const Analytics: React.FC = () => {
   const [daysBack, setDaysBack] = useState(30);
-  const [costAlertThreshold, setCostAlertThreshold] = useState<number | null>(() => {
-    const stored = localStorage.getItem('dailyCostAlertThreshold');
-    return stored ? parseFloat(stored) : null;
-  });
-  const [alertInputValue, setAlertInputValue] = useState(() => {
-    return localStorage.getItem('dailyCostAlertThreshold') || '';
-  });
   const [showAlertSettings, setShowAlertSettings] = useState(false);
+  const [alertForm, setAlertForm] = useState({
+    dailyCostUsdThreshold: '',
+    recentErrorRateThreshold: '10',
+    pendingJobsThreshold: '25',
+    staleProcessingJobsThreshold: '1',
+  });
+  const role = useRole();
+  const toast = useToast();
 
   const { data, loading, error } = useAnalyticsDashboard(daysBack);
+  const {
+    data: systemHealth,
+    loading: systemHealthLoading,
+    error: systemHealthError,
+    refresh: refreshSystemHealth,
+  } = useSystemHealth(role.canAccessAnalytics);
   const { stats: modelGenStats } = useModelGenerationLogs();
   const {
     batches: experimentBatches,
@@ -35,6 +51,19 @@ export const Analytics: React.FC = () => {
     loading: experimentLoading,
     error: experimentError,
   } = useExperimentAnalytics();
+
+  useEffect(() => {
+    if (!systemHealth?.settings) {
+      return;
+    }
+
+    setAlertForm({
+      dailyCostUsdThreshold: systemHealth.settings.dailyCostUsdThreshold?.toString() || '',
+      recentErrorRateThreshold: String(systemHealth.settings.recentErrorRateThreshold),
+      pendingJobsThreshold: String(systemHealth.settings.pendingJobsThreshold),
+      staleProcessingJobsThreshold: String(systemHealth.settings.staleProcessingJobsThreshold),
+    });
+  }, [systemHealth?.settings]);
 
   if (loading) {
     return (
@@ -63,7 +92,7 @@ export const Analytics: React.FC = () => {
     );
   }
 
-  const { summary, dailyVolume, byProvider, topClients, costByClientProvider } = data;
+  const { summary, dailyVolume, byProvider, topClients, costByClientProvider, productivityByClientModel } = data;
 
   if (!summary) {
     return (
@@ -86,19 +115,32 @@ export const Analytics: React.FC = () => {
     { name: 'Fallidos', value: summary.failedJobs },
   ];
 
-  const todayCostUsd = data.dailyVolume.length > 0 ? data.dailyVolume[data.dailyVolume.length - 1].costUsd : 0;
-  const costAlertTriggered = costAlertThreshold !== null && todayCostUsd >= costAlertThreshold;
+  const todayCostUsd = systemHealth?.todayCostUsd ?? (data.dailyVolume.length > 0 ? data.dailyVolume[data.dailyVolume.length - 1].costUsd : 0);
+  const costAlertTriggered = Boolean(systemHealth?.alerts.some((alert) => alert.id === 'daily_cost'));
+  const sharedDailyCostThreshold = systemHealth?.settings?.dailyCostUsdThreshold ?? null;
 
-  const handleSaveAlertThreshold = () => {
-    const val = parseFloat(alertInputValue);
-    if (!isNaN(val) && val > 0) {
-      setCostAlertThreshold(val);
-      localStorage.setItem('dailyCostAlertThreshold', String(val));
-    } else {
-      setCostAlertThreshold(null);
-      localStorage.removeItem('dailyCostAlertThreshold');
+  const handleSaveAlertThreshold = async () => {
+    try {
+      await saveSystemAlertSettings({
+        dailyCostUsdThreshold: alertForm.dailyCostUsdThreshold.trim() ? parseFloat(alertForm.dailyCostUsdThreshold) : null,
+        recentErrorRateThreshold: parseFloat(alertForm.recentErrorRateThreshold),
+        pendingJobsThreshold: parseInt(alertForm.pendingJobsThreshold, 10),
+        staleProcessingJobsThreshold: parseInt(alertForm.staleProcessingJobsThreshold, 10),
+      });
+      await refreshSystemHealth();
+      toast({
+        tone: 'success',
+        title: 'Alertas actualizadas',
+        description: 'Los umbrales compartidos ya quedaron guardados para todo el equipo.',
+      });
+      setShowAlertSettings(false);
+    } catch (saveError: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos guardar las alertas',
+        description: saveError?.message || 'Revisa los valores e inténtalo nuevamente.',
+      });
     }
-    setShowAlertSettings(false);
   };
 
   return (
@@ -124,14 +166,14 @@ export const Analytics: React.FC = () => {
           ))}
           <button
             onClick={() => setShowAlertSettings((s) => !s)}
-            title={costAlertThreshold !== null ? `Alerta: $${costAlertThreshold}/día` : 'Configurar alerta de costo'}
+            title={sharedDailyCostThreshold !== null ? `Alerta compartida: $${sharedDailyCostThreshold}/día` : 'Configurar alertas compartidas'}
             className={`rounded-xl border px-3 py-1.5 text-sm font-medium transition ${
-              costAlertThreshold !== null
+              sharedDailyCostThreshold !== null
                 ? 'border-amber-300 bg-amber-50 text-amber-700'
                 : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
-            {costAlertThreshold !== null ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            {sharedDailyCostThreshold !== null ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
           </button>
         </div>
       </div>
@@ -139,51 +181,118 @@ export const Analytics: React.FC = () => {
       {/* Alert settings panel */}
       {showAlertSettings && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="mb-3 text-sm font-medium text-amber-900">Alerta de gasto diario</p>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-500">$</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={alertInputValue}
-                onChange={(e) => setAlertInputValue(e.target.value)}
-                placeholder="Ej. 10.00"
-                className="w-36 rounded-xl border border-gray-300 py-2 pl-7 pr-3 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200"
-              />
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm font-medium text-amber-900">Alertas compartidas del sistema</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Estos umbrales se aplican para todo el equipo. {role.canManageUsers ? 'Solo admin puede cambiarlos.' : 'Estás viendo la configuración activa.'}
+              </p>
             </div>
-            <button
-              onClick={handleSaveAlertThreshold}
-              className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
-            >
-              Guardar
-            </button>
-            {costAlertThreshold !== null && (
+            {systemHealthLoading ? <span className="text-xs text-amber-700">Actualizando...</span> : null}
+          </div>
+
+          {systemHealthError ? (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {systemHealthError}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <AlertInput
+              label="Costo diario USD"
+              prefix="$"
+              value={alertForm.dailyCostUsdThreshold}
+              onChange={(value) => setAlertForm((current) => ({ ...current, dailyCostUsdThreshold: value }))}
+              disabled={!role.canManageUsers}
+            />
+            <AlertInput
+              label="Error reciente %"
+              value={alertForm.recentErrorRateThreshold}
+              onChange={(value) => setAlertForm((current) => ({ ...current, recentErrorRateThreshold: value }))}
+              disabled={!role.canManageUsers}
+            />
+            <AlertInput
+              label="Pendientes"
+              value={alertForm.pendingJobsThreshold}
+              onChange={(value) => setAlertForm((current) => ({ ...current, pendingJobsThreshold: value }))}
+              disabled={!role.canManageUsers}
+            />
+            <AlertInput
+              label="Atascados"
+              value={alertForm.staleProcessingJobsThreshold}
+              onChange={(value) => setAlertForm((current) => ({ ...current, staleProcessingJobsThreshold: value }))}
+              disabled={!role.canManageUsers}
+            />
+          </div>
+
+          {role.canManageUsers ? (
+            <div className="mt-4 flex items-center gap-3">
               <button
-                onClick={() => { setCostAlertThreshold(null); localStorage.removeItem('dailyCostAlertThreshold'); setAlertInputValue(''); setShowAlertSettings(false); }}
+                onClick={() => void handleSaveAlertThreshold()}
+                className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+              >
+                Guardar
+              </button>
+              <button
+                onClick={() => {
+                  if (!systemHealth?.settings) return;
+                  setAlertForm({
+                    dailyCostUsdThreshold: systemHealth.settings.dailyCostUsdThreshold?.toString() || '',
+                    recentErrorRateThreshold: String(systemHealth.settings.recentErrorRateThreshold),
+                    pendingJobsThreshold: String(systemHealth.settings.pendingJobsThreshold),
+                    staleProcessingJobsThreshold: String(systemHealth.settings.staleProcessingJobsThreshold),
+                  });
+                  setShowAlertSettings(false);
+                }}
                 className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
               >
-                Desactivar
+                Cancelar
               </button>
-            )}
-            <p className="text-xs text-amber-700">Se mostrará un aviso cuando el gasto del día supere este umbral.</p>
-          </div>
+            </div>
+          ) : null}
         </div>
       )}
 
       {/* Cost alert banner */}
-      {costAlertTriggered && (
+      {costAlertTriggered && systemHealth && (
         <div className="flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 p-4">
           <Bell className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
           <div>
-            <p className="text-sm font-semibold text-rose-800">Alerta de gasto diario</p>
+            <p className="text-sm font-semibold text-rose-800">Alerta compartida de gasto diario</p>
             <p className="mt-1 text-sm text-rose-700">
-              El gasto de hoy es <strong>${todayCostUsd.toFixed(2)}</strong>, superando el umbral configurado de <strong>${costAlertThreshold!.toFixed(2)}</strong>.
+              El gasto de hoy es <strong>${formatUsd(todayCostUsd)}</strong>, superando el umbral compartido de <strong>${formatUsd(sharedDailyCostThreshold)}</strong>.
             </p>
           </div>
         </div>
       )}
+
+      {systemHealth?.alerts.length ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Alertas activas</h3>
+              <p className="mt-1 text-sm text-slate-600">Estado operativo compartido con los mismos umbrales para todo el equipo.</p>
+            </div>
+            <div className="text-xs text-slate-500">Última lectura: {systemHealth.checkedAt && new Date(systemHealth.checkedAt as any).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {systemHealth.alerts.map((alert) => (
+              <div
+                key={alert.id}
+                className={`rounded-xl border px-4 py-3 ${alert.status === 'down' ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">{alert.title}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${alert.status === 'down' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {alert.status === 'down' ? 'Crítico' : 'Degradado'}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">{alert.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Warning Banner */}
       {summary.failedJobs > 0 && (
@@ -200,7 +309,7 @@ export const Analytics: React.FC = () => {
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
         <StatCard 
           title="Total trabajos" 
           value={summary.totalJobs.toLocaleString()} 
@@ -224,21 +333,28 @@ export const Analytics: React.FC = () => {
         />
         <StatCard 
           title="Duración media" 
-          value={`${summary.avgDurationSeconds}s`} 
+          value={`${summary.avgDurationSeconds ?? 0}s`} 
           icon={Clock} 
           color="text-purple-600" 
           bg="bg-purple-50" 
         />
         <StatCard 
           title="Costo total" 
-          value={`$${summary.totalCostUsd.toFixed(2)}`} 
+          value={`$${formatUsd(summary.totalCostUsd)}`} 
           icon={DollarSign} 
           color="text-rose-600" 
           bg="bg-rose-50" 
         />
         <StatCard 
+          title="1ra pasada" 
+          value={`${summary.firstPassApprovalRatePct}%`} 
+          icon={CheckCircle2} 
+          color="text-emerald-700" 
+          bg="bg-emerald-50" 
+        />
+        <StatCard 
           title="Proyección mensual" 
-          value={`$${summary.projectedMonthlyCostUsd.toFixed(2)}`} 
+          value={`$${formatUsd(summary.projectedMonthlyCostUsd)}`} 
           icon={TrendingUp} 
           color="text-amber-600" 
           bg="bg-amber-50" 
@@ -514,6 +630,79 @@ export const Analytics: React.FC = () => {
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Productividad por cliente y modelo</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Aprobación implícita actual = trabajos completados que quedaron como resultado final. Primera pasada = completados sin regeneración manual.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-xs text-gray-500">Aprobadas 1ra pasada</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{summary.firstPassApprovedJobs.toLocaleString()}</p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-xs text-gray-500">Tasa 1ra pasada</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{summary.firstPassApprovalRatePct}%</p>
+            </div>
+          </div>
+        </div>
+
+        {productivityByClientModel.length > 0 ? (
+          <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">Cliente / modelo</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">Aprobadas</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">1ra pasada</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">Tasa 1ra</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">Regeneradas</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">Costo/aprobada</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">Duración media</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {productivityByClientModel.map((entry) => {
+                  const firstPassRate = entry.completedJobs > 0
+                    ? Math.round((entry.firstPassApprovedJobs / entry.completedJobs) * 100)
+                    : 0;
+                  const avgCostPerApproved = entry.completedJobs > 0 ? entry.totalCostUsd / entry.completedJobs : 0;
+                  const avgDurationSeconds = entry.totalCompletedOutputs > 0
+                    ? entry.totalDurationSeconds / entry.totalCompletedOutputs
+                    : 0;
+
+                  return (
+                    <tr key={entry.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{entry.clientNameSnapshot}</div>
+                        <div className="text-xs text-gray-500">{entry.modelNameSnapshot}</div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-900">{entry.completedJobs.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{entry.firstPassApprovedJobs.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${firstPassRate >= 80 ? 'bg-emerald-100 text-emerald-700' : firstPassRate >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {firstPassRate}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-700">{entry.regeneratedCompletedJobs.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">${avgCostPerApproved.toFixed(3)}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{avgDurationSeconds.toFixed(1)}s</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-6 rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-400">
+            Todavía no hay suficiente historial para calcular productividad por cliente y modelo.
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Experimentos A/B</h3>
@@ -703,6 +892,42 @@ export const Analytics: React.FC = () => {
     </div>
   );
 };
+
+function AlertInput({
+  label,
+  value,
+  onChange,
+  disabled,
+  prefix,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  prefix?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <div className="relative">
+        {prefix ? (
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-500">
+            {prefix}
+          </span>
+        ) : null}
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          className={`w-full rounded-xl border border-gray-300 py-2 pr-3 text-sm focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200 ${prefix ? 'pl-7' : 'pl-3'} ${disabled ? 'bg-gray-100 text-gray-500' : 'bg-white text-gray-800'}`}
+        />
+      </div>
+    </label>
+  );
+}
 
 function StatCard({ title, value, icon: Icon, color, bg }: { title: string, value: string | number, icon: any, color: string, bg: string }) {
   return (

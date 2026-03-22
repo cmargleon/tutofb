@@ -7,6 +7,8 @@ import {
 } from '../../../shared/src/types';
 
 export type SourceType = GarmentSourceType;
+export type GenerateWizardStepId = 1 | 2 | 3;
+export type GenerateSubmitStage = 'idle' | 'uploading' | 'creating-batch';
 
 export type GarmentUploadStatus = 'idle' | 'queued' | 'uploading' | 'retrying' | 'uploaded' | 'failed';
 
@@ -46,8 +48,18 @@ export interface WizardExperimentState {
   providers: Provider[];
 }
 
+export interface UploadSummary {
+  total: number;
+  uploaded: number;
+  failed: number;
+  queued: number;
+  inFlight: number;
+  idle: number;
+  started: number;
+}
+
 export interface WizardState {
-  step: number;
+  step: GenerateWizardStepId;
   selectedClientId: string | null;
   selectedModelId: string | null;
   selectedPoseIds: string[];

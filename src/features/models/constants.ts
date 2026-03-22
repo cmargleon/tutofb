@@ -130,6 +130,8 @@ export const AI_WIZARD_STEPS = [
   { id: 3, name: 'Poses' },
 ];
 
+export const AI_WIZARD_MAX_STEP = AI_WIZARD_STEPS[AI_WIZARD_STEPS.length - 1]?.id ?? 3;
+
 export const SEX_OPTIONS = [
   { value: 'female', label: 'Femenino' },
   { value: 'male', label: 'Masculino' },

@@ -1,13 +1,9 @@
 import React from 'react';
 import { Check } from 'lucide-react';
-
-interface Step {
-  id: number;
-  name: string;
-}
+import { WizardStepDefinition } from '../features/wizard/types';
 
 interface WizardStepperProps {
-  steps: Step[];
+  steps: WizardStepDefinition[];
   currentStep: number;
   onStepSelect?: (stepId: number) => void;
   canSelectStep?: (stepId: number) => boolean;
@@ -19,9 +15,11 @@ export const WizardStepper: React.FC<WizardStepperProps> = ({
   onStepSelect,
   canSelectStep,
 }) => {
+  const gridTemplateColumns = `repeat(${steps.length}, minmax(0, 1fr))`;
+
   return (
     <nav aria-label="Progress" className="mb-8">
-      <ol role="list" className="grid grid-cols-3 items-start gap-0">
+      <ol role="list" className="grid items-start gap-0" style={{ gridTemplateColumns }}>
         {steps.map((step, stepIdx) => (
           <li key={step.name} className="relative">
             {stepIdx !== steps.length - 1 ? (

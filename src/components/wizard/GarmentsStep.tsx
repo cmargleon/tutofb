@@ -1,25 +1,8 @@
 import React from 'react';
 import { FolderUp, ImagePlus, UploadCloud, X } from 'lucide-react';
 import { EmptyState } from '../ui';
-import { GarmentUploadState, UploadedGarmentDraft } from '../../features/generate/types';
-
-const getUploadStatusCopy = (upload: GarmentUploadState): { label: string; tone: string; bar: string } => {
-  switch (upload.status) {
-    case 'queued':
-      return { label: 'En cola', tone: 'bg-slate-100 text-slate-600', bar: 'bg-slate-400' };
-    case 'uploading':
-      return { label: 'Subiendo', tone: 'bg-sky-100 text-sky-700', bar: 'bg-sky-500' };
-    case 'retrying':
-      return { label: `Reintento ${Math.max(upload.attempts, 1)}`, tone: 'bg-amber-100 text-amber-800', bar: 'bg-amber-500' };
-    case 'uploaded':
-      return { label: 'Lista', tone: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-500' };
-    case 'failed':
-      return { label: 'Falló', tone: 'bg-rose-100 text-rose-700', bar: 'bg-rose-500' };
-    case 'idle':
-    default:
-      return { label: 'Pendiente', tone: 'bg-slate-100 text-slate-600', bar: 'bg-slate-300' };
-  }
-};
+import { UploadedGarmentDraft } from '../../features/generate/types';
+import { GarmentUploadStatus } from './GarmentUploadStatus';
 
 interface Props {
   garments: UploadedGarmentDraft[];
@@ -105,23 +88,7 @@ export const GarmentsStep: React.FC<Props> = ({ garments, isSubmitting, onFiles,
                 {garment.files.length} archivo{garment.files.length === 1 ? '' : 's'} · {garment.sourceType}
               </p>
               {garment.upload.status !== 'idle' ? (
-                <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between gap-2 text-[11px]">
-                    <span className={`rounded-full px-2.5 py-1 font-medium ${getUploadStatusCopy(garment.upload).tone}`}>
-                      {getUploadStatusCopy(garment.upload).label}
-                    </span>
-                    <span className="font-medium text-slate-500">{Math.round(garment.upload.progress)}%</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className={`h-full rounded-full transition-all ${getUploadStatusCopy(garment.upload).bar}`}
-                      style={{ width: `${Math.max(garment.upload.progress, garment.upload.status === 'uploaded' ? 100 : 6)}%` }}
-                    />
-                  </div>
-                  {garment.upload.error ? (
-                    <p className="text-xs leading-relaxed text-rose-600">{garment.upload.error}</p>
-                  ) : null}
-                </div>
+                <GarmentUploadStatus upload={garment.upload} minimumProgress={6} />
               ) : null}
             </div>
           </div>

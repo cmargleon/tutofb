@@ -2,16 +2,26 @@ import { useCallback, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useConfirm, useToast } from '../../feedback/FeedbackProvider';
 import {
+  AI_WIZARD_MAX_STEP,
   AI_WIZARD_STEPS,
   DEFAULT_POSE_SELECTION_IDS,
   IDENTITY_CANDIDATE_COUNT,
   MODEL_POSE_GROUPS,
   MODEL_POSE_RECIPES,
 } from '../constants';
+import {
+  buildGeneratedPosePhotoState,
+  buildPendingPosePhotos,
+  buildReferencePosePhotoState,
+  getAcceptedPoseCount,
+  isAiWizardStepComplete,
+  toCandidatePhotoState,
+} from '../aiWizard';
 import { createModelFromPaths, generateModelPoses } from '../firebase';
 import { buildPosePrompt } from '../prompts';
 import { GeneratedPhotoState, PoseRecipe } from '../types';
 import { AiIdentityFormState, useAiIdentityForm } from './useAiIdentityForm';
+import { canSelectWizardStep } from '../../wizard/navigation';
 
 interface UseAiWizardParams {
   newModelName: string;
@@ -101,7 +111,7 @@ export const useAiWizard = ({
     regeneratingCandidateIndex !== null ||
     regeneratingPoseIndex !== null;
   const acceptedPoseCount = useMemo(
-    () => posePhotos.filter((photo) => !photo.rejected && !photo.loading).length,
+    () => getAcceptedPoseCount(posePhotos),
     [posePhotos],
   );
   const allPosesSelected = useMemo(
@@ -117,12 +127,19 @@ export const useAiWizard = ({
 
   const canSelectStep = useCallback(
     (stepId: number): boolean => {
-      if (stepId === 1) return true;
-      if (stepId === 2) return candidates.length > 0;
-      if (stepId === 3) return selectedCandidate !== null;
-      return false;
+      return canSelectWizardStep({
+        targetStep: stepId,
+        currentStep: wizardStep,
+        maxStep: AI_WIZARD_MAX_STEP,
+        isStepComplete: (candidateStepId) =>
+          isAiWizardStepComplete({
+            stepId: candidateStepId,
+            candidates,
+            selectedCandidate,
+          }),
+      });
     },
-    [candidates.length, selectedCandidate],
+    [candidates, selectedCandidate, wizardStep],
   );
 
   const resetFlow = useCallback(() => {
@@ -196,14 +213,7 @@ export const useAiWizard = ({
         stage: 'identity',
       });
 
-      setCandidates(
-        response.photos.map((photo) => ({
-          storagePath: photo.storagePath,
-          contentType: photo.contentType,
-          rejected: false,
-          source: 'candidate',
-        })),
-      );
+      setCandidates(response.photos.map(toCandidatePhotoState));
 
       if (response.errors.length > 0) {
         toast({
@@ -255,12 +265,7 @@ export const useAiWizard = ({
           setCandidates((prev) =>
             prev.map((photo, photoIndex) =>
               photoIndex === index
-                ? {
-                    storagePath: newPhoto.storagePath,
-                    contentType: newPhoto.contentType,
-                    rejected: false,
-                    source: 'candidate',
-                  }
+                ? toCandidatePhotoState(newPhoto)
                 : photo,
             ),
           );
@@ -300,17 +305,7 @@ export const useAiWizard = ({
     }
 
     setGeneratingPoses(true);
-    setPosePhotos(
-      selectedPoseRecipes.map((pose) => ({
-        storagePath: '',
-        contentType: '',
-        rejected: false,
-        label: pose.label,
-        source: 'pose' as const,
-        loading: true,
-        error: false,
-      })),
-    );
+    setPosePhotos(buildPendingPosePhotos(selectedPoseRecipes));
 
     try {
       await Promise.allSettled(
@@ -319,15 +314,7 @@ export const useAiWizard = ({
             setPosePhotos((prev) =>
               prev.map((photo, photoIndex) =>
                 photoIndex === index
-                  ? {
-                      storagePath: selectedCandidate.storagePath,
-                      contentType: selectedCandidate.contentType,
-                      rejected: false,
-                      label: pose.label,
-                      source: 'pose' as const,
-                      loading: false,
-                      error: false,
-                    }
+                  ? buildReferencePosePhotoState(selectedCandidate, pose)
                   : photo,
               ),
             );
@@ -350,15 +337,7 @@ export const useAiWizard = ({
             setPosePhotos((prev) =>
               prev.map((prevPhoto, photoIndex) =>
                 photoIndex === index
-                  ? {
-                      storagePath: photo?.storagePath ?? '',
-                      contentType: photo?.contentType ?? '',
-                      rejected: !photo,
-                      label: pose.label,
-                      source: 'pose' as const,
-                      loading: false,
-                      error: !photo,
-                    }
+                  ? buildGeneratedPosePhotoState(photo, pose)
                   : prevPhoto,
               ),
             );
@@ -411,13 +390,7 @@ export const useAiWizard = ({
           setPosePhotos((prev) =>
             prev.map((photo, photoIndex) =>
               photoIndex === index
-                ? {
-                    storagePath: newPhoto.storagePath,
-                    contentType: newPhoto.contentType,
-                    rejected: false,
-                    label: poseRecipe.label,
-                    source: 'pose',
-                  }
+                ? buildGeneratedPosePhotoState(newPhoto, poseRecipe)
                 : photo,
             ),
           );

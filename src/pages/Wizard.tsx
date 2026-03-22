@@ -2,16 +2,12 @@ import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { LoadingBlock, PageHeader } from '../components/ui';
 import { WizardStepper } from '../components/WizardStepper';
+import { WizardFooter } from '../components/wizard/WizardFooter';
 import { ClientModelStep } from '../components/wizard/ClientModelStep';
 import { GarmentsStep } from '../components/wizard/GarmentsStep';
 import { BatchStep } from '../components/wizard/BatchStep';
 import { useWizard } from '../features/generate/hooks/useWizard';
-
-const STEPS = [
-  { id: 1, name: 'Cliente y modelo' },
-  { id: 2, name: 'Prendas' },
-  { id: 3, name: 'Lote' },
-];
+import { GENERATE_WIZARD_MAX_STEP, GENERATE_WIZARD_STEPS } from '../features/generate/wizard/state';
 
 export const Wizard: React.FC = () => {
   const {
@@ -77,7 +73,7 @@ export const Wizard: React.FC = () => {
       <div className="rounded-[32px] border border-slate-200 bg-slate-50 p-6 shadow-sm">
         <div ref={stepperRef}>
           <WizardStepper
-            steps={STEPS}
+            steps={GENERATE_WIZARD_STEPS}
             currentStep={state.step}
             onStepSelect={handleStepSelect}
             canSelectStep={canSelectStep}
@@ -129,27 +125,14 @@ export const Wizard: React.FC = () => {
           />
         )}
 
-        <div className="mt-8 flex items-center justify-between">
-          <button
-            type="button"
-            disabled={state.step === 1 || isSubmitting}
-            onClick={() => goToStep(state.step - 1)}
-            className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Volver
-          </button>
-
-          {state.step < 3 && (
-            <button
-              type="button"
-              disabled={!canAdvance || isSubmitting}
-              onClick={() => goToStep(state.step + 1)}
-              className="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Continuar
-            </button>
-          )}
-        </div>
+        <WizardFooter
+          currentStep={state.step}
+          maxStep={GENERATE_WIZARD_MAX_STEP}
+          canAdvance={canAdvance}
+          isSubmitting={isSubmitting}
+          onBack={() => goToStep(state.step - 1)}
+          onNext={() => goToStep(state.step + 1)}
+        />
       </div>
     </div>
   );

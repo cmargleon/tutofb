@@ -525,8 +525,6 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
       },
     });
 
-    console.log('[jobWorker] finalPrompt enviado al proveedor:', claimedJob.finalPrompt);
-
     const providerResult = await generateWithProvider(
       claimedJob.provider as Provider,
       {

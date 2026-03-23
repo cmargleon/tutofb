@@ -55,23 +55,17 @@ export const subscribeToModels = (
 };
 
 export const createModel = async (clientId: string, name: string, files: File[]) => {
-  console.log('Starting createModel...', { clientId, name, filesCount: files.length });
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
-  
-  // Get client name
-  console.log('Fetching client info...');
+
   const clientRef = doc(db, 'clients', clientId);
   const clientSnap = await getDoc(clientRef);
   if (!clientSnap.exists()) throw new Error('Cliente no encontrado');
   const client = clientSnap.data() as Client;
   if (isArchivedCatalogEntity(client)) throw new Error('No puedes crear modelos para un cliente archivado.');
   const clientName = client.name;
-  console.log('Client info fetched:', clientName);
 
-  // Generate model ID
   const newModelRef = doc(collection(db, 'models'));
   const modelId = newModelRef.id;
-  console.log('Generated model ID:', modelId);
   const storageRootPath = getModelStorageRootPath(modelId, clientId);
 
   const poses: Pose[] = [];
@@ -81,7 +75,6 @@ export const createModel = async (clientId: string, name: string, files: File[])
     // Upload images
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      console.log(`Uploading file ${i + 1}/${files.length}: ${file.name}`);
       const poseId = uuidv4();
       const fileName = sanitizeFileName(file.name);
       const storagePath = `${storageRootPath}/poses/${poseId}-${fileName}`;
@@ -94,8 +87,6 @@ export const createModel = async (clientId: string, name: string, files: File[])
       );
       
       await Promise.race([uploadPromise, timeoutPromise]);
-      
-      console.log(`File ${i + 1} uploaded successfully.`);
       uploadedRefs.push(storageRef);
 
       poses.push({
@@ -106,7 +97,6 @@ export const createModel = async (clientId: string, name: string, files: File[])
       });
     }
 
-    console.log('All files uploaded. Saving model document to Firestore...');
     const modelData: Omit<Model, 'id'> = {
       clientId,
       clientNameSnapshot: clientName,
@@ -127,7 +117,6 @@ export const createModel = async (clientId: string, name: string, files: File[])
     };
 
     await setDoc(newModelRef, modelData);
-    console.log('Model document saved successfully.');
     return modelId;
   } catch (error) {
     console.error('Error in createModel:', error);

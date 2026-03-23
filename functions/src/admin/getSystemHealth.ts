@@ -10,6 +10,7 @@ import {
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { HealthStatus, Job, ProviderHealthCheck, QueueHealthSnapshot, SystemHealthSnapshot } from '../../../shared/src/types';
+import { toMillis } from '../../../shared/src/utils/dateUtils';
 import { computeOverallHealth } from './systemHealth.helpers';
 import { buildSystemAlerts, getSystemAlertSettings } from './systemAlerts';
 
@@ -17,23 +18,6 @@ const SYSTEM_WINDOW_HOURS = 24;
 const REQUEST_TIMEOUT_MS = 8000;
 const FAL_HEALTHCHECK_URL = 'https://queue.fal.run/fal-ai/nano-banana-pro/requests/health/status';
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
-
-const toMillis = (value: unknown): number | null => {
-  if (!value) {
-    return null;
-  }
-
-  if (value instanceof Timestamp) {
-    return value.toMillis();
-  }
-
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return value.toMillis();
-  }
-
-  const parsed = new Date(value as string);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
-};
 
 const fetchWithTimeout = async (
   input: string,

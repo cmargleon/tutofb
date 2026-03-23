@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { buildFinalGenerationPrompt } from '../../../shared/src/domain';
 import { Job, JobAutoReview, JobLog, JobOutput, Provider } from '../../../shared/src/types';
+import { toMillis } from '../../../shared/src/utils/dateUtils';
 import { generateWithProvider } from '../providers';
 import {
   FAL_KEY,
@@ -18,23 +19,6 @@ import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 
 const db = getAppFirestore();
 const bucket = admin.storage().bucket();
-
-const toMillis = (value: unknown): number | null => {
-  if (!value) {
-    return null;
-  }
-
-  if (value instanceof Timestamp) {
-    return value.toMillis();
-  }
-
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return value.toMillis();
-  }
-
-  const date = new Date(value as string);
-  return Number.isNaN(date.getTime()) ? null : date.getTime();
-};
 
 const getSignedUrl = async (storagePath: string): Promise<string> => {
   const file = bucket.file(storagePath);

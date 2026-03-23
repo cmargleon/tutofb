@@ -16,17 +16,8 @@ import {
   History,
 } from 'lucide-react';
 
-const formatActivityDate = (ts: any) => {
-  if (!ts) return '';
-  const date = typeof ts.toDate === 'function' ? ts.toDate() : new Date(ts);
-  return new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-};
 import { AnalyticsSummary, HealthStatus, ProviderHealthCheck, SystemAlert, SystemHealthSnapshot } from '../../shared/src/types';
+import { formatDateTime as formatActivityDate } from '../../shared/src/utils/dateUtils';
 import { EmptyState, ImageThumb, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
 import { DashboardSnapshot, subscribeToAnalyticsSummary, subscribeToDashboardData } from '../features/dashboard/firebase';
 import { useRole } from '../features/auth/AuthProvider';

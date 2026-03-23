@@ -1,5 +1,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ArchiveSearchRequest, ArchiveSearchResponse, Batch, Job } from '../../../shared/src/types';
+import { toMillis } from '../../../shared/src/utils/dateUtils';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 
@@ -18,23 +19,6 @@ const asTrimmedString = (value: unknown): string =>
 const asOptionalTrimmedString = (value: unknown): string | null => {
   const trimmed = asTrimmedString(value);
   return trimmed ? trimmed : null;
-};
-
-const toMillis = (value: unknown): number => {
-  if (!value) {
-    return 0;
-  }
-
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return value.toMillis();
-  }
-
-  if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-    return value.toDate().getTime();
-  }
-
-  const parsed = new Date(value as string | number | Date);
-  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
 };
 
 const matchesText = (value: string | undefined, queryText: string) =>
@@ -143,7 +127,7 @@ export const searchArchive = onCall<ArchiveSearchRequest, Promise<ArchiveSearchR
       ).sort((left, right) => left.localeCompare(right)),
       latestMatchedAt: matchedJobs.reduce<unknown>((latest, job) => {
         const current = job.updatedAt || job.createdAt;
-        return toMillis(current) > toMillis(latest) ? current : latest;
+        return (toMillis(current) ?? 0) > (toMillis(latest) ?? 0) ? current : latest;
       }, batch.updatedAt || batch.createdAt) as Batch['updatedAt'],
     });
 

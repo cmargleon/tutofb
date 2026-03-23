@@ -10,30 +10,7 @@ import {
 } from '../../features/evaluation/useJobTraceability';
 import { LoadingBlock, StatusBadge } from '../ui';
 
-const toMillis = (value: unknown): number | null => {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return value.toMillis();
-  }
-
-  const date = new Date(value as string);
-  return Number.isNaN(date.getTime()) ? null : date.getTime();
-};
-
-const formatDateTime = (value: unknown): string => {
-  const millis = toMillis(value);
-  if (millis === null) {
-    return 'Sin dato';
-  }
-
-  return new Intl.DateTimeFormat('es-MX', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(millis);
-};
+import { formatDateTimeFull as formatDateTime, toMillis } from '../../../shared/src/utils/dateUtils';
 
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat('es-MX', {

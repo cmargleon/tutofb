@@ -31,32 +31,7 @@ const normalize = (value: string) =>
 
 const includesNormalized = (value: string, queryText: string) => normalize(value).includes(queryText);
 
-const getDate = (value: unknown): Date | null => {
-  if (!value) return null;
-
-  if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-    return value.toDate();
-  }
-
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return new Date(value.toMillis());
-  }
-
-  const parsed = new Date(value as string | number | Date);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const formatRelativeDate = (value: unknown) => {
-  const date = getDate(value);
-  if (!date) return 'sin fecha';
-
-  return new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-};
+import { formatDateTime as formatRelativeDate, toDate as getDate } from '../../../shared/src/utils/dateUtils';
 
 const getBatchStatusLabel = (status: Batch['status']) => {
   switch (status) {

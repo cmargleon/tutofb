@@ -16,37 +16,7 @@ import { usePersistedJobOutputSelections } from '../features/evaluation/usePersi
 
 const SEARCH_PAGE_SIZE = 40;
 
-const toDate = (value: unknown): Date | null => {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-    return value.toDate();
-  }
-
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return new Date(value.toMillis());
-  }
-
-  const parsed = new Date(value as string | number | Date);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const formatDateTime = (value: unknown) => {
-  const date = toDate(value);
-  if (!date) {
-    return 'sin fecha';
-  }
-
-  return new Intl.DateTimeFormat('es-MX', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-};
+import { formatDateTimeLong as formatDateTime } from '../../shared/src/utils/dateUtils';
 
 const isTypingTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement

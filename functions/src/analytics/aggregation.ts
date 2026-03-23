@@ -1,4 +1,3 @@
-import { Timestamp } from 'firebase-admin/firestore';
 import {
   AnalyticsClientStats,
   AnalyticsClientModelStats,
@@ -11,6 +10,7 @@ import {
   Provider,
 } from '../../../shared/src/types';
 import { PROVIDER_COSTS } from '../../../shared/src/constants/providerCosts';
+import { formatMexicoCityDate } from '../../../shared/src/utils/dateUtils';
 
 export interface AnalyticsRebuildData {
   summary: AnalyticsSummary;
@@ -26,28 +26,6 @@ export interface JobStateDelta {
   providerFailed: Partial<Record<Provider, number>>;
   dailyFailed: Array<{ date: string; delta: number }>;
 }
-
-const toDate = (value: unknown): Date | null => {
-  if (!value) {
-    return null;
-  }
-
-  if (value instanceof Timestamp) {
-    return value.toDate();
-  }
-
-  if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-    return value.toDate();
-  }
-
-  const parsed = new Date(value as string);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-export const formatMexicoCityDate = (value: unknown): string => {
-  const date = toDate(value) || new Date();
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(date);
-};
 
 const emptyStateSummary = (): AnalyticsSummary => ({
   totalJobs: 0,

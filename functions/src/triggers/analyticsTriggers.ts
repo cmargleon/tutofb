@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { onDocumentCreated, onDocumentDeleted, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { Job, JobOutput } from '../../../shared/src/types';
+import { formatMexicoCityDate } from '../../../shared/src/utils/dateUtils';
 import { getJobStateDelta } from '../analytics/aggregation';
 import { getAppFirestore } from '../firebase/appFirestore';
 
@@ -247,7 +248,7 @@ export const onJobOutputAnalyticsCreate = onDocumentCreated('jobs/{jobId}/output
 
   const output = snapshot.data() as JobOutput;
   const batch = db.batch();
-  const date = output.createdAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(output.createdAt.toDate()) : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+  const date = formatMexicoCityDate(output.createdAt);
   const durationSeconds = output.durationSeconds || 0;
 
   batch.set(
@@ -332,7 +333,7 @@ export const onJobOutputAnalyticsDelete = onDocumentDeleted('jobs/{jobId}/output
 
   const output = snapshot.data() as JobOutput;
   const batch = db.batch();
-  const date = output.createdAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(output.createdAt.toDate()) : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+  const date = formatMexicoCityDate(output.createdAt);
   const durationSeconds = output.durationSeconds || 0;
 
   batch.set(

@@ -1,24 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Batch, Job, JobAutoReview, JobAutoReviewMarketplaceData, JobOutput, Provider } from '../../../shared/src/types';
-import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../../shared/src/domain';
+import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
+import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { StatusBadge } from '../ui';
-import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Download,
-  ImageIcon,
-  RefreshCw,
-  Sparkles,
-  XCircle,
-} from 'lucide-react';
+import { AlertCircle, Download, ImageIcon, RefreshCw } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
 import { useToast } from '../../features/feedback/FeedbackProvider';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
+import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils';
 import { HoverZoomImage } from './HoverZoomImage';
+import { AttemptThumbnail } from './AttemptThumbnail';
+import { AutoReviewPanel } from './AutoReviewPanel';
+import { JobControls } from './JobControls';
 
 interface Props {
   batch: Batch;
@@ -37,48 +31,10 @@ interface Props {
   onSelectOutput?: (outputId: string | null, output: JobOutput | null) => void;
 }
 
-const INPUT_BASE =
-  'w-full rounded-xl border px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed';
 const HISTORY_LIMIT = 18;
-
-const toMillis = (value: unknown): number => {
-  if (!value) return 0;
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return value.toMillis();
-  }
-
-  const date = new Date(value as string);
-  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-};
-
-const reviewTone = (review: JobAutoReview | null, userApproved: boolean): string => {
-  if (userApproved) return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (!review) return 'border-slate-200 bg-slate-50 text-slate-600';
-  return review.verdict === 'approved'
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : 'border-amber-200 bg-amber-50 text-amber-700';
-};
-
-const reviewTitle = (review: JobAutoReview | null, userApproved: boolean): string => {
-  if (userApproved) return 'Aprobada por usuario';
-  if (!review) return 'Sin revisión automática registrada';
-  return review.verdict === 'approved' ? 'Aprobada por Gemini' : 'Gemini pidió otro intento';
-};
 
 const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string =>
   output.generationAttempt ? `Intento ${output.generationAttempt}` : `Salida ${fallbackIndex + 1}`;
-
-const marketplaceFieldValue = (value: string | null | undefined): string => value?.trim() || 'Sin dato';
-const EMPTY_MARKETPLACE_DATA: JobAutoReviewMarketplaceData = {
-  title: null,
-  description: null,
-  brand: null,
-  gender: null,
-  garmentType: null,
-  primaryColor: null,
-  sport: null,
-  isSportswear: null,
-};
 
 export const JobEvaluationCard: React.FC<Props> = ({
   batch,
@@ -99,19 +55,16 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const role = useRole();
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
-  const [marketplaceExpanded, setMarketplaceExpanded] = useState(false);
   const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
   const isExperimentJob = job.experimentEnabled === true;
 
   const outputsDesc = useMemo(() => {
     const merged = new Map<string, JobOutput>();
-
     [job.userSelectedOutput, job.currentOutput, ...outputs].forEach((output) => {
       if (output?.id && !merged.has(output.id)) {
         merged.set(output.id, output);
       }
     });
-
     return [...merged.values()].sort((left, right) => toMillis(right.createdAt) - toMillis(left.createdAt));
   }, [job.currentOutput, job.userSelectedOutput, outputs]);
 
@@ -123,23 +76,17 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const historyOutputs = useMemo(() => [...outputsDesc].reverse(), [outputsDesc]);
   const isViewingLatest = displayedOutput?.id === currentOutput?.id;
   const isUserApprovedDisplayed = Boolean(displayedOutput?.id && selectedOutputId === displayedOutput.id);
-  const activeReview = displayedOutput?.autoReview || (isViewingLatest ? job.latestAutoReview || currentOutput?.autoReview || null : null);
+  const activeReview =
+    displayedOutput?.autoReview || (isViewingLatest ? job.latestAutoReview || currentOutput?.autoReview || null : null);
   const activeReviewPrompt =
-    activeReview?.reviewPrompt
-    || displayedOutput?.autoReview?.reviewPrompt
-    || currentOutput?.autoReview?.reviewPrompt
-    || job.latestAutoReview?.reviewPrompt
-    || null;
-  const marketplaceData = activeReview?.marketplaceData || EMPTY_MARKETPLACE_DATA;
-  const hasMarketplaceData = Object.values(marketplaceData).some((value) => value !== null && value !== '');
-  const failedCriteria = activeReview?.criteria.filter((criterion) => !criterion.passed) || [];
+    activeReview?.reviewPrompt ||
+    displayedOutput?.autoReview?.reviewPrompt ||
+    currentOutput?.autoReview?.reviewPrompt ||
+    job.latestAutoReview?.reviewPrompt ||
+    null;
 
   const { url: displayedImageUrl } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
   const { url: poseThumbnailUrl } = useStorageAssetUrl(job.poseImagePath || null);
-
-  useEffect(() => {
-    setMarketplaceExpanded(false);
-  }, [job.id]);
 
   useEffect(() => {
     if (selectedOutputId && !outputsDesc.some((output) => output.id === selectedOutputId)) {
@@ -232,7 +179,10 @@ export const JobEvaluationCard: React.FC<Props> = ({
           >
             {!isViewingLatest ? (
               <span className="absolute left-3 top-3 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-white">
-                {formatOutputLabel(displayedOutput!, historyOutputs.findIndex((output) => output.id === displayedOutput?.id))}
+                {formatOutputLabel(
+                  displayedOutput!,
+                  historyOutputs.findIndex((output) => output.id === displayedOutput?.id),
+                )}
               </span>
             ) : null}
           </HoverZoomImage>
@@ -300,10 +250,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
         </div>
 
         {historyOutputs.length > 0 ? (
-          <div
-            className="mt-3 flex gap-2 overflow-x-auto pb-1"
-            onClick={(event) => event.stopPropagation()}
-          >
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1" onClick={(event) => event.stopPropagation()}>
             {historyOutputs.map((output, outputIndex) => (
               <AttemptThumbnail
                 key={output.id}
@@ -312,7 +259,10 @@ export const JobEvaluationCard: React.FC<Props> = ({
                 active={displayedOutput?.id === output.id}
                 userApproved={selectedOutputId === output.id}
                 onSelect={() => {
-                  onSelectOutput?.(selectedOutputId === output.id ? null : output.id, selectedOutputId === output.id ? null : output);
+                  onSelectOutput?.(
+                    selectedOutputId === output.id ? null : output.id,
+                    selectedOutputId === output.id ? null : output,
+                  );
                 }}
               />
             ))}
@@ -321,264 +271,29 @@ export const JobEvaluationCard: React.FC<Props> = ({
       </div>
 
       <div className="p-4 flex flex-col flex-grow space-y-3">
-        {displayedOutput ? (
-          <div className={`rounded-xl border px-3 py-3 text-xs ${reviewTone(activeReview, isUserApprovedDisplayed)}`}>
-            <div className="flex items-start gap-2">
-              {isUserApprovedDisplayed ? (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              ) : activeReview?.verdict === 'approved' ? (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              ) : activeReview ? (
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-              ) : (
-                <ImageIcon className="mt-0.5 h-4 w-4 shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="font-semibold">{reviewTitle(activeReview, isUserApprovedDisplayed)}</p>
-                <p className="mt-1 leading-relaxed">
-                  {isUserApprovedDisplayed
-                    ? 'Esta salida fue marcada manualmente como la aprobada. Guardar y descargar usarán esta imagen.'
-                    : activeReview?.summary || 'Esta salida todavía no tiene un veredicto automático asociado.'}
-                </p>
-                {isUserApprovedDisplayed && activeReview ? (
-                  <p className="mt-1 text-[11px] uppercase tracking-[0.12em] opacity-80">
-                    Veredicto Gemini original: {activeReview.verdict === 'approved' ? 'Aprobada' : 'Rechazada'}
-                  </p>
-                ) : activeReview?.model ? (
-                  <p className="mt-1 text-[11px] uppercase tracking-[0.12em] opacity-80">
-                    {activeReview.model}
-                  </p>
-                ) : null}
-              </div>
-            </div>
+        <AutoReviewPanel
+          key={job.id}
+          displayedOutput={displayedOutput}
+          activeReview={activeReview}
+          activeReviewPrompt={activeReviewPrompt}
+          isUserApprovedDisplayed={isUserApprovedDisplayed}
+        />
 
-            {failedCriteria.length > 0 && !isUserApprovedDisplayed ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {failedCriteria.map((criterion) => (
-                  <span key={`${displayedOutput.id}-${criterion.key}`} className="rounded-full bg-white/70 px-2.5 py-1">
-                    {criterion.label}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {activeReview ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50">
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setMarketplaceExpanded((current) => !current);
-              }}
-              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-              aria-expanded={marketplaceExpanded}
-            >
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Ficha marketplace</p>
-                <p className="mt-1 text-xs text-slate-600">
-                  {hasMarketplaceData
-                    ? 'Titulo, descripcion y atributos comerciales extraidos por Gemini.'
-                    : 'Esta revision no trae datos comerciales guardados todavia.'}
-                </p>
-              </div>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
-                {marketplaceExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </span>
-            </button>
-
-            {marketplaceExpanded ? (
-              <div className="border-t border-slate-200 px-3 py-3 text-xs text-slate-700">
-                {!hasMarketplaceData ? (
-                  <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
-                    Este intento no incluye `marketplaceData`. Suele pasar con imagenes evaluadas antes de este cambio o si Gemini no devolvio esos campos.
-                  </div>
-                ) : null}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <MarketplaceField label="Titulo" value={marketplaceFieldValue(marketplaceData.title)} />
-                  <MarketplaceField label="Marca" value={marketplaceFieldValue(marketplaceData.brand)} />
-                  <MarketplaceField label="Genero" value={marketplaceFieldValue(marketplaceData.gender)} />
-                  <MarketplaceField label="Tipo de prenda" value={marketplaceFieldValue(marketplaceData.garmentType)} />
-                  <MarketplaceField label="Color principal" value={marketplaceFieldValue(marketplaceData.primaryColor)} />
-                  <MarketplaceField label="Deporte / uso" value={marketplaceFieldValue(marketplaceData.sport)} />
-                  <MarketplaceField
-                    label="Es deportiva"
-                    value={
-                      marketplaceData.isSportswear === null
-                        ? 'Sin dato'
-                        : marketplaceData.isSportswear
-                          ? 'Si'
-                          : 'No'
-                    }
-                  />
-                </div>
-                <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Descripcion</p>
-                  <p className="mt-1 whitespace-pre-wrap leading-relaxed text-slate-700">
-                    {marketplaceFieldValue(marketplaceData.description)}
-                  </p>
-                </div>
-                <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Prompt enviado a Gemini
-                  </p>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-3 py-3 text-[11px] leading-relaxed text-slate-700">
-                    {activeReviewPrompt || 'Sin prompt guardado en esta revision.'}
-                  </pre>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Proveedor IA</label>
-          <select
-            value={draft.provider}
-            onChange={(e) => onUpdateDraft({ provider: e.target.value as Provider })}
-            onClick={(event) => event.stopPropagation()}
-            disabled={isProcessing || isQueueing || !role.canRegenerate || isExperimentJob}
-            className={INPUT_BASE}
-          >
-            <option value="fal-seedream">{PROVIDER_LABELS['fal-seedream']}</option>
-            <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
-            <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
-          </select>
-        </div>
-
-        <div className="flex-grow flex flex-col">
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">Prompt</label>
-          <textarea
-            value={draft.prompt}
-            onChange={(e) => onUpdateDraft({ prompt: e.target.value })}
-            onClick={(event) => event.stopPropagation()}
-            disabled={isProcessing || isQueueing || !role.canRegenerate || isExperimentJob}
-            rows={4}
-            className={`${INPUT_BASE} resize-none flex-grow`}
-            placeholder="Define el prompt base para regenerar..."
-          />
-          {isExperimentJob ? (
-            <p className="mt-1.5 text-xs text-amber-700">
-              El proveedor y el prompt quedan bloqueados para conservar la validez del experimento A/B.
-            </p>
-          ) : null}
-        </div>
-
-        {job.status === 'failed' && job.lastError && currentOutput ? (
-          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" aria-hidden="true" />
-            <div><span className="font-medium">Detalle del fallo: </span>{job.lastError}</div>
-          </div>
-        ) : null}
-
-        {regenerationError ? (
-          <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-            <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" aria-hidden="true" />
-            <span>{regenerationError}</span>
-          </div>
-        ) : null}
-
-        {historyOutputs.length > 1 ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            Esta pose conserva el historial completo de intentos generados. Puedes abrir cualquier miniatura para revisar qué cambió.
-          </div>
-        ) : null}
-
-        {role.canRegenerate ? (
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onRegenerate();
-            }}
-            disabled={isProcessing || isQueueing || !draft.prompt.trim()}
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-transparent text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          >
-            <RefreshCw className={`w-4 h-4 ${isQueueing ? 'animate-spin' : ''}`} />
-            Regenerar foto
-          </button>
-        ) : (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
-            Tu rol puede revisar y descargar resultados, pero no encolar regeneraciones.
-          </div>
-        )}
+        <JobControls
+          draft={draft}
+          isProcessing={isProcessing}
+          isQueueing={isQueueing}
+          canRegenerate={role.canRegenerate}
+          isExperimentJob={isExperimentJob}
+          jobStatus={job.status}
+          lastError={job.lastError || null}
+          currentOutput={currentOutput}
+          regenerationError={regenerationError}
+          historyOutputsCount={historyOutputs.length}
+          onUpdateDraft={onUpdateDraft}
+          onRegenerate={onRegenerate}
+        />
       </div>
     </div>
-  );
-};
-
-const MarketplaceField: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
-    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
-    <p className="mt-1 text-slate-700">{value}</p>
-  </div>
-);
-
-const AttemptThumbnail: React.FC<{
-  output: JobOutput;
-  label: string;
-  onSelect: () => void;
-  active: boolean;
-  userApproved: boolean;
-  disabled?: boolean;
-}> = ({ output, label, active, userApproved, disabled = false, onSelect }) => {
-  const { url } = useStorageAssetUrl(output.resultImagePath || null);
-  const verdict = output.autoReview?.verdict || null;
-  const statusLabel = userApproved
-    ? 'Aprobada por usuario'
-    : verdict === 'approved'
-      ? 'Aprobada por Gemini'
-      : verdict === 'rejected'
-        ? 'Rechazada'
-        : 'Sin veredicto';
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      disabled={disabled}
-      className={`group shrink-0 rounded-2xl border p-1.5 text-left transition ${
-        userApproved
-          ? 'border-emerald-300 bg-emerald-50 shadow-sm'
-          : active
-            ? 'border-indigo-300 bg-indigo-50 shadow-sm'
-            : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
-      } ${disabled ? 'cursor-wait opacity-70' : ''}`}
-      title={label}
-    >
-      <div className="relative h-20 w-16 overflow-hidden rounded-xl bg-slate-100">
-        {url ? (
-          <img src={url} alt={label} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-slate-300">
-            <ImageIcon className="h-4 w-4" />
-          </div>
-        )}
-        {output.isCurrent ? (
-          <span className="absolute left-1.5 top-1.5 rounded-full bg-slate-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-            Actual
-          </span>
-        ) : null}
-        {userApproved ? (
-          <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-            Elegida
-          </span>
-        ) : null}
-      </div>
-      <div className="mt-2 space-y-1 px-0.5">
-        <p className="text-[11px] font-semibold text-slate-700">{label}</p>
-        <p
-          className={`text-[11px] ${
-            userApproved || verdict === 'approved'
-              ? 'text-emerald-700'
-              : verdict === 'rejected'
-                ? 'text-amber-700'
-                : 'text-slate-500'
-          }`}
-        >
-          {statusLabel}
-        </p>
-      </div>
-    </button>
   );
 };

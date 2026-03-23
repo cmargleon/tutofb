@@ -8,6 +8,7 @@ import { useRole } from '../features/auth/AuthProvider';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { PROVIDER_LABELS } from '../../shared/src/domain';
 import { Batch, Job, Provider } from '../../shared/src/types';
+import { formatDateTime, toDate, toMillis } from '../../shared/src/utils/dateUtils';
 
 interface QueueRow {
   id: string;
@@ -18,28 +19,6 @@ interface QueueRow {
 }
 
 type KanbanStage = 'pending' | 'processing' | 'evaluation';
-
-const toDate = (value: unknown): Date | null => {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === 'object' && value !== null && 'toDate' in value && typeof value.toDate === 'function') {
-    return value.toDate();
-  }
-
-  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
-    return new Date(value.toMillis());
-  }
-
-  const parsed = new Date(value as string | number | Date);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-};
-
-const toMillis = (value: unknown): number | null => {
-  const date = toDate(value);
-  return date ? date.getTime() : null;
-};
 
 const average = (values: number[]) => {
   if (values.length === 0) {
@@ -77,20 +56,6 @@ const formatElapsedSince = (millis: number | null) => {
   }
 
   return formatRelativeDuration((Date.now() - millis) / 1000);
-};
-
-const formatDateTime = (value: unknown) => {
-  const date = toDate(value);
-  if (!date) {
-    return 'sin fecha';
-  }
-
-  return new Intl.DateTimeFormat('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
 };
 
 const getCompletedJobDuration = (job: Job) => {

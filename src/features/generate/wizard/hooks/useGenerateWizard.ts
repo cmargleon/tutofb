@@ -1,19 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Provider } from '../../../../../shared/src/types';
 import { canSelectWizardStep, clampWizardStep } from '../../../wizard/navigation';
-import { createGenerationBatch } from '../../firebase';
 import { handleGarmentFiles, revokeGarmentUrls } from '../../garments';
-import { deleteGarmentDraftByStoragePath, uploadGarmentDrafts } from '../../storage';
-import { GenerateSubmitStage, GenerateWizardStepId, UploadedGarmentDraft, WizardState } from '../../types';
+import { deleteGarmentDraftByStoragePath } from '../../storage';
+import { GenerateWizardStepId, UploadedGarmentDraft, WizardState } from '../../types';
 import { useGenerateWizardCatalog } from './useGenerateWizardCatalog';
-import {
-  buildCreateGenerationBatchRequest,
-  getUploadFailureMessage,
-  getUploadedGarmentsForBatch,
-  mergeGarmentUploadResults,
-  patchGarmentUploadState,
-} from '../submit';
+import { useGenerateWizardSubmit } from './useGenerateWizardSubmit';
 import {
   buildGarmentUploadSummary,
   createInitialGenerateWizardState,
@@ -21,21 +13,15 @@ import {
   GENERATE_WIZARD_MAX_STEP,
   getGenerateWizardCanAdvance,
   getGenerateWizardExperimentProviderError,
-  getGenerateWizardSubmitButtonLabel,
   getGenerateWizardTotalJobs,
-  isGarmentUploadedForBatch,
   isGenerateWizardStepComplete,
 } from '../state';
 
 export const useGenerateWizard = () => {
-  const navigate = useNavigate();
   const garmentUrlsRef = useRef<UploadedGarmentDraft[]>([]);
   const stepperRef = useRef<HTMLDivElement | null>(null);
   const previousStepRef = useRef<GenerateWizardStepId>(1);
   const [state, setState] = useState<WizardState>(createInitialGenerateWizardState);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStage, setSubmitStage] = useState<GenerateSubmitStage>('idle');
-  const [draftBatchId, setDraftBatchId] = useState<string | null>(null);
   const [flowError, setFlowError] = useState<string | null>(null);
 
   const {
@@ -71,10 +57,6 @@ export const useGenerateWizard = () => {
 
   const totalJobs = useMemo(() => getGenerateWizardTotalJobs(state), [state]);
   const uploadSummary = useMemo(() => buildGarmentUploadSummary(state.garments), [state.garments]);
-  const uploadedGarmentCount = useMemo(
-    () => state.garments.filter((garment) => isGarmentUploadedForBatch(garment, draftBatchId)).length,
-    [draftBatchId, state.garments],
-  );
   const experimentProviderError = useMemo(
     () => getGenerateWizardExperimentProviderError(state),
     [state],
@@ -82,32 +64,29 @@ export const useGenerateWizard = () => {
   const allPosesSelected = useMemo(
     () =>
       Boolean(
-        selectedModel
-          && selectedModel.poses.length > 0
-          && selectedModel.poses.every((pose) => state.selectedPoseIds.includes(pose.id)),
+        selectedModel &&
+          selectedModel.poses.length > 0 &&
+          selectedModel.poses.every((pose) => state.selectedPoseIds.includes(pose.id)),
       ),
     [selectedModel, state.selectedPoseIds],
   );
   const canAdvance = useMemo(() => getGenerateWizardCanAdvance(state), [state]);
-  const submitButtonLabel = useMemo(
-    () =>
-      getGenerateWizardSubmitButtonLabel({
-        isSubmitting,
-        submitStage,
-        uploadedGarmentCount,
-        garmentCount: state.garments.length,
-        totalJobs,
-        uploadSummary,
-      }),
-    [isSubmitting, state.garments.length, submitStage, totalJobs, uploadSummary, uploadedGarmentCount],
-  );
+
+  const submit = useGenerateWizardSubmit({
+    state,
+    experimentProviderError,
+    totalJobs,
+    uploadSummary,
+    setState,
+    setFlowError,
+  });
 
   const canSelectStep = (targetStep: number) =>
     canSelectWizardStep({
       targetStep,
       currentStep: state.step,
       maxStep: GENERATE_WIZARD_MAX_STEP,
-      isBusy: isSubmitting,
+      isBusy: submit.isSubmitting,
       isStepComplete: (stepId) => isGenerateWizardStepComplete(state, stepId),
     });
 
@@ -125,14 +104,9 @@ export const useGenerateWizard = () => {
     if (!canSelectStep(targetStep)) {
       return;
     }
-
-    setState((current) => ({ ...current, step: clampWizardStep(targetStep, 1, GENERATE_WIZARD_MAX_STEP) as GenerateWizardStepId }));
-  };
-
-  const patchGarmentUpload = (garmentId: string, patch: Parameters<typeof patchGarmentUploadState>[2]) => {
     setState((current) => ({
       ...current,
-      garments: patchGarmentUploadState(current.garments, garmentId, patch),
+      step: clampWizardStep(targetStep, 1, GENERATE_WIZARD_MAX_STEP) as GenerateWizardStepId,
     }));
   };
 
@@ -154,7 +128,7 @@ export const useGenerateWizard = () => {
     }
 
     if (state.garments.length === 1 && state.garments[0]?.id === garmentId) {
-      setDraftBatchId(null);
+      submit.resetDraftBatch();
     }
 
     setState((current) => {
@@ -162,7 +136,6 @@ export const useGenerateWizard = () => {
       if (garment) {
         revokeGarmentUrls([garment]);
       }
-
       return {
         ...current,
         garments: current.garments.filter((item) => item.id !== garmentId),
@@ -196,7 +169,6 @@ export const useGenerateWizard = () => {
     if (!selectedModel) {
       return;
     }
-
     setState((current) => ({
       ...current,
       selectedPoseIds: allPosesSelected ? [] : selectedModel.poses.map((pose) => pose.id),
@@ -219,7 +191,6 @@ export const useGenerateWizard = () => {
     setState((current) => {
       const nextProviders = [...current.experiment.providers];
       nextProviders[index] = provider;
-
       return {
         ...current,
         provider: nextProviders[0],
@@ -240,88 +211,12 @@ export const useGenerateWizard = () => {
     setState((current) => ({ ...current, prompt }));
   };
 
-  const handleSubmit = async () => {
-    if (!state.selectedClientId || !state.selectedModelId || state.selectedPoseIds.length === 0 || state.garments.length === 0) {
-      setFlowError('Completa cliente, modelo, poses y prendas antes de crear el lote.');
-      return;
-    }
-
-    if (experimentProviderError) {
-      setFlowError(experimentProviderError);
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitStage('uploading');
-    setFlowError(null);
-    const activeDraftBatchId = draftBatchId ?? crypto.randomUUID();
-    if (!draftBatchId) {
-      setDraftBatchId(activeDraftBatchId);
-    }
-
-    try {
-      const garmentsToUpload = state.garments.filter(
-        (garment) => !isGarmentUploadedForBatch(garment, activeDraftBatchId),
-      );
-
-      const uploadResult = garmentsToUpload.length > 0
-        ? await uploadGarmentDrafts(activeDraftBatchId, garmentsToUpload, {
-            concurrency: 4,
-            maxRetries: 2,
-            onProgress: (event) => {
-              patchGarmentUpload(event.garmentId, {
-                status: event.status,
-                progress: event.progress,
-                attempts: event.attempts,
-                error: event.error,
-                storagePath: event.storagePath,
-                draftBatchId: activeDraftBatchId,
-              });
-            },
-          })
-        : { uploaded: [], failed: [] };
-
-      const nextGarments = mergeGarmentUploadResults(state.garments, uploadResult, activeDraftBatchId);
-
-      if (uploadResult.uploaded.length > 0 || uploadResult.failed.length > 0) {
-        setState((current) => ({ ...current, garments: mergeGarmentUploadResults(current.garments, uploadResult, activeDraftBatchId) }));
-      }
-
-      if (uploadResult.failed.length > 0) {
-        setFlowError(getUploadFailureMessage(nextGarments, uploadResult.failed.length, activeDraftBatchId));
-        return;
-      }
-
-      const uploadedGarments = getUploadedGarmentsForBatch(nextGarments, activeDraftBatchId);
-      if (uploadedGarments.length === 0) {
-        setFlowError('No hay prendas listas para crear el lote.');
-        return;
-      }
-
-      setSubmitStage('creating-batch');
-      const result = await createGenerationBatch(
-        buildCreateGenerationBatchRequest(state, uploadedGarments),
-      );
-
-      navigate(`/evaluacion?batchId=${result.batchId}`);
-    } catch (submitError: any) {
-      console.error(submitError);
-      setFlowError(
-        submitError.message
-          || 'No se pudo crear el lote. Las prendas ya subidas quedaron listas para reintentar sin volver a cargarlas.',
-      );
-    } finally {
-      setIsSubmitting(false);
-      setSubmitStage('idle');
-    }
-  };
-
   return {
     state,
     clients,
     models,
     loadingData,
-    isSubmitting,
+    isSubmitting: submit.isSubmitting,
     error,
     stepperRef,
     selectedModel,
@@ -331,13 +226,13 @@ export const useGenerateWizard = () => {
     uploadSummary,
     experimentProviderError,
     experimentProviderOptions: GENERATE_WIZARD_EXPERIMENT_PROVIDER_OPTIONS,
-    submitButtonLabel,
+    submitButtonLabel: submit.submitButtonLabel,
     goToStep,
     handleStepSelect,
     canSelectStep,
     handleFiles,
     removeGarment,
-    handleSubmit,
+    handleSubmit: submit.handleSubmit,
     handleClientChange,
     handleModelSelect,
     handlePoseToggle,

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Batch, Job, JobAutoReview, JobAutoReviewMarketplaceData, JobOutput, Provider } from '../../../shared/src/types';
+import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { StatusBadge } from '../ui';
 import {
   AlertCircle,
@@ -7,9 +8,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  History,
   ImageIcon,
-  Layers3,
   RefreshCw,
   Sparkles,
   XCircle,
@@ -18,7 +17,6 @@ import { useRole } from '../../features/auth/AuthProvider';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
 import { useToast } from '../../features/feedback/FeedbackProvider';
-import { PROVIDER_LABELS } from '../../../shared/src/domain';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
 import { HoverZoomImage } from './HoverZoomImage';
 
@@ -35,20 +33,34 @@ interface Props {
   onToggleSelected?: () => void;
   focused?: boolean;
   onFocusTraceability?: () => void;
+  selectedOutputId?: string | null;
+  onSelectOutput?: (outputId: string | null, output: JobOutput | null) => void;
 }
 
 const INPUT_BASE =
   'w-full rounded-xl border px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed';
 const HISTORY_LIMIT = 18;
 
-const reviewTone = (review: JobAutoReview | null): string => {
+const toMillis = (value: unknown): number => {
+  if (!value) return 0;
+  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof value.toMillis === 'function') {
+    return value.toMillis();
+  }
+
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const reviewTone = (review: JobAutoReview | null, userApproved: boolean): string => {
+  if (userApproved) return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   if (!review) return 'border-slate-200 bg-slate-50 text-slate-600';
   return review.verdict === 'approved'
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : 'border-amber-200 bg-amber-50 text-amber-700';
 };
 
-const reviewTitle = (review: JobAutoReview | null): string => {
+const reviewTitle = (review: JobAutoReview | null, userApproved: boolean): string => {
+  if (userApproved) return 'Aprobada por usuario';
   if (!review) return 'Sin revisión automática registrada';
   return review.verdict === 'approved' ? 'Aprobada por Gemini' : 'Gemini pidió otro intento';
 };
@@ -81,32 +93,36 @@ export const JobEvaluationCard: React.FC<Props> = ({
   onToggleSelected,
   focused = false,
   onFocusTraceability,
+  selectedOutputId = null,
+  onSelectOutput,
 }) => {
   const role = useRole();
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
-  const [compareMode, setCompareMode] = useState(false);
   const [marketplaceExpanded, setMarketplaceExpanded] = useState(false);
-  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
   const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
   const isExperimentJob = job.experimentEnabled === true;
 
   const outputsDesc = useMemo(() => {
-    const next = [...outputs];
-    if (job.currentOutput && !next.some((output) => output.id === job.currentOutput?.id)) {
-      next.unshift(job.currentOutput);
-    }
-    return next;
-  }, [job.currentOutput, outputs]);
+    const merged = new Map<string, JobOutput>();
 
-  const currentOutput = outputsDesc[0] ?? null;
-  const previousOutput = outputsDesc[1] ?? null;
+    [job.userSelectedOutput, job.currentOutput, ...outputs].forEach((output) => {
+      if (output?.id && !merged.has(output.id)) {
+        merged.set(output.id, output);
+      }
+    });
+
+    return [...merged.values()].sort((left, right) => toMillis(right.createdAt) - toMillis(left.createdAt));
+  }, [job.currentOutput, job.userSelectedOutput, outputs]);
+
+  const currentOutput = job.currentOutput || outputsDesc[0] || null;
   const displayedOutput = useMemo(
     () => outputsDesc.find((output) => output.id === selectedOutputId) || currentOutput,
     [currentOutput, outputsDesc, selectedOutputId],
   );
   const historyOutputs = useMemo(() => [...outputsDesc].reverse(), [outputsDesc]);
-  const isViewingLatest = !selectedOutputId || displayedOutput?.id === currentOutput?.id;
+  const isViewingLatest = displayedOutput?.id === currentOutput?.id;
+  const isUserApprovedDisplayed = Boolean(displayedOutput?.id && selectedOutputId === displayedOutput.id);
   const activeReview = displayedOutput?.autoReview || (isViewingLatest ? job.latestAutoReview || currentOutput?.autoReview || null : null);
   const activeReviewPrompt =
     activeReview?.reviewPrompt
@@ -119,27 +135,26 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const failedCriteria = activeReview?.criteria.filter((criterion) => !criterion.passed) || [];
 
   const { url: displayedImageUrl } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
-  const { url: currentImageUrl } = useStorageAssetUrl(currentOutput?.resultImagePath || null);
-  const { url: previousImageUrl } = useStorageAssetUrl(previousOutput?.resultImagePath || null);
   const { url: poseThumbnailUrl } = useStorageAssetUrl(job.poseImagePath || null);
 
   useEffect(() => {
-    setCompareMode(false);
     setMarketplaceExpanded(false);
-    setSelectedOutputId(null);
   }, [job.id]);
 
   useEffect(() => {
     if (selectedOutputId && !outputsDesc.some((output) => output.id === selectedOutputId)) {
-      setSelectedOutputId(null);
+      onSelectOutput?.(null, null);
     }
-  }, [outputsDesc, selectedOutputId]);
+  }, [onSelectOutput, outputsDesc, selectedOutputId]);
 
   const handleDownload = async () => {
-    if (!job.currentOutput?.resultImagePath) return;
+    const effectiveOutput = selectedOutputId
+      ? outputsDesc.find((output) => output.id === selectedOutputId) || null
+      : resolveApprovedJobOutput(job);
+    if (!effectiveOutput?.resultImagePath) return;
     setDownloading(true);
     try {
-      await downloadSingleJobImage(batch, job, index);
+      await downloadSingleJobImage(batch, job, index, selectedOutputId);
     } catch (error) {
       console.error('Error downloading image:', error);
       toast({
@@ -154,8 +169,6 @@ export const JobEvaluationCard: React.FC<Props> = ({
 
   const isProcessing = job.status === 'pending' || job.status === 'processing';
   const hasOutput = !!displayedImageUrl;
-  const hasPreviousOutput = !!previousOutput && !!previousImageUrl;
-  const canCompare = hasPreviousOutput && isViewingLatest;
 
   return (
     <div
@@ -203,71 +216,12 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {onFocusTraceability ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onFocusTraceability();
-              }}
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                focused ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-              title="Abrir trazabilidad del job"
-            >
-              <History className="h-3.5 w-3.5" />
-              Historial
-            </button>
-          ) : null}
-          {canCompare ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setCompareMode((current) => !current);
-              }}
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                compareMode ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-              title="Comparar resultado actual con el intento anterior"
-            >
-              {compareMode ? <Layers3 className="h-3.5 w-3.5" /> : <History className="h-3.5 w-3.5" />}
-              {compareMode ? 'Comparando' : 'Ver anterior'}
-            </button>
-          ) : null}
           <StatusBadge status={job.status} />
         </div>
       </div>
 
       <div className="relative flex-shrink-0 bg-gray-100">
-        {compareMode && canCompare ? (
-          <div className="grid grid-cols-2 gap-px bg-slate-200">
-            <HoverZoomImage
-              src={previousImageUrl!}
-              alt={`Pose ${index + 1} anterior`}
-              containerClassName="aspect-[3/4] bg-slate-100"
-              imageClassName="bg-white object-contain"
-              preserveNaturalAspectRatio
-              zoomScale={2.1}
-            >
-              <span className="absolute left-3 top-3 rounded-lg bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
-                Anterior
-              </span>
-            </HoverZoomImage>
-            <HoverZoomImage
-              src={currentImageUrl!}
-              alt={`Pose ${index + 1} actual`}
-              containerClassName="aspect-[3/4] bg-slate-100"
-              imageClassName="bg-white object-contain"
-              preserveNaturalAspectRatio
-              zoomScale={2.1}
-            >
-              <span className="absolute left-3 top-3 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-medium text-white">
-                Actual
-              </span>
-            </HoverZoomImage>
-          </div>
-        ) : hasOutput ? (
+        {hasOutput ? (
           <HoverZoomImage
             src={displayedImageUrl!}
             alt={`Pose ${index + 1}`}
@@ -313,7 +267,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </div>
         )}
 
-        {hasOutput && !isProcessing && !isQueueing && isViewingLatest && (
+        {hasOutput && !isProcessing && !isQueueing && (
           <button
             onClick={(event) => {
               event.stopPropagation();
@@ -321,7 +275,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
             }}
             disabled={downloading}
             className="absolute bottom-3 right-3 cursor-pointer p-2 bg-white/90 hover:bg-white text-gray-700 rounded-xl shadow-sm backdrop-blur transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Descargar imagen actual"
+            title="Descargar imagen aprobada"
           >
             <Download className="w-4 h-4" />
           </button>
@@ -355,10 +309,10 @@ export const JobEvaluationCard: React.FC<Props> = ({
                 key={output.id}
                 output={output}
                 label={formatOutputLabel(output, outputIndex)}
-                selected={selectedOutputId ? output.id === selectedOutputId : output.id === currentOutput?.id}
+                active={displayedOutput?.id === output.id}
+                userApproved={selectedOutputId === output.id}
                 onSelect={() => {
-                  setCompareMode(false);
-                  setSelectedOutputId(output.id === currentOutput?.id ? null : output.id);
+                  onSelectOutput?.(selectedOutputId === output.id ? null : output.id, selectedOutputId === output.id ? null : output);
                 }}
               />
             ))}
@@ -368,9 +322,11 @@ export const JobEvaluationCard: React.FC<Props> = ({
 
       <div className="p-4 flex flex-col flex-grow space-y-3">
         {displayedOutput ? (
-          <div className={`rounded-xl border px-3 py-3 text-xs ${reviewTone(activeReview)}`}>
+          <div className={`rounded-xl border px-3 py-3 text-xs ${reviewTone(activeReview, isUserApprovedDisplayed)}`}>
             <div className="flex items-start gap-2">
-              {activeReview?.verdict === 'approved' ? (
+              {isUserApprovedDisplayed ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              ) : activeReview?.verdict === 'approved' ? (
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               ) : activeReview ? (
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
@@ -378,11 +334,17 @@ export const JobEvaluationCard: React.FC<Props> = ({
                 <ImageIcon className="mt-0.5 h-4 w-4 shrink-0" />
               )}
               <div className="min-w-0">
-                <p className="font-semibold">{reviewTitle(activeReview)}</p>
+                <p className="font-semibold">{reviewTitle(activeReview, isUserApprovedDisplayed)}</p>
                 <p className="mt-1 leading-relaxed">
-                  {activeReview?.summary || 'Esta salida todavía no tiene un veredicto automático asociado.'}
+                  {isUserApprovedDisplayed
+                    ? 'Esta salida fue marcada manualmente como la aprobada. Guardar y descargar usarán esta imagen.'
+                    : activeReview?.summary || 'Esta salida todavía no tiene un veredicto automático asociado.'}
                 </p>
-                {activeReview?.model ? (
+                {isUserApprovedDisplayed && activeReview ? (
+                  <p className="mt-1 text-[11px] uppercase tracking-[0.12em] opacity-80">
+                    Veredicto Gemini original: {activeReview.verdict === 'approved' ? 'Aprobada' : 'Rechazada'}
+                  </p>
+                ) : activeReview?.model ? (
                   <p className="mt-1 text-[11px] uppercase tracking-[0.12em] opacity-80">
                     {activeReview.model}
                   </p>
@@ -390,7 +352,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
               </div>
             </div>
 
-            {failedCriteria.length > 0 ? (
+            {failedCriteria.length > 0 && !isUserApprovedDisplayed ? (
               <div className="mt-2 flex flex-wrap gap-2">
                 {failedCriteria.map((criterion) => (
                   <span key={`${displayedOutput.id}-${criterion.key}`} className="rounded-full bg-white/70 px-2.5 py-1">
@@ -555,21 +517,33 @@ const MarketplaceField: React.FC<{ label: string; value: string }> = ({ label, v
 const AttemptThumbnail: React.FC<{
   output: JobOutput;
   label: string;
-  selected: boolean;
   onSelect: () => void;
-}> = ({ output, label, selected, onSelect }) => {
+  active: boolean;
+  userApproved: boolean;
+  disabled?: boolean;
+}> = ({ output, label, active, userApproved, disabled = false, onSelect }) => {
   const { url } = useStorageAssetUrl(output.resultImagePath || null);
   const verdict = output.autoReview?.verdict || null;
+  const statusLabel = userApproved
+    ? 'Aprobada por usuario'
+    : verdict === 'approved'
+      ? 'Aprobada por Gemini'
+      : verdict === 'rejected'
+        ? 'Rechazada'
+        : 'Sin veredicto';
 
   return (
     <button
       type="button"
       onClick={onSelect}
+      disabled={disabled}
       className={`group shrink-0 rounded-2xl border p-1.5 text-left transition ${
-        selected
-          ? 'border-indigo-300 bg-indigo-50 shadow-sm'
-          : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
-      }`}
+        userApproved
+          ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+          : active
+            ? 'border-indigo-300 bg-indigo-50 shadow-sm'
+            : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
+      } ${disabled ? 'cursor-wait opacity-70' : ''}`}
       title={label}
     >
       <div className="relative h-20 w-16 overflow-hidden rounded-xl bg-slate-100">
@@ -585,19 +559,24 @@ const AttemptThumbnail: React.FC<{
             Actual
           </span>
         ) : null}
+        {userApproved ? (
+          <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+            Elegida
+          </span>
+        ) : null}
       </div>
       <div className="mt-2 space-y-1 px-0.5">
         <p className="text-[11px] font-semibold text-slate-700">{label}</p>
         <p
           className={`text-[11px] ${
-            verdict === 'approved'
+            userApproved || verdict === 'approved'
               ? 'text-emerald-700'
               : verdict === 'rejected'
                 ? 'text-amber-700'
                 : 'text-slate-500'
           }`}
         >
-          {verdict === 'approved' ? 'Aprobada' : verdict === 'rejected' ? 'Rechazada' : 'Sin veredicto'}
+          {statusLabel}
         </p>
       </div>
     </button>

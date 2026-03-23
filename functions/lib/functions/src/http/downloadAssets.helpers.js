@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.readAssetBytes = exports.parseBody = exports.getBearerToken = exports.setCorsHeaders = exports.buildZipFolderName = exports.buildJobImageFilename = exports.getExtension = exports.isRemoteUrl = exports.normalizeFilename = void 0;
 const admin = __importStar(require("firebase-admin"));
+const domain_1 = require("../../../shared/src/domain");
 const bucket = admin.storage().bucket();
 const normalizeFilename = (value) => value
     .normalize('NFD')
@@ -55,7 +56,7 @@ const buildJobImageFilename = (batch, job, poseIndex) => [
     (0, exports.normalizeFilename)(batch.modelNameSnapshot || 'modelo'),
     (0, exports.normalizeFilename)(job.garmentName || `job-${job.id}`),
     `pose-${poseIndex + 1}`,
-    `job-${job.id}.${(0, exports.getExtension)(job.currentOutput?.resultImagePath || '')}`,
+    `job-${job.id}.${(0, exports.getExtension)((0, domain_1.resolveApprovedJobOutput)(job)?.resultImagePath || '')}`,
 ].join('_');
 exports.buildJobImageFilename = buildJobImageFilename;
 const buildZipFolderName = (batch) => [

@@ -51,6 +51,15 @@ service cloud.firestore {
       return isActiveUser() && (currentRole() in ['admin', 'revisor']);
     }
 
+    function canUpdateJobSelection() {
+      return canReview()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'userSelectedOutputId',
+          'userSelectedOutput',
+          'updatedAt',
+        ]);
+    }
+
     match /users/{uid} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
       allow create: if isAdmin()
@@ -79,7 +88,8 @@ service cloud.firestore {
 
     match /jobs/{jobId} {
       allow read: if canReview();
-      allow create, update, delete: if false;
+      allow create, delete: if false;
+      allow update: if canUpdateJobSelection();
 
       match /outputs/{outputId} {
         allow read: if canReview();

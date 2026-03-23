@@ -43,6 +43,7 @@ admin.initializeApp();
 // Export callables
 __exportStar(require("./callables/createGenerationBatch"), exports);
 __exportStar(require("./callables/regenerateJob"), exports);
+__exportStar(require("./callables/selectJobOutput"), exports);
 __exportStar(require("./callables/regenerateFailedBatchJobs"), exports);
 __exportStar(require("./callables/cancelPendingBatchJobs"), exports);
 __exportStar(require("./callables/regenerateJobsBulk"), exports);

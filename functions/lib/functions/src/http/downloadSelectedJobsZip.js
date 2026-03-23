@@ -40,6 +40,7 @@ exports.downloadSelectedJobsZip = void 0;
 const admin = __importStar(require("firebase-admin"));
 const jszip_1 = __importDefault(require("jszip"));
 const https_1 = require("firebase-functions/v2/https");
+const domain_1 = require("../../../shared/src/domain");
 const roles_1 = require("../auth/roles");
 const appFirestore_1 = require("../firebase/appFirestore");
 const downloadAssets_helpers_1 = require("./downloadAssets.helpers");
@@ -73,6 +74,9 @@ exports.downloadSelectedJobsZip = (0, https_1.onRequest)({
                 .map((value) => value.trim())
                 .filter(Boolean)
             : [];
+        const selectedOutputIdsByJobId = body.selectedOutputIdsByJobId && typeof body.selectedOutputIdsByJobId === 'object'
+            ? body.selectedOutputIdsByJobId
+            : {};
         if (!batchId || jobIds.length === 0) {
             throw new https_1.HttpsError('invalid-argument', 'Debes indicar el lote y al menos un job para descargar.');
         }
@@ -92,7 +96,7 @@ exports.downloadSelectedJobsZip = (0, https_1.onRequest)({
         const selectedIds = new Set(jobIds);
         const orderedSelectedJobs = jobsSnapshot.docs
             .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
-            .filter((job) => selectedIds.has(job.id) && job.currentOutput?.resultImagePath);
+            .filter((job) => selectedIds.has(job.id) && (0, domain_1.resolveApprovedJobOutput)(job)?.resultImagePath);
         if (orderedSelectedJobs.length === 0) {
             throw new https_1.HttpsError('failed-precondition', 'Los jobs seleccionados no tienen imágenes listas para descargar.');
         }
@@ -104,7 +108,17 @@ exports.downloadSelectedJobsZip = (0, https_1.onRequest)({
             throw new Error('No se pudo preparar el ZIP de la selección.');
         }
         for (const job of orderedSelectedJobs) {
-            const resultImagePath = job.currentOutput?.resultImagePath;
+            const requestedOutputId = typeof selectedOutputIdsByJobId[job.id || ''] === 'string'
+                ? String(selectedOutputIdsByJobId[job.id || '']).trim()
+                : '';
+            const selectedOutputSnapshot = requestedOutputId
+                ? db.collection('jobs').doc(job.id).collection('outputs').doc(requestedOutputId).get()
+                : null;
+            const resolvedSelectedOutputSnapshot = selectedOutputSnapshot ? await selectedOutputSnapshot : null;
+            const selectedOutput = resolvedSelectedOutputSnapshot?.exists
+                ? { id: resolvedSelectedOutputSnapshot.id, ...resolvedSelectedOutputSnapshot.data() }
+                : null;
+            const resultImagePath = (selectedOutput || (0, domain_1.resolveApprovedJobOutput)(job))?.resultImagePath;
             if (!resultImagePath) {
                 continue;
             }

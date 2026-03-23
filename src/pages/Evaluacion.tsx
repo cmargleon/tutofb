@@ -6,12 +6,13 @@ import { JobBatchCarousel } from '../components/evaluation/JobBatchCarousel';
 import { downloadBatchImages, downloadMultipleJobImages } from '../features/evaluation/downloadBatchImages';
 import { cancelPendingBatchJobs, regenerateFailedBatchJobs, regenerateJobsBulk } from '../features/evaluation/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
-import { Download, AlertCircle, ChevronDown, ChevronUp, Clock, RefreshCw, CheckSquare2 } from 'lucide-react';
+import { Download, AlertCircle, Clock, RefreshCw, CheckSquare2 } from 'lucide-react';
 import { useAuth, useRole } from '../features/auth/AuthProvider';
 import { computeBatchExperimentAnalytics } from '../../shared/src/experiments';
 import { buildJobPoseIndexMap } from '../features/evaluation/jobSlides';
-import { PROVIDER_LABELS } from '../../shared/src/domain';
+import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../shared/src/domain';
 import { Job, JobStatus, Provider } from '../../shared/src/types';
+import { usePersistedJobOutputSelections } from '../features/evaluation/usePersistedJobOutputSelections';
 
 const isTypingTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement
@@ -38,6 +39,18 @@ export const Evaluacion: React.FC = () => {
   const [busySelectionAction, setBusySelectionAction] = useState<'download' | 'requeue' | null>(null);
   const experimentAnalytics = computeBatchExperimentAnalytics(batch, jobs);
   const initialFocusJobId = openedWithoutBatchIdRef.current ? jobs[jobs.length - 1]?.id || null : null;
+  const { selectedOutputIdsByJobId, selectOutput } = usePersistedJobOutputSelections(
+    resolvedBatchId || batchId,
+    jobs,
+    (error) => {
+      console.error('Error persisting selected output in evaluation:', error);
+      toast({
+        tone: 'error',
+        title: 'No pudimos guardar la selección',
+        description: 'Inténtalo de nuevo desde esta tarjeta.',
+      });
+    },
+  );
 
   useEffect(() => {
     if (!batchId && resolvedBatchId) {
@@ -82,7 +95,7 @@ export const Evaluacion: React.FC = () => {
 
     setBusySelectionAction('download');
     try {
-      await downloadMultipleJobImages(batch, selectedJobs, poseIndexes);
+      await downloadMultipleJobImages(batch, selectedJobs, poseIndexes, selectedOutputIdsByJobId);
       toast({
         tone: 'success',
         title: 'Descarga iniciada',
@@ -222,7 +235,7 @@ export const Evaluacion: React.FC = () => {
   const handleDownloadAll = async () => {
     setDownloading(true);
     try {
-      await downloadBatchImages(batch, filteredJobs);
+      await downloadBatchImages(batch, filteredJobs, selectedOutputIdsByJobId);
     } catch (err: any) {
       toast({
         tone: 'error',
@@ -298,7 +311,9 @@ export const Evaluacion: React.FC = () => {
     }
   };
 
-  const hasCompletedImages = filteredJobs.some((job) => job.status === 'completed' && job.currentOutput?.resultImagePath);
+  const hasCompletedImages = filteredJobs.some(
+    (job) => Boolean(resolveApprovedJobOutput(job)?.resultImagePath || (job.id && selectedOutputIdsByJobId[job.id])),
+  );
   const canRegenerateFailed = role.canRegenerate && batch.failedJobs > 0;
   const canCancelPending = role.canRegenerate && batch.pendingJobs > 0;
   const hasSelection = selectedJobIds.length > 0;
@@ -420,71 +435,6 @@ export const Evaluacion: React.FC = () => {
         </div>
       ) : null}
 
-      {/* Batch summary + filters */}
-      <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <button
-          type="button"
-          onClick={() => setSummaryCollapsed((current) => !current)}
-          className="flex w-full items-start justify-between gap-4 text-left"
-          aria-expanded={!summaryCollapsed}
-          aria-controls="evaluation-summary-panel"
-        >
-          <div className="min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-3">
-              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-indigo-800">
-                Lote Actual
-              </span>
-              <StatusBadge status={batch.status} />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900">
-              {batch.clientNameSnapshot} <span className="mx-2 font-normal text-gray-400">/</span> {batch.modelNameSnapshot}
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              ID: {batch.id} · Creado el {new Date(batch.createdAt?.toMillis ? batch.createdAt.toMillis() : batch.createdAt).toLocaleString()}
-            </p>
-          </div>
-
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500">
-            {summaryCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </span>
-        </button>
-
-        {!summaryCollapsed ? (
-          <div id="evaluation-summary-panel" className="mt-6 grid gap-4 md:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Proveedor</span>
-              <select
-                value={providerFilter}
-                onChange={(event) => setProviderFilter(event.target.value as 'all' | Provider)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-              >
-                <option value="all">Todos los proveedores</option>
-                {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
-                  <option key={providerValue} value={providerValue}>
-                    {PROVIDER_LABELS[providerValue]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-slate-700">Estado</span>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as 'all' | JobStatus)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-              >
-                <option value="all">Todos</option>
-                <option value="pending">Pendiente</option>
-                <option value="processing">Procesando</option>
-                <option value="completed">Completado</option>
-                <option value="failed">Fallido</option>
-              </select>
-            </label>
-          </div>
-        ) : null}
-      </div>
-
       {filteredJobs.length === 0 ? (
         <EmptyState
           title="No hay resultados para ese filtro"
@@ -497,9 +447,73 @@ export const Evaluacion: React.FC = () => {
           jobs={filteredJobs}
           initialFocusJobId={initialFocusJobId}
           showFloatingGarment
+          headerContent={(
+            <>
+              <button
+                type="button"
+                onClick={() => setSummaryCollapsed((current) => !current)}
+                className="flex w-full items-start justify-between gap-4 text-left"
+                aria-expanded={!summaryCollapsed}
+                aria-controls="evaluation-summary-panel"
+              >
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center gap-3">
+                    <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-indigo-800">
+                      Lote Actual
+                    </span>
+                    <StatusBadge status={batch.status} />
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    ID: {batch.id} · Creado el {new Date(batch.createdAt?.toMillis ? batch.createdAt.toMillis() : batch.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-lg leading-none text-slate-500">
+                  {summaryCollapsed ? 'v' : '^'}
+                </span>
+              </button>
+
+              {!summaryCollapsed ? (
+                <div id="evaluation-summary-panel" className="mt-6 grid gap-4 border-t border-slate-200 pt-6 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">Proveedor</span>
+                    <select
+                      value={providerFilter}
+                      onChange={(event) => setProviderFilter(event.target.value as 'all' | Provider)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                    >
+                      <option value="all">Todos los proveedores</option>
+                      {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
+                        <option key={providerValue} value={providerValue}>
+                          {PROVIDER_LABELS[providerValue]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">Estado</span>
+                    <select
+                      value={statusFilter}
+                      onChange={(event) => setStatusFilter(event.target.value as 'all' | JobStatus)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                    >
+                      <option value="all">Todos</option>
+                      <option value="pending">Pendiente</option>
+                      <option value="processing">Procesando</option>
+                      <option value="completed">Completado</option>
+                      <option value="failed">Fallido</option>
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+            </>
+          )}
           selectedJobIds={selectedJobIds}
+          selectedOutputIdsByJobId={selectedOutputIdsByJobId}
           onToggleJob={toggleJob}
           onSelectJobs={selectJobs}
+          onSelectOutput={selectOutput}
           keyboardShortcutLabel="Flechas cambian de prenda. A selecciona visibles. D descarga. R reencola."
         />
       )}

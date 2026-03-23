@@ -6,6 +6,8 @@ import {
   RegenerateFailedBatchJobsResponse,
   RegenerateJobsBulkRequest,
   RegenerateJobsBulkResponse,
+  SelectJobOutputRequest,
+  SelectJobOutputResponse,
 } from '../../../shared/src/types';
 
 export const regenerateJob = async (jobId: string, provider: Provider, prompt: string) => {
@@ -62,6 +64,24 @@ export const regenerateJobsBulk = async (
     return result.data;
   } catch (error) {
     console.error('Error calling regenerateJobsBulk:', error);
+    throw error;
+  }
+};
+
+export const selectJobOutput = async (
+  jobId: string,
+  outputId: string | null,
+): Promise<SelectJobOutputResponse> => {
+  const callable = httpsCallable<SelectJobOutputRequest, SelectJobOutputResponse>(
+    functions,
+    'selectJobOutput',
+  );
+
+  try {
+    const result = await callable({ jobId, outputId });
+    return result.data;
+  } catch (error) {
+    console.error('Error calling selectJobOutput:', error);
     throw error;
   }
 };

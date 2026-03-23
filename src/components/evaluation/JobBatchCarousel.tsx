@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Batch, Job } from '../../../shared/src/types';
+import { Batch, Job, JobOutput } from '../../../shared/src/types';
 import { useGarmentCarousel } from '../../features/evaluation/useGarmentCarousel';
 import { GarmentCarouselControls } from './GarmentCarouselControls';
 import { JobEvaluationCard } from './JobEvaluationCard';
@@ -14,9 +14,12 @@ interface Props {
   jobs: Job[];
   initialFocusJobId?: string | null;
   showFloatingGarment?: boolean;
+  headerContent?: React.ReactNode;
   selectedJobIds?: string[];
+  selectedOutputIdsByJobId?: Record<string, string | null>;
   onToggleJob?: (jobId: string) => void;
   onSelectJobs?: (jobIds: string[], selected: boolean) => void;
+  onSelectOutput?: (jobId: string, outputId: string | null, output: JobOutput | null) => void;
   bulkActions?: React.ReactNode;
   keyboardShortcutLabel?: string;
 }
@@ -30,9 +33,12 @@ export const JobBatchCarousel: React.FC<Props> = ({
   jobs,
   initialFocusJobId = null,
   showFloatingGarment = false,
+  headerContent,
   selectedJobIds = [],
+  selectedOutputIdsByJobId = {},
   onToggleJob,
   onSelectJobs,
+  onSelectOutput,
   bulkActions,
   keyboardShortcutLabel = 'Usa flechas izquierda/derecha para cambiar de prenda.',
 }) => {
@@ -106,15 +112,34 @@ export const JobBatchCarousel: React.FC<Props> = ({
 
   const activeSlideJobIds = activeSlide.jobs.map((job) => job.id).filter((jobId): jobId is string => Boolean(jobId));
   const allActiveSelected = activeSlideJobIds.length > 0 && activeSlideJobIds.every((jobId) => selectedJobIds.includes(jobId));
+  const carouselControls = (
+    <GarmentCarouselControls
+      slides={slides}
+      activeIndex={activeSlideIndex}
+      onNext={nextSlide}
+      onPrev={prevSlide}
+      onGoTo={goToSlide}
+      embedded={Boolean(headerContent)}
+    />
+  );
 
   return (
     <div className="flex flex-col space-y-8">
-      <GarmentCarouselControls
-        slides={slides}
-        activeIndex={activeSlideIndex}
-        onNext={nextSlide}
-        onPrev={prevSlide}
-        onGoTo={goToSlide}
+      {headerContent ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          {headerContent}
+          <div className="mt-6 border-t border-slate-200 pt-6">
+            {carouselControls}
+          </div>
+        </div>
+      ) : (
+        carouselControls
+      )}
+
+      <BatchErrorLogPanel
+        jobs={jobs}
+        focusedJobId={activeFocusedJob?.id || null}
+        onFocusJob={handleFocusJob}
       />
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
@@ -143,12 +168,6 @@ export const JobBatchCarousel: React.FC<Props> = ({
         </div>
 
         <div className="space-y-6">
-          <BatchErrorLogPanel
-            jobs={jobs}
-            focusedJobId={activeFocusedJob?.id || null}
-            onFocusJob={handleFocusJob}
-          />
-
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {activeSlide.jobs.map((job, index) => (
               <JobEvaluationCard
@@ -165,6 +184,8 @@ export const JobBatchCarousel: React.FC<Props> = ({
                 onToggleSelected={job.id && onToggleJob ? () => onToggleJob(job.id!) : undefined}
                 focused={job.id === activeFocusedJob?.id}
                 onFocusTraceability={job.id ? () => handleFocusJob(job.id!) : undefined}
+                selectedOutputId={job.id ? selectedOutputIdsByJobId[job.id] || null : null}
+                onSelectOutput={job.id && onSelectOutput ? (outputId, output) => onSelectOutput(job.id!, outputId, output) : undefined}
               />
             ))}
           </div>

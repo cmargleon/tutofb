@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.downloadJobImage = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
+const domain_1 = require("../../../shared/src/domain");
 const roles_1 = require("../auth/roles");
 const appFirestore_1 = require("../firebase/appFirestore");
 const downloadAssets_helpers_1 = require("./downloadAssets.helpers");
@@ -62,15 +63,27 @@ exports.downloadJobImage = (0, https_1.onRequest)({
         await (0, roles_1.assertUserRoles)(decodedToken.uid, decodedToken.role, ['admin', 'operador', 'revisor']);
         const body = (0, downloadAssets_helpers_1.parseBody)(request.body);
         const jobId = typeof body.jobId === 'string' ? body.jobId.trim() : '';
+        const requestedOutputId = typeof body.outputId === 'string' ? body.outputId.trim() : '';
         if (!jobId) {
             throw new https_1.HttpsError('invalid-argument', 'Debes indicar la imagen que quieres descargar.');
         }
-        const jobSnapshot = await db.collection('jobs').doc(jobId).get();
+        const jobRef = db.collection('jobs').doc(jobId);
+        const jobSnapshot = await jobRef.get();
         if (!jobSnapshot.exists) {
             throw new https_1.HttpsError('not-found', 'Trabajo no encontrado.');
         }
         const job = { id: jobSnapshot.id, ...jobSnapshot.data() };
-        const resultImagePath = job.currentOutput?.resultImagePath;
+        const selectedOutputSnapshot = requestedOutputId
+            ? await jobRef.collection('outputs').doc(requestedOutputId).get()
+            : null;
+        const selectedOutput = selectedOutputSnapshot?.exists
+            ? { id: selectedOutputSnapshot.id, ...selectedOutputSnapshot.data() }
+            : null;
+        if (requestedOutputId && !selectedOutput) {
+            throw new https_1.HttpsError('not-found', 'La salida seleccionada ya no existe para este job.');
+        }
+        const resolvedOutput = selectedOutput || (0, domain_1.resolveApprovedJobOutput)(job);
+        const resultImagePath = resolvedOutput?.resultImagePath;
         if (!resultImagePath) {
             throw new https_1.HttpsError('failed-precondition', 'Este trabajo todavía no tiene un resultado disponible.');
         }
@@ -88,7 +101,7 @@ exports.downloadJobImage = (0, https_1.onRequest)({
         const poseIndex = Math.max(0, orderedJobs.findIndex((candidate) => candidate.id === job.id));
         const fileBytes = await (0, downloadAssets_helpers_1.readAssetBytes)(resultImagePath);
         const fileName = (0, downloadAssets_helpers_1.buildJobImageFilename)(batch, job, poseIndex);
-        const contentType = job.currentOutput?.contentType || 'image/png';
+        const contentType = resolvedOutput?.contentType || 'image/png';
         response.set('Content-Type', contentType);
         response.set('Content-Disposition', `attachment; filename="${fileName}"`);
         response.set('Cache-Control', 'private, no-store, max-age=0');

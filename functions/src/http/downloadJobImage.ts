@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onRequest } from 'firebase-functions/v2/https';
 import type { Request, Response } from 'express';
+import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { Batch, Job } from '../../../shared/src/types';
 import { assertUserRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
@@ -43,17 +44,29 @@ export const downloadJobImage = onRequest(
 
       const body = parseBody(request.body);
       const jobId = typeof body.jobId === 'string' ? body.jobId.trim() : '';
+      const requestedOutputId = typeof body.outputId === 'string' ? body.outputId.trim() : '';
       if (!jobId) {
         throw new HttpsError('invalid-argument', 'Debes indicar la imagen que quieres descargar.');
       }
 
-      const jobSnapshot = await db.collection('jobs').doc(jobId).get();
+      const jobRef = db.collection('jobs').doc(jobId);
+      const jobSnapshot = await jobRef.get();
       if (!jobSnapshot.exists) {
         throw new HttpsError('not-found', 'Trabajo no encontrado.');
       }
 
       const job = { id: jobSnapshot.id, ...jobSnapshot.data() } as Job;
-      const resultImagePath = job.currentOutput?.resultImagePath;
+      const selectedOutputSnapshot = requestedOutputId
+        ? await jobRef.collection('outputs').doc(requestedOutputId).get()
+        : null;
+      const selectedOutput = selectedOutputSnapshot?.exists
+        ? ({ id: selectedOutputSnapshot.id, ...selectedOutputSnapshot.data() } as Job['currentOutput'])
+        : null;
+      if (requestedOutputId && !selectedOutput) {
+        throw new HttpsError('not-found', 'La salida seleccionada ya no existe para este job.');
+      }
+      const resolvedOutput = selectedOutput || resolveApprovedJobOutput(job);
+      const resultImagePath = resolvedOutput?.resultImagePath;
       if (!resultImagePath) {
         throw new HttpsError('failed-precondition', 'Este trabajo todavía no tiene un resultado disponible.');
       }
@@ -77,7 +90,7 @@ export const downloadJobImage = onRequest(
       );
       const fileBytes = await readAssetBytes(resultImagePath);
       const fileName = buildJobImageFilename(batch, job, poseIndex);
-      const contentType = job.currentOutput?.contentType || 'image/png';
+      const contentType = resolvedOutput?.contentType || 'image/png';
 
       response.set('Content-Type', contentType);
       response.set('Content-Disposition', `attachment; filename="${fileName}"`);

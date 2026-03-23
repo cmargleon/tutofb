@@ -40,6 +40,7 @@ exports.downloadBatchZip = void 0;
 const admin = __importStar(require("firebase-admin"));
 const jszip_1 = __importDefault(require("jszip"));
 const https_1 = require("firebase-functions/v2/https");
+const domain_1 = require("../../../shared/src/domain");
 const roles_1 = require("../auth/roles");
 const appFirestore_1 = require("../firebase/appFirestore");
 const downloadAssets_helpers_1 = require("./downloadAssets.helpers");
@@ -66,6 +67,9 @@ exports.downloadBatchZip = (0, https_1.onRequest)({
         await (0, roles_1.assertUserRoles)(decodedToken.uid, decodedToken.role, ['admin', 'operador', 'revisor']);
         const body = (0, downloadAssets_helpers_1.parseBody)(request.body);
         const batchId = typeof body.batchId === 'string' ? body.batchId.trim() : '';
+        const selectedOutputIdsByJobId = body.selectedOutputIdsByJobId && typeof body.selectedOutputIdsByJobId === 'object'
+            ? body.selectedOutputIdsByJobId
+            : {};
         if (!batchId) {
             throw new https_1.HttpsError('invalid-argument', 'Debes indicar el lote que quieres descargar.');
         }
@@ -81,7 +85,7 @@ exports.downloadBatchZip = (0, https_1.onRequest)({
             .get();
         const completedJobs = jobsSnapshot.docs
             .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
-            .filter((job) => job.currentOutput?.resultImagePath);
+            .filter((job) => (0, domain_1.resolveApprovedJobOutput)(job)?.resultImagePath);
         if (completedJobs.length === 0) {
             throw new https_1.HttpsError('failed-precondition', 'No hay imágenes completadas para descargar.');
         }
@@ -92,7 +96,16 @@ exports.downloadBatchZip = (0, https_1.onRequest)({
             throw new Error('No se pudo preparar el ZIP del lote.');
         }
         for (const [index, job] of completedJobs.entries()) {
-            const resultImagePath = job.currentOutput?.resultImagePath;
+            const requestedOutputId = typeof selectedOutputIdsByJobId[job.id || ''] === 'string'
+                ? String(selectedOutputIdsByJobId[job.id || '']).trim()
+                : '';
+            const selectedOutputSnapshot = requestedOutputId
+                ? await db.collection('jobs').doc(job.id).collection('outputs').doc(requestedOutputId).get()
+                : null;
+            const selectedOutput = selectedOutputSnapshot?.exists
+                ? { id: selectedOutputSnapshot.id, ...selectedOutputSnapshot.data() }
+                : null;
+            const resultImagePath = (selectedOutput || (0, domain_1.resolveApprovedJobOutput)(job))?.resultImagePath;
             if (!resultImagePath) {
                 continue;
             }

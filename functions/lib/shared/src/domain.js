@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildFinalGenerationPrompt = exports.isActiveCatalogEntity = exports.isArchivedCatalogEntity = exports.isCatalogEntityStatus = exports.isAspectRatio = exports.isProvider = exports.isRole = exports.DEFAULT_TRY_ON_PROMPT = exports.PROVIDER_LABELS = exports.ASPECT_RATIO_VALUES = exports.PROVIDER_VALUES = exports.ROLE_VALUES = void 0;
+exports.buildFinalGenerationPrompt = exports.resolveApprovedJobOutput = exports.isActiveCatalogEntity = exports.isArchivedCatalogEntity = exports.isCatalogEntityStatus = exports.isAspectRatio = exports.isProvider = exports.isRole = exports.DEFAULT_TRY_ON_PROMPT = exports.PROVIDER_LABELS = exports.ASPECT_RATIO_VALUES = exports.PROVIDER_VALUES = exports.ROLE_VALUES = void 0;
 exports.ROLE_VALUES = ['admin', 'operador', 'revisor'];
 exports.PROVIDER_VALUES = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5'];
 exports.ASPECT_RATIO_VALUES = ['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'];
@@ -42,18 +42,53 @@ GARMENT INTEGRITY (CRITICAL):
 - Do NOT hallucinate missing parts — only use visible reference information
 - Ensure perspective consistency with the scene
 
-BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT):
-- Only place logos or branding that are explicitly visible in the reference image
-- If a logo is visible:
+--------------------------------
+BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
+--------------------------------
+
+- Logos, text, or branding must ONLY be used if they are explicitly visible in the reference image AND in the corresponding visible area
+
+- If a logo is visible in the reference:
   • Preserve its EXACT position, scale, and orientation
-  • Do NOT move or reinterpret it
-- If a logo is NOT visible (e.g., back side not shown):
-  • DO NOT generate, infer, or assume any logo placement
-  • DO NOT add logos to unseen areas (e.g., back, sleeves, sides)
+  • Do NOT move, reinterpret, or enhance it
+
+- VISIBILITY RULE (CRITICAL PRIORITY):
+  • If the reference image shows ONLY the front of the garment:
+    - DO NOT render ANY logos or branding on areas not visible (e.g., back, sides, shoulders not shown)
+    - EVEN IF the garment clearly has a logo on the front, DO NOT assume or replicate branding on unseen areas
+    - The model must behave as if the unseen areas contain NO branding
+
+- If the garment has a visible logo on the front but NO back view is provided:
+  • The generated image MUST NOT contain ANY visible branding on the back or other unseen areas
+  • The back must remain clean and free of logos
+
 - Do NOT assume symmetry of branding (front ≠ back)
 - Do NOT reconstruct hidden branding
+- Do NOT generate additional or duplicate logos
 
-STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS):
+--------------------------------
+UNSEEN AREA CONSTRAINTS (CRITICAL)
+--------------------------------
+
+- Any part of the garment that is NOT visible in the reference image must be treated as UNKNOWN
+
+- For UNKNOWN areas:
+  • Apply only neutral continuation of base fabric
+  • Continue color or pattern ONLY if clearly consistent and non-distinct
+  • Avoid adding any new visual elements
+
+STRICTLY FORBIDDEN in unseen areas:
+- Logos, brand marks, or symbols
+- Text, typography, or graphics
+- High-contrast shapes resembling branding
+- Any design element not explicitly visible in the reference
+
+- The system must behave as if it has ZERO knowledge beyond what is visible
+
+--------------------------------
+STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS)
+--------------------------------
+
 - No adding logos to areas not visible in the reference
 - No “guessing” brand placement
 - No front/back symmetry assumptions
@@ -64,8 +99,16 @@ STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS):
 - No background changes
 - No artifacts or distortions
 
-OUTPUT:
-Generate a photorealistic, high-detail fashion catalog image with perfect pose preservation, correct gaze direction, and strictly accurate brand placement with zero hallucinations.`;
+--------------------------------
+OUTPUT
+--------------------------------
+
+Generate a photorealistic, high-detail fashion catalog image with:
+- strict pose preservation
+- correct gaze direction
+- accurate garment reproduction
+- ZERO hallucinated branding
+- clean treatment of unseen areas`;
 const isRole = (value) => exports.ROLE_VALUES.includes(value);
 exports.isRole = isRole;
 const isProvider = (value) => exports.PROVIDER_VALUES.includes(value);
@@ -78,6 +121,8 @@ const isArchivedCatalogEntity = (value) => value?.status === 'archived';
 exports.isArchivedCatalogEntity = isArchivedCatalogEntity;
 const isActiveCatalogEntity = (value) => !(0, exports.isArchivedCatalogEntity)(value);
 exports.isActiveCatalogEntity = isActiveCatalogEntity;
+const resolveApprovedJobOutput = (job) => job.userSelectedOutput || job.currentOutput || null;
+exports.resolveApprovedJobOutput = resolveApprovedJobOutput;
 const buildFinalGenerationPrompt = (promptBase, garmentIsMultiAngle) => {
     const basePrompt = promptBase.trim() || exports.DEFAULT_TRY_ON_PROMPT;
     const sections = [basePrompt];

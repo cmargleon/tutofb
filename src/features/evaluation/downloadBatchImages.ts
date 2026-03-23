@@ -1,4 +1,5 @@
 import FileSaver from 'file-saver';
+import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { Batch, Job } from '../../../shared/src/types';
 import { auth } from '../../firebase';
 import firebaseConfig from '../../../firebase-applet-config.json';
@@ -64,7 +65,21 @@ const getSelectedJobsZipDownloadUrl = (): string => {
   return `https://us-central1-${projectId}.cloudfunctions.net/downloadSelectedJobsZip`;
 };
 
-const requestBatchZipBlob = async (batchId: string): Promise<Blob> => {
+const sanitizeSelectedOutputIds = (selectedOutputIdsByJobId?: Record<string, string | null>): Record<string, string> => {
+  if (!selectedOutputIdsByJobId) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(selectedOutputIdsByJobId)
+      .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1])),
+  );
+};
+
+const requestBatchZipBlob = async (
+  batchId: string,
+  selectedOutputIdsByJobId?: Record<string, string | null>,
+): Promise<Blob> => {
   const user = auth.currentUser;
   if (!user) {
     throw new Error('Debes iniciar sesión para descargar las imágenes.');
@@ -80,7 +95,7 @@ const requestBatchZipBlob = async (batchId: string): Promise<Blob> => {
         Authorization: `Bearer ${idToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ batchId }),
+      body: JSON.stringify({ batchId, selectedOutputIdsByJobId: sanitizeSelectedOutputIds(selectedOutputIdsByJobId) }),
     });
   } catch (error) {
     if (error instanceof TypeError) {
@@ -118,7 +133,7 @@ const requestBatchZipBlob = async (batchId: string): Promise<Blob> => {
   return response.blob();
 };
 
-const requestJobImageBlob = async (jobId: string): Promise<Blob> => {
+const requestJobImageBlob = async (jobId: string, outputId?: string | null): Promise<Blob> => {
   const user = auth.currentUser;
   if (!user) {
     throw new Error('Debes iniciar sesión para descargar las imágenes.');
@@ -134,7 +149,7 @@ const requestJobImageBlob = async (jobId: string): Promise<Blob> => {
         Authorization: `Bearer ${idToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ jobId }),
+      body: JSON.stringify({ jobId, outputId: outputId || null }),
     });
   } catch (error) {
     if (error instanceof TypeError) {
@@ -172,7 +187,11 @@ const requestJobImageBlob = async (jobId: string): Promise<Blob> => {
   return response.blob();
 };
 
-const requestSelectedJobsZipBlob = async (batchId: string, jobIds: string[]): Promise<Blob> => {
+const requestSelectedJobsZipBlob = async (
+  batchId: string,
+  jobIds: string[],
+  selectedOutputIdsByJobId?: Record<string, string | null>,
+): Promise<Blob> => {
   const user = auth.currentUser;
   if (!user) {
     throw new Error('Debes iniciar sesión para descargar las imágenes.');
@@ -188,7 +207,7 @@ const requestSelectedJobsZipBlob = async (batchId: string, jobIds: string[]): Pr
         Authorization: `Bearer ${idToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ batchId, jobIds }),
+      body: JSON.stringify({ batchId, jobIds, selectedOutputIdsByJobId: sanitizeSelectedOutputIds(selectedOutputIdsByJobId) }),
     });
   } catch (error) {
     if (error instanceof TypeError) {
@@ -231,19 +250,24 @@ export const buildJobImageFilename = (batch: Batch, job: Job, poseIndex: number)
   normalizeFilename(batch.modelNameSnapshot || 'modelo'),
   normalizeFilename(job.garmentName || `job-${job.id}`),
   `pose-${poseIndex + 1}`,
-  `job-${job.id}.${getExtension(job.currentOutput?.resultImagePath || '')}`,
+  `job-${job.id}.${getExtension(resolveApprovedJobOutput(job)?.resultImagePath || '')}`,
 ].join('_');
 
-export const downloadSingleJobImage = async (batch: Batch, job: Job, poseIndex: number): Promise<void> => {
+export const downloadSingleJobImage = async (
+  batch: Batch,
+  job: Job,
+  poseIndex: number,
+  outputId?: string | null,
+): Promise<void> => {
   if (!job.id) {
     throw new Error('No se encontró el identificador del trabajo a descargar.');
   }
 
-  if (!job.currentOutput?.resultImagePath) {
+  if (!resolveApprovedJobOutput(job)?.resultImagePath) {
     throw new Error('Este trabajo todavía no tiene un resultado disponible.');
   }
 
-  const blob = await requestJobImageBlob(job.id);
+  const blob = await requestJobImageBlob(job.id, outputId);
   saveAs(blob, buildJobImageFilename(batch, job, poseIndex));
 };
 
@@ -251,8 +275,11 @@ export const downloadMultipleJobImages = async (
   batch: Batch,
   jobs: Job[],
   poseIndexes: Record<string, number>,
+  selectedOutputIdsByJobId?: Record<string, string | null>,
 ): Promise<void> => {
-  const downloadableJobs = jobs.filter((job) => job.id && job.currentOutput?.resultImagePath);
+  const downloadableJobs = jobs.filter(
+    (job) => job.id && (resolveApprovedJobOutput(job)?.resultImagePath || selectedOutputIdsByJobId?.[job.id]),
+  );
   if (downloadableJobs.length === 0) {
     throw new Error('No hay imágenes seleccionadas listas para descargar.');
   }
@@ -265,22 +292,29 @@ export const downloadMultipleJobImages = async (
     const zipBlob = await requestSelectedJobsZipBlob(
       batch.id,
       downloadableJobs.map((job) => job.id!),
+      selectedOutputIdsByJobId,
     );
     saveAs(zipBlob, `${buildBatchZipFilename(batch)}_seleccion.zip`);
     return;
   }
 
   for (const job of jobs) {
-    if (!job.id || !job.currentOutput?.resultImagePath) {
+    if (!job.id || (!resolveApprovedJobOutput(job)?.resultImagePath && !selectedOutputIdsByJobId?.[job.id])) {
       continue;
     }
 
-    await downloadSingleJobImage(batch, job, poseIndexes[job.id] ?? 0);
+    await downloadSingleJobImage(batch, job, poseIndexes[job.id] ?? 0, selectedOutputIdsByJobId?.[job.id] || null);
   }
 };
 
-export const downloadBatchImages = async (batch: Batch, jobs: Job[]) => {
-  const completedJobs = jobs.filter((job) => job.currentOutput?.resultImagePath);
+export const downloadBatchImages = async (
+  batch: Batch,
+  jobs: Job[],
+  selectedOutputIdsByJobId?: Record<string, string | null>,
+) => {
+  const completedJobs = jobs.filter(
+    (job) => (job.id && selectedOutputIdsByJobId?.[job.id]) || resolveApprovedJobOutput(job)?.resultImagePath,
+  );
   if (completedJobs.length === 0) {
     throw new Error('No hay imágenes completadas para descargar.');
   }
@@ -289,6 +323,6 @@ export const downloadBatchImages = async (batch: Batch, jobs: Job[]) => {
     throw new Error('No se encontró el identificador del lote a descargar.');
   }
 
-  const zipBlob = await requestBatchZipBlob(batch.id);
+  const zipBlob = await requestBatchZipBlob(batch.id, selectedOutputIdsByJobId);
   saveAs(zipBlob, `${buildBatchZipFilename(batch)}.zip`);
 };

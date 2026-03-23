@@ -9,6 +9,7 @@ interface Props {
   onNext: () => void;
   onPrev: () => void;
   onGoTo: (index: number) => void;
+  embedded?: boolean;
 }
 
 export const GarmentCarouselControls: React.FC<Props> = ({
@@ -16,14 +17,15 @@ export const GarmentCarouselControls: React.FC<Props> = ({
   activeIndex,
   onNext,
   onPrev,
-  onGoTo
+  onGoTo,
+  embedded = false,
 }) => {
   const activeSlide = slides[activeIndex] || slides[0];
 
   if (!activeSlide) return null;
 
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white px-6 py-7 shadow-sm">
+    <div className={embedded ? '' : 'rounded-[2rem] border border-slate-200 bg-white px-6 py-7 shadow-sm'}>
       <div className="grid items-center gap-6 lg:grid-cols-[1fr_auto_1fr]">
         <button
           onClick={onPrev}

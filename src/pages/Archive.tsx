@@ -10,8 +10,9 @@ import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { useAuth, useRole } from '../features/auth/AuthProvider';
 import { regenerateJobsBulk } from '../features/evaluation/firebase';
 import { buildJobPoseIndexMap } from '../features/evaluation/jobSlides';
-import { PROVIDER_LABELS } from '../../shared/src/domain';
+import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../shared/src/domain';
 import { Batch, Job, JobStatus, Provider } from '../../shared/src/types';
+import { usePersistedJobOutputSelections } from '../features/evaluation/usePersistedJobOutputSelections';
 
 const SEARCH_PAGE_SIZE = 40;
 
@@ -103,6 +104,18 @@ export const Archive: React.FC = () => {
   );
 
   const { batch, jobs, loading: batchLoading, error: batchError } = useArchiveBatch(selectedBatchId);
+  const { selectedOutputIdsByJobId, selectOutput } = usePersistedJobOutputSelections(
+    selectedBatchId,
+    jobs,
+    (error) => {
+      console.error('Error persisting selected output in archive:', error);
+      toast({
+        tone: 'error',
+        title: 'No pudimos guardar la selección',
+        description: 'Inténtalo de nuevo desde Archivo.',
+      });
+    },
+  );
 
   const visibleJobs = useMemo(
     () =>
@@ -118,6 +131,14 @@ export const Archive: React.FC = () => {
         return true;
       }),
     [jobStatus, jobs, provider],
+  );
+
+  const downloadableVisibleJobsCount = useMemo(
+    () =>
+      visibleJobs.filter(
+        (job) => Boolean(resolveApprovedJobOutput(job)?.resultImagePath || (job.id && selectedOutputIdsByJobId[job.id])),
+      ).length,
+    [selectedOutputIdsByJobId, visibleJobs],
   );
 
   const poseIndexes = useMemo(() => buildJobPoseIndexMap(visibleJobs), [visibleJobs]);
@@ -207,12 +228,11 @@ export const Archive: React.FC = () => {
 
     setBusyAction('download');
     try {
-      await downloadBatchImages(batch, visibleJobs);
-      const completedJobs = visibleJobs.filter((job) => job.currentOutput?.resultImagePath).length;
+      await downloadBatchImages(batch, visibleJobs, selectedOutputIdsByJobId);
       toast({
         tone: 'success',
         title: 'Descarga iniciada',
-        description: `Preparamos el ZIP con ${completedJobs} imagen${completedJobs === 1 ? '' : 'es'} visible${completedJobs === 1 ? '' : 's'}.`,
+        description: `Preparamos el ZIP con ${downloadableVisibleJobsCount} imagen${downloadableVisibleJobsCount === 1 ? '' : 'es'} visible${downloadableVisibleJobsCount === 1 ? '' : 's'}.`,
       });
     } catch (error: any) {
       toast({
@@ -232,7 +252,7 @@ export const Archive: React.FC = () => {
 
     setBusyAction('download');
     try {
-      await downloadMultipleJobImages(batch, selectedJobs, poseIndexes);
+      await downloadMultipleJobImages(batch, selectedJobs, poseIndexes, selectedOutputIdsByJobId);
       toast({
         tone: 'success',
         title: 'Descarga iniciada',
@@ -574,7 +594,7 @@ export const Archive: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => void handleDownloadAll()}
-                          disabled={busyAction === 'download' || !visibleJobs.some((job) => job.currentOutput?.resultImagePath)}
+                          disabled={busyAction === 'download' || downloadableVisibleJobsCount === 0}
                           className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <Download className="h-4 w-4" />
@@ -594,8 +614,10 @@ export const Archive: React.FC = () => {
                     jobs={visibleJobs}
                     showFloatingGarment
                     selectedJobIds={selectedJobIds}
+                    selectedOutputIdsByJobId={selectedOutputIdsByJobId}
                     onToggleJob={toggleJob}
                     onSelectJobs={selectJobs}
+                    onSelectOutput={selectOutput}
                     bulkActions={bulkActions}
                     keyboardShortcutLabel="Flechas cambian de prenda. A selecciona visibles. D descarga. R reencola."
                   />

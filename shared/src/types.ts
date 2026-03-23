@@ -252,6 +252,8 @@ export interface Job {
   latestOutputCreatedAt?: TimestampLike | null;
   currentOutputId: string | null;
   currentOutput: JobOutput | null;
+  userSelectedOutputId?: string | null;
+  userSelectedOutput?: JobOutput | null;
   completedOutputCount: number;
   totalCostUsd: number;
   totalDurationSeconds: number;
@@ -581,6 +583,17 @@ export interface RegenerateJobRequest {
 export interface RegenerateJobResponse {
   success: boolean;
   jobId: string;
+}
+
+export interface SelectJobOutputRequest {
+  jobId: string;
+  outputId: string | null;
+}
+
+export interface SelectJobOutputResponse {
+  success: boolean;
+  jobId: string;
+  outputId: string | null;
 }
 
 export interface RegenerateFailedBatchJobsRequest {

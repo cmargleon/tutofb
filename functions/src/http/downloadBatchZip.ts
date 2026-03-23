@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import JSZip from 'jszip';
 import { HttpsError, onRequest } from 'firebase-functions/v2/https';
 import type { Request, Response } from 'express';
+import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { Batch, Job } from '../../../shared/src/types';
 import { assertUserRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
@@ -45,6 +46,10 @@ export const downloadBatchZip = onRequest(
 
     const body = parseBody(request.body);
     const batchId = typeof body.batchId === 'string' ? body.batchId.trim() : '';
+    const selectedOutputIdsByJobId =
+      body.selectedOutputIdsByJobId && typeof body.selectedOutputIdsByJobId === 'object'
+        ? body.selectedOutputIdsByJobId as Record<string, unknown>
+        : {};
     if (!batchId) {
       throw new HttpsError('invalid-argument', 'Debes indicar el lote que quieres descargar.');
     }
@@ -63,7 +68,7 @@ export const downloadBatchZip = onRequest(
 
     const completedJobs = jobsSnapshot.docs
       .map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }) as Job)
-      .filter((job) => job.currentOutput?.resultImagePath);
+      .filter((job) => resolveApprovedJobOutput(job)?.resultImagePath);
 
     if (completedJobs.length === 0) {
       throw new HttpsError('failed-precondition', 'No hay imágenes completadas para descargar.');
@@ -78,7 +83,16 @@ export const downloadBatchZip = onRequest(
     }
 
     for (const [index, job] of completedJobs.entries()) {
-      const resultImagePath = job.currentOutput?.resultImagePath;
+      const requestedOutputId = typeof selectedOutputIdsByJobId[job.id || ''] === 'string'
+        ? String(selectedOutputIdsByJobId[job.id || '']).trim()
+        : '';
+      const selectedOutputSnapshot = requestedOutputId
+        ? await db.collection('jobs').doc(job.id!).collection('outputs').doc(requestedOutputId).get()
+        : null;
+      const selectedOutput = selectedOutputSnapshot?.exists
+        ? ({ id: selectedOutputSnapshot.id, ...selectedOutputSnapshot.data() } as Job['currentOutput'])
+        : null;
+      const resultImagePath = (selectedOutput || resolveApprovedJobOutput(job))?.resultImagePath;
       if (!resultImagePath) {
         continue;
       }

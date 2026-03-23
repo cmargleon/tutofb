@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { Batch, Job } from '../../../shared/src/types';
 
 const bucket = admin.storage().bucket();
@@ -24,7 +25,7 @@ export const buildJobImageFilename = (batch: Batch, job: Job, poseIndex: number)
     normalizeFilename(batch.modelNameSnapshot || 'modelo'),
     normalizeFilename(job.garmentName || `job-${job.id}`),
     `pose-${poseIndex + 1}`,
-    `job-${job.id}.${getExtension(job.currentOutput?.resultImagePath || '')}`,
+    `job-${job.id}.${getExtension(resolveApprovedJobOutput(job)?.resultImagePath || '')}`,
   ].join('_');
 
 export const buildZipFolderName = (batch: Batch): string =>

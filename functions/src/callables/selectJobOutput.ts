@@ -70,13 +70,22 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
   await jobRef.update({
     userSelectedOutputId: output.id,
     userSelectedOutput: output,
+    status: 'completed',
+    completedAt: now,
+    lastError: null,
+    'traceability.lastCompletedAt': now,
+    'traceability.lastProviderErrorAt': null,
+    'traceability.lastProviderErrorMessage': null,
     updatedAt: now,
   });
 
   await jobRef.collection('logs').add({
-    type: 'system',
+    type: job.status === 'completed' ? 'system' : 'completed',
     level: 'info',
-    message: 'Usuario marcó manualmente una salida como aprobada.',
+    message:
+      job.status === 'completed'
+        ? 'Usuario marcó manualmente una salida como aprobada.'
+        : 'Usuario aprobó manualmente una salida y el job quedó completado.',
     outputId: output.id,
     payload: {
       requestedByUid: request.auth!.uid,
@@ -84,6 +93,7 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
       outputId: output.id,
       generationAttempt: output.generationAttempt || null,
       previousOutputId: job.userSelectedOutputId || null,
+      previousStatus: job.status,
     },
     createdAt: now,
   });

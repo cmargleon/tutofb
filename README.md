@@ -42,6 +42,14 @@ Flujo server-side documentado:
 
 ## Setup local
 
+## Estado actual de entorno
+
+Importante:
+- correr el frontend en `localhost:3000` no implica usar Firebase local
+- hoy este repo está configurado para trabajar contra Firebase en la nube cuando `VITE_USE_FIREBASE_EMULATORS=false`
+- en este workspace, [`.env.local`](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/.env.local#L1) tiene `VITE_USE_FIREBASE_EMULATORS="false"`, así que el frontend local usa Firestore, Functions y Storage remotos
+- solo se usan emuladores si cambias esa variable a `true` y además levantas `firebase emulators:start`
+
 ### 1. Instalar dependencias
 
 ```bash

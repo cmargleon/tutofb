@@ -259,10 +259,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
                 active={displayedOutput?.id === output.id}
                 userApproved={selectedOutputId === output.id}
                 onSelect={() => {
-                  onSelectOutput?.(
-                    selectedOutputId === output.id ? null : output.id,
-                    selectedOutputId === output.id ? null : output,
-                  );
+                  onSelectOutput?.(output.id, output);
                 }}
               />
             ))}

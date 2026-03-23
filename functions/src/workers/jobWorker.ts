@@ -65,6 +65,20 @@ const createLog = async (jobId: string, input: Omit<JobLog, 'createdAt'>): Promi
   });
 };
 
+const isClaimStillActive = async (jobId: string, claimToken: string | null): Promise<boolean> => {
+  if (!claimToken) {
+    return false;
+  }
+
+  const snapshot = await db.collection('jobs').doc(jobId).get();
+  if (!snapshot.exists) {
+    return false;
+  }
+
+  const job = { id: snapshot.id, ...snapshot.data() } as Job;
+  return job.status === 'processing' && job.claimToken === claimToken;
+};
+
 const claimJob = async (jobId: string, workerId: string): Promise<Job | null> => {
   const jobRef = db.collection('jobs').doc(jobId);
   const claimExpiresAt = Timestamp.fromMillis(Date.now() + getJobTimeoutMs());
@@ -153,7 +167,7 @@ const persistGeneratedAttempt = async ({
   autoReview: JobAutoReview | null;
   lastError: string | null;
   nextPromptBase?: string;
-}): Promise<void> => {
+}): Promise<boolean> => {
   const jobId = claimedJob.id!;
   const jobRef = db.collection('jobs').doc(jobId);
   const outputRef = jobRef.collection('outputs').doc();
@@ -254,83 +268,104 @@ const persistGeneratedAttempt = async ({
     baseJobUpdate.finalPrompt = buildFinalGenerationPrompt(resolvedPromptBase, claimedJob.garmentIsMultiAngle);
   }
 
-  const writeBatch = db.batch();
-  writeBatch.set(outputRef, currentOutput);
+  const committed = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(jobRef);
+    if (!snapshot.exists) {
+      return false;
+    }
 
-  if (claimedJob.currentOutputId) {
-    writeBatch.set(
-      jobRef.collection('outputs').doc(claimedJob.currentOutputId),
-      {
-        isCurrent: false,
-      },
-      { merge: true },
-    );
-  }
+    const latestJob = { id: snapshot.id, ...snapshot.data() } as Job;
+    if (latestJob.status !== 'processing' || latestJob.claimToken !== claimedJob.claimToken) {
+      return false;
+    }
 
-  writeBatch.update(jobRef, baseJobUpdate);
+    transaction.set(outputRef, currentOutput);
 
-  writeBatch.set(jobRef.collection('logs').doc(), {
-    type: 'provider_response',
-    level: 'info',
-    message: 'Proveedor completó la generación y el resultado fue guardado.',
-    outputId,
-    payload: {
-      provider: providerResult.provider,
-      requestId: providerResult.requestId,
-      remoteUrl: providerResult.remoteUrl,
-      summary: providerResult.responseSummary,
-      generationAttempt,
-    },
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+    if (latestJob.currentOutputId) {
+      transaction.set(
+        jobRef.collection('outputs').doc(latestJob.currentOutputId),
+        {
+          isCurrent: false,
+        },
+        { merge: true },
+      );
+    }
 
-  if (autoReview) {
-    writeBatch.set(jobRef.collection('logs').doc(), {
-      type: 'quality_review',
-      level:
-        autoReview.verdict === 'approved'
-          ? 'info'
-          : nextStatus === 'pending'
-            ? 'warn'
-            : 'error',
-      message:
-        autoReview.verdict === 'approved'
-          ? 'Gemini aprobó la imagen generada.'
-          : nextStatus === 'pending'
-            ? 'Gemini rechazó la imagen y programó un nuevo intento.'
-            : 'Gemini rechazó la imagen y se agotó el máximo de intentos.',
-      outputId,
-      payload: {
-        model: autoReview.model,
-        verdict: autoReview.verdict,
-        summary: autoReview.summary,
-        reviewPrompt: autoReview.reviewPrompt,
-        revisedPrompt: autoReview.revisedPrompt,
-        criteria: autoReview.criteria,
-        marketplaceData: autoReview.marketplaceData,
-        attemptNumber: generationAttempt,
-      },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  }
+    transaction.update(jobRef, baseJobUpdate);
 
-  if (nextStatus === 'completed') {
-    writeBatch.set(jobRef.collection('logs').doc(), {
-      type: 'completed',
+    transaction.set(jobRef.collection('logs').doc(), {
+      type: 'provider_response',
       level: 'info',
-      message: 'Trabajo completado y aprobado por la autoevaluación.',
+      message: 'Proveedor completó la generación y el resultado fue guardado.',
       outputId,
       payload: {
-        destinationPath,
-        durationSeconds,
-        costUsd,
+        provider: providerResult.provider,
+        requestId: providerResult.requestId,
+        remoteUrl: providerResult.remoteUrl,
+        summary: providerResult.responseSummary,
         generationAttempt,
       },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    if (autoReview) {
+      transaction.set(jobRef.collection('logs').doc(), {
+        type: 'quality_review',
+        level:
+          autoReview.verdict === 'approved'
+            ? 'info'
+            : nextStatus === 'pending'
+              ? 'warn'
+              : 'error',
+        message:
+          autoReview.verdict === 'approved'
+            ? 'Gemini aprobó la imagen generada.'
+            : nextStatus === 'pending'
+              ? 'Gemini rechazó la imagen y programó un nuevo intento.'
+              : 'Gemini rechazó la imagen y se agotó el máximo de intentos.',
+        outputId,
+        payload: {
+          model: autoReview.model,
+          verdict: autoReview.verdict,
+          summary: autoReview.summary,
+          reviewPrompt: autoReview.reviewPrompt,
+          revisedPrompt: autoReview.revisedPrompt,
+          criteria: autoReview.criteria,
+          marketplaceData: autoReview.marketplaceData,
+          attemptNumber: generationAttempt,
+        },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (nextStatus === 'completed') {
+      transaction.set(jobRef.collection('logs').doc(), {
+        type: 'completed',
+        level: 'info',
+        message: 'Trabajo completado y aprobado por la autoevaluación.',
+        outputId,
+        payload: {
+          destinationPath,
+          durationSeconds,
+          costUsd,
+          generationAttempt,
+        },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    return true;
+  });
+
+  if (!committed) {
+    try {
+      await bucket.file(destinationPath).delete();
+    } catch (cleanupError) {
+      console.warn('Could not delete discarded generated file:', cleanupError);
+    }
   }
 
-  await writeBatch.commit();
+  return committed;
 };
 
 const failGeneratedAttemptAfterReviewError = async ({
@@ -346,7 +381,7 @@ const failGeneratedAttemptAfterReviewError = async ({
   generationAttempt: number;
   error: unknown;
 }): Promise<void> => {
-  await persistGeneratedAttempt({
+  const persisted = await persistGeneratedAttempt({
     claimedJob,
     providerResult,
     durationSeconds,
@@ -358,6 +393,10 @@ const failGeneratedAttemptAfterReviewError = async ({
         ? `No se pudo validar la imagen con Gemini: ${error.message}`
         : 'No se pudo validar la imagen con Gemini.',
   });
+
+  if (!persisted) {
+    return;
+  }
 
   await createLog(claimedJob.id!, {
     type: 'quality_review',
@@ -378,37 +417,46 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
   const errorMessage =
     error instanceof Error ? error.message : 'Ocurrió un error desconocido durante la generación.';
 
-  const writeBatch = db.batch();
-  writeBatch.update(jobRef, {
-    status: shouldRetry ? 'pending' : 'failed',
-    queuePriority: shouldRetry ? 0 : 0,
-    retryCount: nextRetryCount,
-    claimToken: null,
-    claimedBy: null,
-    claimExpiresAt: null,
-    timeoutAt: null,
-    startedAt: null,
-    'traceability.lastProviderErrorAt': admin.firestore.FieldValue.serverTimestamp(),
-    'traceability.lastProviderErrorMessage': errorMessage,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    lastError: errorMessage,
-  });
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(jobRef);
+    if (!snapshot.exists) {
+      return;
+    }
 
-  writeBatch.set(jobRef.collection('logs').doc(), {
-    type: shouldRetry ? 'retry_scheduled' : 'failed',
-    level: shouldRetry ? 'warn' : 'error',
-    message: shouldRetry
-      ? `La generación falló y quedó reencolada para el intento ${nextRetryCount}.`
-      : 'La generación agotó sus reintentos y quedó fallida.',
-    payload: {
+    const latestJob = { id: snapshot.id, ...snapshot.data() } as Job;
+    if (latestJob.status !== 'processing' || latestJob.claimToken !== claimedJob.claimToken) {
+      return;
+    }
+
+    transaction.update(jobRef, {
+      status: shouldRetry ? 'pending' : 'failed',
+      queuePriority: 0,
       retryCount: nextRetryCount,
-      maxRetries: claimedJob.maxRetries,
-      error: serializeError(error),
-    },
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+      claimToken: null,
+      claimedBy: null,
+      claimExpiresAt: null,
+      timeoutAt: null,
+      startedAt: null,
+      'traceability.lastProviderErrorAt': admin.firestore.FieldValue.serverTimestamp(),
+      'traceability.lastProviderErrorMessage': errorMessage,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastError: errorMessage,
+    });
 
-  await writeBatch.commit();
+    transaction.set(jobRef.collection('logs').doc(), {
+      type: shouldRetry ? 'retry_scheduled' : 'failed',
+      level: shouldRetry ? 'warn' : 'error',
+      message: shouldRetry
+        ? `La generación falló y quedó reencolada para el intento ${nextRetryCount}.`
+        : 'La generación agotó sus reintentos y quedó fallida.',
+      payload: {
+        retryCount: nextRetryCount,
+        maxRetries: claimedJob.maxRetries,
+        error: serializeError(error),
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
 };
 
 export const requeueExpiredJobs = async (): Promise<number> => {
@@ -523,6 +571,10 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
         openaiApiKey: OPENAI_API_KEY.value(),
       },
     );
+
+    if (!(await isClaimStillActive(jobId, claimedJob.claimToken))) {
+      return;
+    }
 
     const startedAtMs = toMillis(claimedJob.lastAttemptStartedAt) || Date.now();
     const durationSeconds = Math.max(0, Math.round((Date.now() - startedAtMs) / 1000));

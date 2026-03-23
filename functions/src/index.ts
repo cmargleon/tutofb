@@ -8,6 +8,7 @@ setGlobalOptions({ maxInstances: 10 });
 // Export callables
 export * from './callables/createGenerationBatch';
 export * from './callables/regenerateJob';
+export * from './callables/cancelJobGeneration';
 export * from './callables/selectJobOutput';
 export * from './callables/regenerateFailedBatchJobs';
 export * from './callables/cancelPendingBatchJobs';

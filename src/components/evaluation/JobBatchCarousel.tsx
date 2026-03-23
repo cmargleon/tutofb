@@ -47,9 +47,12 @@ export const JobBatchCarousel: React.FC<Props> = ({
     localDrafts,
     queueingJobs,
     regenerationErrors,
+    cancellingJobs,
+    cancellationErrors,
     initializeDraft,
     updateDraft,
-    handleRegenerate
+    handleRegenerate,
+    handleCancelGeneration,
   } = useJobRegenerationFirebase();
 
   // Initialize drafts for jobs in the active slide
@@ -177,9 +180,12 @@ export const JobBatchCarousel: React.FC<Props> = ({
                 index={index}
                 draft={localDrafts[job.id!] || { provider: job.provider, prompt: job.promptBase || job.finalPrompt || '' }}
                 isQueueing={!!queueingJobs[job.id!]}
+                isCancellingGeneration={!!cancellingJobs[job.id!]}
                 regenerationError={regenerationErrors[job.id!] || null}
+                cancellationError={cancellationErrors[job.id!] || null}
                 onUpdateDraft={(updates) => updateDraft(job.id!, updates)}
                 onRegenerate={() => handleRegenerate(job.id!)}
+                onCancelGeneration={() => handleCancelGeneration(job.id!)}
                 selected={job.id ? selectedJobIds.includes(job.id) : false}
                 onToggleSelected={job.id && onToggleJob ? () => onToggleJob(job.id!) : undefined}
                 focused={job.id === activeFocusedJob?.id}

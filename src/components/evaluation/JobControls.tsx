@@ -10,12 +10,14 @@ interface Props {
   draft: { provider: Provider; prompt: string };
   isProcessing: boolean;
   isQueueing: boolean;
+  isCancelling: boolean;
   canRegenerate: boolean;
   isExperimentJob: boolean;
   jobStatus: Job['status'];
   lastError: string | null;
   currentOutput: JobOutput | null;
   regenerationError: string | null;
+  cancellationError: string | null;
   historyOutputsCount: number;
   onUpdateDraft: (updates: Partial<{ provider: Provider; prompt: string }>) => void;
   onRegenerate: () => void;
@@ -25,17 +27,19 @@ export const JobControls: React.FC<Props> = ({
   draft,
   isProcessing,
   isQueueing,
+  isCancelling,
   canRegenerate,
   isExperimentJob,
   jobStatus,
   lastError,
   currentOutput,
   regenerationError,
+  cancellationError,
   historyOutputsCount,
   onUpdateDraft,
   onRegenerate,
 }) => {
-  const disabled = isProcessing || isQueueing || !canRegenerate || isExperimentJob;
+  const disabled = isProcessing || isQueueing || isCancelling || !canRegenerate || isExperimentJob;
 
   return (
     <>
@@ -89,6 +93,13 @@ export const JobControls: React.FC<Props> = ({
         </div>
       ) : null}
 
+      {cancellationError ? (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" aria-hidden="true" />
+          <span>{cancellationError}</span>
+        </div>
+      ) : null}
+
       {historyOutputsCount > 1 ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
           Esta pose conserva el historial completo de intentos generados. Puedes abrir cualquier miniatura para revisar
@@ -102,7 +113,7 @@ export const JobControls: React.FC<Props> = ({
             event.stopPropagation();
             onRegenerate();
           }}
-          disabled={isProcessing || isQueueing || !draft.prompt.trim()}
+          disabled={isProcessing || isQueueing || isCancelling || !draft.prompt.trim()}
           className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-transparent text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
         >
           <RefreshCw className={`w-4 h-4 ${isQueueing ? 'animate-spin' : ''}`} />

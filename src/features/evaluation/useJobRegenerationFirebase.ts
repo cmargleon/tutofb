@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
 import { Job, Provider } from '../../../shared/src/types';
-import { regenerateJob } from './firebase';
+import { cancelJobGeneration, regenerateJob } from './firebase';
 
 export const useJobRegenerationFirebase = () => {
   const [localDrafts, setLocalDrafts] = useState<Record<string, { provider: Provider; prompt: string }>>({});
   const [queueingJobs, setQueueingJobs] = useState<Record<string, boolean>>({});
   const [regenerationErrors, setRegenerationErrors] = useState<Record<string, string | null>>({});
+  const [cancellingJobs, setCancellingJobs] = useState<Record<string, boolean>>({});
+  const [cancellationErrors, setCancellationErrors] = useState<Record<string, string | null>>({});
 
   // Initialize drafts for jobs that don't have one yet
   const initializeDraft = useCallback((job: Job) => {
@@ -47,12 +49,32 @@ export const useJobRegenerationFirebase = () => {
     }
   }, [localDrafts]);
 
+  const handleCancelGeneration = useCallback(async (jobId: string) => {
+    setCancellingJobs(prev => ({ ...prev, [jobId]: true }));
+    setCancellationErrors(prev => ({ ...prev, [jobId]: null }));
+
+    try {
+      await cancelJobGeneration(jobId);
+    } catch (error: any) {
+      setCancellationErrors(prev => ({
+        ...prev,
+        [jobId]: error.message || 'No pudimos cancelar esta generación',
+      }));
+      throw error;
+    } finally {
+      setCancellingJobs(prev => ({ ...prev, [jobId]: false }));
+    }
+  }, []);
+
   return {
     localDrafts,
     queueingJobs,
     regenerationErrors,
+    cancellingJobs,
+    cancellationErrors,
     initializeDraft,
     updateDraft,
-    handleRegenerate
+    handleRegenerate,
+    handleCancelGeneration,
   };
 };

@@ -1,6 +1,7 @@
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
+  CancelJobGenerationResponse,
   CancelPendingBatchJobsResponse,
   Provider,
   RegenerateFailedBatchJobsResponse,
@@ -17,6 +18,18 @@ export const regenerateJob = async (jobId: string, provider: Provider, prompt: s
     return result.data;
   } catch (error) {
     console.error('Error calling regenerateJob:', error);
+    throw error;
+  }
+};
+
+export const cancelJobGeneration = async (jobId: string): Promise<CancelJobGenerationResponse> => {
+  const callable = httpsCallable<{ jobId: string }, CancelJobGenerationResponse>(functions, 'cancelJobGeneration');
+
+  try {
+    const result = await callable({ jobId });
+    return result.data;
+  } catch (error) {
+    console.error('Error calling cancelJobGeneration:', error);
     throw error;
   }
 };

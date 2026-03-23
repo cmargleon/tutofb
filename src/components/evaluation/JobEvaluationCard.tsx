@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { StatusBadge } from '../ui';
-import { AlertCircle, Download, ImageIcon, RefreshCw } from 'lucide-react';
+import { AlertCircle, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
@@ -20,9 +20,12 @@ interface Props {
   index: number;
   draft: { provider: Provider; prompt: string };
   isQueueing: boolean;
+  isCancellingGeneration: boolean;
   regenerationError: string | null;
+  cancellationError: string | null;
   onUpdateDraft: (updates: Partial<{ provider: Provider; prompt: string }>) => void;
   onRegenerate: () => void;
+  onCancelGeneration: () => Promise<void>;
   selected?: boolean;
   onToggleSelected?: () => void;
   focused?: boolean;
@@ -42,9 +45,12 @@ export const JobEvaluationCard: React.FC<Props> = ({
   index,
   draft,
   isQueueing,
+  isCancellingGeneration,
   regenerationError,
+  cancellationError,
   onUpdateDraft,
   onRegenerate,
+  onCancelGeneration,
   selected = false,
   onToggleSelected,
   focused = false,
@@ -115,7 +121,31 @@ export const JobEvaluationCard: React.FC<Props> = ({
   };
 
   const isProcessing = job.status === 'pending' || job.status === 'processing';
+  const isLoadingState = isProcessing || isQueueing;
   const hasOutput = !!displayedImageUrl;
+  const canCancelGeneration = role.canRegenerate && isLoadingState && !isCancellingGeneration;
+  const showInlineLoadingBadge = hasOutput && isLoadingState && isViewingLatest;
+  const showLoadingPlaceholder = !hasOutput && isLoadingState;
+
+  const handleCancelGeneration = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+
+    try {
+      await onCancelGeneration();
+      toast({
+        tone: 'success',
+        title: 'Generación cancelada',
+        description: `La pose ${index + 1} dejó de procesarse.`,
+      });
+    } catch (error) {
+      console.error('Error cancelling generation:', error);
+      toast({
+        tone: 'error',
+        title: 'No pudimos cancelar esta generación',
+        description: 'Inténtalo de nuevo en unos segundos.',
+      });
+    }
+  };
 
   return (
     <div
@@ -188,7 +218,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </HoverZoomImage>
         ) : (
           <div className="aspect-[3/4] w-full flex flex-col items-center justify-center text-gray-400 p-6 text-center">
-            {job.status === 'failed' ? (
+            {job.status === 'failed' && !isLoadingState ? (
               <>
                 <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
                 <p className="text-sm font-medium text-red-600">Error en la generación</p>
@@ -200,24 +230,67 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </div>
         )}
 
-        {(isProcessing || isQueueing) && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-10">
-            <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mb-4" />
-            <p className="font-medium text-gray-900">
-              {isQueueing ? 'Encolando regeneración...' : 'Procesando imagen...'}
-            </p>
-            <p className="text-xs text-gray-500 mt-2">
-              Esta tarjeta se actualizará automáticamente cuando termine.
-            </p>
+        {showInlineLoadingBadge ? (
+          <button
+            type="button"
+            onClick={(event) => void handleCancelGeneration(event)}
+            disabled={!canCancelGeneration}
+            className={`group absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition-all ${
+              canCancelGeneration
+                ? 'border-indigo-200 bg-white/92 text-indigo-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700'
+                : 'cursor-default border-indigo-200 bg-white/92 text-indigo-700'
+            } ${isCancellingGeneration ? 'min-w-[164px] justify-center' : ''}`}
+            title={canCancelGeneration ? 'Cancelar generación de esta pose' : 'Generación en curso'}
+          >
+            <span className={`items-center gap-2 ${canCancelGeneration ? 'flex group-hover:hidden' : 'flex'}`}>
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              {isCancellingGeneration ? 'Cancelando...' : isQueueing ? 'Encolando...' : 'Generando...'}
+            </span>
+            {canCancelGeneration ? (
+              <span className="hidden items-center gap-2 group-hover:flex">
+                <XCircle className="h-3.5 w-3.5" />
+                Cancelar esta pose
+              </span>
+            ) : null}
+          </button>
+        ) : null}
+
+        {showLoadingPlaceholder ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 p-6 text-center backdrop-blur-sm">
+            <RefreshCw className="mb-4 h-8 w-8 animate-spin text-indigo-600" />
+            <p className="font-medium text-gray-900">{isQueueing ? 'Encolando regeneración...' : 'Procesando imagen...'}</p>
+            <p className="mt-2 text-xs text-gray-500">Esta tarjeta se actualizará automáticamente cuando termine.</p>
+            <button
+              type="button"
+              onClick={(event) => void handleCancelGeneration(event)}
+              disabled={!canCancelGeneration}
+              className={`group mt-4 inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm transition-all ${
+                canCancelGeneration
+                  ? 'border-indigo-200 bg-white text-indigo-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700'
+                  : 'cursor-default border-indigo-200 bg-white text-indigo-700'
+              }`}
+              title={canCancelGeneration ? 'Cancelar generación de esta pose' : 'Generación en curso'}
+            >
+              <span className={`items-center gap-2 ${canCancelGeneration ? 'flex group-hover:hidden' : 'flex'}`}>
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                {isCancellingGeneration ? 'Cancelando...' : 'Cargando...'}
+              </span>
+              {canCancelGeneration ? (
+                <span className="hidden items-center gap-2 group-hover:flex">
+                  <XCircle className="h-3.5 w-3.5" />
+                  Cancelar esta pose
+                </span>
+              ) : null}
+            </button>
             {currentOutput ? (
-              <p className="text-xs text-indigo-600 font-medium mt-4 bg-indigo-50 px-3 py-1 rounded-full">
+              <p className="mt-4 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-600">
                 Mostrando el último intento disponible
               </p>
             ) : null}
           </div>
-        )}
+        ) : null}
 
-        {hasOutput && !isProcessing && !isQueueing && (
+        {hasOutput && !isLoadingState && (
           <button
             onClick={(event) => {
               event.stopPropagation();
@@ -280,12 +353,14 @@ export const JobEvaluationCard: React.FC<Props> = ({
           draft={draft}
           isProcessing={isProcessing}
           isQueueing={isQueueing}
+          isCancelling={isCancellingGeneration}
           canRegenerate={role.canRegenerate}
           isExperimentJob={isExperimentJob}
           jobStatus={job.status}
           lastError={job.lastError || null}
           currentOutput={currentOutput}
           regenerationError={regenerationError}
+          cancellationError={cancellationError}
           historyOutputsCount={historyOutputs.length}
           onUpdateDraft={onUpdateDraft}
           onRegenerate={onRegenerate}

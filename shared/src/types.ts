@@ -585,6 +585,15 @@ export interface RegenerateJobResponse {
   jobId: string;
 }
 
+export interface CancelJobGenerationRequest {
+  jobId: string;
+}
+
+export interface CancelJobGenerationResponse {
+  success: boolean;
+  jobId: string;
+}
+
 export interface SelectJobOutputRequest {
   jobId: string;
   outputId: string | null;

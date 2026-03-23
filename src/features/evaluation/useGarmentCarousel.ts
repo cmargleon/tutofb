@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Job } from '../../../shared/src/types';
-import { buildGarmentSlides, GarmentSlide } from './jobSlides';
+import { buildGarmentSlides } from './jobSlides';
 
 export const useGarmentCarousel = (jobs: Job[], initialFocusJobId?: string | null) => {
   const slides = useMemo(() => buildGarmentSlides(jobs), [jobs]);

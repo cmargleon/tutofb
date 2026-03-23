@@ -26,7 +26,7 @@ const formatActivityDate = (ts: any) => {
     minute: '2-digit',
   }).format(date);
 };
-import { AnalyticsSummary, Batch, HealthStatus, Job, ProviderHealthCheck, SystemAlert, SystemHealthSnapshot } from '../../shared/src/types';
+import { AnalyticsSummary, HealthStatus, ProviderHealthCheck, SystemAlert, SystemHealthSnapshot } from '../../shared/src/types';
 import { EmptyState, ImageThumb, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
 import { DashboardSnapshot, subscribeToAnalyticsSummary, subscribeToDashboardData } from '../features/dashboard/firebase';
 import { useRole } from '../features/auth/AuthProvider';

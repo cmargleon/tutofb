@@ -1,5 +1,5 @@
 import { db, auth } from '../../firebase';
-import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { Client } from '../../../shared/src/types';
 import { isActiveCatalogEntity } from '../../../shared/src/domain';
 import { functions } from '../../firebase';

@@ -50,7 +50,7 @@ export const JobBatchCarousel: React.FC<Props> = ({
     initializeDraft,
     updateDraft,
     handleRegenerate
-  } = useJobRegenerationFirebase(jobs);
+  } = useJobRegenerationFirebase();
 
   // Initialize drafts for jobs in the active slide
   useEffect(() => {

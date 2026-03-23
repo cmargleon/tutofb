@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Job, Provider } from '../../../shared/src/types';
 import { regenerateJob } from './firebase';
 
-export const useJobRegenerationFirebase = (jobs: Job[]) => {
+export const useJobRegenerationFirebase = () => {
   const [localDrafts, setLocalDrafts] = useState<Record<string, { provider: Provider; prompt: string }>>({});
   const [queueingJobs, setQueueingJobs] = useState<Record<string, boolean>>({});
   const [regenerationErrors, setRegenerationErrors] = useState<Record<string, string | null>>({});

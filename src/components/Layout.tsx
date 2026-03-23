@@ -24,7 +24,6 @@ import {
   Sun,
   Moon,
   Bell,
-  BookOpen,
   Search,
 } from 'lucide-react';
 import { AnalyticsSummary, Batch, Job } from '../../shared/src/types';
@@ -212,7 +211,6 @@ export const Layout: React.FC = () => {
     { name: 'Archivo',     path: '/archivo',    icon: Archive,         visible: role.canAccessArchive   },
     { name: 'Analíticas',  path: '/analytics',  icon: BarChart3,       visible: role.canAccessAnalytics },
     { name: 'Usuarios',    path: '/users',      icon: Shield,          visible: role.canManageUsers     },
-    { name: 'Documentación', path: '/docs',     icon: BookOpen,        visible: role.isActive           },
   ];
 
   const filteredNav = navItems.filter((item) => item.visible);

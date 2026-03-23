@@ -4,7 +4,7 @@ import {
   AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
 import {
-  Activity, CheckCircle2, XCircle, Clock, DollarSign, TrendingUp, AlertTriangle, Bell, BellOff, UserSquare2
+  Activity, CheckCircle2, Clock, DollarSign, TrendingUp, AlertTriangle, Bell, BellOff, UserSquare2
 } from 'lucide-react';
 import { useAnalyticsDashboard } from '../features/analytics/useAnalyticsDashboard';
 import { useExperimentAnalytics } from '../features/analytics/useExperimentAnalytics';
@@ -412,7 +412,7 @@ export const Analytics: React.FC = () => {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {pieData.map((entry, index) => (
+                    {pieData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -442,7 +442,7 @@ export const Analytics: React.FC = () => {
                   <YAxis stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip 
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    formatter={(value, name, props) => {
+                    formatter={(value, name) => {
                       if (name === 'Completados' || name === 'Fallidos') return [value, name];
                       return [value, name];
                     }}

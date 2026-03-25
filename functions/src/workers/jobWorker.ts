@@ -227,7 +227,8 @@ const persistGeneratedAttempt = async ({
 
   const resolvedPromptBase = typeof nextPromptBase === 'string' ? nextPromptBase.trim() : claimedJob.promptBase;
   const shouldResetForNextAttempt = nextStatus === 'pending' || nextStatus === 'failed';
-  const baseJobUpdate: Record<string, unknown> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const baseJobUpdate: Record<string, any> = {
     provider: providerResult.provider,
     status: nextStatus,
     queuePriority: nextStatus === 'pending' ? 1 : 0,

@@ -1,257 +1,144 @@
 # ARCHITECTURE
 
-Resumen practico de la arquitectura actual del proyecto.
+Documento regenerado desde la estructura y el codigo actual del repositorio.
 
-Este archivo sirve para:
-- entender rapido como esta dividido el sistema
-- ubicar donde vive cada responsabilidad
-- identificar los flujos criticos
-- reducir cambios fuera de contexto
+Objetivo:
+- describir lo que hoy se puede verificar en el repo
+- reducir supuestos heredados de otras apps
+- dejar un mapa util para ubicar responsabilidades y zonas sensibles
 
-## 1. Vision General
+Si este archivo contradice al codigo, manda el codigo.
 
-La app es una herramienta interna de operacion para catalogo ecommerce montada sobre Firebase.
+## 1. Snapshot del repositorio
 
-Capacidades principales:
-- autenticacion interna con roles
-- administracion de clientes y usuarios
-- alta de modelos y poses
-- wizard para crear lotes de generacion
-- procesamiento server-side de jobs con proveedores externos
-- evaluacion, regeneracion, descarga y archivo
-- analytics operativos y de costo
+El repo esta organizado en tres capas principales:
 
-Stack principal:
-- frontend: React 19 + TypeScript + Vite
-- backend: Firebase Cloud Functions v2
-- base de datos: Firestore
-- archivos: Cloud Storage
-- auth: Firebase Auth
+- `src/`: frontend SPA con React 19, TypeScript y Vite
+- `functions/src/`: backend con Firebase Cloud Functions v2
+- `shared/src/`: contrato compartido entre frontend y backend
 
-## 2. Capas del Sistema
+Infraestructura visible en el repo:
+- `firebase.json`: Hosting, Firestore, Storage, Functions y emuladores
+- `.firebaserc`: proyecto por defecto
+- `firestore.rules`, `firestore.indexes.json`, `storage.rules`
+- `firebase-applet-config.json`: configuracion del cliente Firebase usada por `src/firebase.ts`
+- `tests/`: suite de pruebas del repo
 
-### Frontend
+Herramientas y scripts observados:
+- raiz: `npm run dev`, `npm run build`, `npm run lint`, `npm test`
+- functions: `npm --prefix functions run build`, `serve`, `deploy`, `logs`
 
-Ubicacion:
-- `src/app/`
-- `src/pages/`
-- `src/components/`
-- `src/features/`
+## 2. Mapa del frontend
 
-Responsabilidad:
-- renderizar la UI interna
-- manejar navegacion y permisos por rol
-- leer y escribir datos a Firestore y Functions
-- reflejar estado operativo de lotes, jobs, analytics y archivo
+### Shell y providers
 
-Patron dominante:
-- paginas en `src/pages/`
-- logica de dominio en `src/features/`
-- componentes visuales en `src/components/`
+- `src/app/App.tsx`: monta `ErrorBoundary`, `ThemeProvider`, `FeedbackProvider` y `AuthProvider`
+- `src/app/AppRouter.tsx`: define rutas protegidas y chequeo de roles
+- `src/components/Layout.tsx` y `src/components/layout/`: shell principal, sidebar y busqueda global
+- `src/components/ui.tsx`: componentes UI reutilizables
 
-### Backend Functions
+### Rutas observadas
 
-Ubicacion:
-- `functions/src/`
+| Ruta | Pagina | Roles permitidos |
+| --- | --- | --- |
+| `/login` | `src/pages/Login.tsx` | publica |
+| `/` | `src/pages/Dashboard.tsx` | autenticado y activo |
+| `/users` | `src/pages/Users.tsx` | `admin` |
+| `/clients` | `src/pages/Clients.tsx` | `admin` |
+| `/models` | `src/pages/Models.tsx` | `admin` |
+| `/generate` | `src/pages/Wizard.tsx` | `admin`, `operador` |
+| `/cola` | `src/pages/Cola.tsx` | `admin`, `operador`, `revisor` |
+| `/evaluacion` | `src/pages/Evaluacion.tsx` | `admin`, `operador`, `revisor` |
+| `/archivo` | `src/pages/Archive.tsx` | `admin`, `operador`, `revisor` |
+| `/analytics` | `src/pages/Analytics.tsx` | `admin`, `revisor` |
 
-Responsabilidad:
-- exponer callables y endpoints HTTP
-- ejecutar procesamiento real de jobs
-- reaccionar a eventos de Firestore
-- mantener consistencia operativa y analytics
+### Features del frontend
 
-Subareas:
-- `callables/`: acciones invocadas desde frontend
-- `http/`: descargas y endpoints directos
-- `workers/`: pipeline de ejecucion de jobs
-- `triggers/`: reaccion a cambios en Firestore
-- `providers/`: integracion con proveedores de IA
-- `admin/`: salud del sistema y tareas administrativas
-- `review/`: revision automatica de imagenes
+Dominios visibles por carpeta:
+- `src/features/auth/`: estado de sesion, lectura de `users/{uid}` y sync de claims
+- `src/features/clients/`: CRUD y archivado de clientes
+- `src/features/models/`: catalogo de modelos, poses y generacion IA de fotos de modelo
+- `src/features/generate/` y `src/features/wizard/`: wizard, subida de prendas draft y envio de batches
+- `src/features/evaluation/`: evaluacion, traceabilidad, output history, regeneracion y descargas
+- `src/features/queue/`: lectura de batches y jobs para la cola
+- `src/features/archive/`: busqueda historica y apertura de batches archivados
+- `src/features/dashboard/`: resumen operativo para la home
+- `src/features/analytics/`: dashboard de analytics y experimentos
+- `src/features/system/`: salud del sistema y alertas
+- `src/features/search/`, `src/features/notifications/`, `src/features/feedback/`, `src/features/theme/`, `src/features/storage/`: soporte transversal del shell
 
-### Shared
+## 3. Mapa del backend
 
-Ubicacion:
-- `shared/src/`
+### Entry points exportados
 
-Responsabilidad:
-- tipos de dominio
-- constantes compartidas
-- reglas y helpers de negocio que frontend y backend deben compartir
+`functions/src/index.ts` exporta estas areas:
 
-Pieza critica:
-- `shared/src/types.ts`
+- Callables:
+  - `createGenerationBatch`
+  - `regenerateJob`
+  - `cancelJobGeneration`
+  - `selectJobOutput`
+  - `regenerateFailedBatchJobs`
+  - `cancelPendingBatchJobs`
+  - `regenerateJobsBulk`
+  - `searchArchive`
+  - `syncUserClaims`
+  - `createAppUser`
+  - `updateAppUser`
+  - `archiveAppUser`
+  - `restoreAppUser`
+  - `permanentlyDeleteAppUser`
+  - `permanentlyDeleteClient`
+  - `permanentlyDeleteModel`
+  - `generateModelPose`
+- Admin:
+  - `rebuildAnalytics`
+  - `getSystemHealth`
+  - `updateSystemAlertSettings`
+- HTTP:
+  - `downloadBatchZip`
+  - `downloadJobImage`
+  - `downloadSelectedJobsZip`
+- Triggers:
+  - `onJobStatusChange`
+  - `onClientDelete`
+  - `onModelDelete`
+  - `processJobOnCreate`
+  - `processJobOnRequeue`
+  - `requeueExpiredJobs`
+  - `analyticsTriggers`
+  - `syncClaimsOnUserWrite`
 
-## 3. Dominios Funcionales
+### Carpetas backend
 
-### Auth y permisos
+- `functions/src/callables/`: acciones invocadas desde frontend
+- `functions/src/http/`: descargas de imagenes y ZIPs
+- `functions/src/workers/`: worker de jobs y documentacion del flujo
+- `functions/src/triggers/`: procesamiento, analytics, borrados y sync de claims
+- `functions/src/providers/`: integraciones con providers de imagen
+- `functions/src/review/`: auto review con Gemini
+- `functions/src/admin/`: rebuild de analytics, salud y alertas
+- `functions/src/auth/`: autorizacion por rol
+- `functions/src/config/`: runtime params y secrets
+- `functions/src/firebase/`: acceso compartido a Firebase Admin
 
-Archivos principales:
-- `src/features/auth/`
-- `functions/src/auth/`
-- `functions/src/callables/syncUserClaims.ts`
-- `functions/src/triggers/syncClaimsOnUserWrite.ts`
+## 4. Contrato compartido
 
-Modelo:
-- el usuario autentica por Firebase Auth
-- Firestore guarda el documento `users/{uid}`
-- el rol y estado activo se sincronizan a custom claims
+`shared/src/` es la capa comun entre frontend y backend.
 
-Roles actuales:
-- `admin`
-- `operador`
-- `revisor`
+Piezas principales:
+- `shared/src/types.ts`: entidades, requests, responses, analytics y salud
+- `shared/src/domain.ts`: enums, labels, helpers de dominio y prompt base de generacion
+- `shared/src/constants/`: costos por provider y otras constantes
+- `shared/src/experiments.ts`: configuracion de experimentos
+- `shared/src/utils/dateUtils.ts`: helpers de fecha usados en varias capas
 
-### Catalogo operativo
+Cambiar `shared/src/` implica revisar frontend, Functions y tests.
 
-Dominios:
-- clientes
-- modelos
-- poses
-- prendas temporales
-- batches
-- jobs
-- outputs
+## 5. Modelo de datos observable
 
-Entidades clave:
-- `Client`
-- `Model`
-- `Batch`
-- `Job`
-- `JobOutput`
+Colecciones y documentos que aparecen en el codigo:
 
-Los contratos viven en:
-- `shared/src/types.ts`
-
-### Generacion
-
-Frontend:
-- `src/pages/Wizard.tsx`
-- `src/features/generate/`
-- `src/components/wizard/`
-
-Backend:
-- `functions/src/callables/createGenerationBatch.ts`
-- `functions/src/workers/jobWorker.ts`
-- `functions/src/providers/`
-- `functions/src/triggers/processJobOnCreate.ts`
-- `functions/src/triggers/processJobOnRequeue.ts`
-
-Responsabilidad:
-- seleccionar cliente, modelo, poses y prendas
-- crear un lote
-- crear un job por combinacion
-- disparar procesamiento automatico
-
-### Modelos con IA
-
-Frontend:
-- `src/pages/Models.tsx`
-- `src/features/models/`
-- `src/components/models/`
-
-Backend:
-- `functions/src/callables/generateModelPose.ts`
-- `functions/src/providers/textToImage.ts`
-
-Responsabilidad:
-- generar candidatos de identidad
-- generar poses derivadas
-- convertir poses aceptadas en un modelo usable para el flujo de catalogo
-
-### Evaluacion y cola
-
-Frontend:
-- `src/pages/Evaluacion.tsx`
-- `src/pages/Cola.tsx`
-- `src/features/evaluation/`
-- `src/features/queue/`
-- `src/components/evaluation/`
-
-Backend:
-- `functions/src/callables/regenerateJob.ts`
-- `functions/src/callables/regenerateFailedBatchJobs.ts`
-- `functions/src/callables/regenerateJobsBulk.ts`
-- `functions/src/callables/cancelPendingBatchJobs.ts`
-- `functions/src/http/`
-
-Responsabilidad:
-- revisar resultados por lote
-- descargar imagenes
-- reintentar jobs
-- cancelar pendientes
-- visualizar la cola operativa
-
-### Analytics y salud
-
-Frontend:
-- `src/pages/Analytics.tsx`
-- `src/features/analytics/`
-- `src/features/system/`
-
-Backend:
-- `functions/src/analytics/`
-- `functions/src/admin/`
-- `functions/src/triggers/analyticsTriggers.ts`
-
-Responsabilidad:
-- volumen operativo
-- costo por proveedor
-- clientes y modelos mas activos
-- experimentos
-- salud de proveedores y cola
-- alertas compartidas
-
-### Archivo y administracion
-
-Frontend:
-- `src/pages/Archive.tsx`
-- `src/pages/Users.tsx`
-- `src/pages/Clients.tsx`
-- `src/features/archive/`
-- `src/features/users/`
-- `src/features/clients/`
-
-Backend:
-- callables de usuarios y borrado
-- triggers de cascada para clientes y modelos
-
-Responsabilidad:
-- administrar usuarios y clientes
-- archivar entidades
-- borrar definitivamente cuando aplique
-
-## 4. Flujo Principal de Generacion
-
-Secuencia resumida:
-
-1. El usuario arma un lote desde el wizard.
-2. El frontend sube prendas draft a Storage.
-3. `createGenerationBatch` valida entrada y crea un `batch`.
-4. La misma callable crea un `job` por combinacion pose-prenda.
-5. Un trigger detecta jobs pendientes y llama al worker.
-6. El worker reclama el job por transaccion.
-7. El worker genera URLs o descarga assets necesarios.
-8. El worker invoca al proveedor configurado.
-9. El resultado se guarda en Storage.
-10. Se crea un `output` historico bajo `jobs/{jobId}/outputs`.
-11. Gemini revisa el resultado.
-12. El job queda `completed`, vuelve a `pending` para otro intento o termina en `failed`.
-13. Triggers actualizan agregados y analytics.
-
-## 5. Modelo de Datos Operativo
-
-Principio central:
-- `jobs` representa el estado actual
-- `outputs` representa el historial real de resultados generados
-
-Implicaciones:
-- una regeneracion no borra el historial
-- el output vigente se refleja en `currentOutput`
-- el costo acumulado debe calcularse sobre outputs
-- la operacion actual de la cola debe calcularse sobre jobs
-
-Colecciones importantes:
 - `users`
 - `clients`
 - `models`
@@ -259,111 +146,109 @@ Colecciones importantes:
 - `jobs`
 - `jobs/{jobId}/outputs`
 - `jobs/{jobId}/logs`
-- `analytics_summary`
-- `analytics_daily`
-- `analytics_clients`
-- `analytics_providers`
-- `analytics_client_providers`
-- `analytics_client_models`
+- `analytics_summary/global`
+- `analytics_daily/{date}`
+- `analytics_providers/{provider}`
+- `analytics_clients/{clientId}`
+- `analytics_client_providers/{clientId__provider}`
+- `analytics_client_models/{clientId__modelId}`
+- `system_alert_settings/global`
 - `model_generation_logs`
 
-## 6. Routing y permisos
+Entidades principales visibles en `shared/src/types.ts`:
+- `User`
+- `Client`
+- `Model`
+- `Pose`
+- `Batch`
+- `Job`
+- `JobOutput`
+- `JobLog`
+- `Analytics*`
+- `SystemHealthSnapshot`
 
-La navegacion principal vive en:
+Semantica confirmada por tipos y worker:
+- `Batch` agrega estado por lote
+- `Job` representa el estado operativo actual
+- `JobOutput` representa outputs persistidos por job
+- `JobLog` guarda eventos operativos y de traceabilidad
+- auth usa roles `admin`, `operador`, `revisor`
+
+## 6. Storage observable
+
+Paths que aparecen en el codigo:
+
+- drafts de prendas: `garments/drafts/{uid}/{draftBatchId}/{garmentId}.jpg`
+- outputs generados: `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`
+- modelos y poses: `models/{clientId}/{modelId}/poses/{poseId}-{fileName}`
+- fotos IA de modelos: `model_generations/{clientId}/...`
+
+## 7. Flujos confirmados por codigo
+
+### Auth y acceso
+
+- login con email/password en `src/pages/Login.tsx`
+- despues del login se consulta `users/{uid}`
+- si el usuario existe y esta activo, se llama `syncUserClaims`
+- `AppRouter` protege rutas usando el usuario autenticado y su rol
+- backend valida roles con `functions/src/auth/roles.ts`
+
+### Generacion de batches
+
+- el frontend sube prendas a Storage desde `src/features/generate/storage.ts`
+- el wizard arma `CreateGenerationBatchRequest`
+- `createGenerationBatch` valida cliente, modelo, poses y prendas
+- la callable crea un documento `batch` y uno o varios `jobs`
+- si hay experimento, una combinacion pose/prenda puede expandirse en varios brazos
+
+### Pipeline de jobs
+
+- `processJobOnCreate` y `processJobOnRequeue` disparan el worker
+- `functions/src/workers/jobWorker.ts` reclama el job, llama al provider y guarda el output en Storage
+- el worker escribe `jobs/{jobId}/outputs/{outputId}` y logs operativos
+- el mismo worker ejecuta auto review con Gemini
+- `requeueExpiredJobs` recupera jobs atascados por timeout o claim vencido
+- `onJobStatusChange` actualiza agregados del batch
+
+### Evaluacion y archivo
+
+- evaluacion y archivo leen `batches`, `jobs`, `outputs` y `logs`
+- hay callables para regenerar, cancelar, seleccionar output y buscar archivo
+- las descargas salen por endpoints HTTP que arman imagenes individuales o ZIPs
+
+### Analytics y salud
+
+- `analyticsTriggers.ts` mantiene agregados a partir de `jobs` y `outputs`
+- `rebuildAnalytics` recompone agregados leyendo `jobs` y `collectionGroup('outputs')`
+- `getSystemHealth` combina checks de providers, estado de cola y alertas compartidas
+- `updateSystemAlertSettings` escribe la configuracion de alertas
+
+### Generacion IA de modelos
+
+- `generateModelPose` genera imagenes temporales para modelos
+- esas imagenes se guardan en Storage bajo `model_generations/...`
+- el callable registra costo estimado en `model_generation_logs`
+
+## 8. Zonas sensibles
+
+Archivos y areas con impacto transversal:
 - `src/app/AppRouter.tsx`
-
-Rutas clave:
-- `/users`
-- `/clients`
-- `/models`
-- `/generate`
-- `/cola`
-- `/evaluacion`
-- `/archivo`
-- `/analytics`
-
-Permisos:
-- `admin`: gestion completa
-- `operador`: generar y operar lotes
-- `revisor`: evaluacion, archivo y analytics
-
-## 7. Integraciones Externas
-
-Actualmente hay integraciones con:
-- fal.ai
-- OpenAI
-- Gemini
-
-Uso general:
-- fal.ai y OpenAI: generacion o edicion de imagen
-- Gemini: revision automatica del resultado
-
-La configuracion vive en:
-- `functions/src/config/runtime.ts`
-
-## 8. Patrones Importantes
-
-### Frontend por feature
-
-Evitar logica grande dentro de paginas.
-Preferir:
-- hooks y acceso a datos en `src/features/`
-- componentes en `src/components/`
-- pagina como ensamblaje de secciones
-
-### Backend orientado a eventos
-
-El backend no depende solo de requests directos.
-Gran parte del comportamiento nace de:
-- creacion de documentos
-- cambios de estado
-- triggers de Firestore
-
-### Tipos compartidos como contrato
-
-Cuando cambia un tipo en `shared/`, puede romper:
-- formularios frontend
-- callables
-- workers
-- analytics
-- tests
-
-Por eso `shared/` debe tocarse con cuidado.
-
-## 9. Zonas de Riesgo
-
-Las areas mas sensibles del sistema son:
+- `src/firebase.ts`
 - `shared/src/types.ts`
-- `functions/src/workers/jobWorker.ts`
-- `functions/src/triggers/analyticsTriggers.ts`
+- `shared/src/domain.ts`
+- `functions/src/index.ts`
+- `functions/src/auth/roles.ts`
 - `functions/src/callables/createGenerationBatch.ts`
 - `functions/src/callables/regenerateJob.ts`
-- reglas de borrado en cascada
-- cualquier cambio en estados de `Job` y `Batch`
+- `functions/src/workers/jobWorker.ts`
+- `functions/src/triggers/analyticsTriggers.ts`
+- `functions/src/admin/getSystemHealth.ts`
 
-Riesgos frecuentes:
-- doble conteo de costos
-- romper regeneracion conservando historial
-- inconsistencias entre `jobs` y `outputs`
-- permisos desalineados entre frontend y backend
-- cambios transversales sin actualizar tests
+## 9. Como leer este repo sin asumir de mas
 
-## 10. Como usar este archivo
-
-Antes de cambiar algo:
-- ubicar el dominio funcional
-- revisar si afecta frontend, functions o ambos
-- verificar si toca `shared/`
-- validar si impacta jobs, outputs, analytics o permisos
-
-Si una tarea toca varias capas:
-- empezar por este archivo
-- luego revisar `AGENTS.md`
-- despues entrar a los archivos del dominio especifico
-
-## 11. Documentos Relacionados
-
-- `README.md`
-- `AGENTS.md`
-- `functions/src/workers/PROCESSING_FLOW.md`
-
+Orden recomendado:
+1. `src/app/AppRouter.tsx` para ver rutas y roles
+2. `shared/src/types.ts` para ver entidades y contratos
+3. `functions/src/index.ts` para ver entry points reales
+4. `functions/src/workers/jobWorker.ts` para entender el pipeline central
+5. `tests/` para ver que comportamientos ya estan cubiertos

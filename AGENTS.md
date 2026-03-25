@@ -1,57 +1,86 @@
 # AGENTS
 
-Definicion inicial de agentes para trabajar sobre este repositorio.
+Documento regenerado desde la estructura actual del repositorio.
 
-Objetivo:
-- dividir responsabilidades por dominio real de la app
-- evitar que un mismo agente toque cualquier parte del sistema
-- dejar un contrato simple en Markdown antes de automatizar ejecucion
+La asignacion de responsabilidades sale de carpetas, paginas, features y entry points que existen hoy en el repo. Si este archivo contradice al codigo, manda el codigo.
 
 ## Regla General
 
 Cada agente:
-- tiene un alcance claro de negocio
 - puede leer todo el repo para entender contexto
-- solo debe editar archivos dentro de su scope principal
-- debe escalar cambios en `shared/` o flujos transversales
-- debe proponer pruebas o validaciones relacionadas con su cambio
+- debe editar solo su scope principal salvo coordinacion explicita
+- debe escalar cambios en `shared/src/`, reglas de Firebase, permisos, rutas globales, `functions/src/index.ts` o contratos entre frontend y backend
+- debe proponer la validacion minima relacionada con su cambio
 
-Regla operativa de deploy:
-- si un cambio afecta codigo ejecutado en `functions/src/`, no alcanza con editar TypeScript: hay que hacer `build` de Functions y, cuando se necesite verlo en Firebase/produccion, tambien `deploy` de Functions
-- si el frontend solo muestra datos persistidos por una Function, verificar si hace falta generar una nueva ejecucion para ver el cambio reflejado
+Validacion recomendada:
+- cambio de frontend o hooks: `npm run lint`
+- cambio en `functions/src/`: `npm --prefix functions run build`
+- cambio en contratos, auth, jobs, analytics o flujos transversales: `npm test`
+
+Reglas operativas:
+- si un cambio afecta `functions/src/`, no alcanza con editar TypeScript: hay que compilar Functions
+- si ademas se quiere ver el cambio en Firebase remoto, tambien hace falta deploy
+- `functions/lib/` es salida generada de build, no fuente de verdad para editar a mano
 
 Cambios transversales:
 - si una tarea toca frontend + functions + `shared/`, debe pasar por un agente coordinador
-- si una tarea modifica tipos compartidos, contratos de Firestore o permisos, requiere revision extra
+- si una tarea modifica colecciones de Firestore, subcolecciones, storage paths o custom claims, requiere revision extra
 
 ## 1. Coordinador
 
 Nombre: `planner-orchestrator`
 
 Responsabilidad:
-- entender la tarea
-- decidir que agente debe encargarse
-- partir trabajo grande en subtareas
-- detectar dependencias entre dominios
+- entender la tarea antes de asignarla
+- coordinar cambios que cruzan dominios
+- mantener documentacion, shell de la app e infraestructura compartida
+- decidir cuando un cambio deja de ser local a un dominio
 
-Puede tocar:
-- este archivo
-- documentacion de arquitectura
+Scope principal:
+- `AGENTS.md`
+- `ARCHITECTURE.md`
+- `CLAUDE.md`
+- `README.md`
+- `DECISIONS.md`
+- `package.json`
+- `tsconfig.json`
+- `vite.config.ts`
+- `firebase.json`
+- `.firebaserc`
+- `firestore.rules`
+- `firestore.indexes.json`
+- `storage.rules`
+- `src/app/`
+- `src/firebase.ts`
+- `src/components/Layout.tsx`
+- `src/components/layout/`
+- `src/components/ui.tsx`
+- `src/features/feedback/`
+- `src/features/notifications/`
+- `src/features/search/`
+- `src/features/storage/`
+- `src/features/theme/`
+- `src/utils/`
 
-Debe delegar cuando el cambio pertenezca a un dominio especifico.
+Debe coordinar:
+- cambios de rutas globales
+- cambios de navegacion
+- cambios de infraestructura o configuracion Firebase
+- cambios que mezclen varios agentes
 
 ## 2. Agente de Generacion
 
 Nombre: `generation-agent`
 
 Responsabilidad:
-- wizard de creacion de lotes
-- subida de prendas
-- configuracion de proveedor, aspect ratio y experimentos
-- creacion de `batches` y `jobs`
+- flujo del wizard de generacion
+- subida de prendas draft
+- configuracion de provider, aspect ratio y experimentos
+- creacion de batches y jobs desde el frontend y la callable asociada
 
 Scope principal:
 - `src/pages/Wizard.tsx`
+- `src/components/WizardStepper.tsx`
 - `src/components/wizard/`
 - `src/features/generate/`
 - `src/features/wizard/`
@@ -59,8 +88,8 @@ Scope principal:
 - `functions/src/callables/createGenerationBatch.helpers.ts`
 
 No deberia tocar:
-- analytics
-- auth/usuarios
+- analytics agregados
+- auth, usuarios o claims
 - pipeline interno del worker salvo que la tarea lo exija
 
 ## 3. Agente de Modelos
@@ -68,10 +97,11 @@ No deberia tocar:
 Nombre: `models-agent`
 
 Responsabilidad:
-- alta de modelos
+- alta y edicion de modelos
 - biblioteca de modelos
-- poses base
-- wizard IA para generar candidatos y poses
+- carga y mantenimiento de poses
+- wizard IA para candidatos y poses derivadas
+- generacion de fotos temporales para modelos
 
 Scope principal:
 - `src/pages/Models.tsx`
@@ -81,37 +111,46 @@ Scope principal:
 - `functions/src/providers/textToImage.ts`
 
 No deberia tocar:
-- cola operativa
-- analytics global
+- cola operativa de jobs de batch
+- analytics globales salvo lectura puntual para contexto
 
 ## 4. Agente de Evaluacion
 
 Nombre: `evaluation-agent`
 
 Responsabilidad:
-- revision de lotes
-- regeneraciones manuales o masivas
+- revision de batches y jobs
+- seleccion manual de outputs
+- regeneraciones individuales o masivas
+- cancelaciones operativas
 - descargas
-- historial de outputs
-- trazabilidad operativa por job
+- cola
+- archivo operativo e historial
 
 Scope principal:
 - `src/pages/Evaluacion.tsx`
 - `src/pages/Cola.tsx`
+- `src/pages/Archive.tsx`
 - `src/components/evaluation/`
 - `src/features/evaluation/`
 - `src/features/queue/`
+- `src/features/archive/`
 - `functions/src/callables/regenerateJob.ts`
+- `functions/src/callables/regenerateJob.helpers.ts`
 - `functions/src/callables/regenerateFailedBatchJobs.ts`
 - `functions/src/callables/regenerateJobsBulk.ts`
+- `functions/src/callables/cancelJobGeneration.ts`
 - `functions/src/callables/cancelPendingBatchJobs.ts`
+- `functions/src/callables/selectJobOutput.ts`
+- `functions/src/callables/searchArchive.ts`
 - `functions/src/http/downloadBatchZip.ts`
 - `functions/src/http/downloadJobImage.ts`
 - `functions/src/http/downloadSelectedJobsZip.ts`
 
 No deberia tocar:
-- creacion de usuarios
-- configuracion de alertas
+- creacion de usuarios o claims
+- integraciones de providers
+- agregados globales de analytics
 
 ## 5. Agente de Backend Core
 
@@ -119,41 +158,51 @@ Nombre: `backend-core-agent`
 
 Responsabilidad:
 - ejecucion real de jobs
-- workers
-- triggers
-- integraciones con proveedores
-- reintentos, timeouts y consistencia del pipeline
+- triggers y workers
+- integraciones con providers
+- revision automatica
+- reintentos, timeouts y recuperacion de jobs
+- consistencia del pipeline server-side
 
 Scope principal:
 - `functions/src/workers/`
-- `functions/src/triggers/`
-- `functions/src/providers/`
+- `functions/src/workers/PROCESSING_FLOW.md`
+- `functions/src/triggers/processJobOnCreate.ts`
+- `functions/src/triggers/processJobOnRequeue.ts`
+- `functions/src/triggers/requeueExpiredJobs.ts`
+- `functions/src/triggers/onJobStatusChange.ts`
+- `functions/src/providers/index.ts`
+- `functions/src/providers/fal.ts`
+- `functions/src/providers/openai.ts`
+- `functions/src/providers/types.ts`
 - `functions/src/review/`
 - `functions/src/config/`
 - `functions/src/firebase/`
-
-Tambien puede tocar:
-- `functions/src/index.ts`
+- `functions/src/utils/`
 
 Debe tener cuidado especial con:
 - estados de `jobs`
-- escritura en Storage
-- costos por output
-- requeue y recuperacion de jobs atascados
+- subcolecciones `jobs/{jobId}/outputs` y `jobs/{jobId}/logs`
+- escrituras en Storage
+- requeue y expiracion de claims
+- costos por output y auto review
 
 ## 6. Agente de Analytics y Salud
 
 Nombre: `analytics-health-agent`
 
 Responsabilidad:
-- metricas operativas
-- dashboards
-- costos
-- experimentos
-- alertas y salud del sistema
+- dashboard operativo
+- analytics agregados
+- experimentos A/B
+- salud de sistema
+- alertas compartidas
+- reconstruccion de agregados
 
 Scope principal:
+- `src/pages/Dashboard.tsx`
 - `src/pages/Analytics.tsx`
+- `src/features/dashboard/`
 - `src/features/analytics/`
 - `src/features/system/`
 - `functions/src/admin/`
@@ -162,28 +211,27 @@ Scope principal:
 
 No deberia tocar:
 - wizard de generacion
-- CRUD de usuarios salvo permisos ligados a analytics
+- CRUD de usuarios salvo que el cambio afecte alertas o permisos de lectura
 
 ## 7. Agente de Administracion
 
 Nombre: `admin-agent`
 
 Responsabilidad:
+- login y acceso interno
 - usuarios
-- roles
 - clientes
-- archivado
-- borrado permanente
-- permisos y claims
+- roles y activacion
+- archivado y borrado permanente de entidades administrativas
+- sincronizacion de claims
 
 Scope principal:
+- `src/pages/Login.tsx`
 - `src/pages/Users.tsx`
 - `src/pages/Clients.tsx`
-- `src/pages/Archive.tsx`
+- `src/features/auth/`
 - `src/features/users/`
 - `src/features/clients/`
-- `src/features/archive/`
-- `src/features/auth/`
 - `functions/src/auth/`
 - `functions/src/callables/createAppUser.ts`
 - `functions/src/callables/updateAppUser.ts`
@@ -194,17 +242,23 @@ Scope principal:
 - `functions/src/callables/permanentlyDeleteModel.ts`
 - `functions/src/callables/syncUserClaims.ts`
 - `functions/src/callables/userManagement.helpers.ts`
+- `functions/src/triggers/deletePlans.ts`
 - `functions/src/triggers/syncClaimsOnUserWrite.ts`
 - `functions/src/triggers/onClientDelete.ts`
 - `functions/src/triggers/onModelDelete.ts`
+
+No deberia tocar:
+- pipeline de generacion
+- agregados de analytics salvo para revisar impacto de permisos
 
 ## 8. Zona Compartida
 
 Archivos especiales:
 - `shared/src/types.ts`
 - `shared/src/domain.ts`
-- `shared/src/constants.ts`
+- `shared/src/constants/`
 - `shared/src/experiments.ts`
+- `shared/src/utils/`
 
 Regla:
 - ningun agente de dominio deberia cambiar estos archivos sin justificarlo
@@ -213,17 +267,18 @@ Regla:
 ## 9. Criterio de Asignacion
 
 Usa este criterio rapido:
-- si el cambio empieza en el wizard o crea jobs: `generation-agent`
-- si el cambio empieza en modelos o poses IA: `models-agent`
-- si el cambio empieza en cola, evaluacion, descarga o regeneracion: `evaluation-agent`
-- si el cambio empieza en worker, trigger o proveedor: `backend-core-agent`
-- si el cambio empieza en metricas, alertas o salud del sistema: `analytics-health-agent`
-- si el cambio empieza en usuarios, roles, clientes o archivo: `admin-agent`
-- si toca varios dominios: `planner-orchestrator`
+- si el cambio empieza en shell, rutas globales, docs o config Firebase: `planner-orchestrator`
+- si el cambio empieza en login, usuarios, clientes o claims: `admin-agent`
+- si el cambio empieza en modelos, poses o generacion IA de modelos: `models-agent`
+- si el cambio empieza en wizard, drafts de prendas o creacion de batches/jobs: `generation-agent`
+- si el cambio empieza en cola, evaluacion, archivo, descargas o regeneraciones: `evaluation-agent`
+- si el cambio empieza en worker, trigger, provider, runtime o auto review: `backend-core-agent`
+- si el cambio empieza en dashboard, analytics, salud o alertas: `analytics-health-agent`
+- si toca varios dominios o `shared/`: `planner-orchestrator`
 
-## 10. Fase Siguiente
+## 10. Siguiente Paso
 
-Si mas adelante quieres volver esto ejecutable, el siguiente paso seria:
-- crear una carpeta `docs/agents/` con un archivo por agente
-- definir prompt, herramientas permitidas y limites por agente
-- agregar un coordinador que enrute tareas usando esta misma division
+Si mas adelante quieres volver esto ejecutable, el siguiente paso natural seria:
+- mover esta definicion a `docs/agents/`
+- crear un archivo por agente con prompt, limites y validaciones
+- automatizar el enrutado usando esta misma division

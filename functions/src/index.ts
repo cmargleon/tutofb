@@ -41,4 +41,5 @@ export * from './triggers/processJobOnCreate';
 export * from './triggers/processJobOnRequeue';
 export * from './triggers/requeueExpiredJobs';
 export * from './triggers/analyticsTriggers';
+export * from './triggers/onModelWrite';
 export * from './triggers/syncClaimsOnUserWrite';

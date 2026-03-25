@@ -3,6 +3,8 @@ import { UploadGarmentDraftsResult } from '../storage';
 import { GarmentUploadState, UploadedGarmentDraft, WizardState } from '../types';
 import { isGarmentUploadedForBatch } from './state';
 
+type UploadedGarmentPhotoRequest = NonNullable<CreateGenerationBatchRequest['garments'][number]['photos']>[number];
+
 export const patchGarmentUploadState = (
   garments: UploadedGarmentDraft[],
   garmentId: string,
@@ -27,6 +29,21 @@ export const mergeGarmentUploadResults = (
     if (uploaded) {
       return {
         ...garment,
+        originalPhotos: garment.originalPhotos.map((photo) => {
+          const uploadedPhoto = uploaded.photoUploads.find((entry) => entry.photoId === photo.id);
+          return {
+            ...photo,
+            upload: {
+              ...photo.upload,
+              status: uploadedPhoto ? 'uploaded' : photo.upload.status,
+              progress: uploadedPhoto ? 100 : photo.upload.progress,
+              attempts: uploaded.attempts,
+              error: uploadedPhoto ? null : photo.upload.error,
+              storagePath: uploadedPhoto?.storagePath || null,
+              draftBatchId,
+            },
+          };
+        }),
         upload: {
           ...garment.upload,
           status: 'uploaded',
@@ -43,6 +60,17 @@ export const mergeGarmentUploadResults = (
     if (failed) {
       return {
         ...garment,
+        originalPhotos: garment.originalPhotos.map((photo) => ({
+          ...photo,
+          upload: {
+            ...photo.upload,
+            status: 'failed',
+            attempts: failed.attempts,
+            error: failed.error,
+            storagePath: null,
+            draftBatchId,
+          },
+        })),
         upload: {
           ...garment.upload,
           status: 'failed',
@@ -64,14 +92,37 @@ export const getUploadedGarmentsForBatch = (
 ): CreateGenerationBatchRequest['garments'] =>
   garments
     .filter((garment) => isGarmentUploadedForBatch(garment, draftBatchId))
-    .map((garment) => ({
-      id: garment.id,
-      name: garment.name,
-      storagePath: garment.upload.storagePath!,
-      isMultiAngle: garment.isMultiAngle,
-      sourceType: garment.sourceType,
-      originalFileNames: garment.originalFileNames,
-    }));
+    .map((garment) => {
+      const photos = garment.originalPhotos.reduce<UploadedGarmentPhotoRequest[]>((result, photo) => {
+        if (!photo.upload.storagePath) {
+          return result;
+        }
+
+        result.push({
+          id: photo.id,
+          fileName: photo.fileName,
+          storagePath: photo.upload.storagePath,
+          sourceIndex: photo.sourceIndex,
+          view: photo.classification.view || 'front',
+          confidence: photo.classification.confidence,
+          reasoning: photo.classification.reasoning,
+          classifiedBy: photo.classification.classifiedBy || 'assumed_single_front',
+        });
+
+        return result;
+      }, []);
+
+      return {
+        id: garment.id,
+        name: garment.name,
+        storagePath: photos[0]?.storagePath || garment.upload.storagePath!,
+        isMultiAngle: garment.isMultiAngle,
+        sourceType: garment.sourceType,
+        originalFileNames: garment.originalFileNames,
+        originalPhotoCount: garment.originalPhotos.length,
+        photos,
+      };
+    });
 
 export const getUploadFailureMessage = (
   garments: UploadedGarmentDraft[],

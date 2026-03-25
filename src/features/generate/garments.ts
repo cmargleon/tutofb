@@ -1,5 +1,20 @@
 import { v4 as uuidv4 } from 'uuid';
-import { UploadedGarmentDraft, SourceType, createInitialGarmentUploadState } from './types';
+import { GarmentView } from '../../../shared/src/types';
+import * as garmentViewMatchingNamespace from '../../../shared/src/utils/garmentViewMatching';
+import {
+  GarmentOriginalPhotoDraft,
+  SourceType,
+  UploadedGarmentDraft,
+  createInitialGarmentPhotoClassificationState,
+  createInitialGarmentUploadState,
+} from './types';
+
+const garmentViewMatchingModule =
+  ((garmentViewMatchingNamespace as { default?: unknown }).default as typeof import('../../../shared/src/utils/garmentViewMatching'))
+  ?? (garmentViewMatchingNamespace as typeof import('../../../shared/src/utils/garmentViewMatching'));
+
+const { getSortedUniqueGarmentViews } =
+  garmentViewMatchingModule as typeof import('../../../shared/src/utils/garmentViewMatching');
 
 interface FileLike {
   name: string;
@@ -20,7 +35,7 @@ const GAP = 8;
 
 const isImageFile = <TFile extends FileLike>(file: TFile): boolean => file.type.startsWith('image/');
 
-const fileFingerprint = <TFile extends FileLike>(file: TFile): string =>
+export const fileFingerprint = <TFile extends FileLike>(file: TFile): string =>
   [
     file.webkitRelativePath || '',
     file.name,
@@ -219,18 +234,36 @@ export const handleGarmentFiles = async (
 
   const preparedGarments = await Promise.all(
     grouped.map(async (group) => {
-      const uploadFile = await composeMultiAngleImage(group.files as File[]);
-      const previewUrl = URL.createObjectURL(uploadFile);
+      const originalPhotos: GarmentOriginalPhotoDraft[] = (group.files as File[]).map((file, index) => {
+        const isSinglePhoto = group.files.length === 1;
+        return {
+          id: uuidv4(),
+          file,
+          fileName: file.name,
+          sourceIndex: index,
+          previewUrl: URL.createObjectURL(file),
+          upload: createInitialGarmentUploadState(),
+          classification: isSinglePhoto
+            ? createInitialGarmentPhotoClassificationState({
+                status: 'classified',
+                view: 'front',
+                classifiedBy: 'assumed_single_front',
+                reasoning: 'Se asumió frente porque la prenda solo tiene una foto.',
+              })
+            : createInitialGarmentPhotoClassificationState(),
+        };
+      });
+      const previewUrl = originalPhotos[0]?.previewUrl || '';
 
       return {
         id: uuidv4(),
         name: group.name,
         sourceType: group.sourceType,
         files: group.files as File[],
-        uploadFile,
         previewUrl,
         isMultiAngle: group.files.length > 1,
         originalFileNames: group.files.map((file) => file.name),
+        originalPhotos,
         upload: createInitialGarmentUploadState(),
       } satisfies UploadedGarmentDraft;
     }),
@@ -240,5 +273,31 @@ export const handleGarmentFiles = async (
 };
 
 export const revokeGarmentUrls = (garments: UploadedGarmentDraft[]) => {
-  garments.forEach((garment) => URL.revokeObjectURL(garment.previewUrl));
+  garments.forEach((garment) => {
+    URL.revokeObjectURL(garment.previewUrl);
+    garment.originalPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+  });
 };
+
+export const getGarmentAvailableViews = (garment: UploadedGarmentDraft) =>
+  getSortedUniqueGarmentViews(
+    garment.originalPhotos
+      .map((photo) => photo.classification.view)
+      .filter((view): view is GarmentView => Boolean(view)),
+  );
+
+export const buildGarmentSuggestionSignature = (
+  selectedModelId: string | null,
+  garments: UploadedGarmentDraft[],
+): string =>
+  JSON.stringify({
+    selectedModelId,
+    garments: garments.map((garment) => ({
+      id: garment.id,
+      name: garment.name,
+      photos: garment.originalPhotos.map((photo) => ({
+        id: photo.id,
+        fingerprint: fileFingerprint(photo.file),
+      })),
+    })),
+  });

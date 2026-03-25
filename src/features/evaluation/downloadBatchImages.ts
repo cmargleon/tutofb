@@ -1,8 +1,14 @@
 import FileSaver from 'file-saver';
-import { resolveApprovedJobOutput } from '../../../shared/src/domain';
+import * as sharedDomainNamespace from '../../../shared/src/domain';
 import { Batch, Job } from '../../../shared/src/types';
 import { auth } from '../../firebase';
 import firebaseConfig from '../../../firebase-applet-config.json';
+
+const sharedDomainModule =
+  ((sharedDomainNamespace as { default?: unknown }).default
+    || sharedDomainNamespace) as typeof import('../../../shared/src/domain');
+
+const { resolveApprovedJobOutput } = sharedDomainModule;
 
 const { saveAs } = FileSaver;
 

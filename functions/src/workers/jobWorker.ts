@@ -265,7 +265,10 @@ const persistGeneratedAttempt = async ({
 
   if (nextStatus === 'pending') {
     baseJobUpdate.promptBase = resolvedPromptBase;
-    baseJobUpdate.finalPrompt = buildFinalGenerationPrompt(resolvedPromptBase, claimedJob.garmentIsMultiAngle);
+    baseJobUpdate.finalPrompt = buildFinalGenerationPrompt(
+      resolvedPromptBase,
+      claimedJob.garmentReferenceImageType || (claimedJob.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
+    );
   }
 
   const committed = await db.runTransaction(async (transaction) => {
@@ -552,6 +555,9 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
         aspectRatio: claimedJob.aspectRatio,
         poseImagePath: claimedJob.poseImagePath,
         garmentFilePath: claimedJob.garmentFilePath,
+        garmentPhotoId: claimedJob.garmentPhotoId || null,
+        garmentPhotoFileName: claimedJob.garmentPhotoFileName || null,
+        garmentView: claimedJob.garmentView || null,
         requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
         promptBase: claimedJob.promptBase,
       },

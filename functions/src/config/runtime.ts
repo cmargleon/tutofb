@@ -15,6 +15,12 @@ const OPENAI_BASE_URL = defineString('OPENAI_BASE_URL', { default: 'https://api.
 const GEMINI_IMAGE_REVIEW_MODEL = defineString('GEMINI_IMAGE_REVIEW_MODEL', {
   default: 'gemini-3.1-flash-lite-preview',
 });
+const GEMINI_POSE_CLASSIFICATION_MODEL = defineString('GEMINI_POSE_CLASSIFICATION_MODEL', {
+  default: 'gemini-3.1-flash-lite-preview',
+});
+const GEMINI_GARMENT_VIEW_CLASSIFICATION_MODEL = defineString('GEMINI_GARMENT_VIEW_CLASSIFICATION_MODEL', {
+  default: 'gemini-3.1-flash-lite-preview',
+});
 
 export const getBatchMaxJobs = (): number => BATCH_MAX_JOBS.value();
 export const getJobMaxRetries = (): number => JOB_MAX_RETRIES.value();
@@ -25,3 +31,5 @@ export const getFalPollIntervalMs = (): number => FAL_POLL_INTERVAL_MS.value();
 export const getFalPollTimeoutMs = (): number => FAL_POLL_TIMEOUT_MS.value();
 export const getOpenAIBaseUrl = (): string => OPENAI_BASE_URL.value();
 export const getGeminiImageReviewModel = (): string => GEMINI_IMAGE_REVIEW_MODEL.value();
+export const getGeminiPoseClassificationModel = (): string => GEMINI_POSE_CLASSIFICATION_MODEL.value();
+export const getGeminiGarmentViewClassificationModel = (): string => GEMINI_GARMENT_VIEW_CLASSIFICATION_MODEL.value();

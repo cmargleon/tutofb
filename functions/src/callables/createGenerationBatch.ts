@@ -14,6 +14,8 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import {
   assertModelOwnershipAndPoses,
   buildJobDraft,
+  getCompatibleGarmentPoseCombinations,
+  resolveGarmentPhotoForPose,
   validateCreateGenerationBatchInput,
 } from './createGenerationBatch.helpers';
 
@@ -48,6 +50,28 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     }
 
     const poseMap = assertModelOwnershipAndPoses(client, model, validated.poseIds);
+    const selectedPoses = validated.poseIds
+      .map((poseId) => poseMap.get(poseId))
+      .filter((pose): pose is Model['poses'][number] => Boolean(pose));
+    const compatibleCombinations = getCompatibleGarmentPoseCombinations(validated.garments, selectedPoses);
+    const actualJobMultiplier = validated.experiment?.mode === 'ab_paired'
+      ? validated.experiment.arms.length
+      : 1;
+    const actualTotalJobs = compatibleCombinations.length * actualJobMultiplier;
+
+    if (actualTotalJobs === 0) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Ninguna prenda del lote tiene vistas compatibles con las poses seleccionadas.',
+      );
+    }
+
+    if (actualTotalJobs > getBatchMaxJobs()) {
+      throw new HttpsError(
+        'out-of-range',
+        `El lote excede el límite configurado de ${getBatchMaxJobs()} trabajos (${actualTotalJobs} solicitados).`,
+      );
+    }
 
     const now = admin.firestore.FieldValue.serverTimestamp();
     const batchRef = db.collection('batches').doc();
@@ -78,8 +102,8 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
       promptBase: validated.promptBase,
       poseIds: validated.poseIds,
       garmentCount: validated.garments.length,
-      totalJobs: validated.totalJobs,
-      pendingJobs: validated.totalJobs,
+      totalJobs: actualTotalJobs,
+      pendingJobs: actualTotalJobs,
       processingJobs: 0,
       completedJobs: 0,
       failedJobs: 0,
@@ -100,12 +124,8 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     const autoReviewMaxAttempts = getJobAutoReviewMaxAttempts();
     let combinationIndex = 0;
 
-    for (const garment of validated.garments) {
-      for (const poseId of validated.poseIds) {
-        const pose = poseMap.get(poseId);
-        if (!pose) {
-          continue;
-        }
+    for (const { garment, pose } of compatibleCombinations) {
+        const selectedGarmentPhoto = resolveGarmentPhotoForPose(garment, pose);
 
         const comparisonKey = `${pose.id}::${garment.id}`;
         const assignedArms = validated.experiment
@@ -122,7 +142,8 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
           const jobDraft = buildJobDraft(
             {
               garmentIsMultiAngle: garment.isMultiAngle,
-            } as Pick<Job, 'garmentIsMultiAngle'>,
+              garmentReferenceImageType: 'single_view',
+            } as Pick<Job, 'garmentIsMultiAngle' | 'garmentReferenceImageType'>,
             selectedProvider,
             validated.promptBase,
             autoReviewMaxAttempts,
@@ -144,10 +165,14 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
             poseFileName: pose.fileName,
             garmentId: garment.id,
             garmentName: garment.name,
-            garmentFilePath: garment.storagePath,
+            garmentFilePath: selectedGarmentPhoto.storagePath,
+            garmentPhotoId: selectedGarmentPhoto.id,
+            garmentPhotoFileName: selectedGarmentPhoto.fileName,
+            garmentView: selectedGarmentPhoto.view,
             garmentSourceType: garment.sourceType,
             garmentOriginalFileNames: garment.originalFileNames || [],
             garmentIsMultiAngle: garment.isMultiAngle,
+            garmentReferenceImageType: 'single_view',
             aspectRatio: validated.aspectRatio,
             ...jobDraft,
             maxRetries,
@@ -181,8 +206,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
           writeBatch.set(jobRef, jobData);
         });
 
-        combinationIndex += 1;
-      }
+      combinationIndex += 1;
     }
 
     writeBatch.set(
@@ -199,7 +223,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
 
     return {
       batchId: batchRef.id,
-      createdJobs: validated.totalJobs,
+      createdJobs: actualTotalJobs,
     };
   },
 );

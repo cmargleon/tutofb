@@ -5,6 +5,7 @@ import { WizardStepper } from '../components/WizardStepper';
 import { WizardFooter } from '../components/wizard/WizardFooter';
 import { ClientModelStep } from '../components/wizard/ClientModelStep';
 import { GarmentsStep } from '../components/wizard/GarmentsStep';
+import { PoseSelectionStep } from '../components/wizard/PoseSelectionStep';
 import { BatchStep } from '../components/wizard/BatchStep';
 import { useWizard } from '../features/generate/hooks/useWizard';
 import { GENERATE_WIZARD_MAX_STEP, GENERATE_WIZARD_STEPS } from '../features/generate/wizard/state';
@@ -42,7 +43,9 @@ export const Wizard: React.FC = () => {
     handleProviderChange,
     handleAspectRatioChange,
     handlePromptChange,
+    handleRetryPoseSuggestions,
   } = useWizard();
+  const isWizardBusy = isSubmitting || state.poseSuggestions.status === 'preparing';
 
   if (loadingData) {
     return (
@@ -60,7 +63,7 @@ export const Wizard: React.FC = () => {
     <div className="max-w-7xl mx-auto pb-12">
       <PageHeader
         title="Generar imágenes"
-        description="Replica el flujo operativo del catálogo: eliges cliente y modelo, subes prendas con agrupado automático y generas un trabajo por cada combinación pose-prenda."
+        description="Replica el flujo operativo del catálogo: eliges cliente y modelo, subes prendas, confirmas las poses sugeridas y generas un trabajo por cada combinación compatible pose-prenda."
       />
 
       {error && (
@@ -86,30 +89,41 @@ export const Wizard: React.FC = () => {
             models={models}
             selectedClientId={state.selectedClientId}
             selectedModelId={state.selectedModelId}
-            selectedPoseIds={state.selectedPoseIds}
-            selectedModel={selectedModel}
-            allPosesSelected={allPosesSelected}
             onClientChange={handleClientChange}
             onModelSelect={handleModelSelect}
-            onPoseToggle={handlePoseToggle}
-            onToggleAllPoses={handleToggleAllPoses}
           />
         )}
 
         {state.step === 2 && (
           <GarmentsStep
             garments={state.garments}
-            isSubmitting={isSubmitting}
+            isSubmitting={isWizardBusy}
             onFiles={handleFiles}
             onRemoveGarment={removeGarment}
           />
         )}
 
         {state.step === 3 && (
+          <PoseSelectionStep
+            selectedModel={selectedModel}
+            garments={state.garments}
+            selectedPoseIds={state.selectedPoseIds}
+            suggestedPoseIds={state.poseSuggestions.suggestedPoseIds}
+            allPosesSelected={allPosesSelected}
+            isPreparing={state.poseSuggestions.status === 'preparing'}
+            suggestionError={state.poseSuggestions.error}
+            missingPoseClassificationCount={state.poseSuggestions.missingPoseClassificationCount}
+            onPoseToggle={handlePoseToggle}
+            onToggleAllPoses={handleToggleAllPoses}
+            onRetrySuggestions={handleRetryPoseSuggestions}
+          />
+        )}
+
+        {state.step === 4 && (
           <BatchStep
             state={state}
             garments={state.garments}
-            isSubmitting={isSubmitting}
+            isSubmitting={isWizardBusy}
             totalJobs={totalJobs}
             uploadSummary={uploadSummary}
             experimentProviderError={experimentProviderError}
@@ -129,7 +143,7 @@ export const Wizard: React.FC = () => {
           currentStep={state.step}
           maxStep={GENERATE_WIZARD_MAX_STEP}
           canAdvance={canAdvance}
-          isSubmitting={isSubmitting}
+          isSubmitting={isWizardBusy}
           onBack={() => goToStep(state.step - 1)}
           onNext={() => goToStep(state.step + 1)}
         />

@@ -3,12 +3,21 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { Client, Model } from '../shared/src/types';
+
 const require = createRequire(import.meta.url);
 const createBatchHelpers = require('../functions/lib/functions/src/callables/createGenerationBatch.helpers.js');
 
-const { assertModelOwnershipAndPoses, buildJobDraft, validateCreateGenerationBatchInput } = createBatchHelpers as {
+const {
+  assertModelOwnershipAndPoses,
+  buildJobDraft,
+  getCompatibleGarmentPoseCombinations,
+  resolveGarmentPhotoForPose,
+  validateCreateGenerationBatchInput,
+} = createBatchHelpers as {
   assertModelOwnershipAndPoses: typeof import('../functions/src/callables/createGenerationBatch.helpers').assertModelOwnershipAndPoses;
   buildJobDraft: typeof import('../functions/src/callables/createGenerationBatch.helpers').buildJobDraft;
+  getCompatibleGarmentPoseCombinations: typeof import('../functions/src/callables/createGenerationBatch.helpers').getCompatibleGarmentPoseCombinations;
+  resolveGarmentPhotoForPose: typeof import('../functions/src/callables/createGenerationBatch.helpers').resolveGarmentPhotoForPose;
   validateCreateGenerationBatchInput: typeof import('../functions/src/callables/createGenerationBatch.helpers').validateCreateGenerationBatchInput;
 };
 
@@ -37,10 +46,29 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
         {
           id: 'gar-1',
           name: 'Vestido Azul',
-          storagePath: 'garments/drafts/user-1/draft-1/gar-1.jpg',
+          storagePath: 'garments/drafts/user-1/draft-1/gar-1/front.jpg',
           isMultiAngle: true,
           sourceType: 'subfolder',
           originalFileNames: ['front.jpg', 'back.jpg'],
+          originalPhotoCount: 2,
+          photos: [
+            {
+              id: 'gar-1-front',
+              fileName: 'front.jpg',
+              storagePath: 'garments/drafts/user-1/draft-1/gar-1/front.jpg',
+              sourceIndex: 0,
+              view: 'front',
+              classifiedBy: 'gemini',
+            },
+            {
+              id: 'gar-1-back',
+              fileName: 'back.jpg',
+              storagePath: 'garments/drafts/user-1/draft-1/gar-1/back.jpg',
+              sourceIndex: 1,
+              view: 'back',
+              classifiedBy: 'gemini',
+            },
+          ],
         },
       ],
       provider: 'fal-banana-pro',
@@ -56,6 +84,7 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
   assert.equal(validated.promptBase, 'Prompt real');
   assert.deepEqual(validated.poseIds, ['pose-1', 'pose-2']);
   assert.equal(validated.totalJobs, 2);
+  assert.equal(validated.garments[0]?.photos?.length, 2);
 });
 
 test('validateCreateGenerationBatchInput soporta experimento A/B paired y excluye banana-pro', () => {
@@ -173,10 +202,93 @@ test('assertModelOwnershipAndPoses rechaza poses ajenas o modelos de otro client
   );
 });
 
-test('buildJobDraft prepara el prompt final para multiangulo y deja el job en pending', () => {
+test('resolveGarmentPhotoForPose prioriza la vista principal y cae a front si hace falta', () => {
+  const selectedFrontThreeQuarter = resolveGarmentPhotoForPose(
+    {
+      id: 'gar-1',
+      name: 'Vestido Azul',
+      storagePath: 'garments/drafts/user-1/draft-1/gar-1/front.jpg',
+      isMultiAngle: true,
+      photos: [
+        {
+          id: 'gar-1-front',
+          fileName: 'front.jpg',
+          storagePath: 'garments/drafts/user-1/draft-1/gar-1/front.jpg',
+          sourceIndex: 0,
+          view: 'front',
+          classifiedBy: 'gemini',
+        },
+        {
+          id: 'gar-1-side',
+          fileName: 'side.jpg',
+          storagePath: 'garments/drafts/user-1/draft-1/gar-1/side.jpg',
+          sourceIndex: 1,
+          view: 'side',
+          classifiedBy: 'gemini',
+        },
+      ],
+    },
+    {
+      id: 'pose-front-34',
+      fileName: 'pose-front-34.jpg',
+      aiClassification: {
+        orientationGroup: 'front',
+        orientationDetail: 'front_three_quarter',
+        framing: 'full_body',
+        autoCategory: 'frente_3_4_cuerpo_completo',
+        usableForGarmentViews: ['front', 'side'],
+        confidence: 0.9,
+        taggedBy: 'gemini',
+        taggedAt: new Date(),
+        version: 1,
+      },
+    },
+  );
+
+  assert.equal(selectedFrontThreeQuarter.id, 'gar-1-front');
+
+  const selectedFallback = resolveGarmentPhotoForPose(
+    {
+      id: 'gar-1',
+      name: 'Vestido Azul',
+      storagePath: 'garments/drafts/user-1/draft-1/gar-1/front.jpg',
+      isMultiAngle: true,
+      photos: [
+        {
+          id: 'gar-1-front',
+          fileName: 'front.jpg',
+          storagePath: 'garments/drafts/user-1/draft-1/gar-1/front.jpg',
+          sourceIndex: 0,
+          view: 'front',
+          classifiedBy: 'gemini',
+        },
+      ],
+    },
+    {
+      id: 'pose-back',
+      fileName: 'pose-back.jpg',
+      aiClassification: {
+        orientationGroup: 'back',
+        orientationDetail: 'back',
+        framing: 'full_body',
+        autoCategory: 'espalda_cuerpo_completo',
+        usableForGarmentViews: ['back'],
+        confidence: 0.9,
+        taggedBy: 'gemini',
+        taggedAt: new Date(),
+        version: 1,
+      },
+    },
+  );
+
+  assert.equal(selectedFallback.id, 'gar-1-front');
+});
+
+test('buildJobDraft usa single_view para el matching nuevo y deja el job en pending', () => {
   const draft = buildJobDraft(
     {
       garmentIsMultiAngle: true,
+      garmentReferenceImageType: 'single_view',
     },
     'openai-gpt-image-1.5',
     '',
@@ -184,7 +296,110 @@ test('buildJobDraft prepara el prompt final para multiangulo y deja el job en pe
 
   assert.equal(draft.provider, 'openai-gpt-image-1.5');
   assert.equal(draft.status, 'pending');
-  assert.match(draft.finalPrompt, /multiples angulos/i);
+  assert.doesNotMatch(draft.finalPrompt, /multiples angulos/i);
   assert.doesNotMatch(draft.finalPrompt, /Instrucciones de fondo/i);
   assert.doesNotMatch(draft.finalPrompt, /Evitar en el fondo/i);
+});
+
+test('buildJobDraft mantiene la nota de multiangulo en jobs legacy compuestos', () => {
+  const draft = buildJobDraft(
+    {
+      garmentIsMultiAngle: true,
+      garmentReferenceImageType: 'multi_angle_composite',
+    },
+    'openai-gpt-image-1.5',
+    '',
+  );
+
+  assert.match(draft.finalPrompt, /multiples angulos/i);
+});
+
+test('getCompatibleGarmentPoseCombinations omite la pose de espalda para prendas solo-front y la mantiene para prendas front-back', () => {
+  const combinations = getCompatibleGarmentPoseCombinations(
+    [
+      {
+        id: 'gar-front-back',
+        name: 'Multicolor',
+        storagePath: 'garments/drafts/user-1/draft-1/gar-front-back/front.jpg',
+        isMultiAngle: true,
+        photos: [
+          {
+            id: 'gar-front-back-front',
+            fileName: 'front.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-front-back/front.jpg',
+            sourceIndex: 0,
+            view: 'front',
+            classifiedBy: 'gemini',
+          },
+          {
+            id: 'gar-front-back-back',
+            fileName: 'back.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-front-back/back.jpg',
+            sourceIndex: 1,
+            view: 'back',
+            classifiedBy: 'gemini',
+          },
+        ],
+      },
+      {
+        id: 'gar-front-only',
+        name: 'Frente Solo',
+        storagePath: 'garments/drafts/user-1/draft-1/gar-front-only/front.jpg',
+        isMultiAngle: false,
+        photos: [
+          {
+            id: 'gar-front-only-front',
+            fileName: 'front.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-front-only/front.jpg',
+            sourceIndex: 0,
+            view: 'front',
+            classifiedBy: 'assumed_single_front',
+          },
+        ],
+      },
+    ],
+    [
+      {
+        id: 'pose-front-medium',
+        fileName: 'pose-front-medium.jpg',
+        storagePath: 'models/client-1/model-1/poses/front-medium.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front_three_quarter',
+          framing: 'medium_body',
+          autoCategory: 'frente_3_4_medio_cuerpo',
+          usableForGarmentViews: ['front', 'side'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 1,
+        },
+      },
+      {
+        id: 'pose-back',
+        fileName: 'pose-back.jpg',
+        storagePath: 'models/client-1/model-1/poses/back.jpg',
+        aiClassification: {
+          orientationGroup: 'back',
+          orientationDetail: 'back',
+          framing: 'three_quarter_body',
+          autoCategory: 'espalda_tres_cuartos',
+          usableForGarmentViews: ['back'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 1,
+        },
+      },
+    ],
+  );
+
+  assert.deepEqual(
+    combinations.map(({ garment, pose }) => `${garment.id}:${pose.id}`),
+    [
+      'gar-front-back:pose-front-medium',
+      'gar-front-back:pose-back',
+      'gar-front-only:pose-front-medium',
+    ],
+  );
 });

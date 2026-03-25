@@ -17,11 +17,13 @@ import {
 
 interface UseGenerateWizardSubmitParams {
   state: WizardState;
+  draftBatchId: string | null;
   experimentProviderError: string | null;
   totalJobs: number;
   uploadSummary: UploadSummary;
   setState: React.Dispatch<React.SetStateAction<WizardState>>;
   setFlowError: (error: string | null) => void;
+  setDraftBatchId: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 export interface UseGenerateWizardSubmitReturn {
@@ -36,16 +38,17 @@ export interface UseGenerateWizardSubmitReturn {
 
 export const useGenerateWizardSubmit = ({
   state,
+  draftBatchId,
   experimentProviderError,
   totalJobs,
   uploadSummary,
   setState,
   setFlowError,
+  setDraftBatchId,
 }: UseGenerateWizardSubmitParams): UseGenerateWizardSubmitReturn => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStage, setSubmitStage] = useState<GenerateSubmitStage>('idle');
-  const [draftBatchId, setDraftBatchId] = useState<string | null>(null);
 
   const uploadedGarmentCount = useMemo(
     () => state.garments.filter((garment) => isGarmentUploadedForBatch(garment, draftBatchId)).length,

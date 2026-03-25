@@ -1,6 +1,6 @@
-import { storage, auth } from '../../firebase';
+import { auth, storage } from '../../firebase';
 import { deleteObject, ref, uploadBytesResumable } from 'firebase/storage';
-import { GarmentUploadStatus, UploadedGarmentDraft } from './types';
+import { GarmentOriginalPhotoDraft, GarmentUploadStatus, UploadedGarmentDraft } from './types';
 
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
 const DEFAULT_MAX_RETRIES = 2;
@@ -12,6 +12,10 @@ const RETRY_BACKOFF_MS = 1_200;
 interface UploadAttemptResult {
   storagePath: string;
   attempts: number;
+  photoUploads: Array<{
+    photoId: string;
+    storagePath: string;
+  }>;
 }
 
 class UploadFailureError extends Error {
@@ -43,6 +47,10 @@ export interface UploadGarmentDraftsResult {
   uploaded: Array<{
     garmentId: string;
     storagePath: string;
+    photoUploads: Array<{
+      photoId: string;
+      storagePath: string;
+    }>;
     attempts: number;
   }>;
   failed: Array<{
@@ -57,12 +65,18 @@ const sleep = (ms: number): Promise<void> =>
     globalThis.setTimeout(resolve, ms);
   });
 
-const getStoragePath = (draftBatchId: string, garmentId: string): string => {
+const sanitizeFileName = (fileName: string): string => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+
+const getStoragePath = (
+  draftBatchId: string,
+  garment: UploadedGarmentDraft,
+  photo: GarmentOriginalPhotoDraft,
+): string => {
   if (!auth.currentUser) {
     throw new Error('Usuario no autenticado');
   }
 
-  return `garments/drafts/${auth.currentUser.uid}/${draftBatchId}/${garmentId}.jpg`;
+  return `garments/drafts/${auth.currentUser.uid}/${draftBatchId}/${garment.id}/${photo.id}-${sanitizeFileName(photo.fileName)}`;
 };
 
 const resolveUploadTimeoutMs = (fileSizeBytes: number): number => {
@@ -93,45 +107,32 @@ const emitProgress = (
   onProgress?.(event);
 };
 
-export const uploadGarmentDraft = async (
-  draftBatchId: string,
-  garment: UploadedGarmentDraft
-): Promise<string> => {
-  const result = await uploadGarmentDrafts(draftBatchId, [garment], {
-    concurrency: 1,
-  });
-
-  if (result.failed.length > 0) {
-    throw new Error(result.failed[0].error);
-  }
-
-  return result.uploaded[0].storagePath;
-};
-
-const uploadGarmentDraftAttempt = async (
-  draftBatchId: string,
-  garment: UploadedGarmentDraft,
-  attempt: number,
-  onProgress?: UploadGarmentDraftsOptions['onProgress'],
-): Promise<UploadAttemptResult> => {
-  const storagePath = getStoragePath(draftBatchId, garment.id);
+const uploadSinglePhoto = async ({
+  draftBatchId,
+  garment,
+  photo,
+  attempt,
+  completedPhotos,
+  totalPhotos,
+  onProgress,
+}: {
+  draftBatchId: string;
+  garment: UploadedGarmentDraft;
+  photo: GarmentOriginalPhotoDraft;
+  attempt: number;
+  completedPhotos: number;
+  totalPhotos: number;
+  onProgress?: UploadGarmentDraftsOptions['onProgress'];
+}): Promise<string> => {
+  const storagePath = getStoragePath(draftBatchId, garment, photo);
   const storageRef = ref(storage, storagePath);
-  const uploadTask = uploadBytesResumable(storageRef, garment.uploadFile, {
-    contentType: garment.uploadFile.type || 'image/jpeg',
-  });
-
-  emitProgress(onProgress, {
-    garmentId: garment.id,
-    status: attempt === 1 ? 'uploading' : 'retrying',
-    progress: 0,
-    attempts: attempt,
-    error: null,
-    storagePath: null,
+  const uploadTask = uploadBytesResumable(storageRef, photo.file, {
+    contentType: photo.file.type || 'image/jpeg',
   });
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
-    const timeoutMs = resolveUploadTimeoutMs(garment.uploadFile.size);
+    const timeoutMs = resolveUploadTimeoutMs(photo.file.size);
     let timeoutId = globalThis.setTimeout(() => {
       settled = true;
       uploadTask.cancel();
@@ -155,10 +156,11 @@ const uploadGarmentDraftAttempt = async (
         }
 
         refreshTimeout();
+        const photoProgress = snapshot.totalBytes > 0 ? snapshot.bytesTransferred / snapshot.totalBytes : 0;
         emitProgress(onProgress, {
           garmentId: garment.id,
           status: attempt === 1 ? 'uploading' : 'retrying',
-          progress: snapshot.totalBytes > 0 ? (snapshot.bytesTransferred / snapshot.totalBytes) * 100 : 0,
+          progress: ((completedPhotos + photoProgress) / totalPhotos) * 100,
           attempts: attempt,
           error: null,
           storagePath: null,
@@ -180,19 +182,90 @@ const uploadGarmentDraftAttempt = async (
         settled = true;
         emitProgress(onProgress, {
           garmentId: garment.id,
-          status: 'uploaded',
-          progress: 100,
+          status: attempt === 1 ? 'uploading' : 'retrying',
+          progress: ((completedPhotos + 1) / totalPhotos) * 100,
           attempts: attempt,
           error: null,
-          storagePath,
+          storagePath: null,
         });
         resolve();
       },
     );
   });
 
+  return storagePath;
+};
+
+export const uploadGarmentDraft = async (
+  draftBatchId: string,
+  garment: UploadedGarmentDraft,
+): Promise<string> => {
+  const result = await uploadGarmentDrafts(draftBatchId, [garment], {
+    concurrency: 1,
+  });
+
+  if (result.failed.length > 0) {
+    throw new Error(result.failed[0].error);
+  }
+
+  return result.uploaded[0].storagePath;
+};
+
+const uploadGarmentDraftAttempt = async (
+  draftBatchId: string,
+  garment: UploadedGarmentDraft,
+  attempt: number,
+  onProgress?: UploadGarmentDraftsOptions['onProgress'],
+): Promise<UploadAttemptResult> => {
+  emitProgress(onProgress, {
+    garmentId: garment.id,
+    status: attempt === 1 ? 'uploading' : 'retrying',
+    progress: 0,
+    attempts: attempt,
+    error: null,
+    storagePath: null,
+  });
+
+  const uploadedPhotoPaths: UploadAttemptResult['photoUploads'] = [];
+
+  try {
+    for (let index = 0; index < garment.originalPhotos.length; index += 1) {
+      const photo = garment.originalPhotos[index];
+      const storagePath = await uploadSinglePhoto({
+        draftBatchId,
+        garment,
+        photo,
+        attempt,
+        completedPhotos: index,
+        totalPhotos: garment.originalPhotos.length,
+        onProgress,
+      });
+
+      uploadedPhotoPaths.push({
+        photoId: photo.id,
+        storagePath,
+      });
+    }
+  } catch (error) {
+    await Promise.allSettled(
+      uploadedPhotoPaths.map((entry) => deleteObject(ref(storage, entry.storagePath))),
+    );
+    throw error;
+  }
+
+  const primaryStoragePath = uploadedPhotoPaths[0]?.storagePath || null;
+  emitProgress(onProgress, {
+    garmentId: garment.id,
+    status: 'uploaded',
+    progress: 100,
+    attempts: attempt,
+    error: null,
+    storagePath: primaryStoragePath,
+  });
+
   return {
-    storagePath,
+    storagePath: primaryStoragePath || '',
+    photoUploads: uploadedPhotoPaths,
     attempts: attempt,
   };
 };
@@ -277,6 +350,7 @@ export const uploadGarmentDrafts = async (
         uploaded.push({
           garmentId: garment.id,
           storagePath: result.storagePath,
+          photoUploads: result.photoUploads,
           attempts: result.attempts,
         });
       } catch (error) {
@@ -307,12 +381,22 @@ export const deleteGarmentDraftByStoragePath = async (storagePath: string | null
 
 export const deleteGarmentDrafts = async (
   draftBatchId: string,
-  garments: UploadedGarmentDraft[]
+  garments: UploadedGarmentDraft[],
 ) => {
   if (!auth.currentUser) return;
 
   for (const garment of garments) {
-    const storagePath = garment.upload.storagePath ?? getStoragePath(draftBatchId, garment.id);
-    await deleteGarmentDraftByStoragePath(storagePath);
+    const storagePaths = garment.originalPhotos
+      .map((photo) => photo.upload.storagePath)
+      .filter((value): value is string => Boolean(value));
+
+    if (storagePaths.length === 0) {
+      const fallbackPhoto = garment.originalPhotos[0];
+      if (fallbackPhoto) {
+        storagePaths.push(getStoragePath(draftBatchId, garment, fallbackPhoto));
+      }
+    }
+
+    await Promise.allSettled(storagePaths.map((storagePath) => deleteGarmentDraftByStoragePath(storagePath)));
   }
 };

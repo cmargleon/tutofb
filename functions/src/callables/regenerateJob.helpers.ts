@@ -15,7 +15,10 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     provider,
     requestedPromptBase: trimmedPrompt,
     promptBase: trimmedPrompt,
-    finalPrompt: buildFinalGenerationPrompt(trimmedPrompt, job.garmentIsMultiAngle),
+    finalPrompt: buildFinalGenerationPrompt(
+      trimmedPrompt,
+      job.garmentReferenceImageType || (job.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
+    ),
     status: 'pending' as const,
     queuePriority: 1,
     retryCount: 0,

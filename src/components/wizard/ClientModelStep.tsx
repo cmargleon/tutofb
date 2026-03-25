@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Layers3 } from 'lucide-react';
+import { Layers3 } from 'lucide-react';
 import { Client, Model } from '../../../shared/src/types';
 import { EmptyState, ImageThumb } from '../ui';
 
@@ -8,13 +8,8 @@ interface Props {
   models: Model[];
   selectedClientId: string | null;
   selectedModelId: string | null;
-  selectedPoseIds: string[];
-  selectedModel: Model | null;
-  allPosesSelected: boolean | null | undefined;
   onClientChange: (clientId: string | null) => void;
   onModelSelect: (modelId: string | null) => void;
-  onPoseToggle: (poseId: string) => void;
-  onToggleAllPoses: () => void;
 }
 
 export const ClientModelStep: React.FC<Props> = ({
@@ -22,13 +17,8 @@ export const ClientModelStep: React.FC<Props> = ({
   models,
   selectedClientId,
   selectedModelId,
-  selectedPoseIds,
-  selectedModel,
-  allPosesSelected,
   onClientChange,
   onModelSelect,
-  onPoseToggle,
-  onToggleAllPoses,
 }) => (
   <div className="space-y-6">
     <div className="grid gap-5 lg:grid-cols-[280px,1fr]">
@@ -52,7 +42,9 @@ export const ClientModelStep: React.FC<Props> = ({
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Modelos del cliente</h2>
-            <p className="text-sm text-slate-500">Selecciona un modelo y después las poses que entran al lote.</p>
+            <p className="text-sm text-slate-500">
+              Elige el modelo primero. Las poses se sugerirán después de subir las prendas.
+            </p>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
             {models.length} modelo{models.length === 1 ? '' : 's'}
@@ -116,56 +108,5 @@ export const ClientModelStep: React.FC<Props> = ({
         )}
       </div>
     </div>
-
-    {selectedModel && (
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Poses del modelo</h2>
-            <p className="text-sm text-slate-500">
-              {selectedPoseIds.length} seleccionada{selectedPoseIds.length === 1 ? '' : 's'} de {selectedModel.poses.length}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onToggleAllPoses}
-            className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-          >
-            {allPosesSelected ? 'Deseleccionar todas' : 'Seleccionar todas'}
-          </button>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-          {selectedModel.poses.map((pose) => {
-            const selected = selectedPoseIds.includes(pose.id);
-            return (
-              <button
-                type="button"
-                key={pose.id}
-                onClick={() => onPoseToggle(pose.id)}
-                className={`relative overflow-hidden rounded-3xl border transition ${
-                  selected ? 'border-emerald-600 ring-2 ring-emerald-600/20' : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <div className="aspect-[3/4] bg-slate-100">
-                  <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} />
-                </div>
-                <div className="flex items-center justify-between px-3 py-3 text-left">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900 line-clamp-1">{pose.fileName}</p>
-                    <p className="text-xs text-slate-500">Pose {pose.id.slice(0, 6)}</p>
-                  </div>
-                  {selected && (
-                    <span className="rounded-full bg-emerald-600 p-1 text-white">
-                      <Check className="w-4 h-4" />
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    )}
   </div>
 );

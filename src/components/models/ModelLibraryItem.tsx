@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Client, Model } from '../../../shared/src/types';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
+import { formatPoseAutoCategoryLabel } from '../../../shared/src/utils/poseAiClassification';
 import { UseModelLibraryResult } from '../../features/models/hooks/useModelLibrary';
 import { MODEL_INPUT_BASE, formatModelTimestamp } from '../../features/models/utils';
 import { Button, ImageThumb } from '../ui';
@@ -37,6 +38,12 @@ const ViewPosesGrid: React.FC<{ model: Model }> = ({ model }) => (
           className="relative aspect-[3/4] overflow-hidden rounded-md bg-white group"
         >
           <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} />
+          <div className="absolute inset-x-0 bottom-0 rounded-b-md bg-gradient-to-t from-black/80 to-transparent px-2 py-2">
+            <p className="truncate text-[11px] text-white">{pose.fileName}</p>
+            <p className="mt-1 inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white">
+              {formatPoseAutoCategoryLabel(pose.aiClassification?.autoCategory)}
+            </p>
+          </div>
         </div>
       ))}
     </div>
@@ -65,6 +72,9 @@ const EditPosesGrid: React.FC<{
             <div className="absolute inset-0 rounded-md bg-black/0 transition-colors group-hover:bg-black/10" />
             <div className="absolute inset-x-0 bottom-0 rounded-b-md bg-gradient-to-t from-black/75 to-transparent px-2 py-2">
               <p className="truncate text-[11px] text-white">{pose.fileName}</p>
+              <p className="mt-1 inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white">
+                {formatPoseAutoCategoryLabel(pose.aiClassification?.autoCategory)}
+              </p>
               {poseMarked && (
                 <p className="mt-1 text-[11px] font-medium text-amber-200">
                   Se eliminará al guardar

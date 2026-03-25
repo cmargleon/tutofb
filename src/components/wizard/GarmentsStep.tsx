@@ -3,6 +3,7 @@ import { FolderUp, ImagePlus, UploadCloud, X } from 'lucide-react';
 import { EmptyState } from '../ui';
 import { UploadedGarmentDraft } from '../../features/generate/types';
 import { GarmentUploadStatus } from './GarmentUploadStatus';
+import { GarmentOriginalPhotosGrid } from './GarmentOriginalPhotosGrid';
 
 interface Props {
   garments: UploadedGarmentDraft[];
@@ -40,7 +41,7 @@ export const GarmentsStep: React.FC<Props> = ({ garments, isSubmitting, onFiles,
         <FolderUp className="mb-3 h-8 w-8 text-slate-500" />
         <span className="text-sm font-semibold text-slate-900">Carpeta de prendas</span>
         <span className="mt-1 text-sm text-slate-500">
-          Raíz suelta = una prenda multiángulo. Subcarpetas = una prenda por subcarpeta.
+          Raíz suelta = una prenda con varias fotos relacionadas. Subcarpetas = una prenda por subcarpeta.
         </span>
         <input
           type="file"
@@ -67,7 +68,9 @@ export const GarmentsStep: React.FC<Props> = ({ garments, isSubmitting, onFiles,
         {garments.map((garment) => (
           <div key={garment.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="relative aspect-square bg-slate-100">
-              <img src={garment.previewUrl} alt={garment.name} className="h-full w-full object-contain" />
+              <div className="h-full w-full p-3">
+                <GarmentOriginalPhotosGrid photos={garment.originalPhotos} />
+              </div>
               <button
                 type="button"
                 onClick={() => onRemoveGarment(garment.id)}
@@ -81,11 +84,14 @@ export const GarmentsStep: React.FC<Props> = ({ garments, isSubmitting, onFiles,
               <div className="flex items-center justify-between gap-3">
                 <h3 className="line-clamp-1 text-sm font-semibold text-slate-900">{garment.name}</h3>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                  {garment.isMultiAngle ? 'Multiángulo' : 'Simple'}
+                  {garment.originalPhotos.length > 1 ? `${garment.originalPhotos.length} vistas` : '1 vista'}
                 </span>
               </div>
               <p className="text-xs text-slate-500">
                 {garment.files.length} archivo{garment.files.length === 1 ? '' : 's'} · {garment.sourceType}
+              </p>
+              <p className="text-xs text-slate-500">
+                Las fotos se conservan por separado para que Gemini detecte frente, espalda o costado.
               </p>
               {garment.upload.status !== 'idle' ? (
                 <GarmentUploadStatus upload={garment.upload} minimumProgress={6} />

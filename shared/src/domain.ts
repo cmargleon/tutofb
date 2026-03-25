@@ -1,5 +1,6 @@
 import {
   AspectRatio,
+  GarmentReferenceImageType,
   Job,
   JobOutput,
   Provider,
@@ -130,13 +131,38 @@ export const isActiveCatalogEntity = (value: { status?: CatalogEntityStatus | nu
   !isArchivedCatalogEntity(value);
 export const resolveApprovedJobOutput = (job: Pick<Job, 'userSelectedOutput' | 'currentOutput'>): JobOutput | null =>
   job.userSelectedOutput || job.currentOutput || null;
-export const buildFinalGenerationPrompt = (promptBase: string, garmentIsMultiAngle: boolean): string => {
+export const buildFinalGenerationPrompt = (
+  promptBase: string,
+  garmentReferenceImageType: GarmentReferenceImageType | boolean = 'single_view',
+): string => {
   const basePrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
   const sections = [basePrompt];
+  const resolvedReferenceImageType =
+    typeof garmentReferenceImageType === 'boolean'
+      ? garmentReferenceImageType
+        ? 'multi_angle_composite'
+        : 'single_view'
+      : garmentReferenceImageType;
 
-  if (garmentIsMultiAngle) {
+  if (resolvedReferenceImageType === 'multi_angle_composite') {
     sections.push('La prenda de referencia esta mostrada desde multiples angulos dentro de una sola imagen.');
   }
 
   return sections.filter(Boolean).join('\n\n');
+};
+
+export default {
+  ROLE_VALUES,
+  PROVIDER_VALUES,
+  ASPECT_RATIO_VALUES,
+  PROVIDER_LABELS,
+  DEFAULT_TRY_ON_PROMPT,
+  isRole,
+  isProvider,
+  isAspectRatio,
+  isCatalogEntityStatus,
+  isArchivedCatalogEntity,
+  isActiveCatalogEntity,
+  resolveApprovedJobOutput,
+  buildFinalGenerationPrompt,
 };

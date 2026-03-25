@@ -3,6 +3,8 @@ import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverT
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   Model,
+  ModelPoseTaggingRequest,
+  ModelPoseTaggingResponse,
   Pose,
   Client,
   PermanentDeleteCatalogEntityRequest,
@@ -261,6 +263,17 @@ export const generateModelPoses = async (
   const callable = httpsCallable<GenerateModelPhotoRequest, GenerateModelPhotoResponse>(
     functions,
     'generateModelPose',
+  );
+  const result = await callable(data);
+  return result.data;
+};
+
+export const tagModelPosesWithGemini = async (
+  data: ModelPoseTaggingRequest,
+): Promise<ModelPoseTaggingResponse> => {
+  const callable = httpsCallable<ModelPoseTaggingRequest, ModelPoseTaggingResponse>(
+    functions,
+    'tagModelPosesWithGemini',
   );
   const result = await callable(data);
   return result.data;

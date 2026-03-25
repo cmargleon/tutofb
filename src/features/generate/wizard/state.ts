@@ -10,15 +10,17 @@ import {
   UploadedGarmentDraft,
   UploadSummary,
   WizardState,
+  createInitialPoseSuggestionState,
 } from '../types';
 
 export const GENERATE_WIZARD_STEPS: WizardStepDefinition[] = [
   { id: 1, name: 'Cliente y modelo' },
   { id: 2, name: 'Prendas' },
-  { id: 3, name: 'Lote' },
+  { id: 3, name: 'Poses sugeridas' },
+  { id: 4, name: 'Lote' },
 ];
 
-export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_STEPS.length - 1]?.id ?? 3;
+export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_STEPS.length - 1]?.id ?? 4;
 
 export const createInitialGenerateWizardState = (): WizardState => ({
   step: 1,
@@ -26,6 +28,7 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   selectedModelId: null,
   selectedPoseIds: [],
   garments: [],
+  poseSuggestions: createInitialPoseSuggestionState(),
   provider: 'fal-seedream',
   experiment: {
     enabled: false,
@@ -122,16 +125,20 @@ export const getGenerateWizardExperimentMultiplier = (state: WizardState): numbe
     ? state.experiment.providers.length
     : 1;
 
-export const getGenerateWizardTotalJobs = (state: WizardState): number =>
-  state.selectedPoseIds.length * state.garments.length * getGenerateWizardExperimentMultiplier(state);
+export const getGenerateWizardTotalJobs = (
+  state: WizardState,
+  compatiblePairCount: number = state.selectedPoseIds.length * state.garments.length,
+): number => compatiblePairCount * getGenerateWizardExperimentMultiplier(state);
 
 export const isGenerateWizardStepComplete = (state: WizardState, stepId: number): boolean => {
   switch (stepId) {
     case 1:
-      return Boolean(state.selectedClientId && state.selectedModelId && state.selectedPoseIds.length > 0);
+      return Boolean(state.selectedClientId && state.selectedModelId);
     case 2:
       return state.garments.length > 0;
     case 3:
+      return state.selectedPoseIds.length > 0;
+    case 4:
       return true;
     default:
       return false;
@@ -139,7 +146,8 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
 };
 
 export const getGenerateWizardCanAdvance = (state: WizardState): boolean =>
-  isGenerateWizardStepComplete(state, state.step);
+  isGenerateWizardStepComplete(state, state.step)
+  && !(state.step === 3 && state.poseSuggestions.status === 'preparing');
 
 export const getGenerateWizardExperimentProviderError = (state: WizardState): string | null => {
   if (!state.experiment.enabled) {

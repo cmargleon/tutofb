@@ -1,11 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Provider } from '../../../../../shared/src/types';
+import * as garmentViewMatchingNamespace from '../../../../../shared/src/utils/garmentViewMatching';
+import { classifyGarmentViewsWithGemini } from '../../firebase';
+import { buildGarmentSuggestionSignature, getGarmentAvailableViews, handleGarmentFiles, revokeGarmentUrls } from '../../garments';
+import { deleteGarmentDraftByStoragePath, uploadGarmentDrafts } from '../../storage';
+import {
+  GenerateWizardStepId,
+  UploadedGarmentDraft,
+  WizardState,
+  createInitialPoseSuggestionState,
+} from '../../types';
 import { canSelectWizardStep, clampWizardStep } from '../../../wizard/navigation';
-import { handleGarmentFiles, revokeGarmentUrls } from '../../garments';
-import { deleteGarmentDraftByStoragePath } from '../../storage';
-import { GenerateWizardStepId, UploadedGarmentDraft, WizardState } from '../../types';
 import { useGenerateWizardCatalog } from './useGenerateWizardCatalog';
 import { useGenerateWizardSubmit } from './useGenerateWizardSubmit';
+import {
+  getUploadFailureMessage,
+  mergeGarmentUploadResults,
+  patchGarmentUploadState,
+} from '../submit';
 import {
   buildGarmentUploadSummary,
   createInitialGenerateWizardState,
@@ -14,8 +26,94 @@ import {
   getGenerateWizardCanAdvance,
   getGenerateWizardExperimentProviderError,
   getGenerateWizardTotalJobs,
+  isGarmentUploadedForBatch,
   isGenerateWizardStepComplete,
 } from '../state';
+
+const garmentViewMatchingModule =
+  ((garmentViewMatchingNamespace as { default?: unknown }).default as typeof import('../../../../../shared/src/utils/garmentViewMatching'))
+  ?? (garmentViewMatchingNamespace as typeof import('../../../../../shared/src/utils/garmentViewMatching'));
+
+const { countCompatiblePoseMatchesForGarments, getSuggestedPoseIdsForGarments } =
+  garmentViewMatchingModule as typeof import('../../../../../shared/src/utils/garmentViewMatching');
+
+const markGarmentsAsClassifying = (
+  garments: UploadedGarmentDraft[],
+  garmentIds: Set<string>,
+): UploadedGarmentDraft[] =>
+  garments.map((garment) =>
+    garmentIds.has(garment.id)
+      ? {
+          ...garment,
+          originalPhotos: garment.originalPhotos.map((photo) => ({
+            ...photo,
+            classification: {
+              ...photo.classification,
+              status: 'classifying',
+              error: null,
+            },
+          })),
+        }
+      : garment,
+  );
+
+const mergeGarmentClassificationResults = (
+  garments: UploadedGarmentDraft[],
+  response: Awaited<ReturnType<typeof classifyGarmentViewsWithGemini>>,
+): UploadedGarmentDraft[] => {
+  const garmentsById = new Map(response.garments.map((garment) => [garment.garmentId, garment]));
+
+  return garments.map((garment) => {
+    const classifiedGarment = garmentsById.get(garment.id);
+    if (!classifiedGarment) {
+      return garment;
+    }
+
+    const photosById = new Map(classifiedGarment.photos.map((photo) => [photo.id, photo]));
+    return {
+      ...garment,
+      originalPhotos: garment.originalPhotos.map((photo) => {
+        const classifiedPhoto = photosById.get(photo.id);
+        if (!classifiedPhoto) {
+          return photo;
+        }
+
+        return {
+          ...photo,
+          classification: {
+            status: 'classified',
+            view: classifiedPhoto.view,
+            confidence: classifiedPhoto.confidence ?? null,
+            reasoning: classifiedPhoto.reasoning ?? null,
+            classifiedBy: classifiedPhoto.classifiedBy,
+            error: null,
+          },
+        };
+      }),
+    };
+  });
+};
+
+const markGarmentsClassificationFailed = (
+  garments: UploadedGarmentDraft[],
+  garmentIds: Set<string>,
+  message: string,
+): UploadedGarmentDraft[] =>
+  garments.map((garment) =>
+    garmentIds.has(garment.id)
+      ? {
+          ...garment,
+          originalPhotos: garment.originalPhotos.map((photo) => ({
+            ...photo,
+            classification: {
+              ...photo.classification,
+              status: photo.classification.status === 'classified' ? 'classified' : 'failed',
+              error: photo.classification.status === 'classified' ? null : message,
+            },
+          })),
+        }
+      : garment,
+  );
 
 export const useGenerateWizard = () => {
   const garmentUrlsRef = useRef<UploadedGarmentDraft[]>([]);
@@ -23,6 +121,7 @@ export const useGenerateWizard = () => {
   const previousStepRef = useRef<GenerateWizardStepId>(1);
   const [state, setState] = useState<WizardState>(createInitialGenerateWizardState);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const [draftBatchId, setDraftBatchId] = useState<string | null>(null);
 
   const {
     clients,
@@ -55,7 +154,17 @@ export const useGenerateWizard = () => {
     [],
   );
 
-  const totalJobs = useMemo(() => getGenerateWizardTotalJobs(state), [state]);
+  const totalJobs = useMemo(() => {
+    const compatiblePairCount = countCompatiblePoseMatchesForGarments(
+      selectedModel?.poses || [],
+      state.garments.map((garment) => ({
+        availableViews: getGarmentAvailableViews(garment),
+      })),
+      state.selectedPoseIds,
+    );
+
+    return getGenerateWizardTotalJobs(state, compatiblePairCount);
+  }, [selectedModel?.poses, state]);
   const uploadSummary = useMemo(() => buildGarmentUploadSummary(state.garments), [state.garments]);
   const experimentProviderError = useMemo(
     () => getGenerateWizardExperimentProviderError(state),
@@ -71,14 +180,27 @@ export const useGenerateWizard = () => {
     [selectedModel, state.selectedPoseIds],
   );
   const canAdvance = useMemo(() => getGenerateWizardCanAdvance(state), [state]);
+  const suggestionSignature = useMemo(
+    () => buildGarmentSuggestionSignature(state.selectedModelId, state.garments),
+    [state.selectedModelId, state.garments],
+  );
+  const missingPoseClassificationCount = useMemo(
+    () =>
+      selectedModel
+        ? selectedModel.poses.filter((pose) => (pose.aiClassification?.usableForGarmentViews || []).length === 0).length
+        : 0,
+    [selectedModel],
+  );
 
   const submit = useGenerateWizardSubmit({
     state,
+    draftBatchId,
     experimentProviderError,
     totalJobs,
     uploadSummary,
     setState,
     setFlowError,
+    setDraftBatchId,
   });
 
   const canSelectStep = (targetStep: number) =>
@@ -86,7 +208,7 @@ export const useGenerateWizard = () => {
       targetStep,
       currentStep: state.step,
       maxStep: GENERATE_WIZARD_MAX_STEP,
-      isBusy: submit.isSubmitting,
+      isBusy: submit.isSubmitting || state.poseSuggestions.status === 'preparing',
       isStepComplete: (stepId) => isGenerateWizardStepComplete(state, stepId),
     });
 
@@ -110,10 +232,209 @@ export const useGenerateWizard = () => {
     }));
   };
 
+  const patchGarmentUpload = (garmentId: string, patch: Parameters<typeof patchGarmentUploadState>[2]) => {
+    setState((current) => ({
+      ...current,
+      garments: patchGarmentUploadState(current.garments, garmentId, patch),
+    }));
+  };
+
+  const ensureGarmentsUploadedForSuggestions = async (
+    signature: string,
+  ): Promise<{ activeDraftBatchId: string; garments: UploadedGarmentDraft[] }> => {
+    const activeDraftBatchId = draftBatchId ?? crypto.randomUUID();
+    if (!draftBatchId) {
+      setDraftBatchId(activeDraftBatchId);
+    }
+
+    const garmentsToUpload = state.garments.filter(
+      (garment) => !isGarmentUploadedForBatch(garment, activeDraftBatchId),
+    );
+
+    const uploadResult =
+      garmentsToUpload.length > 0
+        ? await uploadGarmentDrafts(activeDraftBatchId, garmentsToUpload, {
+            concurrency: 4,
+            maxRetries: 2,
+            onProgress: (event) => {
+              patchGarmentUpload(event.garmentId, {
+                status: event.status,
+                progress: event.progress,
+                attempts: event.attempts,
+                error: event.error,
+                storagePath: event.storagePath,
+                draftBatchId: activeDraftBatchId,
+              });
+            },
+          })
+        : { uploaded: [], failed: [] };
+
+    const nextGarments = mergeGarmentUploadResults(state.garments, uploadResult, activeDraftBatchId);
+
+    if (uploadResult.uploaded.length > 0 || uploadResult.failed.length > 0) {
+      setState((current) => ({
+        ...current,
+        garments: mergeGarmentUploadResults(current.garments, uploadResult, activeDraftBatchId),
+      }));
+    }
+
+    if (uploadResult.failed.length > 0) {
+      const message = getUploadFailureMessage(nextGarments, uploadResult.failed.length, activeDraftBatchId);
+      setState((current) => ({
+        ...current,
+        poseSuggestions: {
+          ...current.poseSuggestions,
+          status: 'failed',
+          error: message,
+          signature,
+          missingPoseClassificationCount,
+        },
+      }));
+      setFlowError(message);
+      throw new Error(message);
+    }
+
+    return { activeDraftBatchId, garments: nextGarments };
+  };
+
+  const preparePoseSuggestions = async (signature: string) => {
+    if (!selectedModel || state.garments.length === 0) {
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      poseSuggestions: {
+        ...current.poseSuggestions,
+        status: 'preparing',
+        error: null,
+        missingPoseClassificationCount,
+      },
+    }));
+    setFlowError(null);
+
+    try {
+      const { garments: uploadedGarments } = await ensureGarmentsUploadedForSuggestions(signature);
+      const garmentsNeedingClassification = uploadedGarments.filter(
+        (garment) =>
+          garment.originalPhotos.length > 1
+          && garment.originalPhotos.some((photo) => photo.classification.status !== 'classified'),
+      );
+
+      let preparedGarments = uploadedGarments;
+
+      if (garmentsNeedingClassification.length > 0) {
+        const garmentIds = new Set(garmentsNeedingClassification.map((garment) => garment.id));
+        setState((current) => ({
+          ...current,
+          garments: markGarmentsAsClassifying(current.garments, garmentIds),
+        }));
+
+        const classificationResult = await classifyGarmentViewsWithGemini({
+          garments: garmentsNeedingClassification.map((garment) => ({
+            garmentId: garment.id,
+            garmentName: garment.name,
+            photos: garment.originalPhotos.map((photo) => {
+              if (!photo.upload.storagePath) {
+                throw new Error(`La foto ${photo.fileName} todavía no tiene storagePath.`);
+              }
+
+              return {
+                id: photo.id,
+                fileName: photo.fileName,
+                storagePath: photo.upload.storagePath,
+                sourceIndex: photo.sourceIndex,
+              };
+            }),
+          })),
+        });
+
+        preparedGarments = mergeGarmentClassificationResults(uploadedGarments, classificationResult);
+        setState((current) => ({
+          ...current,
+          garments: mergeGarmentClassificationResults(current.garments, classificationResult),
+        }));
+      }
+
+      const suggestedPoseIds = getSuggestedPoseIdsForGarments(
+        selectedModel.poses,
+        preparedGarments.map((garment) => ({
+          availableViews: getGarmentAvailableViews(garment),
+        })),
+      );
+
+      setState((current) => ({
+        ...current,
+        garments: preparedGarments,
+        selectedPoseIds: suggestedPoseIds,
+        poseSuggestions: {
+          status: 'ready',
+          error: null,
+          suggestedPoseIds,
+          signature,
+          missingPoseClassificationCount,
+        },
+      }));
+      setFlowError(null);
+    } catch (prepareError: any) {
+      const message =
+        prepareError?.message
+        || 'No se pudieron sugerir las poses automáticamente. Puedes seguir con selección manual.';
+      setState((current) => {
+        const garmentIds = new Set<string>(
+          current.garments
+            .filter((garment) => garment.originalPhotos.some((photo) => photo.classification.status === 'classifying'))
+            .map((garment) => garment.id),
+        );
+
+        return {
+          ...current,
+          garments: markGarmentsClassificationFailed(current.garments, garmentIds, message),
+          poseSuggestions: {
+            ...current.poseSuggestions,
+            status: 'failed',
+            error: message,
+            signature,
+            missingPoseClassificationCount,
+          },
+        };
+      });
+
+      setFlowError(message);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      state.step !== 3
+      || !selectedModel
+      || state.garments.length === 0
+      || state.poseSuggestions.status === 'preparing'
+      || state.poseSuggestions.signature === suggestionSignature
+    ) {
+      return;
+    }
+
+    void preparePoseSuggestions(suggestionSignature);
+  }, [
+    missingPoseClassificationCount,
+    selectedModel,
+    state.garments.length,
+    state.poseSuggestions.signature,
+    state.poseSuggestions.status,
+    state.step,
+    suggestionSignature,
+  ]);
+
   const handleFiles = async (files: File[]) => {
     try {
       const nextGarments = await handleGarmentFiles(files, state.garments);
-      setState((current) => ({ ...current, garments: nextGarments }));
+      setState((current) => ({
+        ...current,
+        garments: nextGarments,
+        selectedPoseIds: [],
+        poseSuggestions: createInitialPoseSuggestionState(),
+      }));
       setFlowError(null);
     } catch (uploadError: any) {
       console.error(uploadError);
@@ -123,11 +444,17 @@ export const useGenerateWizard = () => {
 
   const removeGarment = (garmentId: string) => {
     const garmentToRemove = state.garments.find((item) => item.id === garmentId);
-    if (garmentToRemove?.upload.storagePath) {
-      void deleteGarmentDraftByStoragePath(garmentToRemove.upload.storagePath);
+    if (garmentToRemove) {
+      void Promise.allSettled(
+        garmentToRemove.originalPhotos
+          .map((photo) => photo.upload.storagePath)
+          .filter((value): value is string => Boolean(value))
+          .map((storagePath) => deleteGarmentDraftByStoragePath(storagePath)),
+      );
     }
 
     if (state.garments.length === 1 && state.garments[0]?.id === garmentId) {
+      setDraftBatchId(null);
       submit.resetDraftBatch();
     }
 
@@ -139,6 +466,8 @@ export const useGenerateWizard = () => {
       return {
         ...current,
         garments: current.garments.filter((item) => item.id !== garmentId),
+        selectedPoseIds: [],
+        poseSuggestions: createInitialPoseSuggestionState(),
       };
     });
   };
@@ -149,11 +478,17 @@ export const useGenerateWizard = () => {
       selectedClientId: clientId,
       selectedModelId: null,
       selectedPoseIds: [],
+      poseSuggestions: createInitialPoseSuggestionState(),
     }));
   };
 
   const handleModelSelect = (modelId: string | null) => {
-    setState((current) => ({ ...current, selectedModelId: modelId, selectedPoseIds: [] }));
+    setState((current) => ({
+      ...current,
+      selectedModelId: modelId,
+      selectedPoseIds: [],
+      poseSuggestions: createInitialPoseSuggestionState(),
+    }));
   };
 
   const handlePoseToggle = (poseId: string) => {
@@ -211,6 +546,16 @@ export const useGenerateWizard = () => {
     setState((current) => ({ ...current, prompt }));
   };
 
+  const handleRetryPoseSuggestions = () => {
+    setFlowError(null);
+    setState((current) => ({
+      ...current,
+      poseSuggestions: {
+        ...createInitialPoseSuggestionState(),
+      },
+    }));
+  };
+
   return {
     state,
     clients,
@@ -243,5 +588,6 @@ export const useGenerateWizard = () => {
     handleProviderChange,
     handleAspectRatioChange,
     handlePromptChange,
+    handleRetryPoseSuggestions,
   };
 };

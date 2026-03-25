@@ -41,6 +41,12 @@ service firebase.storage {
       allow delete: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
     }
 
+    match /garments/drafts/{uid}/{draftBatchId}/{garmentId}/{garmentFile} {
+      allow read: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
+      allow write: if canGenerate() && request.auth.uid == uid && isImageUpload();
+      allow delete: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
+    }
+
     match /generated/{clientId}/{batchId}/{jobId}/{fileName} {
       allow read: if isActiveUser();
       allow write: if false;

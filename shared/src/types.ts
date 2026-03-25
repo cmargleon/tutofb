@@ -8,6 +8,32 @@ export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_fail
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type GarmentSourceType = 'single' | 'folder-root' | 'subfolder';
 export type CatalogEntityStatus = 'active' | 'archived';
+export type GarmentView = 'front' | 'back' | 'side';
+export type GarmentPhotoClassificationSource = 'assumed_single_front' | 'gemini';
+export type GarmentReferenceImageType = 'single_view' | 'multi_angle_composite';
+export type PoseOrientationGroup = 'front' | 'back' | 'side' | 'ambiguous';
+export type PoseOrientationDetail =
+  | 'front'
+  | 'front_three_quarter'
+  | 'back'
+  | 'back_three_quarter'
+  | 'left_profile'
+  | 'right_profile'
+  | 'ambiguous';
+export type PoseFraming = 'full_body' | 'three_quarter_body' | 'medium_body' | 'unknown';
+
+export interface PoseAiClassification {
+  orientationGroup: PoseOrientationGroup;
+  orientationDetail: PoseOrientationDetail;
+  framing: PoseFraming;
+  autoCategory: string;
+  usableForGarmentViews: GarmentView[];
+  confidence: number | null;
+  taggedBy: 'gemini';
+  taggedAt: TimestampLike;
+  version: number;
+  reasoning?: string | null;
+}
 
 export interface User {
   uid: string;
@@ -43,6 +69,7 @@ export interface Pose {
   previewStoragePath?: string | null;
   width?: number | null;
   height?: number | null;
+  aiClassification?: PoseAiClassification | null;
   createdAt: TimestampLike;
 }
 
@@ -230,9 +257,13 @@ export interface Job {
   garmentId: string;
   garmentName: string;
   garmentFilePath: string;
+  garmentPhotoId?: string | null;
+  garmentPhotoFileName?: string | null;
+  garmentView?: GarmentView | null;
   garmentSourceType?: GarmentSourceType;
   garmentOriginalFileNames?: string[];
   garmentIsMultiAngle: boolean;
+  garmentReferenceImageType?: GarmentReferenceImageType;
   aspectRatio: AspectRatio;
   provider: Provider;
   requestedPromptBase?: string;
@@ -501,6 +532,20 @@ export interface SystemHealthSnapshot {
   checkedAt: TimestampLike;
 }
 
+export interface GarmentPhotoAssetInput {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  sourceIndex: number;
+}
+
+export interface UploadedGarmentPhotoInput extends GarmentPhotoAssetInput {
+  view: GarmentView;
+  confidence?: number | null;
+  reasoning?: string | null;
+  classifiedBy: GarmentPhotoClassificationSource;
+}
+
 export interface UploadedGarmentInput {
   id: string;
   name: string;
@@ -508,6 +553,8 @@ export interface UploadedGarmentInput {
   isMultiAngle: boolean;
   sourceType?: GarmentSourceType;
   originalFileNames?: string[];
+  originalPhotoCount?: number;
+  photos?: UploadedGarmentPhotoInput[];
 }
 
 export interface CreateGenerationBatchRequest {
@@ -524,6 +571,31 @@ export interface CreateGenerationBatchRequest {
 export interface CreateGenerationBatchResponse {
   batchId: string;
   createdJobs: number;
+}
+
+export interface ClassifyGarmentViewsGarmentInput {
+  garmentId: string;
+  garmentName: string;
+  photos: GarmentPhotoAssetInput[];
+}
+
+export interface ClassifyGarmentViewsRequest {
+  garments: ClassifyGarmentViewsGarmentInput[];
+}
+
+export interface ClassifiedGarmentPhoto extends UploadedGarmentPhotoInput {}
+
+export interface ClassifiedGarmentViewsGarmentResult {
+  garmentId: string;
+  garmentName: string;
+  photos: ClassifiedGarmentPhoto[];
+  availableViews: GarmentView[];
+  usedGemini: boolean;
+}
+
+export interface ClassifyGarmentViewsResponse {
+  success: boolean;
+  garments: ClassifiedGarmentViewsGarmentResult[];
 }
 
 export interface PermanentDeleteCatalogEntityRequest {
@@ -717,6 +789,43 @@ export interface GenerateModelPhotoResponse {
   photos: GeneratedModelPhoto[];
   errors: GeneratedModelPhotoError[];
   estimatedCostUsd: number;
+}
+
+export interface ModelPoseTaggingRequest {
+  targetModelName?: string;
+  dryRun?: boolean;
+  deleteOtherModels?: boolean;
+}
+
+export interface TaggedModelPoseSummary {
+  poseId: string;
+  fileName: string;
+  storagePath: string;
+  orientationGroup: PoseOrientationGroup;
+  orientationDetail: PoseOrientationDetail;
+  framing: PoseFraming;
+  autoCategory: string;
+  usableForGarmentViews: GarmentView[];
+  confidence: number | null;
+}
+
+export interface ModelPoseTaggingModelSummary {
+  id: string;
+  name: string;
+  status: CatalogEntityStatus;
+  poseCount: number;
+  action: 'keep' | 'delete';
+}
+
+export interface ModelPoseTaggingResponse {
+  success: boolean;
+  targetModelName: string;
+  targetModelId: string;
+  dryRun: boolean;
+  models: ModelPoseTaggingModelSummary[];
+  taggedPoses: TaggedModelPoseSummary[];
+  deletedModelIds: string[];
+  warnings: string[];
 }
 
 export interface ModelGenerationLog {

@@ -438,6 +438,37 @@ export interface AnalyticsData {
   productivityByClientModel: AnalyticsClientModelStats[];
 }
 
+export type GeminiUsageFeature = 'image_review' | 'garment_view_classification' | 'pose_classification';
+export type GeminiUsageStatus = 'success' | 'error';
+
+export interface GeminiUsageRecord {
+  id: string;
+  provider: 'gemini';
+  feature: GeminiUsageFeature;
+  operation: 'generateContent';
+  model: string;
+  status: GeminiUsageStatus;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  durationMs: number | null;
+  httpStatus: number | null;
+  errorMessage: string | null;
+  batchId?: string | null;
+  jobId?: string | null;
+  clientId?: string | null;
+  clientNameSnapshot?: string | null;
+  modelId?: string | null;
+  modelNameSnapshot?: string | null;
+  garmentId?: string | null;
+  garmentName?: string | null;
+  poseId?: string | null;
+  poseFileName?: string | null;
+  userUid?: string | null;
+  createdAt: TimestampLike;
+}
+
 export interface ExperimentArmAnalytics {
   armId: string;
   label: string;
@@ -655,6 +686,16 @@ export interface RegenerateJobRequest {
 export interface RegenerateJobResponse {
   success: boolean;
   jobId: string;
+}
+
+export interface RetryJobAutoReviewRequest {
+  jobId: string;
+}
+
+export interface RetryJobAutoReviewResponse {
+  success: boolean;
+  jobId: string;
+  verdict: JobAutoReviewVerdict;
 }
 
 export interface CancelJobGenerationRequest {

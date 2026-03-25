@@ -9,6 +9,7 @@ setGlobalOptions({ maxInstances: 10 });
 export * from './callables/createGenerationBatch';
 export * from './callables/classifyGarmentViewsWithGemini';
 export * from './callables/regenerateJob';
+export * from './callables/retryJobAutoReview';
 export * from './callables/cancelJobGeneration';
 export * from './callables/selectJobOutput';
 export * from './callables/regenerateFailedBatchJobs';

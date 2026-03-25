@@ -4,6 +4,7 @@ import {
   JobAutoReviewMarketplaceData,
   JobAutoReviewVerdict,
 } from '../../../shared/src/types';
+import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 
 interface ReviewImageAsset {
   bytes: Buffer;
@@ -13,6 +14,16 @@ interface ReviewImageAsset {
 interface ReviewRequest {
   apiKey: string;
   model: string;
+  batchId?: string | null;
+  jobId?: string | null;
+  clientId?: string | null;
+  clientNameSnapshot?: string | null;
+  modelId?: string | null;
+  modelNameSnapshot?: string | null;
+  garmentId?: string | null;
+  garmentName?: string | null;
+  poseId?: string | null;
+  userUid?: string | null;
   requestedPromptBase: string;
   promptBase: string;
   finalPrompt: string;
@@ -331,55 +342,56 @@ const extractResponseText = (payload: GeminiGenerateContentResponse): string => 
 
 export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Promise<GeneratedImageReviewResult> => {
   const reviewPrompt = buildReviewPrompt(request);
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${request.model}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': request.apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: reviewPrompt },
-              {
-                inline_data: {
-                  mime_type: request.poseReference.mimeType,
-                  data: request.poseReference.bytes.toString('base64'),
-                },
-              },
-              {
-                inline_data: {
-                  mime_type: request.garmentReference.mimeType,
-                  data: request.garmentReference.bytes.toString('base64'),
-                },
-              },
-              {
-                inline_data: {
-                  mime_type: request.generatedImage.mimeType,
-                  data: request.generatedImage.bytes.toString('base64'),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: REVIEW_RESPONSE_SCHEMA,
-        },
-      }),
-      signal: request.signal,
+  const { payload } = await callGeminiGenerateContent<GeminiGenerateContentResponse>({
+    apiKey: request.apiKey,
+    model: request.model,
+    signal: request.signal,
+    context: {
+      feature: 'image_review',
+      batchId: request.batchId,
+      jobId: request.jobId,
+      clientId: request.clientId,
+      clientNameSnapshot: request.clientNameSnapshot,
+      modelId: request.modelId,
+      modelNameSnapshot: request.modelNameSnapshot,
+      garmentId: request.garmentId,
+      garmentName: request.garmentName,
+      poseId: request.poseId,
+      userUid: request.userUid,
     },
-  );
-
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-
-  const payload = (await response.json()) as GeminiGenerateContentResponse;
+    body: {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: reviewPrompt },
+            {
+              inline_data: {
+                mime_type: request.poseReference.mimeType,
+                data: request.poseReference.bytes.toString('base64'),
+              },
+            },
+            {
+              inline_data: {
+                mime_type: request.garmentReference.mimeType,
+                data: request.garmentReference.bytes.toString('base64'),
+              },
+            },
+            {
+              inline_data: {
+                mime_type: request.generatedImage.mimeType,
+                data: request.generatedImage.bytes.toString('base64'),
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: REVIEW_RESPONSE_SCHEMA,
+      },
+    },
+  });
   const reviewText = extractResponseText(payload);
   const parsed = JSON.parse(reviewText) as GeminiReviewPayload;
   const criteria = sanitizeCriteria(parsed.criteria);

@@ -6,10 +6,22 @@ import { AlertCircle, RefreshCw, XCircle } from 'lucide-react';
 const INPUT_BASE =
   'w-full rounded-xl border px-3 py-2 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-500 disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed';
 
+const isGeminiHighDemandFailure = (value: string | null): boolean => {
+  const message = value?.toLowerCase() || '';
+  return (
+    message.includes('high demand')
+    || message.includes('spikes in demand')
+    || message.includes('resource exhausted')
+    || message.includes('gemini está saturado')
+    || message.includes('gemini esta saturado')
+  );
+};
+
 interface Props {
   draft: { provider: Provider; prompt: string };
   isProcessing: boolean;
   isQueueing: boolean;
+  isRetryingAutoReview: boolean;
   isCancelling: boolean;
   canRegenerate: boolean;
   isExperimentJob: boolean;
@@ -17,16 +29,19 @@ interface Props {
   lastError: string | null;
   currentOutput: JobOutput | null;
   regenerationError: string | null;
+  autoReviewRetryError: string | null;
   cancellationError: string | null;
   historyOutputsCount: number;
   onUpdateDraft: (updates: Partial<{ provider: Provider; prompt: string }>) => void;
   onRegenerate: () => void;
+  onRetryAutoReview: () => void;
 }
 
 export const JobControls: React.FC<Props> = ({
   draft,
   isProcessing,
   isQueueing,
+  isRetryingAutoReview,
   isCancelling,
   canRegenerate,
   isExperimentJob,
@@ -34,12 +49,20 @@ export const JobControls: React.FC<Props> = ({
   lastError,
   currentOutput,
   regenerationError,
+  autoReviewRetryError,
   cancellationError,
   historyOutputsCount,
   onUpdateDraft,
   onRegenerate,
+  onRetryAutoReview,
 }) => {
   const disabled = isProcessing || isQueueing || isCancelling || !canRegenerate || isExperimentJob;
+  const showManualGeminiRetry =
+    jobStatus === 'failed'
+    && Boolean(lastError)
+    && isGeminiHighDemandFailure(lastError)
+    && canRegenerate
+    && !isExperimentJob;
 
   return (
     <>
@@ -79,9 +102,25 @@ export const JobControls: React.FC<Props> = ({
       {jobStatus === 'failed' && lastError && currentOutput ? (
         <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" aria-hidden="true" />
-          <div>
-            <span className="font-medium">Detalle del fallo: </span>
-            {lastError}
+          <div className="min-w-0 flex-1">
+            <div>
+              <span className="font-medium">Detalle del fallo: </span>
+              {lastError}
+            </div>
+            {showManualGeminiRetry ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRetryAutoReview();
+                }}
+                disabled={isProcessing || isQueueing || isCancelling || isRetryingAutoReview}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRetryingAutoReview ? 'animate-spin' : ''}`} />
+                {isRetryingAutoReview ? 'Revisando...' : 'Revisar otra vez con Gemini'}
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -90,6 +129,13 @@ export const JobControls: React.FC<Props> = ({
         <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
           <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" aria-hidden="true" />
           <span>{regenerationError}</span>
+        </div>
+      ) : null}
+
+      {autoReviewRetryError ? (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" aria-hidden="true" />
+          <span>{autoReviewRetryError}</span>
         </div>
       ) : null}
 

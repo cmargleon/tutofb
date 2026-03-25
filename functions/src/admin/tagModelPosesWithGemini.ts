@@ -15,6 +15,7 @@ import {
   isPoseFraming,
   isPoseOrientationDetail,
 } from '../../../shared/src/utils/poseAiClassification';
+import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 import { assertCallableRoles } from '../auth/roles';
 import { GEMINI_API_KEY, getGeminiPoseClassificationModel } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
@@ -107,10 +108,20 @@ const classifyPoseWithGemini = async ({
   apiKey,
   model,
   pose,
+  clientId,
+  clientNameSnapshot,
+  modelId,
+  modelName,
+  userUid,
 }: {
   apiKey: string;
   model: string;
   pose: Pose;
+  clientId?: string | null;
+  clientNameSnapshot?: string | null;
+  modelId?: string | null;
+  modelName?: string | null;
+  userUid?: string | null;
 }): Promise<{
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
@@ -138,42 +149,42 @@ const classifyPoseWithGemini = async ({
     'Devuelve solo JSON con el schema solicitado.',
   ].join('\n');
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: image.mimeType,
-                  data: image.bytes.toString('base64'),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: POSE_CLASSIFICATION_RESPONSE_SCHEMA,
-        },
-      }),
+  const { payload } = await callGeminiGenerateContent<{
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  }>({
+    apiKey,
+    model,
+    context: {
+      feature: 'pose_classification',
+      clientId,
+      clientNameSnapshot,
+      modelId,
+      modelNameSnapshot: modelName,
+      poseId: pose.id,
+      poseFileName: pose.fileName,
+      userUid,
     },
-  );
-
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-
-  const payload = (await response.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    body: {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: image.mimeType,
+                data: image.bytes.toString('base64'),
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: POSE_CLASSIFICATION_RESPONSE_SCHEMA,
+      },
+    },
+  });
   const parsed = JSON.parse(extractResponseText(payload)) as GeminiPoseClassificationPayload;
 
   const orientationDetail = isPoseOrientationDetail(parsed.orientationDetail)
@@ -261,6 +272,11 @@ export const tagModelPosesWithGemini = onCall<ModelPoseTaggingRequest, Promise<M
         apiKey: GEMINI_API_KEY.value(),
         model: geminiModel,
         pose,
+        clientId: targetModel.clientId,
+        clientNameSnapshot: targetModel.clientNameSnapshot,
+        modelId: targetModel.id,
+        modelName: targetModel.name,
+        userUid: request.auth?.uid,
       });
 
       const aiClassification = buildPoseAiClassification({

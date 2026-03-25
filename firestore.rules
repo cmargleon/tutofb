@@ -141,5 +141,10 @@ service cloud.firestore {
       allow read: if canReadAnalytics();
       allow write: if false;
     }
+
+    match /analytics_gemini_usage/{logId} {
+      allow read: if canReadAnalytics();
+      allow write: if false;
+    }
   }
 }

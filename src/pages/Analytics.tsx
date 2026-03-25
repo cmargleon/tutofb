@@ -4,17 +4,19 @@ import {
   AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
 import {
-  Activity, CheckCircle2, Clock, DollarSign, TrendingUp, AlertTriangle, Bell, BellOff, UserSquare2
+  Activity, CheckCircle2, Clock, DollarSign, TrendingUp, AlertTriangle, Bell, BellOff, UserSquare2, Bot
 } from 'lucide-react';
 import { useAnalyticsDashboard } from '../features/analytics/useAnalyticsDashboard';
 import { useExperimentAnalytics } from '../features/analytics/useExperimentAnalytics';
 import { useModelGenerationLogs } from '../features/analytics/useModelGenerationLogs';
+import { useGeminiUsageAnalytics } from '../features/analytics/useGeminiUsageAnalytics';
 import { PageHeader, LoadingBlock, EmptyState } from '../components/ui';
 import { PROVIDER_COSTS } from '../../shared/src/constants/providerCosts';
 import { useSystemHealth } from '../features/system/useSystemHealth';
 import { updateSystemAlertSettings as saveSystemAlertSettings } from '../features/system/firebase';
 import { useRole } from '../features/auth/AuthProvider';
 import { useToast } from '../features/feedback/FeedbackProvider';
+import type { GeminiUsageFeature, GeminiUsageStatus } from '../../shared/src/types';
 
 const COLORS = ['#10B981', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6'];
 
@@ -23,9 +25,28 @@ const formatUsd = (value: unknown, digits: number = 2) => {
   return amount.toFixed(digits);
 };
 
+const formatTokenCount = (value: unknown) => {
+  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  return new Intl.NumberFormat('es-MX').format(Math.round(amount));
+};
+
+const GEMINI_FEATURE_LABELS: Record<GeminiUsageFeature, string> = {
+  image_review: 'Auto review',
+  garment_view_classification: 'Clasif. prendas',
+  pose_classification: 'Tagging de poses',
+};
+
+const GEMINI_STATUS_LABELS: Record<GeminiUsageStatus, string> = {
+  success: 'OK',
+  error: 'Error',
+};
+
 export const Analytics: React.FC = () => {
   const [daysBack, setDaysBack] = useState(30);
   const [showAlertSettings, setShowAlertSettings] = useState(false);
+  const [geminiFeatureFilter, setGeminiFeatureFilter] = useState<GeminiUsageFeature | 'all'>('all');
+  const [geminiStatusFilter, setGeminiStatusFilter] = useState<GeminiUsageStatus | 'all'>('all');
+  const [geminiModelFilter, setGeminiModelFilter] = useState('');
   const [alertForm, setAlertForm] = useState({
     dailyCostUsdThreshold: '',
     recentErrorRateThreshold: '10',
@@ -51,6 +72,15 @@ export const Analytics: React.FC = () => {
     loading: experimentLoading,
     error: experimentError,
   } = useExperimentAnalytics();
+  const {
+    data: geminiUsage,
+    loading: geminiUsageLoading,
+    error: geminiUsageError,
+  } = useGeminiUsageAnalytics(daysBack, {
+    feature: geminiFeatureFilter,
+    model: geminiModelFilter,
+    status: geminiStatusFilter,
+  });
 
   useEffect(() => {
     if (!systemHealth?.settings) {
@@ -118,6 +148,9 @@ export const Analytics: React.FC = () => {
   const todayCostUsd = systemHealth?.todayCostUsd ?? (data.dailyVolume.length > 0 ? data.dailyVolume[data.dailyVolume.length - 1].costUsd : 0);
   const costAlertTriggered = Boolean(systemHealth?.alerts.some((alert) => alert.id === 'daily_cost'));
   const sharedDailyCostThreshold = systemHealth?.settings?.dailyCostUsdThreshold ?? null;
+  const geminiRows = geminiUsage.rows.slice(0, 25);
+  const geminiFeatureBreakdown = geminiUsage.byFeature.slice(0, 3);
+  const geminiModelBreakdown = geminiUsage.byModel.slice(0, 3);
 
   const handleSaveAlertThreshold = async () => {
     try {
@@ -816,6 +849,170 @@ export const Analytics: React.FC = () => {
             </div>
           </div>
         )}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="flex items-center gap-2">
+            <Bot className="w-5 h-5 text-emerald-600" />
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Uso de Gemini</h2>
+              <p className="text-xs text-gray-500">
+                Registro por llamada con costo aproximado usando ${formatUsd(0.25, 2)}/1M input y ${formatUsd(1.5, 2)}/1M output.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3 lg:ml-auto">
+            <select
+              value={geminiFeatureFilter}
+              onChange={(event) => setGeminiFeatureFilter(event.target.value as GeminiUsageFeature | 'all')}
+              className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="all">Todos los flujos</option>
+              {Object.entries(GEMINI_FEATURE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <select
+              value={geminiStatusFilter}
+              onChange={(event) => setGeminiStatusFilter(event.target.value as GeminiUsageStatus | 'all')}
+              className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="all">Todos los estados</option>
+              {Object.entries(GEMINI_STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <select
+              value={geminiModelFilter}
+              onChange={(event) => setGeminiModelFilter(event.target.value)}
+              className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="">Todos los modelos Gemini</option>
+              {geminiUsage.availableModels.map((model) => (
+                <option key={model} value={model}>{model}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {geminiUsageError ? (
+          <div className="px-6 py-6 text-sm text-rose-600">{geminiUsageError}</div>
+        ) : geminiUsageLoading ? (
+          <div className="px-6 py-6">
+            <LoadingBlock message="Cargando uso de Gemini..." />
+          </div>
+        ) : geminiUsage.summary.totalCalls === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-gray-400">
+            No hay llamadas a Gemini para los filtros seleccionados.
+          </div>
+        ) : (
+          <div className="p-6 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <p className="text-xs text-gray-500 mb-1">Llamadas</p>
+                <p className="text-xl font-bold text-gray-900">{formatTokenCount(geminiUsage.summary.totalCalls)}</p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <p className="text-xs text-gray-500 mb-1">Costo aprox.</p>
+                <p className="text-xl font-bold text-gray-900">${formatUsd(geminiUsage.summary.totalCostUsd, 4)}</p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <p className="text-xs text-gray-500 mb-1">Input tokens</p>
+                <p className="text-xl font-bold text-gray-900">{formatTokenCount(geminiUsage.summary.inputTokens)}</p>
+              </div>
+              <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                <p className="text-xs text-gray-500 mb-1">Output tokens</p>
+                <p className="text-xl font-bold text-gray-900">{formatTokenCount(geminiUsage.summary.outputTokens)}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-gray-100 p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Costo por flujo</p>
+                <div className="space-y-2">
+                  {geminiFeatureBreakdown.map((entry) => (
+                    <div key={entry.key} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                      <span className="font-medium text-gray-700">{GEMINI_FEATURE_LABELS[entry.key as GeminiUsageFeature] || entry.label}</span>
+                      <span className="text-gray-500">
+                        {entry.calls} llamadas · <span className="font-semibold text-gray-900">${formatUsd(entry.totalCostUsd, 4)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl border border-gray-100 p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Costo por modelo</p>
+                <div className="space-y-2">
+                  {geminiModelBreakdown.map((entry) => (
+                    <div key={entry.key} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                      <span className="font-medium text-gray-700">{entry.label}</span>
+                      <span className="text-gray-500">
+                        {entry.calls} llamadas · <span className="font-semibold text-gray-900">${formatUsd(entry.totalCostUsd, 4)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Últimas llamadas</p>
+                <p className="text-xs text-gray-400">Mostrando hasta 25 registros del rango elegido.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-gray-400">
+                      <th className="pb-2 font-medium">Fecha</th>
+                      <th className="pb-2 font-medium">Flujo</th>
+                      <th className="pb-2 font-medium">Modelo</th>
+                      <th className="pb-2 font-medium">Tokens</th>
+                      <th className="pb-2 font-medium">Costo</th>
+                      <th className="pb-2 font-medium">Estado</th>
+                      <th className="pb-2 font-medium">Contexto</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {geminiRows.map((row) => (
+                      <tr key={row.id} className="text-gray-700 align-top">
+                        <td className="py-2 pr-4 whitespace-nowrap">
+                          {row.createdAt instanceof Date ? row.createdAt.toLocaleString('es-MX') : 'Sin fecha'}
+                        </td>
+                        <td className="py-2 pr-4">{GEMINI_FEATURE_LABELS[row.feature] || row.feature}</td>
+                        <td className="py-2 pr-4 whitespace-nowrap">{row.model}</td>
+                        <td className="py-2 pr-4 whitespace-nowrap">
+                          <span className="font-medium text-gray-900">{formatTokenCount(row.totalTokens)}</span>
+                          <span className="text-gray-400"> total</span>
+                          <div className="text-[11px] text-gray-400">
+                            in {formatTokenCount(row.inputTokens)} / out {formatTokenCount(row.outputTokens)}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4 font-medium whitespace-nowrap">${formatUsd(row.estimatedCostUsd, 6)}</td>
+                        <td className="py-2 pr-4">
+                          <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-medium ${
+                            row.status === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {GEMINI_STATUS_LABELS[row.status]}
+                          </span>
+                        </td>
+                        <td className="py-2 max-w-[280px]">
+                          <div className="text-gray-600">
+                            {[row.clientNameSnapshot, row.modelNameSnapshot, row.garmentName, row.poseFileName]
+                              .filter(Boolean)
+                              .join(' / ') || (row.userUid ? `uid ${row.userUid.slice(0, 8)}` : 'Sin contexto adicional')}
+                          </div>
+                          {row.errorMessage ? (
+                            <div className="mt-1 text-[11px] text-rose-600">{row.errorMessage}</div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       {/* Model Generation Costs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">

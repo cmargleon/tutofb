@@ -1,11 +1,13 @@
 import { useState, useCallback } from 'react';
 import { Job, Provider } from '../../../shared/src/types';
-import { cancelJobGeneration, regenerateJob } from './firebase';
+import { cancelJobGeneration, regenerateJob, retryJobAutoReview } from './firebase';
 
 export const useJobRegenerationFirebase = () => {
   const [localDrafts, setLocalDrafts] = useState<Record<string, { provider: Provider; prompt: string }>>({});
   const [queueingJobs, setQueueingJobs] = useState<Record<string, boolean>>({});
   const [regenerationErrors, setRegenerationErrors] = useState<Record<string, string | null>>({});
+  const [retryingAutoReviewJobs, setRetryingAutoReviewJobs] = useState<Record<string, boolean>>({});
+  const [autoReviewRetryErrors, setAutoReviewRetryErrors] = useState<Record<string, string | null>>({});
   const [cancellingJobs, setCancellingJobs] = useState<Record<string, boolean>>({});
   const [cancellationErrors, setCancellationErrors] = useState<Record<string, string | null>>({});
 
@@ -66,15 +68,34 @@ export const useJobRegenerationFirebase = () => {
     }
   }, []);
 
+  const handleRetryAutoReview = useCallback(async (jobId: string) => {
+    setRetryingAutoReviewJobs((prev) => ({ ...prev, [jobId]: true }));
+    setAutoReviewRetryErrors((prev) => ({ ...prev, [jobId]: null }));
+
+    try {
+      await retryJobAutoReview(jobId);
+    } catch (error: any) {
+      setAutoReviewRetryErrors((prev) => ({
+        ...prev,
+        [jobId]: error?.message || 'No pudimos reintentar la revisión automática',
+      }));
+    } finally {
+      setRetryingAutoReviewJobs((prev) => ({ ...prev, [jobId]: false }));
+    }
+  }, []);
+
   return {
     localDrafts,
     queueingJobs,
     regenerationErrors,
+    retryingAutoReviewJobs,
+    autoReviewRetryErrors,
     cancellingJobs,
     cancellationErrors,
     initializeDraft,
     updateDraft,
     handleRegenerate,
+    handleRetryAutoReview,
     handleCancelGeneration,
   };
 };

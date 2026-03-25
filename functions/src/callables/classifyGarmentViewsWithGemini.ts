@@ -8,6 +8,7 @@ import {
   GarmentPhotoAssetInput,
 } from '../../../shared/src/types';
 import { getSortedUniqueGarmentViews } from '../../../shared/src/utils/garmentViewMatching';
+import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 import { assertCallableRoles } from '../auth/roles';
 import {
   GEMINI_API_KEY,
@@ -143,11 +144,17 @@ const downloadStorageImage = async (storagePath: string): Promise<{ bytes: Buffe
 const classifyGarmentPhotoWithGemini = async ({
   apiKey,
   model,
+  garmentId,
+  garmentName,
   photo,
+  userUid,
 }: {
   apiKey: string;
   model: string;
+  garmentId: string;
+  garmentName: string;
   photo: GarmentPhotoAssetInput;
+  userUid?: string | null;
 }): Promise<Pick<ClassifiedGarmentPhoto, 'view' | 'confidence' | 'reasoning' | 'classifiedBy'>> => {
   const image = await downloadStorageImage(photo.storagePath);
 
@@ -162,42 +169,38 @@ const classifyGarmentPhotoWithGemini = async ({
     'Devuelve solo JSON con el schema solicitado.',
   ].join('\n');
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: image.mimeType,
-                  data: image.bytes.toString('base64'),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: GARMENT_VIEW_CLASSIFICATION_RESPONSE_SCHEMA,
-        },
-      }),
+  const { payload } = await callGeminiGenerateContent<{
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  }>({
+    apiKey,
+    model,
+    context: {
+      feature: 'garment_view_classification',
+      garmentId,
+      garmentName,
+      userUid,
     },
-  );
-
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-
-  const payload = (await response.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    body: {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: image.mimeType,
+                data: image.bytes.toString('base64'),
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseJsonSchema: GARMENT_VIEW_CLASSIFICATION_RESPONSE_SCHEMA,
+      },
+    },
+  });
   const parsed = JSON.parse(extractResponseText(payload)) as GeminiGarmentViewClassificationPayload;
   const view = parsed.view === 'back' || parsed.view === 'side' ? parsed.view : 'front';
 
@@ -257,7 +260,10 @@ export const classifyGarmentViewsWithGemini = onCall<ClassifyGarmentViewsRequest
         const classification = await classifyGarmentPhotoWithGemini({
           apiKey: GEMINI_API_KEY.value(),
           model: geminiModel,
+          garmentId: garment.garmentId,
+          garmentName: garment.garmentName,
           photo,
+          userUid: request.auth?.uid,
         });
 
         classifiedPhotos.push({

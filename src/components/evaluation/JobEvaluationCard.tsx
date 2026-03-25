@@ -20,11 +20,14 @@ interface Props {
   index: number;
   draft: { provider: Provider; prompt: string };
   isQueueing: boolean;
+  isRetryingAutoReview: boolean;
   isCancellingGeneration: boolean;
   regenerationError: string | null;
+  autoReviewRetryError: string | null;
   cancellationError: string | null;
   onUpdateDraft: (updates: Partial<{ provider: Provider; prompt: string }>) => void;
   onRegenerate: () => void;
+  onRetryAutoReview: () => void;
   onCancelGeneration: () => Promise<void>;
   selected?: boolean;
   onToggleSelected?: () => void;
@@ -45,11 +48,14 @@ export const JobEvaluationCard: React.FC<Props> = ({
   index,
   draft,
   isQueueing,
+  isRetryingAutoReview,
   isCancellingGeneration,
   regenerationError,
+  autoReviewRetryError,
   cancellationError,
   onUpdateDraft,
   onRegenerate,
+  onRetryAutoReview,
   onCancelGeneration,
   selected = false,
   onToggleSelected,
@@ -353,6 +359,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
           draft={draft}
           isProcessing={isProcessing}
           isQueueing={isQueueing}
+          isRetryingAutoReview={isRetryingAutoReview}
           isCancelling={isCancellingGeneration}
           canRegenerate={role.canRegenerate}
           isExperimentJob={isExperimentJob}
@@ -360,10 +367,12 @@ export const JobEvaluationCard: React.FC<Props> = ({
           lastError={job.lastError || null}
           currentOutput={currentOutput}
           regenerationError={regenerationError}
+          autoReviewRetryError={autoReviewRetryError}
           cancellationError={cancellationError}
           historyOutputsCount={historyOutputs.length}
           onUpdateDraft={onUpdateDraft}
           onRegenerate={onRegenerate}
+          onRetryAutoReview={onRetryAutoReview}
         />
       </div>
     </div>

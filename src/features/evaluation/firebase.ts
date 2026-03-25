@@ -7,6 +7,8 @@ import {
   RegenerateFailedBatchJobsResponse,
   RegenerateJobsBulkRequest,
   RegenerateJobsBulkResponse,
+  RetryJobAutoReviewRequest,
+  RetryJobAutoReviewResponse,
   SelectJobOutputRequest,
   SelectJobOutputResponse,
 } from '../../../shared/src/types';
@@ -18,6 +20,23 @@ export const regenerateJob = async (jobId: string, provider: Provider, prompt: s
     return result.data;
   } catch (error) {
     console.error('Error calling regenerateJob:', error);
+    throw error;
+  }
+};
+
+export const retryJobAutoReview = async (
+  jobId: string,
+): Promise<RetryJobAutoReviewResponse> => {
+  const callable = httpsCallable<RetryJobAutoReviewRequest, RetryJobAutoReviewResponse>(
+    functions,
+    'retryJobAutoReview',
+  );
+
+  try {
+    const result = await callable({ jobId });
+    return result.data;
+  } catch (error) {
+    console.error('Error calling retryJobAutoReview:', error);
     throw error;
   }
 };

@@ -10,6 +10,7 @@ import {
   archiveModel,
   permanentlyDeleteModel,
   restoreModel,
+  tagModelPosesWithGemini,
   updateModel,
 } from '../firebase';
 
@@ -22,6 +23,7 @@ export interface UseModelLibraryResult {
   editFilesToAdd: File[];
   editPoseIdsToRemove: string[];
   isSavingEdit: boolean;
+  taggingModelId: string | null;
   handleStartEdit: (model: Model) => void;
   handleCancelEdit: () => void;
   handleEditFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -31,6 +33,7 @@ export interface UseModelLibraryResult {
   handleArchive: (model: Model) => Promise<void>;
   handleRestore: (model: Model) => Promise<void>;
   handlePermanentDelete: (model: Model) => Promise<void>;
+  handleTagPosesWithGemini: (model: Model) => Promise<void>;
 }
 
 export const useModelLibrary = (): UseModelLibraryResult => {
@@ -42,6 +45,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
   const [editFilesToAdd, setEditFilesToAdd] = useState<File[]>([]);
   const [editPoseIdsToRemove, setEditPoseIdsToRemove] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [taggingModelId, setTaggingModelId] = useState<string | null>(null);
 
   const handleStartEdit = (model: Model) => {
     setEditingId(model.id ?? null);
@@ -210,6 +214,28 @@ export const useModelLibrary = (): UseModelLibraryResult => {
     }
   };
 
+  const handleTagPosesWithGemini = async (model: Model) => {
+    if (!model.id) return;
+
+    setTaggingModelId(model.id);
+    try {
+      await tagModelPosesWithGemini({ modelId: model.id, dryRun: false });
+      toast({
+        tone: 'success',
+        title: 'Poses clasificadas con Gemini',
+        description: `Las poses de "${model.name}" fueron analizadas y etiquetadas correctamente.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'Error al clasificar poses',
+        description: err.message || 'No se pudo completar la clasificación con Gemini.',
+      });
+    } finally {
+      setTaggingModelId(null);
+    }
+  };
+
   return {
     editingId,
     editName,
@@ -219,6 +245,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
     editFilesToAdd,
     editPoseIdsToRemove,
     isSavingEdit,
+    taggingModelId,
     handleStartEdit,
     handleCancelEdit,
     handleEditFileChange,
@@ -228,5 +255,6 @@ export const useModelLibrary = (): UseModelLibraryResult => {
     handleArchive,
     handleRestore,
     handlePermanentDelete,
+    handleTagPosesWithGemini,
   };
 };

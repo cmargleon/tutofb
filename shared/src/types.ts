@@ -833,6 +833,7 @@ export interface GenerateModelPhotoResponse {
 }
 
 export interface ModelPoseTaggingRequest {
+  modelId?: string;
   targetModelName?: string;
   dryRun?: boolean;
   deleteOtherModels?: boolean;

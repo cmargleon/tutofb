@@ -4,6 +4,7 @@ import {
   ChevronUp,
   Edit2,
   Image as ImageIcon,
+  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -258,6 +259,19 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                     >
                       Editar
                     </Button>
+                    {hasPoses && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={Sparkles}
+                        loading={library.taggingModelId === model.id}
+                        disabled={library.taggingModelId !== null}
+                        onClick={() => void library.handleTagPosesWithGemini(model)}
+                        title="Clasificar poses automáticamente con Gemini"
+                      >
+                        Gemini
+                      </Button>
+                    )}
                     <Button
                       variant="warning"
                       size="sm"

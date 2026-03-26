@@ -263,6 +263,7 @@ export const generateModelPoses = async (
   const callable = httpsCallable<GenerateModelPhotoRequest, GenerateModelPhotoResponse>(
     functions,
     'generateModelPose',
+    { timeout: 300000 }, // 5 min — generation can take 90s+ with multiple images
   );
   const result = await callable(data);
   return result.data;

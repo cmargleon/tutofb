@@ -32,6 +32,9 @@ export const tagModelPosesWithGemini = onCall<ModelPoseTaggingRequest, Promise<M
   async (request) => {
     await assertCallableRoles(request, ['admin']);
 
+    const modelId = typeof request.data?.modelId === 'string' && request.data.modelId.trim().length > 0
+      ? request.data.modelId.trim()
+      : null;
     const targetModelName =
       typeof request.data?.targetModelName === 'string' && request.data.targetModelName.trim().length > 0
         ? request.data.targetModelName.trim()
@@ -40,28 +43,40 @@ export const tagModelPosesWithGemini = onCall<ModelPoseTaggingRequest, Promise<M
     const deleteOtherModels = request.data?.deleteOtherModels === true;
 
     const db = getAppFirestore();
-    const snapshot = await db.collection('models').get();
-    const models = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Model));
 
-    const targetMatches = models.filter(
-      (model) => normalizeModelName(model.name) === normalizeModelName(targetModelName),
-    );
+    let targetModel: Model;
+    let allModels: Model[] | null = null;
 
-    if (targetMatches.length === 0) {
-      throw new HttpsError(
-        'not-found',
-        `No se encontró un modelo con nombre "${targetModelName}" en la colección models.`,
+    if (modelId) {
+      const modelDoc = await db.collection('models').doc(modelId).get();
+      if (!modelDoc.exists) {
+        throw new HttpsError('not-found', `No se encontró un modelo con id "${modelId}".`);
+      }
+      targetModel = { id: modelDoc.id, ...modelDoc.data() } as Model;
+    } else {
+      const snapshot = await db.collection('models').get();
+      allModels = snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Model));
+
+      const targetMatches = allModels.filter(
+        (model) => normalizeModelName(model.name) === normalizeModelName(targetModelName),
       );
-    }
 
-    if (targetMatches.length > 1) {
-      throw new HttpsError(
-        'failed-precondition',
-        `Se encontraron ${targetMatches.length} modelos con nombre "${targetModelName}". Resuelve la duplicidad antes de ejecutar esta tarea.`,
-      );
-    }
+      if (targetMatches.length === 0) {
+        throw new HttpsError(
+          'not-found',
+          `No se encontró un modelo con nombre "${targetModelName}" en la colección models.`,
+        );
+      }
 
-    const targetModel = targetMatches[0];
+      if (targetMatches.length > 1) {
+        throw new HttpsError(
+          'failed-precondition',
+          `Se encontraron ${targetMatches.length} modelos con nombre "${targetModelName}". Resuelve la duplicidad antes de ejecutar esta tarea.`,
+        );
+      }
+
+      targetModel = targetMatches[0];
+    }
     if (!targetModel.id) {
       throw new HttpsError('internal', 'El modelo objetivo no tiene id.');
     }
@@ -130,7 +145,9 @@ export const tagModelPosesWithGemini = onCall<ModelPoseTaggingRequest, Promise<M
       };
     });
 
-    const otherModels = models.filter((model) => model.id !== targetModel.id);
+    const otherModels = allModels
+      ? allModels.filter((model) => model.id !== targetModel.id)
+      : [];
     const deletedModelIds: string[] = [];
     const warnings: string[] = [];
 
@@ -164,7 +181,8 @@ export const tagModelPosesWithGemini = onCall<ModelPoseTaggingRequest, Promise<M
       }
     }
 
-    const modelSummaries: ModelPoseTaggingModelSummary[] = models
+    const displayModels = allModels ?? [targetModel];
+    const modelSummaries: ModelPoseTaggingModelSummary[] = displayModels
       .map((model): ModelPoseTaggingModelSummary => ({
         ...buildModelSummary(model),
         action:

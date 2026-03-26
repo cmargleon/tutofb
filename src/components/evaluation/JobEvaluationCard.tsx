@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
+import { PROVIDER_LABELS } from '../../../shared/src/domain';
 import { StatusBadge } from '../ui';
-import { AlertCircle, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
@@ -12,7 +13,6 @@ import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils'
 import { HoverZoomImage } from './HoverZoomImage';
 import { AttemptThumbnail } from './AttemptThumbnail';
 import { AutoReviewPanel } from './AutoReviewPanel';
-import { JobControls } from './JobControls';
 import { getJobReviewSignals } from '../../../shared/src/reviewMetrics';
 
 interface Props {
@@ -43,6 +43,24 @@ const HISTORY_LIMIT = 18;
 const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string =>
   output.generationAttempt ? `Intento ${output.generationAttempt}` : `Salida ${fallbackIndex + 1}`;
 
+const isGeminiHighDemand = (error: string | null): boolean => {
+  const msg = error?.toLowerCase() || '';
+  return (
+    msg.includes('high demand')
+    || msg.includes('spikes in demand')
+    || msg.includes('resource exhausted')
+    || msg.includes('gemini está saturado')
+    || msg.includes('gemini esta saturado')
+  );
+};
+
+const ErrorRow: React.FC<{ message: string }> = ({ message }) => (
+  <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
+    <span>{message}</span>
+  </div>
+);
+
 export const JobEvaluationCard: React.FC<Props> = ({
   batch,
   job,
@@ -68,6 +86,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const role = useRole();
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
   const isExperimentJob = job.experimentEnabled === true;
 
@@ -100,7 +119,6 @@ export const JobEvaluationCard: React.FC<Props> = ({
     null;
 
   const { url: displayedImageUrl } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
-  const { url: poseThumbnailUrl } = useStorageAssetUrl(job.poseImagePath || null);
 
   useEffect(() => {
     if (selectedOutputId && !outputsDesc.some((output) => output.id === selectedOutputId)) {
@@ -134,30 +152,38 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const canCancelGeneration = role.canRegenerate && isLoadingState && !isCancellingGeneration;
   const showInlineLoadingBadge = hasOutput && isLoadingState && isViewingLatest;
   const showLoadingPlaceholder = !hasOutput && isLoadingState;
+  const showManualGeminiRetry =
+    job.status === 'failed'
+    && Boolean(job.lastError)
+    && isGeminiHighDemand(job.lastError || null)
+    && role.canRegenerate
+    && !isExperimentJob;
 
   const handleCancelGeneration = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-
     try {
       await onCancelGeneration();
-      toast({
-        tone: 'success',
-        title: 'Generación cancelada',
-        description: `La pose ${index + 1} dejó de procesarse.`,
-      });
+      toast({ tone: 'success', title: 'Generación cancelada', description: `La pose ${index + 1} dejó de procesarse.` });
     } catch (error) {
       console.error('Error cancelling generation:', error);
-      toast({
-        tone: 'error',
-        title: 'No pudimos cancelar esta generación',
-        description: 'Inténtalo de nuevo en unos segundos.',
-      });
+      toast({ tone: 'error', title: 'No pudimos cancelar esta generación', description: 'Inténtalo de nuevo en unos segundos.' });
     }
   };
 
+  // Verdict badge text and color
+  const verdictBadge = isUserApprovedDisplayed
+    ? { label: '✓ Elegida', cls: 'bg-emerald-600/90 text-white' }
+    : activeReview?.verdict === 'approved'
+      ? { label: '✓ OK', cls: 'bg-emerald-600/90 text-white' }
+      : activeReview?.verdict === 'rejected'
+        ? { label: '↻ Reintento', cls: 'bg-amber-500/90 text-white' }
+        : null;
+
+  const controlsDisabled = isProcessing || isQueueing || isCancellingGeneration || isExperimentJob;
+
   return (
     <div
-      className={`overflow-hidden rounded-xl border bg-white shadow-sm transition-shadow flex flex-col ${
+      className={`flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow ${
         focused
           ? 'border-indigo-400 ring-2 ring-indigo-100'
           : selected
@@ -167,45 +193,26 @@ export const JobEvaluationCard: React.FC<Props> = ({
       onClick={() => onFocusTraceability?.()}
       onFocusCapture={() => onFocusTraceability?.()}
     >
-      <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-        <div className="flex items-start gap-3">
-          {onToggleSelected ? (
-            <label className="mt-0.5 inline-flex cursor-pointer items-center">
-              <input
-                type="checkbox"
-                checked={selected}
-                onChange={onToggleSelected}
-                onClick={(event) => event.stopPropagation()}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                aria-label={`Seleccionar ${job.garmentName} pose ${index + 1}`}
-              />
-            </label>
-          ) : null}
-          <div className="flex items-start gap-3">
-            <div className="h-14 w-11 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
-              {poseThumbnailUrl ? (
-                <img
-                  src={poseThumbnailUrl}
-                  alt={job.poseFileName || `Pose ${index + 1}`}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-slate-300">
-                  <ImageIcon className="h-4 w-4" />
-                </div>
-              )}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">Pose {index + 1}</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={job.status} />
-        </div>
+      {/* Compact header */}
+      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2.5">
+        {onToggleSelected ? (
+          <label className="inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelected}
+              onClick={(event) => event.stopPropagation()}
+              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              aria-label={`Seleccionar ${job.garmentName} pose ${index + 1}`}
+            />
+          </label>
+        ) : null}
+        <span className="flex-1 text-sm font-semibold text-slate-800">Pose {index + 1}</span>
+        <StatusBadge status={job.status} />
       </div>
 
-      <div className="relative flex-shrink-0 bg-gray-100">
+      {/* Image area */}
+      <div className="relative flex-shrink-0 bg-slate-100">
         {hasOutput ? (
           <HoverZoomImage
             src={displayedImageUrl!}
@@ -215,8 +222,14 @@ export const JobEvaluationCard: React.FC<Props> = ({
             preserveNaturalAspectRatio
             zoomScale={1.95}
           >
+            {/* Verdict badge overlay */}
+            {verdictBadge && !isLoadingState ? (
+              <span className={`absolute left-2 top-2 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${verdictBadge.cls}`}>
+                {verdictBadge.label}
+              </span>
+            ) : null}
             {!isViewingLatest ? (
-              <span className="absolute left-3 top-3 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-white">
+              <span className="absolute left-2 top-2 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-white">
                 {formatOutputLabel(
                   displayedOutput!,
                   historyOutputs.findIndex((output) => output.id === displayedOutput?.id),
@@ -225,19 +238,23 @@ export const JobEvaluationCard: React.FC<Props> = ({
             ) : null}
           </HoverZoomImage>
         ) : (
-          <div className="aspect-[3/4] w-full flex flex-col items-center justify-center text-gray-400 p-6 text-center">
+          <div className="flex aspect-[3/4] w-full flex-col items-center justify-center p-6 text-center text-gray-400">
             {job.status === 'failed' && !isLoadingState ? (
               <>
-                <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
+                <AlertCircle className="mb-2 h-8 w-8 text-red-400" />
                 <p className="text-sm font-medium text-red-600">Error en la generación</p>
-                {job.lastError && <p className="text-xs text-red-500 mt-1">{job.lastError}</p>}
+                {job.lastError ? <p className="mt-1 line-clamp-3 text-xs text-red-500">{job.lastError}</p> : null}
               </>
             ) : (
-              <p className="text-sm text-gray-400">Esperando resultado...</p>
+              <>
+                <ImageIcon className="mb-2 h-8 w-8 text-slate-300" />
+                <p className="text-sm text-gray-400">Esperando resultado...</p>
+              </>
             )}
           </div>
         )}
 
+        {/* Loading badge over existing image */}
         {showInlineLoadingBadge ? (
           <button
             type="button"
@@ -247,8 +264,8 @@ export const JobEvaluationCard: React.FC<Props> = ({
               canCancelGeneration
                 ? 'border-indigo-200 bg-white/92 text-indigo-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700'
                 : 'cursor-default border-indigo-200 bg-white/92 text-indigo-700'
-            } ${isCancellingGeneration ? 'min-w-[164px] justify-center' : ''}`}
-            title={canCancelGeneration ? 'Cancelar generación de esta pose' : 'Generación en curso'}
+            } ${isCancellingGeneration ? 'min-w-[140px] justify-center' : ''}`}
+            title={canCancelGeneration ? 'Cancelar generación' : 'Generación en curso'}
           >
             <span className={`items-center gap-2 ${canCancelGeneration ? 'flex group-hover:hidden' : 'flex'}`}>
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -257,126 +274,176 @@ export const JobEvaluationCard: React.FC<Props> = ({
             {canCancelGeneration ? (
               <span className="hidden items-center gap-2 group-hover:flex">
                 <XCircle className="h-3.5 w-3.5" />
-                Cancelar esta pose
+                Cancelar
               </span>
             ) : null}
           </button>
         ) : null}
 
+        {/* Loading placeholder (no image yet) */}
         {showLoadingPlaceholder ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 p-6 text-center backdrop-blur-sm">
             <RefreshCw className="mb-4 h-8 w-8 animate-spin text-indigo-600" />
-            <p className="font-medium text-gray-900">{isQueueing ? 'Encolando regeneración...' : 'Procesando imagen...'}</p>
-            <p className="mt-2 text-xs text-gray-500">Esta tarjeta se actualizará automáticamente cuando termine.</p>
+            <p className="font-medium text-gray-900">{isQueueing ? 'Encolando...' : 'Procesando...'}</p>
             <button
               type="button"
               onClick={(event) => void handleCancelGeneration(event)}
               disabled={!canCancelGeneration}
-              className={`group mt-4 inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm transition-all ${
-                canCancelGeneration
-                  ? 'border-indigo-200 bg-white text-indigo-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700'
-                  : 'cursor-default border-indigo-200 bg-white text-indigo-700'
-              }`}
-              title={canCancelGeneration ? 'Cancelar generación de esta pose' : 'Generación en curso'}
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-default disabled:opacity-60"
             >
-              <span className={`items-center gap-2 ${canCancelGeneration ? 'flex group-hover:hidden' : 'flex'}`}>
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                {isCancellingGeneration ? 'Cancelando...' : 'Cargando...'}
-              </span>
-              {canCancelGeneration ? (
-                <span className="hidden items-center gap-2 group-hover:flex">
-                  <XCircle className="h-3.5 w-3.5" />
-                  Cancelar esta pose
-                </span>
-              ) : null}
+              <XCircle className="h-3.5 w-3.5" />
+              {isCancellingGeneration ? 'Cancelando...' : 'Cancelar'}
             </button>
-            {currentOutput ? (
-              <p className="mt-4 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-600">
-                Mostrando el último intento disponible
-              </p>
-            ) : null}
           </div>
         ) : null}
 
-        {hasOutput && !isLoadingState && (
+        {/* Download button */}
+        {hasOutput && !isLoadingState ? (
           <button
             onClick={(event) => {
               event.stopPropagation();
               void handleDownload();
             }}
             disabled={downloading}
-            className="absolute bottom-3 right-3 cursor-pointer p-2 bg-white/90 hover:bg-white text-gray-700 rounded-xl shadow-sm backdrop-blur transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Descargar imagen aprobada"
+            className="absolute bottom-2 right-2 rounded-xl bg-white/90 p-2 text-gray-700 shadow-sm backdrop-blur transition-all hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            title="Descargar imagen"
           >
-            <Download className="w-4 h-4" />
+            <Download className="h-4 w-4" />
           </button>
-        )}
-      </div>
-
-      <div className="border-t border-slate-100 bg-white px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Historial generado</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {historyOutputs.length === 0
-                ? 'Todavía no hay imágenes generadas para esta pose.'
-                : `${historyOutputs.length} intento${historyOutputs.length === 1 ? '' : 's'} disponible${historyOutputs.length === 1 ? '' : 's'} en esta imagen.`}
-            </p>
-          </div>
-          {historyOutputs.length > 0 ? (
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-              {formatOutputLabel(currentOutput!, historyOutputs.length - 1)}
-            </span>
-          ) : null}
-        </div>
-
-        {historyOutputs.length > 0 ? (
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1" onClick={(event) => event.stopPropagation()}>
-            {historyOutputs.map((output, outputIndex) => (
-              <AttemptThumbnail
-                key={output.id}
-                output={output}
-                label={formatOutputLabel(output, outputIndex)}
-                active={displayedOutput?.id === output.id}
-                userApproved={selectedOutputId === output.id}
-                onSelect={() => {
-                  onSelectOutput?.(output.id, output);
-                }}
-              />
-            ))}
-          </div>
         ) : null}
       </div>
 
-      <div className="p-4 flex flex-col flex-grow space-y-3">
-        <AutoReviewPanel
-          key={job.id}
-          displayedOutput={displayedOutput}
-          activeReview={activeReview}
-          activeReviewPrompt={activeReviewPrompt}
-          isUserApprovedDisplayed={isUserApprovedDisplayed}
-          reviewSignals={reviewSignals}
-        />
+      {/* History thumbnails — only when multiple attempts exist */}
+      {historyOutputs.length > 1 ? (
+        <div
+          className="flex gap-2 overflow-x-auto border-t border-slate-100 px-3 py-2"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {historyOutputs.map((output, outputIndex) => (
+            <AttemptThumbnail
+              key={output.id}
+              output={output}
+              label={formatOutputLabel(output, outputIndex)}
+              active={displayedOutput?.id === output.id}
+              userApproved={selectedOutputId === output.id}
+              onSelect={() => onSelectOutput?.(output.id, output)}
+            />
+          ))}
+        </div>
+      ) : null}
 
-        <JobControls
-          draft={draft}
-          isProcessing={isProcessing}
-          isQueueing={isQueueing}
-          isRetryingAutoReview={isRetryingAutoReview}
-          isCancelling={isCancellingGeneration}
-          canRegenerate={role.canRegenerate}
-          isExperimentJob={isExperimentJob}
-          jobStatus={job.status}
-          lastError={job.lastError || null}
-          currentOutput={currentOutput}
-          regenerationError={regenerationError}
-          autoReviewRetryError={autoReviewRetryError}
-          cancellationError={cancellationError}
-          historyOutputsCount={historyOutputs.length}
-          onUpdateDraft={onUpdateDraft}
-          onRegenerate={onRegenerate}
-          onRetryAutoReview={onRetryAutoReview}
-        />
+      {/* Action strip */}
+      <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+        {/* Primary: Regenerate */}
+        {role.canRegenerate ? (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              onRegenerate();
+            }}
+            disabled={isProcessing || isQueueing || isCancellingGeneration || !draft.prompt.trim()}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${isQueueing ? 'animate-spin' : ''}`} />
+            {isQueueing ? 'Regenerando...' : 'Regenerar foto'}
+          </button>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
+            Solo lectura — no podés encolar regeneraciones
+          </div>
+        )}
+
+        {/* Details toggle */}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setDetailsExpanded((current) => !current);
+          }}
+          className="flex w-full items-center justify-between px-1 py-1 text-xs text-slate-500 transition-colors hover:text-slate-800"
+        >
+          <span>Revisión y prompt</span>
+          {detailsExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+
+        {/* Expanded details */}
+        {detailsExpanded ? (
+          <div className="space-y-3 border-t border-slate-100 pt-3" onClick={(event) => event.stopPropagation()}>
+            <AutoReviewPanel
+              key={job.id}
+              displayedOutput={displayedOutput}
+              activeReview={activeReview}
+              activeReviewPrompt={activeReviewPrompt}
+              isUserApprovedDisplayed={isUserApprovedDisplayed}
+              reviewSignals={reviewSignals}
+            />
+
+            {/* Provider select */}
+            {role.canRegenerate ? (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Proveedor IA</label>
+                <select
+                  value={draft.provider}
+                  onChange={(event) => onUpdateDraft({ provider: event.target.value as Provider })}
+                  disabled={controlsDisabled}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  <option value="fal-seedream">{PROVIDER_LABELS['fal-seedream']}</option>
+                  <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
+                  <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
+                </select>
+              </div>
+            ) : null}
+
+            {/* Prompt textarea */}
+            {role.canRegenerate ? (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">Prompt</label>
+                <textarea
+                  value={draft.prompt}
+                  onChange={(event) => onUpdateDraft({ prompt: event.target.value })}
+                  disabled={controlsDisabled}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                  placeholder="Prompt base para regenerar..."
+                />
+                {isExperimentJob ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Bloqueado por experimento A/B.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Manual Gemini retry */}
+            {showManualGeminiRetry ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRetryAutoReview();
+                }}
+                disabled={isProcessing || isQueueing || isCancellingGeneration || isRetryingAutoReview}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRetryingAutoReview ? 'animate-spin' : ''}`} />
+                {isRetryingAutoReview ? 'Revisando...' : 'Revisar con Gemini'}
+              </button>
+            ) : null}
+
+            {/* Failed error */}
+            {job.status === 'failed' && job.lastError ? (
+              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" aria-hidden="true" />
+                <span>{job.lastError}</span>
+              </div>
+            ) : null}
+
+            {regenerationError ? <ErrorRow message={regenerationError} /> : null}
+            {autoReviewRetryError ? <ErrorRow message={autoReviewRetryError} /> : null}
+            {cancellationError ? <ErrorRow message={cancellationError} /> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

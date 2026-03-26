@@ -497,48 +497,44 @@ export const Archive: React.FC = () => {
           ) : (
             <>
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Lote</span>
-                  <select
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    value={selectedBatchId ?? ''}
-                    onChange={(event) => setSelectedBatchId(event.target.value)}
-                  >
-                    {results.map((result) => (
-                      <option key={result.batch.id} value={result.batch.id}>
-                        {result.batch.clientNameSnapshot} / {result.batch.modelNameSnapshot} · {formatDateTime(result.batch.createdAt)} · {result.batch.id?.slice(0, 8)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {selectedResult ? (
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {selectedResult.batch.clientNameSnapshot} / {selectedResult.batch.modelNameSnapshot}
+                <p className="mb-3 text-sm font-medium text-slate-700">
+                  {results.length} lote{results.length === 1 ? '' : 's'} encontrado{results.length === 1 ? '' : 's'}
+                </p>
+                <div className="max-h-72 space-y-1 overflow-y-auto">
+                  {results.map((result) => (
+                    <button
+                      key={result.batch.id}
+                      type="button"
+                      onClick={() => setSelectedBatchId(result.batch.id!)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                        selectedBatchId === result.batch.id
+                          ? 'bg-indigo-50 ring-1 ring-indigo-200'
+                          : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {result.batch.clientNameSnapshot} / {result.batch.modelNameSnapshot}
                         </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Lote {selectedResult.batch.id?.slice(0, 8)} · {formatDateTime(selectedResult.batch.createdAt)}
-                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span>{formatDateTime(result.batch.createdAt)}</span>
+                          <span>·</span>
+                          <span>{result.matchedJobCount} job{result.matchedJobCount === 1 ? '' : 's'}</span>
+                          {result.matchedGarments.length > 0 ? (
+                            <>
+                              <span>·</span>
+                              <span className="truncate max-w-[160px]">
+                                {result.matchedGarments.slice(0, 2).join(', ')}
+                                {result.matchedGarments.length > 2 ? ` +${result.matchedGarments.length - 2}` : ''}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
-                      <StatusBadge status={selectedResult.batch.status} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-                      <span className="rounded-full bg-white px-2.5 py-1">
-                        {PROVIDER_LABELS[selectedResult.batch.provider]}
-                      </span>
-                      <span className="rounded-full bg-white px-2.5 py-1">
-                        {selectedResult.matchedJobCount} match{selectedResult.matchedJobCount === 1 ? '' : 'es'}
-                      </span>
-                      <span className="rounded-full bg-white px-2.5 py-1">
-                        {selectedResult.matchedGarments.slice(0, 2).join(', ')}
-                        {selectedResult.matchedGarments.length > 2 ? ` +${selectedResult.matchedGarments.length - 2}` : ''}
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
+                      <StatusBadge status={result.batch.status} />
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {batchLoading ? (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { JobAutoReview, JobAutoReviewMarketplaceData, JobOutput } from '../../../shared/src/types';
+import { JobAutoReview, JobAutoReviewMarketplaceData, JobOutput, JobReviewSignals } from '../../../shared/src/types';
 import { CheckCircle2, ChevronDown, ChevronUp, ImageIcon, Sparkles } from 'lucide-react';
 
 interface Props {
@@ -7,6 +7,7 @@ interface Props {
   activeReview: JobAutoReview | null;
   activeReviewPrompt: string | null;
   isUserApprovedDisplayed: boolean;
+  reviewSignals: JobReviewSignals;
 }
 
 const EMPTY_MARKETPLACE_DATA: JobAutoReviewMarketplaceData = {
@@ -41,6 +42,7 @@ export const AutoReviewPanel: React.FC<Props> = ({
   activeReview,
   activeReviewPrompt,
   isUserApprovedDisplayed,
+  reviewSignals,
 }) => {
   const [marketplaceExpanded, setMarketplaceExpanded] = useState(false);
 
@@ -88,6 +90,20 @@ export const AutoReviewPanel: React.FC<Props> = ({
                   {criterion.label}
                 </span>
               ))}
+            </div>
+          ) : null}
+
+          {reviewSignals.hasHumanIntervention ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="rounded-full bg-white/70 px-2.5 py-1">
+                Intervención humana: {reviewSignals.humanInterventionCount}
+              </span>
+              {reviewSignals.hasGeminiFalsePositive ? (
+                <span className="rounded-full bg-rose-100 px-2.5 py-1 text-rose-700">FP Gemini</span>
+              ) : null}
+              {reviewSignals.hasGeminiFalseNegative ? (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">FN Gemini</span>
+              ) : null}
             </div>
           ) : null}
         </div>

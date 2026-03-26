@@ -7,6 +7,7 @@ import {
   Job,
   Provider,
 } from './types';
+import { getJobReviewOutcomeCounts, getRatePct } from './reviewMetrics';
 
 export const EXPERIMENT_MODE_VALUES: ExperimentMode[] = ['ab_paired', 'ab_interleaved'];
 export const EXPERIMENT_ALLOWED_PROVIDERS: Provider[] = ['fal-seedream', 'openai-gpt-image-1.5'];
@@ -55,6 +56,27 @@ export const computeBatchExperimentAnalytics = (
     const failedJobs = armJobs.filter((job) => job.status === 'failed').length;
     const pendingJobs = armJobs.filter((job) => job.status === 'pending').length;
     const processingJobs = armJobs.filter((job) => job.status === 'processing').length;
+    const reviewCounts = armJobs.reduce(
+      (acc, job) => {
+        const current = getJobReviewOutcomeCounts(job);
+        return {
+          jobsWithHumanIntervention: acc.jobsWithHumanIntervention + current.jobsWithHumanIntervention,
+          humanInterventionCount: acc.humanInterventionCount + current.humanInterventionCount,
+          manualSelectionCount: acc.manualSelectionCount + current.manualSelectionCount,
+          geminiFalsePositiveJobs: acc.geminiFalsePositiveJobs + current.geminiFalsePositiveJobs,
+          geminiFalseNegativeJobs: acc.geminiFalseNegativeJobs + current.geminiFalseNegativeJobs,
+          geminiTruePositiveJobs: acc.geminiTruePositiveJobs + current.geminiTruePositiveJobs,
+        };
+      },
+      {
+        jobsWithHumanIntervention: 0,
+        humanInterventionCount: 0,
+        manualSelectionCount: 0,
+        geminiFalsePositiveJobs: 0,
+        geminiFalseNegativeJobs: 0,
+        geminiTruePositiveJobs: 0,
+      },
+    );
     const manualRegenerationCount = armJobs.reduce((sum, job) => sum + (job.manualRegenerationCount || 0), 0);
     const regeneratedJobs = armJobs.filter((job) => (job.manualRegenerationCount || 0) > 0).length;
     const totalCostUsd = armJobs.reduce((sum, job) => sum + (job.totalCostUsd || 0), 0);
@@ -69,9 +91,19 @@ export const computeBatchExperimentAnalytics = (
       failedJobs,
       pendingJobs,
       processingJobs,
+      jobsWithHumanIntervention: reviewCounts.jobsWithHumanIntervention,
+      humanInterventionCount: reviewCounts.humanInterventionCount,
+      manualSelectionCount: reviewCounts.manualSelectionCount,
       manualRegenerationCount,
       regeneratedJobs,
-      regenerationRatePct: totalJobs > 0 ? round((manualRegenerationCount / totalJobs) * 100, 1) : 0,
+      regenerationRatePct: getRatePct(manualRegenerationCount, totalJobs),
+      humanInterventionRatePct: getRatePct(reviewCounts.jobsWithHumanIntervention, totalJobs),
+      geminiFalsePositiveJobs: reviewCounts.geminiFalsePositiveJobs,
+      geminiFalseNegativeJobs: reviewCounts.geminiFalseNegativeJobs,
+      geminiPrecisionPct: getRatePct(
+        reviewCounts.geminiTruePositiveJobs,
+        reviewCounts.geminiTruePositiveJobs + reviewCounts.geminiFalsePositiveJobs,
+      ),
       totalCostUsd: round(totalCostUsd, 4),
       avgCostPerJobUsd: totalJobs > 0 ? round(totalCostUsd / totalJobs, 4) : 0,
       avgCostPerCompletedJobUsd: completedJobs > 0 ? round(totalCostUsd / completedJobs, 4) : round(totalCostUsd, 4),
@@ -83,22 +115,25 @@ export const computeBatchExperimentAnalytics = (
 
   const minCost = Math.max(0.0001, Math.min(...rawArms.map((arm) => Math.max(0.0001, arm.avgCostPerCompletedJobUsd || arm.avgCostPerJobUsd || 0.0001))));
   const minDuration = Math.max(0.0001, Math.min(...rawArms.map((arm) => Math.max(0.0001, arm.avgDurationPerJobSeconds || 0.0001))));
-  const minRegeneration = Math.max(0.0001, Math.min(...rawArms.map((arm) => Math.max(0.0001, arm.regenerationRatePct || 0.0001))));
+  const minIntervention = Math.max(
+    0.0001,
+    Math.min(...rawArms.map((arm) => Math.max(0.0001, arm.humanInterventionRatePct || 0.0001))),
+  );
 
   const arms = rawArms.map((arm) => {
     const costRatio = (arm.avgCostPerCompletedJobUsd || arm.avgCostPerJobUsd || minCost) / minCost;
     const durationRatio = (arm.avgDurationPerJobSeconds || minDuration) / minDuration;
-    const regenerationRatio = (Math.max(0.0001, arm.regenerationRatePct || 0.0001)) / minRegeneration;
+    const interventionRatio = (Math.max(0.0001, arm.humanInterventionRatePct || 0.0001)) / minIntervention;
 
     return {
       ...arm,
-      efficiencyScore: round(costRatio * 0.4 + durationRatio * 0.35 + regenerationRatio * 0.25, 3),
+      efficiencyScore: round(costRatio * 0.4 + durationRatio * 0.35 + interventionRatio * 0.25, 3),
     };
   });
 
   const winner = [...arms].sort((left, right) => left.efficiencyScore - right.efficiencyScore)[0] || null;
   const recommendation = winner
-    ? `${winner.label} (${winner.provider}) muestra mejor balance entre costo, tiempo total y necesidad de regeneraciones.`
+    ? `${winner.label} (${winner.provider}) muestra mejor balance entre costo, tiempo total y necesidad de intervención humana.`
     : 'Todavía no hay datos suficientes para recomendar un brazo del experimento.';
 
   return {

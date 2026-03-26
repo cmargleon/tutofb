@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { onDocumentCreated, onDocumentDeleted, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { Job, JobOutput } from '../../../shared/src/types';
+import { getJobReviewOutcomeCounts } from '../../../shared/src/reviewMetrics';
 import { formatMexicoCityDate } from '../../../shared/src/utils/dateUtils';
 import { getJobStateDelta } from '../analytics/aggregation';
 import { getAppFirestore } from '../firebase/appFirestore';
@@ -18,6 +19,16 @@ type JobContribution = {
   processingJobs: number;
   firstPassApprovedJobs: number;
   regeneratedCompletedJobs: number;
+  jobsWithHumanIntervention: number;
+  humanInterventionCount: number;
+  manualSelectionCount: number;
+  geminiApprovedJobs: number;
+  geminiRejectedJobs: number;
+  geminiTruePositiveJobs: number;
+  geminiTrueNegativeJobs: number;
+  geminiFalsePositiveJobs: number;
+  geminiFalseNegativeJobs: number;
+  humanReviewAvoidedJobs: number;
   manualRegenerationCount: number;
 };
 
@@ -31,19 +42,41 @@ const getJobContribution = (job: Job | undefined): JobContribution => {
       processingJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
+      jobsWithHumanIntervention: 0,
+      humanInterventionCount: 0,
+      manualSelectionCount: 0,
+      geminiApprovedJobs: 0,
+      geminiRejectedJobs: 0,
+      geminiTruePositiveJobs: 0,
+      geminiTrueNegativeJobs: 0,
+      geminiFalsePositiveJobs: 0,
+      geminiFalseNegativeJobs: 0,
+      humanReviewAvoidedJobs: 0,
       manualRegenerationCount: 0,
     };
   }
 
   const manualRegenerationCount = job.manualRegenerationCount || 0;
+  const reviewCounts = getJobReviewOutcomeCounts(job);
   return {
     totalJobs: 1,
     completedJobs: job.status === 'completed' ? 1 : 0,
     failedJobs: job.status === 'failed' ? 1 : 0,
     pendingJobs: job.status === 'pending' ? 1 : 0,
     processingJobs: job.status === 'processing' ? 1 : 0,
-    firstPassApprovedJobs: job.status === 'completed' && manualRegenerationCount === 0 ? 1 : 0,
+    firstPassApprovedJobs:
+      job.status === 'completed' && manualRegenerationCount === 0 && reviewCounts.jobsWithHumanIntervention === 0 ? 1 : 0,
     regeneratedCompletedJobs: job.status === 'completed' && manualRegenerationCount > 0 ? 1 : 0,
+    jobsWithHumanIntervention: reviewCounts.jobsWithHumanIntervention,
+    humanInterventionCount: reviewCounts.humanInterventionCount,
+    manualSelectionCount: reviewCounts.manualSelectionCount,
+    geminiApprovedJobs: reviewCounts.geminiApprovedJobs,
+    geminiRejectedJobs: reviewCounts.geminiRejectedJobs,
+    geminiTruePositiveJobs: reviewCounts.geminiTruePositiveJobs,
+    geminiTrueNegativeJobs: reviewCounts.geminiTrueNegativeJobs,
+    geminiFalsePositiveJobs: reviewCounts.geminiFalsePositiveJobs,
+    geminiFalseNegativeJobs: reviewCounts.geminiFalseNegativeJobs,
+    humanReviewAvoidedJobs: reviewCounts.humanReviewAvoidedJobs,
     manualRegenerationCount,
   };
 };
@@ -60,6 +93,16 @@ const diffJobContribution = (before: Job | undefined, after: Job | undefined): J
     processingJobs: next.processingJobs - previous.processingJobs,
     firstPassApprovedJobs: next.firstPassApprovedJobs - previous.firstPassApprovedJobs,
     regeneratedCompletedJobs: next.regeneratedCompletedJobs - previous.regeneratedCompletedJobs,
+    jobsWithHumanIntervention: next.jobsWithHumanIntervention - previous.jobsWithHumanIntervention,
+    humanInterventionCount: next.humanInterventionCount - previous.humanInterventionCount,
+    manualSelectionCount: next.manualSelectionCount - previous.manualSelectionCount,
+    geminiApprovedJobs: next.geminiApprovedJobs - previous.geminiApprovedJobs,
+    geminiRejectedJobs: next.geminiRejectedJobs - previous.geminiRejectedJobs,
+    geminiTruePositiveJobs: next.geminiTruePositiveJobs - previous.geminiTruePositiveJobs,
+    geminiTrueNegativeJobs: next.geminiTrueNegativeJobs - previous.geminiTrueNegativeJobs,
+    geminiFalsePositiveJobs: next.geminiFalsePositiveJobs - previous.geminiFalsePositiveJobs,
+    geminiFalseNegativeJobs: next.geminiFalseNegativeJobs - previous.geminiFalseNegativeJobs,
+    humanReviewAvoidedJobs: next.humanReviewAvoidedJobs - previous.humanReviewAvoidedJobs,
     manualRegenerationCount: next.manualRegenerationCount - previous.manualRegenerationCount,
   };
 };
@@ -94,6 +137,16 @@ const updateJobAggregationDoc = (
   setIncrementIfNeeded(payload, 'processingJobs', delta.processingJobs);
   setIncrementIfNeeded(payload, 'firstPassApprovedJobs', delta.firstPassApprovedJobs);
   setIncrementIfNeeded(payload, 'regeneratedCompletedJobs', delta.regeneratedCompletedJobs);
+  setIncrementIfNeeded(payload, 'jobsWithHumanIntervention', delta.jobsWithHumanIntervention);
+  setIncrementIfNeeded(payload, 'humanInterventionCount', delta.humanInterventionCount);
+  setIncrementIfNeeded(payload, 'manualSelectionCount', delta.manualSelectionCount);
+  setIncrementIfNeeded(payload, 'geminiApprovedJobs', delta.geminiApprovedJobs);
+  setIncrementIfNeeded(payload, 'geminiRejectedJobs', delta.geminiRejectedJobs);
+  setIncrementIfNeeded(payload, 'geminiTruePositiveJobs', delta.geminiTruePositiveJobs);
+  setIncrementIfNeeded(payload, 'geminiTrueNegativeJobs', delta.geminiTrueNegativeJobs);
+  setIncrementIfNeeded(payload, 'geminiFalsePositiveJobs', delta.geminiFalsePositiveJobs);
+  setIncrementIfNeeded(payload, 'geminiFalseNegativeJobs', delta.geminiFalseNegativeJobs);
+  setIncrementIfNeeded(payload, 'humanReviewAvoidedJobs', delta.humanReviewAvoidedJobs);
   setIncrementIfNeeded(payload, 'manualRegenerationCount', delta.manualRegenerationCount);
 
   if (Object.keys(payload).length <= Object.keys(basePayload).length + 1) {
@@ -158,6 +211,36 @@ export const onJobAnalyticsUpdate = onDocumentWritten('jobs/{jobId}', async (eve
         : {}),
       ...(jobContributionDelta.firstPassApprovedJobs
         ? { firstPassApprovedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.firstPassApprovedJobs) }
+        : {}),
+      ...(jobContributionDelta.jobsWithHumanIntervention
+        ? { jobsWithHumanIntervention: admin.firestore.FieldValue.increment(jobContributionDelta.jobsWithHumanIntervention) }
+        : {}),
+      ...(jobContributionDelta.humanInterventionCount
+        ? { humanInterventionCount: admin.firestore.FieldValue.increment(jobContributionDelta.humanInterventionCount) }
+        : {}),
+      ...(jobContributionDelta.manualSelectionCount
+        ? { manualSelectionCount: admin.firestore.FieldValue.increment(jobContributionDelta.manualSelectionCount) }
+        : {}),
+      ...(jobContributionDelta.geminiApprovedJobs
+        ? { geminiApprovedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiApprovedJobs) }
+        : {}),
+      ...(jobContributionDelta.geminiRejectedJobs
+        ? { geminiRejectedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiRejectedJobs) }
+        : {}),
+      ...(jobContributionDelta.geminiTruePositiveJobs
+        ? { geminiTruePositiveJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiTruePositiveJobs) }
+        : {}),
+      ...(jobContributionDelta.geminiTrueNegativeJobs
+        ? { geminiTrueNegativeJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiTrueNegativeJobs) }
+        : {}),
+      ...(jobContributionDelta.geminiFalsePositiveJobs
+        ? { geminiFalsePositiveJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiFalsePositiveJobs) }
+        : {}),
+      ...(jobContributionDelta.geminiFalseNegativeJobs
+        ? { geminiFalseNegativeJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiFalseNegativeJobs) }
+        : {}),
+      ...(jobContributionDelta.humanReviewAvoidedJobs
+        ? { humanReviewAvoidedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.humanReviewAvoidedJobs) }
         : {}),
     },
     { merge: true },

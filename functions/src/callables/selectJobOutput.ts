@@ -3,6 +3,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Job, JobOutput, SelectJobOutputRequest, SelectJobOutputResponse } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { buildClearSelectionReviewSignalsPatch, buildSelectOutputReviewSignalsPatch } from '../review/reviewSignals';
 
 export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobOutputResponse>>(async (request) => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
@@ -35,6 +36,11 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
     await jobRef.update({
       userSelectedOutputId: null,
       userSelectedOutput: null,
+      ...buildClearSelectionReviewSignalsPatch({
+        job,
+        uid: request.auth!.uid,
+        displayName: requestedByDisplayName,
+      }),
       updatedAt: now,
     });
 
@@ -76,6 +82,12 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
     'traceability.lastCompletedAt': now,
     'traceability.lastProviderErrorAt': null,
     'traceability.lastProviderErrorMessage': null,
+    ...buildSelectOutputReviewSignalsPatch({
+      job,
+      output,
+      uid: request.auth!.uid,
+      displayName: requestedByDisplayName,
+    }),
     updatedAt: now,
   });
 
@@ -94,6 +106,9 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
       generationAttempt: output.generationAttempt || null,
       previousOutputId: job.userSelectedOutputId || null,
       previousStatus: job.status,
+      currentOutputId: job.currentOutput?.id || null,
+      currentOutputGeminiVerdict: job.currentOutput?.autoReview?.verdict || job.latestAutoReview?.verdict || null,
+      selectedOutputGeminiVerdict: output.autoReview?.verdict || null,
     },
     createdAt: now,
   });

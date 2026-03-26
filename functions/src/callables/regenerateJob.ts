@@ -4,6 +4,7 @@ import { Job, RegenerateJobRequest, RegenerateJobResponse } from '../../../share
 import { assertCallableRoles } from '../auth/roles';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
 
 export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobResponse>>(async (request) => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
@@ -58,6 +59,11 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
     await jobRef.update({
       ...buildRegenerateJobPatch(job, provider || '', prompt),
       manualRegenerationCount: admin.firestore.FieldValue.increment(1),
+      ...buildRegenerationReviewSignalsPatch({
+        job,
+        uid: request.auth!.uid,
+        displayName: requestedByDisplayName,
+      }),
       'traceability.lastManualRegenerationAt': now,
       'traceability.lastManualRegeneratedByUid': request.auth!.uid,
       'traceability.lastManualRegeneratedByDisplayName': requestedByDisplayName,
@@ -76,6 +82,8 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
         requestedByDisplayName,
         provider,
         prompt,
+        currentOutputId: job.currentOutput?.id || null,
+        currentOutputGeminiVerdict: job.currentOutput?.autoReview?.verdict || job.latestAutoReview?.verdict || null,
       },
     createdAt: now,
   });

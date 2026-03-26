@@ -4,6 +4,7 @@ import { Job, RegenerateJobsBulkRequest, RegenerateJobsBulkResponse } from '../.
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
+import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
 
 const MAX_BULK_JOBS = 50;
 
@@ -72,6 +73,11 @@ export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<Rege
       writeBatch.update(jobRef, {
         ...patch,
         manualRegenerationCount: admin.firestore.FieldValue.increment(1),
+        ...buildRegenerationReviewSignalsPatch({
+          job,
+          uid: request.auth!.uid,
+          displayName: requestedByDisplayName,
+        }),
         'traceability.lastManualRegenerationAt': now,
         'traceability.lastManualRegeneratedByUid': request.auth!.uid,
         'traceability.lastManualRegeneratedByDisplayName': requestedByDisplayName,
@@ -88,6 +94,8 @@ export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<Rege
           source: 'bulk_regeneration',
           provider,
           prompt,
+          currentOutputId: job.currentOutput?.id || null,
+          currentOutputGeminiVerdict: job.currentOutput?.autoReview?.verdict || job.latestAutoReview?.verdict || null,
         },
         createdAt: now,
       });

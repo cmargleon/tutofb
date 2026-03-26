@@ -17,6 +17,7 @@ import {
   isAspectRatio,
   isProvider,
 } from '../../../shared/src/domain';
+import { EMPTY_JOB_REVIEW_SIGNALS } from '../../../shared/src/reviewMetrics';
 import { buildExperimentArms, isExperimentEligibleProvider, isExperimentMode } from '../../../shared/src/experiments';
 import {
   getSortedUniqueGarmentViews,
@@ -332,6 +333,9 @@ export const buildJobDraft = (
   generationAttemptCount: 0,
   autoReviewMaxAttempts,
   latestAutoReview: null,
+  reviewSignals: {
+    ...EMPTY_JOB_REVIEW_SIGNALS,
+  },
   claimToken: null,
   claimedBy: null,
   claimExpiresAt: null,

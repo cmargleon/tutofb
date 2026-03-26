@@ -5,6 +5,7 @@ import { assertCallableRoles } from '../auth/roles';
 import { GEMINI_API_KEY, getGeminiImageReviewModel, getJobAutoReviewMaxAttempts } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
+import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
 
 const db = getAppFirestore();
 const bucket = admin.storage().bucket();
@@ -120,6 +121,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
       const jobPatch: Record<string, unknown> = {
         currentOutput: updatedOutput,
         latestAutoReview: storedReview,
+        ...buildAutoReviewSignalsPatch(job, storedReview.verdict),
         updatedAt: now,
         lastError:
           review.verdict === 'approved'

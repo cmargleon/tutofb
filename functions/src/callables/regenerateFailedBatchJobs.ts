@@ -8,6 +8,7 @@ import {
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
+import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
 
 export const regenerateFailedBatchJobs = onCall<
   RegenerateFailedBatchJobsRequest,
@@ -62,6 +63,11 @@ export const regenerateFailedBatchJobs = onCall<
       writeBatch.update(jobRef, {
         ...patch,
         manualRegenerationCount: admin.firestore.FieldValue.increment(1),
+        ...buildRegenerationReviewSignalsPatch({
+          job,
+          uid: request.auth!.uid,
+          displayName: requestedByDisplayName,
+        }),
         'traceability.lastManualRegenerationAt': now,
         'traceability.lastManualRegeneratedByUid': request.auth!.uid,
         'traceability.lastManualRegeneratedByDisplayName': requestedByDisplayName,
@@ -79,6 +85,8 @@ export const regenerateFailedBatchJobs = onCall<
           batchId,
           provider: job.provider,
           prompt,
+          currentOutputId: job.currentOutput?.id || null,
+          currentOutputGeminiVerdict: job.currentOutput?.autoReview?.verdict || job.latestAutoReview?.verdict || null,
         },
         createdAt: now,
       });

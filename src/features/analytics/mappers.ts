@@ -13,6 +13,10 @@ export const mapSummary = (data: any): AnalyticsSummary => {
   const totalDuration = data.totalDurationSeconds || 0;
   const totalCompletedOutputs = data.totalCompletedOutputs || completed; // fallback
   const firstPassApprovedJobs = data.firstPassApprovedJobs || 0;
+  const geminiTruePositiveJobs = data.geminiTruePositiveJobs || 0;
+  const geminiFalsePositiveJobs = data.geminiFalsePositiveJobs || 0;
+  const geminiRejectedJobs = data.geminiRejectedJobs || 0;
+  const geminiFalseNegativeJobs = data.geminiFalseNegativeJobs || 0;
 
   return {
     totalJobs: data.totalJobs || 0,
@@ -22,6 +26,28 @@ export const mapSummary = (data: any): AnalyticsSummary => {
     processingJobs: data.processingJobs || 0,
     firstPassApprovedJobs,
     firstPassApprovalRatePct: completed > 0 ? Math.round((firstPassApprovedJobs / completed) * 100) : 0,
+    jobsWithHumanIntervention: data.jobsWithHumanIntervention || 0,
+    humanInterventionCount: data.humanInterventionCount || 0,
+    manualSelectionCount: data.manualSelectionCount || 0,
+    geminiApprovedJobs: data.geminiApprovedJobs || 0,
+    geminiRejectedJobs,
+    geminiTruePositiveJobs,
+    geminiTrueNegativeJobs: data.geminiTrueNegativeJobs || 0,
+    geminiFalsePositiveJobs,
+    geminiFalseNegativeJobs,
+    humanReviewAvoidedJobs: data.humanReviewAvoidedJobs || 0,
+    humanInterventionRatePct:
+      data.humanInterventionRatePct || ((data.totalJobs || 0) > 0 ? Math.round(((data.jobsWithHumanIntervention || 0) / data.totalJobs) * 100) : 0),
+    humanReviewAvoidedRatePct:
+      data.humanReviewAvoidedRatePct || ((data.totalJobs || 0) > 0 ? Math.round(((data.humanReviewAvoidedJobs || 0) / data.totalJobs) * 100) : 0),
+    geminiPrecisionPct:
+      data.geminiPrecisionPct || (geminiTruePositiveJobs + geminiFalsePositiveJobs > 0
+        ? Math.round((geminiTruePositiveJobs / (geminiTruePositiveJobs + geminiFalsePositiveJobs)) * 100)
+        : 0),
+    geminiFalsePositiveRatePct:
+      data.geminiFalsePositiveRatePct || ((data.geminiApprovedJobs || 0) > 0 ? Math.round((geminiFalsePositiveJobs / data.geminiApprovedJobs) * 100) : 0),
+    geminiFalseNegativeRatePct:
+      data.geminiFalseNegativeRatePct || (geminiRejectedJobs > 0 ? Math.round((geminiFalseNegativeJobs / geminiRejectedJobs) * 100) : 0),
     successRate: (completed + failed) > 0 ? Math.round((completed / (completed + failed)) * 100) : 0,
     avgDurationSeconds: totalCompletedOutputs > 0 ? Math.round(totalDuration / totalCompletedOutputs) : 0,
     totalCompletedOutputs: totalCompletedOutputs,
@@ -70,6 +96,16 @@ export const mapClientStats = (data: any): AnalyticsClientStats => {
     processingJobs: data.processingJobs || 0,
     firstPassApprovedJobs: data.firstPassApprovedJobs || 0,
     regeneratedCompletedJobs: data.regeneratedCompletedJobs || 0,
+    jobsWithHumanIntervention: data.jobsWithHumanIntervention || 0,
+    humanInterventionCount: data.humanInterventionCount || 0,
+    manualSelectionCount: data.manualSelectionCount || 0,
+    geminiApprovedJobs: data.geminiApprovedJobs || 0,
+    geminiRejectedJobs: data.geminiRejectedJobs || 0,
+    geminiTruePositiveJobs: data.geminiTruePositiveJobs || 0,
+    geminiTrueNegativeJobs: data.geminiTrueNegativeJobs || 0,
+    geminiFalsePositiveJobs: data.geminiFalsePositiveJobs || 0,
+    geminiFalseNegativeJobs: data.geminiFalseNegativeJobs || 0,
+    humanReviewAvoidedJobs: data.humanReviewAvoidedJobs || 0,
     manualRegenerationCount: data.manualRegenerationCount || 0,
     totalCostUsd: data.totalCostUsd || 0,
     totalDurationSeconds: data.totalDurationSeconds || 0,
@@ -103,6 +139,16 @@ export const mapClientModelStats = (id: string, data: any): AnalyticsClientModel
     processingJobs: data.processingJobs || 0,
     firstPassApprovedJobs: data.firstPassApprovedJobs || 0,
     regeneratedCompletedJobs: data.regeneratedCompletedJobs || 0,
+    jobsWithHumanIntervention: data.jobsWithHumanIntervention || 0,
+    humanInterventionCount: data.humanInterventionCount || 0,
+    manualSelectionCount: data.manualSelectionCount || 0,
+    geminiApprovedJobs: data.geminiApprovedJobs || 0,
+    geminiRejectedJobs: data.geminiRejectedJobs || 0,
+    geminiTruePositiveJobs: data.geminiTruePositiveJobs || 0,
+    geminiTrueNegativeJobs: data.geminiTrueNegativeJobs || 0,
+    geminiFalsePositiveJobs: data.geminiFalsePositiveJobs || 0,
+    geminiFalseNegativeJobs: data.geminiFalseNegativeJobs || 0,
+    humanReviewAvoidedJobs: data.humanReviewAvoidedJobs || 0,
     manualRegenerationCount: data.manualRegenerationCount || 0,
     totalCompletedOutputs: data.totalCompletedOutputs || 0,
     totalCostUsd: data.totalCostUsd || 0,

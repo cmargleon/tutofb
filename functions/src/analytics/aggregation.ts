@@ -10,6 +10,7 @@ import {
   Provider,
 } from '../../../shared/src/types';
 import { PROVIDER_COSTS } from '../../../shared/src/constants/providerCosts';
+import { getJobReviewOutcomeCounts, getJobReviewSignals, getRatePct } from '../../../shared/src/reviewMetrics';
 import { formatMexicoCityDate } from '../../../shared/src/utils/dateUtils';
 
 export interface AnalyticsRebuildData {
@@ -35,6 +36,21 @@ const emptyStateSummary = (): AnalyticsSummary => ({
   processingJobs: 0,
   firstPassApprovedJobs: 0,
   firstPassApprovalRatePct: 0,
+  jobsWithHumanIntervention: 0,
+  humanInterventionCount: 0,
+  manualSelectionCount: 0,
+  geminiApprovedJobs: 0,
+  geminiRejectedJobs: 0,
+  geminiTruePositiveJobs: 0,
+  geminiTrueNegativeJobs: 0,
+  geminiFalsePositiveJobs: 0,
+  geminiFalseNegativeJobs: 0,
+  humanReviewAvoidedJobs: 0,
+  humanInterventionRatePct: 0,
+  humanReviewAvoidedRatePct: 0,
+  geminiPrecisionPct: 0,
+  geminiFalsePositiveRatePct: 0,
+  geminiFalseNegativeRatePct: 0,
   successRate: 0,
   avgDurationSeconds: null,
   totalCompletedOutputs: 0,
@@ -43,13 +59,27 @@ const emptyStateSummary = (): AnalyticsSummary => ({
   updatedAt: new Date(),
 });
 
-const isFirstPassApprovedJob = (job: Job): boolean => job.status === 'completed' && (job.manualRegenerationCount || 0) === 0;
+const isFirstPassApprovedJob = (job: Job): boolean =>
+  job.status === 'completed' && (job.manualRegenerationCount || 0) === 0 && !getJobReviewSignals(job).hasHumanIntervention;
 
 const isRegeneratedCompletedJob = (job: Job): boolean =>
   job.status === 'completed' && (job.manualRegenerationCount || 0) > 0;
 
 const increment = <T extends string>(target: Partial<Record<T, number>>, key: T, delta: number): void => {
   target[key] = (target[key] || 0) + delta;
+};
+
+const applyReviewCounts = <T extends keyof ReturnType<typeof getJobReviewOutcomeCounts>>(
+  target: Partial<Record<T, number>>,
+  counts: ReturnType<typeof getJobReviewOutcomeCounts>,
+): void => {
+  (Object.entries(counts) as Array<[T, number]>).forEach(([key, value]) => {
+    if (!value) {
+      return;
+    }
+
+    increment(target, key, value);
+  });
 };
 
 const applyJobStatus = (
@@ -136,6 +166,7 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
 
   jobs.forEach((job) => {
     summary.totalJobs += 1;
+    const reviewCounts = getJobReviewOutcomeCounts(job);
     if (job.status === 'completed') {
       summary.completedJobs += 1;
       if (isFirstPassApprovedJob(job)) {
@@ -171,6 +202,10 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     } else {
       summary.pendingJobs += 1;
     }
+    applyReviewCounts(
+      summary as unknown as Partial<Record<keyof typeof reviewCounts, number>>,
+      reviewCounts,
+    );
 
     const clientStats = clientMap.get(job.clientId) || {
       clientId: job.clientId,
@@ -183,6 +218,16 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       processingJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
+      jobsWithHumanIntervention: 0,
+      humanInterventionCount: 0,
+      manualSelectionCount: 0,
+      geminiApprovedJobs: 0,
+      geminiRejectedJobs: 0,
+      geminiTruePositiveJobs: 0,
+      geminiTrueNegativeJobs: 0,
+      geminiFalsePositiveJobs: 0,
+      geminiFalseNegativeJobs: 0,
+      humanReviewAvoidedJobs: 0,
       manualRegenerationCount: 0,
       totalCostUsd: 0,
       totalDurationSeconds: 0,
@@ -196,6 +241,7 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     if (job.status === 'processing') clientStats.processingJobs += 1;
     if (isFirstPassApprovedJob(job)) clientStats.firstPassApprovedJobs += 1;
     if (isRegeneratedCompletedJob(job)) clientStats.regeneratedCompletedJobs += 1;
+    applyReviewCounts(clientStats, reviewCounts);
     clientStats.updatedAt = new Date();
     clientMap.set(job.clientId, clientStats);
 
@@ -213,6 +259,16 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       processingJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
+      jobsWithHumanIntervention: 0,
+      humanInterventionCount: 0,
+      manualSelectionCount: 0,
+      geminiApprovedJobs: 0,
+      geminiRejectedJobs: 0,
+      geminiTruePositiveJobs: 0,
+      geminiTrueNegativeJobs: 0,
+      geminiFalsePositiveJobs: 0,
+      geminiFalseNegativeJobs: 0,
+      humanReviewAvoidedJobs: 0,
       manualRegenerationCount: 0,
       totalCompletedOutputs: 0,
       totalCostUsd: 0,
@@ -227,6 +283,7 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     if (job.status === 'processing') clientModelStats.processingJobs += 1;
     if (isFirstPassApprovedJob(job)) clientModelStats.firstPassApprovedJobs += 1;
     if (isRegeneratedCompletedJob(job)) clientModelStats.regeneratedCompletedJobs += 1;
+    applyReviewCounts(clientModelStats, reviewCounts);
     clientModelStats.updatedAt = new Date();
     clientModelMap.set(clientModelKey, clientModelStats);
   });
@@ -261,6 +318,16 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       processingJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
+      jobsWithHumanIntervention: 0,
+      humanInterventionCount: 0,
+      manualSelectionCount: 0,
+      geminiApprovedJobs: 0,
+      geminiRejectedJobs: 0,
+      geminiTruePositiveJobs: 0,
+      geminiTrueNegativeJobs: 0,
+      geminiFalsePositiveJobs: 0,
+      geminiFalseNegativeJobs: 0,
+      humanReviewAvoidedJobs: 0,
       manualRegenerationCount: 0,
       totalCostUsd: 0,
       totalDurationSeconds: 0,
@@ -301,6 +368,16 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       processingJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
+      jobsWithHumanIntervention: 0,
+      humanInterventionCount: 0,
+      manualSelectionCount: 0,
+      geminiApprovedJobs: 0,
+      geminiRejectedJobs: 0,
+      geminiTruePositiveJobs: 0,
+      geminiTrueNegativeJobs: 0,
+      geminiFalsePositiveJobs: 0,
+      geminiFalseNegativeJobs: 0,
+      humanReviewAvoidedJobs: 0,
       manualRegenerationCount: 0,
       totalCompletedOutputs: 0,
       totalCostUsd: 0,
@@ -334,6 +411,14 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       : 0;
   summary.firstPassApprovalRatePct =
     summary.completedJobs > 0 ? Math.round((summary.firstPassApprovedJobs / summary.completedJobs) * 100) : 0;
+  summary.humanInterventionRatePct = getRatePct(summary.jobsWithHumanIntervention, summary.totalJobs);
+  summary.humanReviewAvoidedRatePct = getRatePct(summary.humanReviewAvoidedJobs, summary.totalJobs);
+  summary.geminiPrecisionPct = getRatePct(
+    summary.geminiTruePositiveJobs,
+    summary.geminiTruePositiveJobs + summary.geminiFalsePositiveJobs,
+  );
+  summary.geminiFalsePositiveRatePct = getRatePct(summary.geminiFalsePositiveJobs, summary.geminiApprovedJobs);
+  summary.geminiFalseNegativeRatePct = getRatePct(summary.geminiFalseNegativeJobs, summary.geminiRejectedJobs);
   summary.avgDurationSeconds =
     summary.totalCompletedOutputs > 0 ? Math.round(totalDuration / summary.totalCompletedOutputs) : null;
   summary.updatedAt = new Date();

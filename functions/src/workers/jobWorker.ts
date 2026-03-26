@@ -16,6 +16,7 @@ import {
 } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
+import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
 
 const db = getAppFirestore();
 const bucket = admin.storage().bucket();
@@ -252,6 +253,7 @@ const persistGeneratedAttempt = async ({
     latestAutoReview: autoReview,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     lastError,
+    ...(autoReview ? buildAutoReviewSignalsPatch(claimedJob, autoReview.verdict) : {}),
   };
 
   if (nextStatus === 'completed') {

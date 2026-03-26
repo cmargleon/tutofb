@@ -151,6 +151,7 @@ export const Analytics: React.FC = () => {
   const geminiRows = geminiUsage.rows.slice(0, 25);
   const geminiFeatureBreakdown = geminiUsage.byFeature.slice(0, 3);
   const geminiModelBreakdown = geminiUsage.byModel.slice(0, 3);
+  const geminiImageReviewCostUsd = geminiUsage.byFeature.find((entry) => entry.key === 'image_review')?.totalCostUsd || 0;
 
   const handleSaveAlertThreshold = async () => {
     try {
@@ -342,7 +343,7 @@ export const Analytics: React.FC = () => {
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <StatCard 
           title="Total trabajos" 
           value={summary.totalJobs.toLocaleString()} 
@@ -379,11 +380,18 @@ export const Analytics: React.FC = () => {
           bg="bg-rose-50" 
         />
         <StatCard 
-          title="1ra pasada" 
-          value={`${summary.firstPassApprovalRatePct}%`} 
+          title="Sin revisión humana" 
+          value={`${summary.humanReviewAvoidedRatePct}%`} 
           icon={CheckCircle2} 
           color="text-emerald-700" 
           bg="bg-emerald-50" 
+        />
+        <StatCard 
+          title="Precisión Gemini" 
+          value={`${summary.geminiPrecisionPct}%`} 
+          icon={Bot} 
+          color="text-sky-700" 
+          bg="bg-sky-50" 
         />
         <StatCard 
           title="Proyección mensual" 
@@ -392,6 +400,53 @@ export const Analytics: React.FC = () => {
           color="text-amber-600" 
           bg="bg-amber-50" 
         />
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Calidad del auto review</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Estas métricas ya cuentan selección manual y regeneración como intervención humana, no solo reintentos.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            Review Gemini (`image_review`): <span className="font-semibold">${formatUsd(geminiImageReviewCostUsd, 4)}</span>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <ReviewMetric
+            label="Jobs sin intervención"
+            value={`${summary.humanReviewAvoidedJobs.toLocaleString()} · ${summary.humanReviewAvoidedRatePct}%`}
+            detail="Aprobados por Gemini y cerrados sin toque humano."
+          />
+          <ReviewMetric
+            label="Intervención humana"
+            value={`${summary.jobsWithHumanIntervention.toLocaleString()} · ${summary.humanInterventionRatePct}%`}
+            detail={`${summary.humanInterventionCount.toLocaleString()} acciones manuales · ${summary.manualSelectionCount.toLocaleString()} selecciones`}
+          />
+          <ReviewMetric
+            label="Falsos positivos"
+            value={`${summary.geminiFalsePositiveJobs.toLocaleString()} · ${summary.geminiFalsePositiveRatePct}%`}
+            detail="Gemini aprobó y luego hubo corrección o regeneración manual."
+          />
+          <ReviewMetric
+            label="Falsos negativos"
+            value={`${summary.geminiFalseNegativeJobs.toLocaleString()} · ${summary.geminiFalseNegativeRatePct}%`}
+            detail="Gemini rechazó algo que terminó aprobado por una persona."
+          />
+          <ReviewMetric
+            label="Aprobados por Gemini"
+            value={summary.geminiApprovedJobs.toLocaleString()}
+            detail={`${summary.geminiTruePositiveJobs.toLocaleString()} quedaron bien sin intervención humana.`}
+          />
+          <ReviewMetric
+            label="Rechazados por Gemini"
+            value={summary.geminiRejectedJobs.toLocaleString()}
+            detail={`${summary.geminiTrueNegativeJobs.toLocaleString()} no terminaron aprobados manualmente.`}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -667,7 +722,7 @@ export const Analytics: React.FC = () => {
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Productividad por cliente y modelo</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Aprobación implícita actual = trabajos completados que quedaron como resultado final. Primera pasada = completados sin regeneración manual.
+              Primera pasada ahora excluye tanto regeneración manual como selección manual. FP/FN reflejan desacuerdos entre Gemini y revisión humana.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -676,8 +731,8 @@ export const Analytics: React.FC = () => {
               <p className="mt-1 text-xl font-semibold text-gray-900">{summary.firstPassApprovedJobs.toLocaleString()}</p>
             </div>
             <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-              <p className="text-xs text-gray-500">Tasa 1ra pasada</p>
-              <p className="mt-1 text-xl font-semibold text-gray-900">{summary.firstPassApprovalRatePct}%</p>
+              <p className="text-xs text-gray-500">Intervención humana</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{summary.humanInterventionRatePct}%</p>
             </div>
           </div>
         </div>
@@ -691,6 +746,9 @@ export const Analytics: React.FC = () => {
                   <th className="px-4 py-3 text-right font-medium text-gray-500">Aprobadas</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-500">1ra pasada</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-500">Tasa 1ra</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">Interv.</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">FP</th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">FN</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-500">Regeneradas</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-500">Costo/aprobada</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-500">Duración media</th>
@@ -704,6 +762,9 @@ export const Analytics: React.FC = () => {
                   const avgCostPerApproved = entry.completedJobs > 0 ? entry.totalCostUsd / entry.completedJobs : 0;
                   const avgDurationSeconds = entry.totalCompletedOutputs > 0
                     ? entry.totalDurationSeconds / entry.totalCompletedOutputs
+                    : 0;
+                  const interventionRate = entry.totalJobs > 0
+                    ? Math.round((entry.jobsWithHumanIntervention / entry.totalJobs) * 100)
                     : 0;
 
                   return (
@@ -719,6 +780,9 @@ export const Analytics: React.FC = () => {
                           {firstPassRate}%
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-right text-gray-700">{interventionRate}%</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{entry.geminiFalsePositiveJobs.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{entry.geminiFalseNegativeJobs.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-gray-700">{entry.regeneratedCompletedJobs.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-gray-700">${avgCostPerApproved.toFixed(3)}</td>
                       <td className="px-4 py-3 text-right text-gray-700">{avgDurationSeconds.toFixed(1)}s</td>
@@ -740,7 +804,7 @@ export const Analytics: React.FC = () => {
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Experimentos A/B</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Comparativa de eficiencia entre modelos considerando regeneraciones, tiempo total y costo acumulado.
+              Comparativa de eficiencia entre modelos considerando intervención humana real, tiempo total y costo acumulado.
             </p>
           </div>
 
@@ -819,8 +883,18 @@ export const Analytics: React.FC = () => {
                       highlighted={experimentComparison.winningArmId === arm.armId}
                     />
                     <ExperimentMetric
-                      label="Tasa regen."
-                      value={`${arm.regenerationRatePct}%`}
+                      label="Interv. humana"
+                      value={`${arm.humanInterventionRatePct}%`}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="Selección manual"
+                      value={arm.manualSelectionCount}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="FP / FN"
+                      value={`${arm.geminiFalsePositiveJobs} / ${arm.geminiFalseNegativeJobs}`}
                       highlighted={experimentComparison.winningArmId === arm.armId}
                     />
                     <ExperimentMetric
@@ -841,6 +915,11 @@ export const Analytics: React.FC = () => {
                     <ExperimentMetric
                       label="Media/job"
                       value={`${arm.avgDurationPerJobSeconds.toFixed(1)}s`}
+                      highlighted={experimentComparison.winningArmId === arm.armId}
+                    />
+                    <ExperimentMetric
+                      label="Precisión Gemini"
+                      value={`${arm.geminiPrecisionPct}%`}
                       highlighted={experimentComparison.winningArmId === arm.armId}
                     />
                   </div>
@@ -1136,6 +1215,24 @@ function StatCard({ title, value, icon: Icon, color, bg }: { title: string, valu
         <h3 className="text-sm font-medium text-gray-500">{title}</h3>
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function ReviewMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-600">{detail}</p>
     </div>
   );
 }

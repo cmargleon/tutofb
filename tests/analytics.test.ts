@@ -127,3 +127,133 @@ test('buildAnalyticsSnapshot calcula estado actual de jobs y costo acumulado por
     1,
   );
 });
+
+test('buildAnalyticsSnapshot cuenta intervención humana y desacuerdos con Gemini', () => {
+  const snapshot = buildAnalyticsSnapshot(
+    [
+      baseJob({
+        id: 'job-fp',
+        status: 'completed',
+        latestAutoReview: {
+          model: 'gemini',
+          verdict: 'approved',
+          summary: 'ok',
+          reviewPrompt: 'prompt',
+          revisedPrompt: null,
+          criteria: [],
+          marketplaceData: {
+            title: null,
+            description: null,
+            brand: null,
+            gender: null,
+            garmentType: null,
+            primaryColor: null,
+            sport: null,
+            isSportswear: null,
+          },
+          attemptNumber: 1,
+          reviewedAt: new Date(),
+        },
+        reviewSignals: {
+          firstAutoReviewVerdict: 'approved',
+          latestAutoReviewVerdict: 'approved',
+          hasHumanIntervention: true,
+          humanInterventionCount: 1,
+          manualSelectionCount: 0,
+          hasGeminiFalsePositive: true,
+          hasGeminiFalseNegative: false,
+          lastHumanDecision: 'regenerated_after_auto_approved',
+          lastHumanDecisionAt: new Date(),
+          lastHumanDecisionByUid: 'user-1',
+          lastHumanDecisionByDisplayName: 'Operador',
+        },
+        manualRegenerationCount: 1,
+      }),
+      baseJob({
+        id: 'job-fn',
+        status: 'completed',
+        latestAutoReview: {
+          model: 'gemini',
+          verdict: 'rejected',
+          summary: 'no',
+          reviewPrompt: 'prompt',
+          revisedPrompt: 'fix',
+          criteria: [],
+          marketplaceData: {
+            title: null,
+            description: null,
+            brand: null,
+            gender: null,
+            garmentType: null,
+            primaryColor: null,
+            sport: null,
+            isSportswear: null,
+          },
+          attemptNumber: 1,
+          reviewedAt: new Date(),
+        },
+        reviewSignals: {
+          firstAutoReviewVerdict: 'rejected',
+          latestAutoReviewVerdict: 'rejected',
+          hasHumanIntervention: true,
+          humanInterventionCount: 1,
+          manualSelectionCount: 1,
+          hasGeminiFalsePositive: false,
+          hasGeminiFalseNegative: true,
+          lastHumanDecision: 'selected_auto_rejected_output',
+          lastHumanDecisionAt: new Date(),
+          lastHumanDecisionByUid: 'user-1',
+          lastHumanDecisionByDisplayName: 'Revisor',
+          lastSelectedOutputId: 'out-fn',
+          lastSelectedOutputVerdict: 'rejected',
+        },
+      }),
+      baseJob({
+        id: 'job-tp',
+        status: 'completed',
+        latestAutoReview: {
+          model: 'gemini',
+          verdict: 'approved',
+          summary: 'ok',
+          reviewPrompt: 'prompt',
+          revisedPrompt: null,
+          criteria: [],
+          marketplaceData: {
+            title: null,
+            description: null,
+            brand: null,
+            gender: null,
+            garmentType: null,
+            primaryColor: null,
+            sport: null,
+            isSportswear: null,
+          },
+          attemptNumber: 1,
+          reviewedAt: new Date(),
+        },
+        reviewSignals: {
+          firstAutoReviewVerdict: 'approved',
+          latestAutoReviewVerdict: 'approved',
+          hasHumanIntervention: false,
+          humanInterventionCount: 0,
+          manualSelectionCount: 0,
+          hasGeminiFalsePositive: false,
+          hasGeminiFalseNegative: false,
+          lastHumanDecision: null,
+          lastHumanDecisionAt: null,
+          lastHumanDecisionByUid: null,
+          lastHumanDecisionByDisplayName: null,
+        },
+      }),
+    ],
+    [],
+  );
+
+  assert.equal(snapshot.summary.jobsWithHumanIntervention, 2);
+  assert.equal(snapshot.summary.humanInterventionCount, 2);
+  assert.equal(snapshot.summary.manualSelectionCount, 1);
+  assert.equal(snapshot.summary.geminiFalsePositiveJobs, 1);
+  assert.equal(snapshot.summary.geminiFalseNegativeJobs, 1);
+  assert.equal(snapshot.summary.humanReviewAvoidedJobs, 1);
+  assert.equal(snapshot.summary.geminiPrecisionPct, 50);
+});

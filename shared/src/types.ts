@@ -189,6 +189,31 @@ export interface JobAutoReview {
   reviewedAt: TimestampLike;
 }
 
+export type JobHumanReviewDecision =
+  | 'selected_auto_approved_output'
+  | 'selected_auto_rejected_output'
+  | 'selected_alternative_output'
+  | 'regenerated_after_auto_approved'
+  | 'regenerated_after_auto_rejected'
+  | 'regenerated_without_auto_review'
+  | 'cleared_manual_selection';
+
+export interface JobReviewSignals {
+  firstAutoReviewVerdict: JobAutoReviewVerdict | null;
+  latestAutoReviewVerdict: JobAutoReviewVerdict | null;
+  hasHumanIntervention: boolean;
+  humanInterventionCount: number;
+  manualSelectionCount: number;
+  hasGeminiFalsePositive: boolean;
+  hasGeminiFalseNegative: boolean;
+  lastHumanDecision: JobHumanReviewDecision | null;
+  lastHumanDecisionAt: TimestampLike | null;
+  lastHumanDecisionByUid: string | null;
+  lastHumanDecisionByDisplayName: string | null;
+  lastSelectedOutputId?: string | null;
+  lastSelectedOutputVerdict?: JobAutoReviewVerdict | 'unreviewed' | null;
+}
+
 export interface JobTraceabilitySummary {
   batchCreatedAt?: TimestampLike | null;
   batchCreatedByUid?: string | null;
@@ -293,6 +318,7 @@ export interface Job {
   autoReviewMaxAttempts?: number;
   latestAutoReview?: JobAutoReview | null;
   manualRegenerationCount: number;
+  reviewSignals?: JobReviewSignals;
   traceability?: JobTraceabilitySummary;
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
@@ -350,6 +376,21 @@ export interface AnalyticsSummary {
   processingJobs: number;
   firstPassApprovedJobs: number;
   firstPassApprovalRatePct: number;
+  jobsWithHumanIntervention: number;
+  humanInterventionCount: number;
+  manualSelectionCount: number;
+  geminiApprovedJobs: number;
+  geminiRejectedJobs: number;
+  geminiTruePositiveJobs: number;
+  geminiTrueNegativeJobs: number;
+  geminiFalsePositiveJobs: number;
+  geminiFalseNegativeJobs: number;
+  humanReviewAvoidedJobs: number;
+  humanInterventionRatePct: number;
+  humanReviewAvoidedRatePct: number;
+  geminiPrecisionPct: number;
+  geminiFalsePositiveRatePct: number;
+  geminiFalseNegativeRatePct: number;
   successRate: number;
   avgDurationSeconds: number | null;
   totalCompletedOutputs: number;
@@ -392,6 +433,16 @@ export interface AnalyticsClientStats {
   processingJobs: number;
   firstPassApprovedJobs: number;
   regeneratedCompletedJobs: number;
+  jobsWithHumanIntervention: number;
+  humanInterventionCount: number;
+  manualSelectionCount: number;
+  geminiApprovedJobs: number;
+  geminiRejectedJobs: number;
+  geminiTruePositiveJobs: number;
+  geminiTrueNegativeJobs: number;
+  geminiFalsePositiveJobs: number;
+  geminiFalseNegativeJobs: number;
+  humanReviewAvoidedJobs: number;
   manualRegenerationCount: number;
   totalCostUsd: number;
   totalDurationSeconds: number;
@@ -421,6 +472,16 @@ export interface AnalyticsClientModelStats {
   processingJobs: number;
   firstPassApprovedJobs: number;
   regeneratedCompletedJobs: number;
+  jobsWithHumanIntervention: number;
+  humanInterventionCount: number;
+  manualSelectionCount: number;
+  geminiApprovedJobs: number;
+  geminiRejectedJobs: number;
+  geminiTruePositiveJobs: number;
+  geminiTrueNegativeJobs: number;
+  geminiFalsePositiveJobs: number;
+  geminiFalseNegativeJobs: number;
+  humanReviewAvoidedJobs: number;
   manualRegenerationCount: number;
   totalCompletedOutputs: number;
   totalCostUsd: number;
@@ -478,9 +539,16 @@ export interface ExperimentArmAnalytics {
   failedJobs: number;
   pendingJobs: number;
   processingJobs: number;
+  jobsWithHumanIntervention: number;
+  humanInterventionCount: number;
+  manualSelectionCount: number;
   manualRegenerationCount: number;
   regeneratedJobs: number;
   regenerationRatePct: number;
+  humanInterventionRatePct: number;
+  geminiFalsePositiveJobs: number;
+  geminiFalseNegativeJobs: number;
+  geminiPrecisionPct: number;
   totalCostUsd: number;
   avgCostPerJobUsd: number;
   avgCostPerCompletedJobUsd: number;

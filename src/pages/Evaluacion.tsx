@@ -423,11 +423,14 @@ export const Evaluacion: React.FC = () => {
                   <MetricPill label="Jobs" value={arm.totalJobs} highlighted={experimentAnalytics.winningArmId === arm.armId} />
                   <MetricPill label="Completados" value={arm.completedJobs} highlighted={experimentAnalytics.winningArmId === arm.armId} />
                   <MetricPill label="Regeneraciones" value={arm.manualRegenerationCount} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Tasa regen." value={`${arm.regenerationRatePct}%`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
+                  <MetricPill label="Interv. humana" value={`${arm.humanInterventionRatePct}%`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
+                  <MetricPill label="Selección manual" value={arm.manualSelectionCount} highlighted={experimentAnalytics.winningArmId === arm.armId} />
+                  <MetricPill label="FP / FN" value={`${arm.geminiFalsePositiveJobs} / ${arm.geminiFalseNegativeJobs}`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
                   <MetricPill label="Costo total" value={`$${arm.totalCostUsd.toFixed(2)}`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
                   <MetricPill label="Costo medio/job" value={`$${arm.avgCostPerJobUsd.toFixed(3)}`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
                   <MetricPill label="Duración total" value={`${arm.totalDurationSeconds}s`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
                   <MetricPill label="Media/job" value={`${arm.avgDurationPerJobSeconds.toFixed(1)}s`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
+                  <MetricPill label="Precisión Gemini" value={`${arm.geminiPrecisionPct}%`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
                 </div>
               </div>
             ))}

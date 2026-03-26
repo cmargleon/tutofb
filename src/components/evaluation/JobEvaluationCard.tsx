@@ -13,6 +13,7 @@ import { HoverZoomImage } from './HoverZoomImage';
 import { AttemptThumbnail } from './AttemptThumbnail';
 import { AutoReviewPanel } from './AutoReviewPanel';
 import { JobControls } from './JobControls';
+import { getJobReviewSignals } from '../../../shared/src/reviewMetrics';
 
 interface Props {
   batch: Batch;
@@ -81,6 +82,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
   }, [job.currentOutput, job.userSelectedOutput, outputs]);
 
   const currentOutput = job.currentOutput || outputsDesc[0] || null;
+  const reviewSignals = getJobReviewSignals(job);
   const displayedOutput = useMemo(
     () => outputsDesc.find((output) => output.id === selectedOutputId) || currentOutput,
     [currentOutput, outputsDesc, selectedOutputId],
@@ -353,6 +355,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
           activeReview={activeReview}
           activeReviewPrompt={activeReviewPrompt}
           isUserApprovedDisplayed={isUserApprovedDisplayed}
+          reviewSignals={reviewSignals}
         />
 
         <JobControls

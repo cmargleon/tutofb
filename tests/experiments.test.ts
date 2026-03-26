@@ -95,6 +95,19 @@ test('computeBatchExperimentAnalytics recomienda el brazo más eficiente', () =>
       totalCostUsd: 0.03,
       totalDurationSeconds: 10,
       manualRegenerationCount: 0,
+      reviewSignals: {
+        firstAutoReviewVerdict: 'approved',
+        latestAutoReviewVerdict: 'approved',
+        hasHumanIntervention: false,
+        humanInterventionCount: 0,
+        manualSelectionCount: 0,
+        hasGeminiFalsePositive: false,
+        hasGeminiFalseNegative: false,
+        lastHumanDecision: null,
+        lastHumanDecisionAt: null,
+        lastHumanDecisionByUid: null,
+        lastHumanDecisionByDisplayName: null,
+      },
     }),
     makeJob({
       id: 'job-b',
@@ -104,6 +117,19 @@ test('computeBatchExperimentAnalytics recomienda el brazo más eficiente', () =>
       totalCostUsd: 0.08,
       totalDurationSeconds: 20,
       manualRegenerationCount: 1,
+      reviewSignals: {
+        firstAutoReviewVerdict: 'approved',
+        latestAutoReviewVerdict: 'approved',
+        hasHumanIntervention: true,
+        humanInterventionCount: 2,
+        manualSelectionCount: 1,
+        hasGeminiFalsePositive: true,
+        hasGeminiFalseNegative: false,
+        lastHumanDecision: 'regenerated_after_auto_approved',
+        lastHumanDecisionAt: new Date(),
+        lastHumanDecisionByUid: 'user-1',
+        lastHumanDecisionByDisplayName: 'Operador',
+      },
     }),
   ]);
 
@@ -111,4 +137,8 @@ test('computeBatchExperimentAnalytics recomienda el brazo más eficiente', () =>
   assert.equal(summary?.winningArmId, 'arm_1');
   assert.equal(summary?.arms[0].totalJobs, 1);
   assert.equal(summary?.arms[1].manualRegenerationCount, 1);
+  assert.equal(summary?.arms[1].humanInterventionCount, 2);
+  assert.equal(summary?.arms[1].manualSelectionCount, 1);
+  assert.equal(summary?.arms[1].geminiFalsePositiveJobs, 1);
+  assert.equal(summary?.arms[0].geminiPrecisionPct, 100);
 });

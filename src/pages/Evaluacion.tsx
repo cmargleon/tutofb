@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { PageHeader, LoadingBlock, EmptyState, StatusBadge, Button } from '../components/ui';
+import { LoadingBlock, EmptyState, StatusBadge, Button } from '../components/ui';
 import { useEvaluationBatch } from '../features/evaluation/useEvaluationBatch';
-import { JobBatchCarousel } from '../components/evaluation/JobBatchCarousel';
+import { PoseSingleView } from '../components/evaluation/PoseSingleView';
 import { downloadBatchImages, downloadMultipleJobImages } from '../features/evaluation/downloadBatchImages';
 import { cancelPendingBatchJobs, regenerateFailedBatchJobs, regenerateJobsBulk } from '../features/evaluation/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
@@ -34,6 +34,7 @@ export const Evaluacion: React.FC = () => {
   const [providerFilter, setProviderFilter] = useState<'all' | Provider>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | JobStatus>('all');
   const [summaryCollapsed, setSummaryCollapsed] = useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = useState(true);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [busySelectionAction, setBusySelectionAction] = useState<'download' | 'requeue' | null>(null);
   const initialFocusJobId = openedWithoutBatchIdRef.current ? jobs[jobs.length - 1]?.id || null : null;
@@ -189,8 +190,7 @@ export const Evaluacion: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto">
-        <PageHeader title="Evaluación" description="Revisa y regenera las imágenes del lote seleccionado." />
+      <div>
         <LoadingBlock />
       </div>
     );
@@ -198,8 +198,7 @@ export const Evaluacion: React.FC = () => {
 
   if (error || !resolvedBatchId) {
     return (
-      <div className="max-w-7xl mx-auto">
-        <PageHeader title="Evaluación" description="Revisa y regenera las imágenes del lote seleccionado." />
+      <div>
         <EmptyState
           title={batchId ? 'Lote no encontrado' : 'No hay evaluaciones recientes'}
           description={error || 'No se ha especificado un lote válido para evaluar.'}
@@ -219,8 +218,7 @@ export const Evaluacion: React.FC = () => {
 
   if (!batch) {
     return (
-      <div className="max-w-7xl mx-auto">
-        <PageHeader title="Evaluación" description="Revisa y regenera las imágenes del lote seleccionado." />
+      <div>
         <EmptyState
           title="Lote no encontrado"
           description="El lote solicitado no existe o no tienes permisos para verlo."
@@ -317,15 +315,10 @@ export const Evaluacion: React.FC = () => {
   const hasSelection = selectedJobIds.length > 0;
 
   return (
-    <div className={`max-w-7xl mx-auto transition-all ${hasSelection ? 'pb-28' : 'pb-12'}`}>
-      {/* Page header + batch-level actions */}
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageHeader
-          title="Evaluación"
-          description="Revisa visualmente los resultados del lote seleccionado. Filtra, compara regeneraciones y actúa sobre varias tarjetas a la vez."
-        />
-
-        <div className="sticky top-4 z-20 flex flex-wrap items-center gap-2 self-end rounded-2xl bg-slate-950/80 py-2 backdrop-blur-sm lg:pt-1">
+    <div className={`transition-all ${hasSelection ? 'pb-28' : ''}`}>
+      {/* Batch-level action pills (cancel/retry) */}
+      {(canCancelPending || canRegenerateFailed) ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           {canCancelPending ? (
             <Button
               variant="secondary"
@@ -336,7 +329,6 @@ export const Evaluacion: React.FC = () => {
               Cancelar pendientes
             </Button>
           ) : null}
-
           {canRegenerateFailed ? (
             <Button
               variant="warning"
@@ -347,19 +339,8 @@ export const Evaluacion: React.FC = () => {
               Reintentar fallidos
             </Button>
           ) : null}
-
-          {hasCompletedImages ? (
-            <Button
-              variant="primary"
-              onClick={() => void handleDownloadAll()}
-              loading={downloading}
-              icon={Download}
-            >
-              Guardar todas
-            </Button>
-          ) : null}
         </div>
-      </div>
+      ) : null}
 
       {batchActionMessage ? (
         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -374,14 +355,14 @@ export const Evaluacion: React.FC = () => {
           icon={<AlertCircle className="w-6 h-6" />}
         />
       ) : (
-        <JobBatchCarousel
+        <PoseSingleView
           batch={batch}
           jobs={filteredJobs}
           initialFocusJobId={initialFocusJobId}
           showFloatingGarment
           headerContent={(
-            <div className="space-y-4">
-              {/* Batch info row */}
+            <div>
+              {/* Always-visible row: lote tag + toggle */}
               <div className="flex flex-wrap items-center gap-3">
                 <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-indigo-800">
                   Lote actual
@@ -390,66 +371,69 @@ export const Evaluacion: React.FC = () => {
                 <span className="text-sm text-slate-500">
                   {new Date(batch.createdAt?.toMillis ? batch.createdAt.toMillis() : batch.createdAt).toLocaleString()}
                 </span>
-              </div>
-
-              {/* Filters + toggle row */}
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="block flex-1 min-w-[140px]">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">Proveedor</span>
-                  <select
-                    value={providerFilter}
-                    onChange={(event) => setProviderFilter(event.target.value as 'all' | Provider)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  >
-                    <option value="all">Todos</option>
-                    {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
-                      <option key={providerValue} value={providerValue}>
-                        {PROVIDER_LABELS[providerValue]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block flex-1 min-w-[140px]">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">Estado</span>
-                  <select
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value as 'all' | JobStatus)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  >
-                    <option value="all">Todos</option>
-                    <option value="pending">Pendiente</option>
-                    <option value="processing">Procesando</option>
-                    <option value="completed">Completado</option>
-                    <option value="failed">Fallido</option>
-                  </select>
-                </label>
-
-                {/* Batch ID toggle */}
                 <button
                   type="button"
-                  onClick={() => setSummaryCollapsed((current) => !current)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+                  onClick={() => setHeaderCollapsed((c) => !c)}
+                  className="ml-auto inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100"
                 >
-                  {summaryCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-                  ID de lote
+                  {headerCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                  {headerCollapsed ? 'Filtros' : 'Colapsar'}
                 </button>
               </div>
 
-              {/* Collapsible batch ID */}
-              {!summaryCollapsed ? (
-                <p className="rounded-xl bg-slate-50 px-3 py-2 font-mono text-xs text-slate-500">
-                  {batch.id}
-                </p>
+              {/* Collapsible filters */}
+              {!headerCollapsed ? (
+                <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="block flex-1 min-w-[140px]">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Proveedor</span>
+                      <select
+                        value={providerFilter}
+                        onChange={(event) => setProviderFilter(event.target.value as 'all' | Provider)}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      >
+                        <option value="all">Todos</option>
+                        {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
+                          <option key={providerValue} value={providerValue}>
+                            {PROVIDER_LABELS[providerValue]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block flex-1 min-w-[140px]">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Estado</span>
+                      <select
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value as 'all' | JobStatus)}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      >
+                        <option value="all">Todos</option>
+                        <option value="pending">Pendiente</option>
+                        <option value="processing">Procesando</option>
+                        <option value="completed">Completado</option>
+                        <option value="failed">Fallido</option>
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setSummaryCollapsed((current) => !current)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100"
+                    >
+                      {summaryCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+                      ID de lote
+                    </button>
+                  </div>
+                  {!summaryCollapsed ? (
+                    <p className="rounded-xl bg-slate-50 px-3 py-2 font-mono text-xs text-slate-500">
+                      {batch.id}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           )}
-          selectedJobIds={selectedJobIds}
           selectedOutputIdsByJobId={selectedOutputIdsByJobId}
-          onToggleJob={toggleJob}
-          onSelectJobs={selectJobs}
           onSelectOutput={selectOutput}
-          keyboardShortcutLabel="Flechas cambian de prenda. A selecciona visibles. D descarga. R reencola."
         />
       )}
 
@@ -492,6 +476,22 @@ export const Evaluacion: React.FC = () => {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {/* Floating "Guardar todas" FAB — bottom-right */}
+      {hasCompletedImages ? (
+        <button
+          type="button"
+          onClick={() => void handleDownloadAll()}
+          disabled={downloading}
+          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-green-500 text-white shadow-xl transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+          title="Guardar todas las imágenes"
+        >
+          {downloading
+            ? <RefreshCw className="h-6 w-6 animate-spin" />
+            : <Download className="h-6 w-6" />
+          }
+        </button>
       ) : null}
     </div>
   );

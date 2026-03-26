@@ -5,8 +5,7 @@ import { GarmentCarouselControls } from './GarmentCarouselControls';
 import { JobEvaluationCard } from './JobEvaluationCard';
 import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRegenerationFirebase';
 import { FloatingGarmentPreview } from './FloatingGarmentPreview';
-import { SwipeView } from './SwipeView';
-import { CheckSquare2, Keyboard, LayoutGrid, Layers, Square } from 'lucide-react';
+import { CheckSquare2, Keyboard, Square } from 'lucide-react';
 import { JobTraceabilityPanel } from './JobTraceabilityPanel';
 import { BatchErrorLogPanel } from './BatchErrorLogPanel';
 
@@ -29,8 +28,6 @@ const isTypingTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement
   && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 
-const VIEW_MODE_KEY = 'jobBatchCarousel_viewMode';
-
 export const JobBatchCarousel: React.FC<Props> = ({
   batch,
   jobs,
@@ -45,16 +42,6 @@ export const JobBatchCarousel: React.FC<Props> = ({
   bulkActions,
   keyboardShortcutLabel = 'Usa flechas izquierda/derecha para cambiar de prenda.',
 }) => {
-  const [viewMode, setViewMode] = useState<'carousel' | 'swipe'>(() => {
-    try { return (localStorage.getItem(VIEW_MODE_KEY) as 'carousel' | 'swipe') || 'carousel'; }
-    catch { return 'carousel'; }
-  });
-
-  const setAndPersistViewMode = (mode: 'carousel' | 'swipe') => {
-    setViewMode(mode);
-    try { localStorage.setItem(VIEW_MODE_KEY, mode); } catch {}
-  };
-
   const { slides, activeSlideIndex, activeSlide, nextSlide, prevSlide, goToSlide } = useGarmentCarousel(jobs, initialFocusJobId);
   const {
     localDrafts,
@@ -79,8 +66,6 @@ export const JobBatchCarousel: React.FC<Props> = ({
   }, [activeSlide, initializeDraft]);
 
   useEffect(() => {
-    if (viewMode === 'swipe') return; // SwipeView handles its own keyboard
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) {
         return;
@@ -100,7 +85,7 @@ export const JobBatchCarousel: React.FC<Props> = ({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [nextSlide, prevSlide, viewMode]);
+  }, [nextSlide, prevSlide]);
 
   const [focusedJobId, setFocusedJobId] = useState<string | null>(initialFocusJobId);
 
@@ -133,42 +118,15 @@ export const JobBatchCarousel: React.FC<Props> = ({
 
   const activeSlideJobIds = activeSlide.jobs.map((job) => job.id).filter((jobId): jobId is string => Boolean(jobId));
   const allActiveSelected = activeSlideJobIds.length > 0 && activeSlideJobIds.every((jobId) => selectedJobIds.includes(jobId));
-
-  const viewToggle = (
-    <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-      <button
-        type="button"
-        title="Vista cuadrícula"
-        onClick={() => setAndPersistViewMode('carousel')}
-        className={`rounded-lg p-1.5 transition ${viewMode === 'carousel' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-      >
-        <LayoutGrid className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        title="Vista swipe"
-        onClick={() => setAndPersistViewMode('swipe')}
-        className={`rounded-lg p-1.5 transition ${viewMode === 'swipe' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-      >
-        <Layers className="h-4 w-4" />
-      </button>
-    </div>
-  );
-
   const carouselControls = (
-    <div className="flex items-center gap-4">
-      <div className="flex-1">
-        <GarmentCarouselControls
-          slides={slides}
-          activeIndex={activeSlideIndex}
-          onNext={nextSlide}
-          onPrev={prevSlide}
-          onGoTo={goToSlide}
-          embedded={Boolean(headerContent)}
-        />
-      </div>
-      {viewToggle}
-    </div>
+    <GarmentCarouselControls
+      slides={slides}
+      activeIndex={activeSlideIndex}
+      onNext={nextSlide}
+      onPrev={prevSlide}
+      onGoTo={goToSlide}
+      embedded={Boolean(headerContent)}
+    />
   );
 
   return (
@@ -184,19 +142,6 @@ export const JobBatchCarousel: React.FC<Props> = ({
         carouselControls
       )}
 
-      {/* ── Swipe view ─────────────────────────────────────────────────────── */}
-      {viewMode === 'swipe' && onSelectOutput ? (
-        <SwipeView
-          batch={batch}
-          jobs={jobs}
-          selectedOutputIdsByJobId={selectedOutputIdsByJobId}
-          onSelectOutput={onSelectOutput}
-        />
-      ) : null}
-
-      {/* ── Carousel view ──────────────────────────────────────────────────── */}
-      {viewMode === 'carousel' ? (
-        <>
       <BatchErrorLogPanel
         jobs={jobs}
         focusedJobId={activeFocusedJob?.id || null}
@@ -266,8 +211,6 @@ export const JobBatchCarousel: React.FC<Props> = ({
           garmentName={activeSlide.garmentName}
           storagePath={activeSlide.garmentFilePath}
         />
-      ) : null}
-        </>
       ) : null}
     </div>
   );

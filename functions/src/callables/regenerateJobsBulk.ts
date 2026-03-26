@@ -59,13 +59,6 @@ export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<Rege
     const provider = entry.provider || job.provider;
     const prompt = entry.prompt || (job.promptBase || job.finalPrompt || '').trim();
 
-    if (job.experimentEnabled) {
-      if (provider !== job.provider || prompt !== (job.promptBase || '').trim()) {
-        skippedJobIds.push(entry.jobId);
-        continue;
-      }
-    }
-
     try {
       const patch = buildRegenerateJobPatch(job, provider, prompt);
       const jobRef = db.collection('jobs').doc(job.id!);

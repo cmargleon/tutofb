@@ -18,7 +18,6 @@ import {
 interface UseGenerateWizardSubmitParams {
   state: WizardState;
   draftBatchId: string | null;
-  experimentProviderError: string | null;
   totalJobs: number;
   uploadSummary: UploadSummary;
   setState: React.Dispatch<React.SetStateAction<WizardState>>;
@@ -39,7 +38,6 @@ export interface UseGenerateWizardSubmitReturn {
 export const useGenerateWizardSubmit = ({
   state,
   draftBatchId,
-  experimentProviderError,
   totalJobs,
   uploadSummary,
   setState,
@@ -83,11 +81,6 @@ export const useGenerateWizardSubmit = ({
       state.garments.length === 0
     ) {
       setFlowError('Completa cliente, modelo, poses y prendas antes de crear el lote.');
-      return;
-    }
-
-    if (experimentProviderError) {
-      setFlowError(experimentProviderError);
       return;
     }
 

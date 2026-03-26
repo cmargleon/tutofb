@@ -2,7 +2,6 @@ export type TimestampLike = any;
 
 export type Role = 'admin' | 'operador' | 'revisor';
 export type Provider = 'fal-seedream' | 'fal-banana-pro' | 'openai-gpt-image-1.5';
-export type ExperimentMode = 'ab_paired' | 'ab_interleaved';
 export type AspectRatio = '9:16' | '3:4' | '2:3' | '1:1' | '4:3' | '3:2' | '16:9';
 export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_failed' | 'failed';
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
@@ -107,18 +106,6 @@ export interface BatchModelSnapshot {
   coverPosePath: string | null;
 }
 
-export interface ExperimentArm {
-  id: string;
-  provider: Provider;
-  label: string;
-}
-
-export interface GenerationExperimentConfig {
-  enabled: boolean;
-  mode: ExperimentMode;
-  providers: Provider[];
-}
-
 export interface Batch {
   id?: string;
   clientId: string;
@@ -128,10 +115,6 @@ export interface Batch {
   modelNameSnapshot: string;
   modelSnapshot?: BatchModelSnapshot;
   provider: Provider;
-  experimentEnabled?: boolean;
-  experimentId?: string | null;
-  experimentMode?: ExperimentMode | null;
-  experimentArms?: ExperimentArm[] | null;
   aspectRatio: AspectRatio;
   promptBase: string;
   poseIds: string[];
@@ -235,12 +218,6 @@ export interface JobOutput {
   clientNameSnapshot: string;
   modelId: string;
   modelNameSnapshot: string;
-  experimentEnabled?: boolean;
-  experimentId?: string | null;
-  experimentMode?: ExperimentMode | null;
-  experimentArmId?: string | null;
-  experimentArmLabel?: string | null;
-  experimentComparisonKey?: string | null;
   poseImageId: string;
   garmentId: string;
   garmentName: string;
@@ -270,12 +247,6 @@ export interface Job {
   clientNameSnapshot: string;
   modelId: string;
   modelNameSnapshot: string;
-  experimentEnabled?: boolean;
-  experimentId?: string | null;
-  experimentMode?: ExperimentMode | null;
-  experimentArmId?: string | null;
-  experimentArmLabel?: string | null;
-  experimentComparisonKey?: string | null;
   poseImageId: string;
   poseImagePath: string;
   poseFileName?: string;
@@ -530,45 +501,6 @@ export interface GeminiUsageRecord {
   createdAt: TimestampLike;
 }
 
-export interface ExperimentArmAnalytics {
-  armId: string;
-  label: string;
-  provider: Provider;
-  totalJobs: number;
-  completedJobs: number;
-  failedJobs: number;
-  pendingJobs: number;
-  processingJobs: number;
-  jobsWithHumanIntervention: number;
-  humanInterventionCount: number;
-  manualSelectionCount: number;
-  manualRegenerationCount: number;
-  regeneratedJobs: number;
-  regenerationRatePct: number;
-  humanInterventionRatePct: number;
-  geminiFalsePositiveJobs: number;
-  geminiFalseNegativeJobs: number;
-  geminiPrecisionPct: number;
-  totalCostUsd: number;
-  avgCostPerJobUsd: number;
-  avgCostPerCompletedJobUsd: number;
-  totalDurationSeconds: number;
-  avgDurationPerJobSeconds: number;
-  efficiencyScore: number;
-}
-
-export interface BatchExperimentAnalytics {
-  batchId: string;
-  experimentId: string;
-  mode: ExperimentMode;
-  totalJobs: number;
-  comparableGroups: number;
-  arms: ExperimentArmAnalytics[];
-  winningArmId: string | null;
-  winningProvider: Provider | null;
-  recommendation: string;
-}
-
 export type HealthStatus = 'healthy' | 'degraded' | 'down';
 
 export type SystemAlertId =
@@ -662,7 +594,6 @@ export interface CreateGenerationBatchRequest {
   poseIds: string[];
   garments: UploadedGarmentInput[];
   provider: Provider;
-  experiment?: GenerationExperimentConfig | null;
   promptBase: string;
   aspectRatio: AspectRatio;
 }

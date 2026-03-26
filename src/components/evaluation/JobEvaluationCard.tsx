@@ -88,7 +88,6 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const [downloading, setDownloading] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
-  const isExperimentJob = job.experimentEnabled === true;
 
   const outputsDesc = useMemo(() => {
     const merged = new Map<string, JobOutput>();
@@ -156,8 +155,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
     job.status === 'failed'
     && Boolean(job.lastError)
     && isGeminiHighDemand(job.lastError || null)
-    && role.canRegenerate
-    && !isExperimentJob;
+    && role.canRegenerate;
 
   const handleCancelGeneration = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -179,7 +177,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
         ? { label: '↻ Reintento', cls: 'bg-amber-500/90 text-white' }
         : null;
 
-  const controlsDisabled = isProcessing || isQueueing || isCancellingGeneration || isExperimentJob;
+  const controlsDisabled = isProcessing || isQueueing || isCancellingGeneration;
 
   return (
     <div
@@ -407,11 +405,6 @@ export const JobEvaluationCard: React.FC<Props> = ({
                   className="w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                   placeholder="Prompt base para regenerar..."
                 />
-                {isExperimentJob ? (
-                  <p className="mt-1 text-xs text-amber-700">
-                    Bloqueado por experimento A/B.
-                  </p>
-                ) : null}
               </div>
             ) : null}
 

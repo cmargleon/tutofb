@@ -1,6 +1,5 @@
 import {
   AspectRatio,
-  ExperimentMode,
   GarmentPhotoClassificationSource,
   GarmentSourceType,
   GarmentView,
@@ -92,12 +91,6 @@ export const createInitialPoseSuggestionState = (): PoseSuggestionState => ({
   missingPoseClassificationCount: 0,
 });
 
-export interface WizardExperimentState {
-  enabled: boolean;
-  mode: ExperimentMode;
-  providers: Provider[];
-}
-
 export interface UploadSummary {
   total: number;
   uploaded: number;
@@ -116,7 +109,6 @@ export interface WizardState {
   garments: UploadedGarmentDraft[];
   poseSuggestions: PoseSuggestionState;
   provider: Provider;
-  experiment: WizardExperimentState;
   prompt: string;
   aspectRatio: AspectRatio;
 }

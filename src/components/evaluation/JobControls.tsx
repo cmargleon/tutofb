@@ -24,7 +24,6 @@ interface Props {
   isRetryingAutoReview: boolean;
   isCancelling: boolean;
   canRegenerate: boolean;
-  isExperimentJob: boolean;
   jobStatus: Job['status'];
   lastError: string | null;
   currentOutput: JobOutput | null;
@@ -44,7 +43,6 @@ export const JobControls: React.FC<Props> = ({
   isRetryingAutoReview,
   isCancelling,
   canRegenerate,
-  isExperimentJob,
   jobStatus,
   lastError,
   currentOutput,
@@ -56,13 +54,12 @@ export const JobControls: React.FC<Props> = ({
   onRegenerate,
   onRetryAutoReview,
 }) => {
-  const disabled = isProcessing || isQueueing || isCancelling || !canRegenerate || isExperimentJob;
+  const disabled = isProcessing || isQueueing || isCancelling || !canRegenerate;
   const showManualGeminiRetry =
     jobStatus === 'failed'
     && Boolean(lastError)
     && isGeminiHighDemandFailure(lastError)
-    && canRegenerate
-    && !isExperimentJob;
+    && canRegenerate;
 
   return (
     <>
@@ -92,11 +89,6 @@ export const JobControls: React.FC<Props> = ({
           className={`${INPUT_BASE} resize-none flex-grow`}
           placeholder="Define el prompt base para regenerar..."
         />
-        {isExperimentJob ? (
-          <p className="mt-1.5 text-xs text-amber-700">
-            El proveedor y el prompt quedan bloqueados para conservar la validez del experimento A/B.
-          </p>
-        ) : null}
       </div>
 
       {jobStatus === 'failed' && lastError && currentOutput ? (

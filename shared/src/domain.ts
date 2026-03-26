@@ -80,6 +80,14 @@ BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
 UNSEEN AREA CONSTRAINTS (CRITICAL)
 --------------------------------
 
+COLOR CONSISTENCY (CRITICAL — HARD CONSTRAINT):
+- The garment color MUST exactly match the reference image
+- DO NOT alter hue, saturation, or brightness of the garment
+- DO NOT introduce lighting-based color shifts (no darker/lighter reds)
+- The red color must remain uniform across the entire garment
+- Avoid shadows that tint the garment toward maroon, orange, or pink
+- If lighting affects perception, correct it to maintain true color fidelity
+
 - Any part of the garment that is NOT visible in the reference image must be treated as UNKNOWN
 
 - For UNKNOWN areas:

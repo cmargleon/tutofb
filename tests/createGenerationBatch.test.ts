@@ -87,7 +87,7 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
   assert.equal(validated.garments[0]?.photos?.length, 2);
 });
 
-test('validateCreateGenerationBatchInput soporta experimento A/B paired y excluye banana-pro', () => {
+test('validateCreateGenerationBatchInput conserva provider y calcula jobs por pose-prenda', () => {
   const validated = validateCreateGenerationBatchInput(
     {
       clientId: 'client-1',
@@ -101,25 +101,19 @@ test('validateCreateGenerationBatchInput soporta experimento A/B paired y excluy
           isMultiAngle: false,
         },
       ],
-      provider: 'fal-seedream',
-      experiment: {
-        enabled: true,
-        mode: 'ab_paired',
-        providers: ['fal-seedream', 'openai-gpt-image-1.5'],
-      },
-      promptBase: 'Prompt experimento',
+      provider: 'openai-gpt-image-1.5',
+      promptBase: 'Prompt lote',
       aspectRatio: '3:4',
     },
     'user-1',
     20,
   );
 
-  assert.equal(validated.experiment?.mode, 'ab_paired');
-  assert.equal(validated.experiment?.arms.length, 2);
-  assert.equal(validated.totalJobs, 4);
+  assert.equal(validated.provider, 'openai-gpt-image-1.5');
+  assert.equal(validated.totalJobs, 2);
 });
 
-test('validateCreateGenerationBatchInput rechaza banana-pro en experimentos A/B', () => {
+test('validateCreateGenerationBatchInput rechaza provider inválido', () => {
   assert.throws(
     () =>
       validateCreateGenerationBatchInput(
@@ -135,19 +129,14 @@ test('validateCreateGenerationBatchInput rechaza banana-pro en experimentos A/B'
               isMultiAngle: false,
             },
           ],
-          provider: 'fal-seedream',
-          experiment: {
-            enabled: true,
-            mode: 'ab_interleaved',
-            providers: ['fal-seedream', 'fal-banana-pro'],
-          },
-          promptBase: 'Prompt experimento',
+          provider: 'otro-provider' as any,
+          promptBase: 'Prompt lote',
           aspectRatio: '3:4',
         },
         'user-1',
         20,
       ),
-    /no está habilitado para experimentos/i,
+    /proveedor no compatible/i,
   );
 });
 

@@ -21,6 +21,9 @@ Reglas operativas:
 - si un cambio afecta `functions/src/`, no alcanza con editar TypeScript: hay que compilar Functions
 - si ademas se quiere ver el cambio en Firebase remoto, tambien hace falta deploy
 - `functions/lib/` es salida generada de build, no fuente de verdad para editar a mano
+- si un cambio requiere cualquier paso adicional para funcionar de verdad en el entorno del usuario, el agente debe hacerlo el mismo
+- esto incluye build, deploy, reinicios, regeneracion de artefactos, migraciones u otros pasos operativos equivalentes
+- no dejar cambios solo en codigo si la app local o remota sigue ejecutando una version vieja
 
 Cambios transversales:
 - si una tarea toca frontend + functions + `shared/`, debe pasar por un agente coordinador

@@ -43,6 +43,13 @@ firebase deploy --project tutofb-260320-1003
 ```
 > Cualquier cambio en `functions/src/` requiere `npm run build` en `functions/` antes de que el cambio sea efectivo. El deploy lo hace automáticamente vía predeploy scripts.
 
+## Regla operativa persistente
+
+- Si un cambio necesita algun paso adicional para funcionar de verdad, el agente debe ejecutarlo el mismo.
+- Esto incluye, segun el caso: `build`, `deploy`, reinicio de dev server, reinicio de emuladores, regeneracion de artefactos, migraciones o cualquier paso operativo equivalente.
+- No alcanza con dejar el codigo cambiado si el sistema sigue corriendo una version vieja local o remota.
+- La responsabilidad termina solo cuando el cambio queda aplicado en el entorno que el usuario esta usando, o cuando falte un permiso externo real y eso quede explicado claramente.
+
 **Correr un test específico:**
 ```bash
 node --import tsx --test tests/createGenerationBatch.test.ts

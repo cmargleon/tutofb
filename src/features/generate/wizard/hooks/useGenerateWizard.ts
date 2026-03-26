@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Provider } from '../../../../../shared/src/types';
 import * as garmentViewMatchingNamespace from '../../../../../shared/src/utils/garmentViewMatching';
 import { classifyGarmentViewsWithGemini } from '../../firebase';
 import { buildGarmentSuggestionSignature, getGarmentAvailableViews, handleGarmentFiles, revokeGarmentUrls } from '../../garments';
@@ -21,10 +20,8 @@ import {
 import {
   buildGarmentUploadSummary,
   createInitialGenerateWizardState,
-  GENERATE_WIZARD_EXPERIMENT_PROVIDER_OPTIONS,
   GENERATE_WIZARD_MAX_STEP,
   getGenerateWizardCanAdvance,
-  getGenerateWizardExperimentProviderError,
   getGenerateWizardTotalJobs,
   isGarmentUploadedForBatch,
   isGenerateWizardStepComplete,
@@ -166,10 +163,6 @@ export const useGenerateWizard = () => {
     return getGenerateWizardTotalJobs(state, compatiblePairCount);
   }, [selectedModel?.poses, state]);
   const uploadSummary = useMemo(() => buildGarmentUploadSummary(state.garments), [state.garments]);
-  const experimentProviderError = useMemo(
-    () => getGenerateWizardExperimentProviderError(state),
-    [state],
-  );
   const allPosesSelected = useMemo(
     () =>
       Boolean(
@@ -195,7 +188,6 @@ export const useGenerateWizard = () => {
   const submit = useGenerateWizardSubmit({
     state,
     draftBatchId,
-    experimentProviderError,
     totalJobs,
     uploadSummary,
     setState,
@@ -510,31 +502,7 @@ export const useGenerateWizard = () => {
     }));
   };
 
-  const handleToggleExperiment = () => {
-    setState((current) => ({
-      ...current,
-      experiment: { ...current.experiment, enabled: !current.experiment.enabled },
-      provider: !current.experiment.enabled ? current.experiment.providers[0] : current.provider,
-    }));
-  };
-
-  const handleExperimentModeChange = (mode: 'ab_paired' | 'ab_interleaved') => {
-    setState((current) => ({ ...current, experiment: { ...current.experiment, mode } }));
-  };
-
-  const handleExperimentProviderChange = (index: number, provider: Provider) => {
-    setState((current) => {
-      const nextProviders = [...current.experiment.providers];
-      nextProviders[index] = provider;
-      return {
-        ...current,
-        provider: nextProviders[0],
-        experiment: { ...current.experiment, providers: nextProviders },
-      };
-    });
-  };
-
-  const handleProviderChange = (provider: Provider) => {
+  const handleProviderChange = (provider: WizardState['provider']) => {
     setState((current) => ({ ...current, provider }));
   };
 
@@ -569,8 +537,6 @@ export const useGenerateWizard = () => {
     canAdvance,
     totalJobs,
     uploadSummary,
-    experimentProviderError,
-    experimentProviderOptions: GENERATE_WIZARD_EXPERIMENT_PROVIDER_OPTIONS,
     submitButtonLabel: submit.submitButtonLabel,
     goToStep,
     handleStepSelect,
@@ -582,9 +548,6 @@ export const useGenerateWizard = () => {
     handleModelSelect,
     handlePoseToggle,
     handleToggleAllPoses,
-    handleToggleExperiment,
-    handleExperimentModeChange,
-    handleExperimentProviderChange,
     handleProviderChange,
     handleAspectRatioChange,
     handlePromptChange,

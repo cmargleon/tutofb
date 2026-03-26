@@ -1,6 +1,5 @@
 import { buildFinalGenerationPrompt, isProvider } from '../../../shared/src/domain';
 import { Job } from '../../../shared/src/types';
-import { getJobReviewSignals } from '../../../shared/src/reviewMetrics';
 
 export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: string) => {
   if (!isProvider(provider)) {
@@ -26,10 +25,6 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     generationAttemptCount: 0,
     autoReviewMaxAttempts: job.autoReviewMaxAttempts || 3,
     latestAutoReview: null,
-    reviewSignals: {
-      ...getJobReviewSignals(job),
-      latestAutoReviewVerdict: null,
-    },
     claimToken: null,
     claimedBy: null,
     claimExpiresAt: null,

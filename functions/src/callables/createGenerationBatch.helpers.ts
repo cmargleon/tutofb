@@ -2,9 +2,6 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import {
   Client,
   CreateGenerationBatchRequest,
-  ExperimentArm,
-  ExperimentMode,
-  GenerationExperimentConfig,
   Job,
   Model,
   Pose,
@@ -18,7 +15,6 @@ import {
   isProvider,
 } from '../../../shared/src/domain';
 import { EMPTY_JOB_REVIEW_SIGNALS } from '../../../shared/src/reviewMetrics';
-import { buildExperimentArms, isExperimentEligibleProvider, isExperimentMode } from '../../../shared/src/experiments';
 import {
   getSortedUniqueGarmentViews,
   isPoseCompatibleWithGarmentViews,
@@ -145,50 +141,10 @@ export interface ValidatedCreateGenerationBatchInput {
   poseIds: string[];
   garments: UploadedGarmentInput[];
   provider: CreateGenerationBatchRequest['provider'];
-  experiment: {
-    enabled: boolean;
-    mode: ExperimentMode;
-    arms: ExperimentArm[];
-  } | null;
   promptBase: string;
   aspectRatio: CreateGenerationBatchRequest['aspectRatio'];
   totalJobs: number;
 }
-
-const validateExperimentConfig = (
-  value: GenerationExperimentConfig | null | undefined,
-): ValidatedCreateGenerationBatchInput['experiment'] => {
-  if (!value?.enabled) {
-    return null;
-  }
-
-  if (!isExperimentMode(value.mode)) {
-    throw new HttpsError('invalid-argument', 'El modo del experimento A/B no es válido.');
-  }
-
-  const providers = Array.isArray(value.providers)
-    ? [...new Set(value.providers.filter((provider): provider is CreateGenerationBatchRequest['provider'] => isProvider(provider)))]
-    : [];
-
-  if (providers.length !== 2) {
-    throw new HttpsError('invalid-argument', 'El experimento A/B requiere exactamente 2 modelos por ahora.');
-  }
-
-  providers.forEach((provider) => {
-    if (!isExperimentEligibleProvider(provider)) {
-      throw new HttpsError(
-        'invalid-argument',
-        `El proveedor ${provider} no está habilitado para experimentos A/B.`,
-      );
-    }
-  });
-
-  return {
-    enabled: true,
-    mode: value.mode,
-    arms: buildExperimentArms(providers),
-  };
-};
 
 export const validateCreateGenerationBatchInput = (
   data: Partial<CreateGenerationBatchRequest> | null | undefined,
@@ -200,9 +156,8 @@ export const validateCreateGenerationBatchInput = (
   const promptBase = typeof data?.promptBase === 'string' ? data.promptBase.trim() : '';
   const provider = data?.provider;
   const aspectRatio = data?.aspectRatio;
-  const experiment = validateExperimentConfig(data?.experiment);
 
-  if (!experiment && !isProvider(provider)) {
+  if (!isProvider(provider)) {
     throw new HttpsError('invalid-argument', 'Se seleccionó un proveedor no compatible.');
   }
 
@@ -225,8 +180,7 @@ export const validateCreateGenerationBatchInput = (
 
   garments.forEach((garment) => ensureDraftOwnership(authUid, garment));
 
-  const experimentMultiplier = experiment?.mode === 'ab_paired' ? experiment.arms.length : 1;
-  const totalJobs = poseIds.length * garments.length * experimentMultiplier;
+  const totalJobs = poseIds.length * garments.length;
   if (totalJobs > maxJobs) {
     throw new HttpsError(
       'out-of-range',
@@ -239,8 +193,7 @@ export const validateCreateGenerationBatchInput = (
     modelId,
     poseIds,
     garments,
-    provider: experiment ? experiment.arms[0].provider : provider!,
-    experiment,
+    provider: provider!,
     promptBase,
     aspectRatio,
     totalJobs,

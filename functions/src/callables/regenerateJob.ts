@@ -34,22 +34,6 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
     );
   }
 
-  if (job.experimentEnabled) {
-    if (provider !== job.provider) {
-      throw new HttpsError(
-        'invalid-argument',
-        'Los jobs de un experimento A/B deben mantener el modelo asignado a su brazo.',
-      );
-    }
-
-    if (prompt !== (job.promptBase || '').trim()) {
-      throw new HttpsError(
-        'invalid-argument',
-        'Los jobs de un experimento A/B deben mantener el prompt original para conservar la comparación.',
-      );
-    }
-  }
-
   const now = admin.firestore.FieldValue.serverTimestamp();
   const requestedByDisplayName =
     userSnapshot.exists && typeof userSnapshot.data()?.displayName === 'string'

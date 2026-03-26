@@ -8,7 +8,6 @@ import { cancelPendingBatchJobs, regenerateFailedBatchJobs, regenerateJobsBulk }
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { Download, AlertCircle, Clock, RefreshCw, CheckSquare2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth, useRole } from '../features/auth/AuthProvider';
-import { computeBatchExperimentAnalytics } from '../../shared/src/experiments';
 import { buildJobPoseIndexMap } from '../features/evaluation/jobSlides';
 import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../shared/src/domain';
 import { Job, JobStatus, Provider } from '../../shared/src/types';
@@ -37,7 +36,6 @@ export const Evaluacion: React.FC = () => {
   const [summaryCollapsed, setSummaryCollapsed] = useState(false);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [busySelectionAction, setBusySelectionAction] = useState<'download' | 'requeue' | null>(null);
-  const experimentAnalytics = computeBatchExperimentAnalytics(batch, jobs);
   const initialFocusJobId = openedWithoutBatchIdRef.current ? jobs[jobs.length - 1]?.id || null : null;
   const { selectedOutputIdsByJobId, selectOutput } = usePersistedJobOutputSelections(
     resolvedBatchId || batchId,
@@ -369,75 +367,6 @@ export const Evaluacion: React.FC = () => {
         </div>
       ) : null}
 
-      {/* Experiment A/B analytics */}
-      {experimentAnalytics ? (
-        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Experimento A/B</p>
-              <h3 className="mt-1 text-xl font-semibold text-slate-900">
-                Comparativa {experimentAnalytics.mode === 'ab_paired' ? 'paired' : 'interleaved'}
-              </h3>
-              <p className="mt-2 text-sm text-slate-600">{experimentAnalytics.recommendation}</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              {experimentAnalytics.comparableGroups} comparaciones · {experimentAnalytics.totalJobs} jobs
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            {experimentAnalytics.arms.map((arm) => (
-              <div
-                key={arm.armId}
-                className={`rounded-2xl border p-5 ${
-                  experimentAnalytics.winningArmId === arm.armId
-                    ? 'border-emerald-400 bg-emerald-900 text-white shadow-lg shadow-emerald-950/20'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4
-                      className={`text-base font-semibold ${
-                        experimentAnalytics.winningArmId === arm.armId ? 'text-white' : 'text-slate-900'
-                      }`}
-                    >
-                      {arm.label} · {arm.provider}
-                    </h4>
-                    <p
-                      className={`mt-1 text-sm ${
-                        experimentAnalytics.winningArmId === arm.armId ? 'text-emerald-100' : 'text-slate-600'
-                      }`}
-                    >
-                      Score eficiencia: {arm.efficiencyScore.toFixed(3)}
-                    </p>
-                  </div>
-                  {experimentAnalytics.winningArmId === arm.armId ? (
-                    <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
-                      Recomendado
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <MetricPill label="Jobs" value={arm.totalJobs} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Completados" value={arm.completedJobs} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Regeneraciones" value={arm.manualRegenerationCount} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Interv. humana" value={`${arm.humanInterventionRatePct}%`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Selección manual" value={arm.manualSelectionCount} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="FP / FN" value={`${arm.geminiFalsePositiveJobs} / ${arm.geminiFalseNegativeJobs}`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Costo total" value={`$${arm.totalCostUsd.toFixed(2)}`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Costo medio/job" value={`$${arm.avgCostPerJobUsd.toFixed(3)}`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Duración total" value={`${arm.totalDurationSeconds}s`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Media/job" value={`${arm.avgDurationPerJobSeconds.toFixed(1)}s`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                  <MetricPill label="Precisión Gemini" value={`${arm.geminiPrecisionPct}%`} highlighted={experimentAnalytics.winningArmId === arm.armId} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {filteredJobs.length === 0 ? (
         <EmptyState
           title="No hay resultados para ese filtro"
@@ -567,20 +496,3 @@ export const Evaluacion: React.FC = () => {
     </div>
   );
 };
-
-const MetricPill: React.FC<{ label: string; value: string | number; highlighted: boolean }> = ({
-  label,
-  value,
-  highlighted,
-}) => (
-  <div
-    className={`rounded-xl px-4 py-3 ${
-      highlighted ? 'bg-white/10 text-white' : 'bg-white text-slate-700'
-    }`}
-  >
-    <p className={`text-xs uppercase tracking-[0.12em] ${highlighted ? 'text-emerald-100' : 'text-slate-500'}`}>
-      {label}
-    </p>
-    <p className="mt-2 text-base font-semibold">{value}</p>
-  </div>
-);

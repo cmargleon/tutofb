@@ -2,7 +2,6 @@ import {
   DEFAULT_TRY_ON_PROMPT,
   PROVIDER_LABELS,
 } from '../../../../shared/src/domain';
-import { EXPERIMENT_ALLOWED_PROVIDERS } from '../../../../shared/src/experiments';
 import { WizardStepDefinition } from '../../wizard/types';
 import {
   GarmentUploadState,
@@ -30,11 +29,6 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   garments: [],
   poseSuggestions: createInitialPoseSuggestionState(),
   provider: 'fal-seedream',
-  experiment: {
-    enabled: false,
-    mode: 'ab_paired',
-    providers: [...EXPERIMENT_ALLOWED_PROVIDERS],
-  },
   prompt: DEFAULT_TRY_ON_PROMPT,
   aspectRatio: '3:4',
 });
@@ -120,15 +114,10 @@ export const isGarmentUploadedForBatch = (
       && garment.upload.draftBatchId === draftBatchId,
   );
 
-export const getGenerateWizardExperimentMultiplier = (state: WizardState): number =>
-  state.experiment.enabled && state.experiment.mode === 'ab_paired'
-    ? state.experiment.providers.length
-    : 1;
-
 export const getGenerateWizardTotalJobs = (
   state: WizardState,
   compatiblePairCount: number = state.selectedPoseIds.length * state.garments.length,
-): number => compatiblePairCount * getGenerateWizardExperimentMultiplier(state);
+): number => compatiblePairCount;
 
 export const isGenerateWizardStepComplete = (state: WizardState, stepId: number): boolean => {
   switch (stepId) {
@@ -148,23 +137,6 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
 export const getGenerateWizardCanAdvance = (state: WizardState): boolean =>
   isGenerateWizardStepComplete(state, state.step)
   && !(state.step === 3 && state.poseSuggestions.status === 'preparing');
-
-export const getGenerateWizardExperimentProviderError = (state: WizardState): string | null => {
-  if (!state.experiment.enabled) {
-    return null;
-  }
-
-  if (state.experiment.providers.length !== 2 || new Set(state.experiment.providers).size !== 2) {
-    return 'El experimento A/B necesita exactamente dos modelos distintos.';
-  }
-
-  return null;
-};
-
-export const GENERATE_WIZARD_EXPERIMENT_PROVIDER_OPTIONS = EXPERIMENT_ALLOWED_PROVIDERS.map((provider) => ({
-  provider,
-  label: PROVIDER_LABELS[provider],
-}));
 
 interface SubmitButtonLabelParams {
   isSubmitting: boolean;

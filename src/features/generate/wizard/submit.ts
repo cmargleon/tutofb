@@ -144,9 +144,6 @@ export const buildCreateGenerationBatchRequest = (state: WizardState, garments: 
   poseIds: state.selectedPoseIds,
   garments,
   provider: state.provider,
-  experiment: state.experiment.enabled
-    ? { enabled: true, mode: state.experiment.mode, providers: state.experiment.providers }
-    : null,
   promptBase: state.prompt,
   aspectRatio: state.aspectRatio,
 });

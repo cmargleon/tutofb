@@ -24,8 +24,6 @@ export const Wizard: React.FC = () => {
     canAdvance,
     totalJobs,
     uploadSummary,
-    experimentProviderError,
-    experimentProviderOptions,
     submitButtonLabel,
     goToStep,
     handleStepSelect,
@@ -37,9 +35,6 @@ export const Wizard: React.FC = () => {
     handleModelSelect,
     handlePoseToggle,
     handleToggleAllPoses,
-    handleToggleExperiment,
-    handleExperimentModeChange,
-    handleExperimentProviderChange,
     handleProviderChange,
     handleAspectRatioChange,
     handlePromptChange,
@@ -126,12 +121,7 @@ export const Wizard: React.FC = () => {
             isSubmitting={isWizardBusy}
             totalJobs={totalJobs}
             uploadSummary={uploadSummary}
-            experimentProviderError={experimentProviderError}
-            experimentProviderOptions={experimentProviderOptions}
             submitButtonLabel={submitButtonLabel}
-            onToggleExperiment={handleToggleExperiment}
-            onExperimentModeChange={handleExperimentModeChange}
-            onExperimentProviderChange={handleExperimentProviderChange}
             onProviderChange={handleProviderChange}
             onAspectRatioChange={handleAspectRatioChange}
             onPromptChange={handlePromptChange}

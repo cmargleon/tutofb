@@ -11,6 +11,7 @@ import {
   OPENAI_API_KEY,
   getGeminiImageReviewModel,
   getJobAutoReviewMaxAttempts,
+  getJobRetryDelayMs,
   getJobStuckSweepLimit,
   getJobTimeoutMs,
 } from '../config/runtime';
@@ -103,6 +104,7 @@ const claimJob = async (jobId: string, workerId: string): Promise<Job | null> =>
       claimedBy: workerId,
       claimExpiresAt,
       timeoutAt: claimExpiresAt,
+      retryNotBefore: null,
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastAttemptStartedAt: admin.firestore.FieldValue.serverTimestamp(),
       'traceability.lastAttemptStartedAt': admin.firestore.FieldValue.serverTimestamp(),
@@ -428,10 +430,15 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
       return;
     }
 
+    const retryNotBefore = shouldRetry
+      ? Timestamp.fromMillis(Date.now() + getJobRetryDelayMs())
+      : null;
+
     transaction.update(jobRef, {
       status: shouldRetry ? 'pending' : 'failed',
       queuePriority: 0,
       retryCount: nextRetryCount,
+      retryNotBefore,
       claimToken: null,
       claimedBy: null,
       claimExpiresAt: null,
@@ -460,58 +467,74 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
 };
 
 export const requeueExpiredJobs = async (): Promise<number> => {
-  const snapshot = await db
+  const now = Timestamp.now();
+
+  // 1. Recover stuck jobs (processing but claim expired)
+  const stuckSnapshot = await db
     .collection('jobs')
     .where('status', '==', 'processing')
-    .where('claimExpiresAt', '<=', Timestamp.now())
+    .where('claimExpiresAt', '<=', now)
     .limit(getJobStuckSweepLimit())
     .get();
 
-  if (snapshot.empty) {
-    return 0;
+  if (!stuckSnapshot.empty) {
+    const writeBatch = db.batch();
+    stuckSnapshot.docs.forEach((docSnapshot) => {
+      const job = { id: docSnapshot.id, ...docSnapshot.data() } as Job;
+      const nextRetryCount = (job.retryCount || 0) + 1;
+      const shouldRetry = nextRetryCount <= (job.maxRetries || 0);
+
+      writeBatch.update(docSnapshot.ref, {
+        status: shouldRetry ? 'pending' : 'failed',
+        retryCount: nextRetryCount,
+        retryNotBefore: null,
+        claimToken: null,
+        claimedBy: null,
+        claimExpiresAt: null,
+        timeoutAt: null,
+        startedAt: null,
+        'traceability.lastProviderErrorAt': admin.firestore.FieldValue.serverTimestamp(),
+        'traceability.lastProviderErrorMessage': shouldRetry
+          ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
+          : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastError: shouldRetry
+          ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
+          : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
+      });
+
+      writeBatch.set(docSnapshot.ref.collection('logs').doc(), {
+        type: shouldRetry ? 'retry_scheduled' : 'failed',
+        level: shouldRetry ? 'warn' : 'error',
+        message: shouldRetry
+          ? 'El trabajo quedó atascado y fue reencolado automáticamente.'
+          : 'El trabajo quedó atascado y fue marcado como fallido al agotar reintentos.',
+        payload: {
+          retryCount: nextRetryCount,
+          maxRetries: job.maxRetries,
+          previousClaimToken: job.claimToken,
+        },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    await writeBatch.commit();
   }
 
-  const writeBatch = db.batch();
-  snapshot.docs.forEach((docSnapshot) => {
-    const job = { id: docSnapshot.id, ...docSnapshot.data() } as Job;
-    const nextRetryCount = (job.retryCount || 0) + 1;
-    const shouldRetry = nextRetryCount <= (job.maxRetries || 0);
+  // 2. Pick up deferred retry jobs whose wait time has elapsed
+  const deferredSnapshot = await db
+    .collection('jobs')
+    .where('status', '==', 'pending')
+    .where('retryNotBefore', '<=', now)
+    .limit(getJobStuckSweepLimit())
+    .get();
 
-    writeBatch.update(docSnapshot.ref, {
-      status: shouldRetry ? 'pending' : 'failed',
-      retryCount: nextRetryCount,
-      claimToken: null,
-      claimedBy: null,
-      claimExpiresAt: null,
-      timeoutAt: null,
-      startedAt: null,
-      'traceability.lastProviderErrorAt': admin.firestore.FieldValue.serverTimestamp(),
-      'traceability.lastProviderErrorMessage': shouldRetry
-        ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
-        : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastError: shouldRetry
-        ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
-        : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
-    });
+  if (!deferredSnapshot.empty) {
+    await Promise.all(
+      deferredSnapshot.docs.map((docSnapshot) => processJob(docSnapshot.id, 'requeue')),
+    );
+  }
 
-    writeBatch.set(docSnapshot.ref.collection('logs').doc(), {
-      type: shouldRetry ? 'retry_scheduled' : 'failed',
-      level: shouldRetry ? 'warn' : 'error',
-      message: shouldRetry
-        ? 'El trabajo quedó atascado y fue reencolado automáticamente.'
-        : 'El trabajo quedó atascado y fue marcado como fallido al agotar reintentos.',
-      payload: {
-        retryCount: nextRetryCount,
-        maxRetries: job.maxRetries,
-        previousClaimToken: job.claimToken,
-      },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  });
-
-  await writeBatch.commit();
-  return snapshot.size;
+  return stuckSnapshot.size + deferredSnapshot.size;
 };
 
 export const processJob = async (jobId: string, source: 'create' | 'requeue'): Promise<void> => {

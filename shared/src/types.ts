@@ -269,6 +269,7 @@ export interface Job {
   queuePriority: number;
   retryCount: number;
   maxRetries: number;
+  retryNotBefore?: TimestampLike | null;
   claimToken: string | null;
   claimedBy: string | null;
   claimExpiresAt: TimestampLike | null;

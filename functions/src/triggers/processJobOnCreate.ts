@@ -8,6 +8,7 @@ export const processJobOnCreate = onDocumentCreated(
     document: 'jobs/{jobId}',
     timeoutSeconds: 540,
     memory: '1GiB',
+    maxInstances: 5,
     secrets: [FAL_KEY, OPENAI_API_KEY, GEMINI_API_KEY],
   },
   async (event) => {

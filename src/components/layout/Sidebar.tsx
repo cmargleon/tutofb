@@ -10,6 +10,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Rows3,
+  Settings,
   Shield,
   Sun,
   UserSquare2,
@@ -53,7 +54,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: 'Modelos',     path: '/models',     icon: UserSquare2,     visible: role.canManageModels    },
     { name: 'Archivo',     path: '/archivo',    icon: Archive,         visible: role.canAccessArchive   },
     { name: 'Analíticas',  path: '/analytics',  icon: BarChart3,       visible: role.canAccessAnalytics },
-    { name: 'Usuarios',    path: '/users',      icon: Shield,          visible: role.canManageUsers     },
+    { name: 'Usuarios',       path: '/users',         icon: Shield,    visible: role.canManageUsers     },
+    { name: 'Configuración',  path: '/configuracion', icon: Settings,  visible: role.canManageUsers     },
   ];
 
   const filteredNav = navItems.filter((item) => item.visible);

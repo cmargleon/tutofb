@@ -9,8 +9,9 @@ import {
   Model,
 } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
-import { getBatchMaxJobs, getJobAutoReviewMaxAttempts, getJobMaxRetries } from '../config/runtime';
+import { getJobAutoReviewMaxAttempts } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { getSystemConfigCached } from '../admin/systemConfig';
 import {
   assertModelOwnershipAndPoses,
   buildJobDraft,
@@ -22,7 +23,8 @@ import {
 export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promise<CreateGenerationBatchResponse>>(
   async (request) => {
     await assertCallableRoles(request, ['admin', 'operador']);
-    const validated = validateCreateGenerationBatchInput(request.data, request.auth!.uid, getBatchMaxJobs());
+    const systemConfig = await getSystemConfigCached();
+    const validated = validateCreateGenerationBatchInput(request.data, request.auth!.uid, systemConfig.batchMaxJobs);
 
     const db = getAppFirestore();
     const clientRef = db.collection('clients').doc(validated.clientId);
@@ -63,10 +65,10 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
       );
     }
 
-    if (actualTotalJobs > getBatchMaxJobs()) {
+    if (actualTotalJobs > systemConfig.batchMaxJobs) {
       throw new HttpsError(
         'out-of-range',
-        `El lote excede el límite configurado de ${getBatchMaxJobs()} trabajos (${actualTotalJobs} solicitados).`,
+        `El lote excede el límite configurado de ${systemConfig.batchMaxJobs} trabajos (${actualTotalJobs} solicitados).`,
       );
     }
 
@@ -112,7 +114,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     const writeBatch = db.batch();
     writeBatch.set(batchRef, batchData);
 
-    const maxRetries = getJobMaxRetries();
+    const maxRetries = systemConfig.jobMaxRetries;
     const autoReviewMaxAttempts = getJobAutoReviewMaxAttempts();
     for (const { garment, pose } of compatibleCombinations) {
       const selectedGarmentPhoto = resolveGarmentPhotoForPose(garment, pose);

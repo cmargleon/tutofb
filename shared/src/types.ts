@@ -535,6 +535,22 @@ export interface SystemAlertSettings {
   updatedByDisplayName?: string | null;
 }
 
+export interface SystemConfig {
+  jobMaxRetries: number;
+  jobRetryDelayMs: number;
+  batchMaxJobs: number;
+  geminiImageReviewModel: string;
+  disabledProviders: string[];
+  systemPromptOverride: string | null;
+  updatedAt?: TimestampLike | null;
+  updatedByUid?: string | null;
+  updatedByDisplayName?: string | null;
+}
+
+export interface UpdateSystemConfigRequest extends Partial<Omit<SystemConfig, 'updatedAt' | 'updatedByUid' | 'updatedByDisplayName'>> {}
+export interface UpdateSystemConfigResponse { success: boolean; config: SystemConfig }
+export interface GetSystemConfigResponse { config: SystemConfig }
+
 export interface ProviderHealthCheck {
   provider: 'fal.ai' | 'OpenAI' | 'Gemini';
   status: HealthStatus;
@@ -794,13 +810,8 @@ export interface RegenerateJobsBulkResponse {
 }
 
 export type ModelPhotoProvider =
-  | 'fal-flux-pro'
-  | 'fal-flux-schnell'
-  | 'fal-seedream-v4'
   | 'fal-seedream-v4.5'
-  | 'fal-banana'
   | 'fal-banana-pro'
-  | 'fal-banana-2'
   | 'openai-dalle';
 
 export type ModelPhotoGenerationStage = 'identity' | 'pose';

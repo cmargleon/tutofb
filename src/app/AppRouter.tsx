@@ -15,6 +15,7 @@ const Analytics = lazy(() => import('../pages/Analytics').then((module) => ({ de
 const Evaluacion = lazy(() => import('../pages/Evaluacion').then((module) => ({ default: module.Evaluacion })));
 const Cola = lazy(() => import('../pages/Cola').then((module) => ({ default: module.Cola })));
 const Configuracion = lazy(() => import('../pages/Configuracion').then((module) => ({ default: module.Configuracion })));
+const Catalogo = lazy(() => import('../pages/Catalogo').then((module) => ({ default: module.Catalogo })));
 
 const RouteLoadingFallback: React.FC = () => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -65,6 +66,7 @@ export const AppRouter: React.FC = () => {
             <Route path="archivo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Archive /></ProtectedRoute>} />
             <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><Analytics /></ProtectedRoute>} />
             <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><Configuracion /></ProtectedRoute>} />
+            <Route path="catalogo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Catalogo /></ProtectedRoute>} />
           </Route>
         </Routes>
       </Suspense>

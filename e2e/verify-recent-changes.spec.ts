@@ -4,6 +4,7 @@
  * - Configuración page (new menu item + page)
  * - Evaluación page (PoseSingleView redesign)
  * - Sidebar navigation
+ * - Catálogo page (new menu item + client selector)
  */
 import { test, expect, chromium } from '@playwright/test';
 import fs from 'fs';
@@ -142,6 +143,21 @@ test('Verify recent changes', async () => {
   const analyticsLink = page.getByRole('link', { name: /analíticas/i });
   await expect(analyticsLink).toBeVisible({ timeout: 5000 });
   console.log('✅ Sidebar: Analíticas link still present');
+
+  // ── Catálogo page ─────────────────────────────────────────────────────────
+  const catalogLink = page.getByRole('link', { name: /catálogo/i });
+  await expect(catalogLink).toBeVisible({ timeout: 5000 });
+  console.log('✅ Sidebar: Catálogo item visible');
+
+  await catalogLink.click();
+  await page.waitForURL(/catalogo/, { timeout: 10000 });
+  await page.waitForTimeout(1500);
+  await shot(page, '09-catalogo-page');
+
+  // Should show client selector and empty state
+  await expect(page.getByRole('combobox')).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText(/selecciona un cliente para ver su catálogo/i)).toBeVisible({ timeout: 5000 });
+  console.log('✅ Catálogo: Client selector rendered');
 
   await browser.close();
   console.log('\n🎉 All checks passed!');

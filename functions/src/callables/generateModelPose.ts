@@ -8,13 +8,8 @@ import {
 } from '../../../shared/src/types';
 import { MODEL_PHOTO_PROVIDER_COSTS } from '../../../shared/src/constants/providerCosts';
 import {
-  generateModelPhotoWithFluxPro,
-  generateModelPhotoWithFluxSchnell,
-  generateModelPhotoWithSeedreamV4,
   generateModelPhotoWithSeedreamV45,
-  generateModelPhotoWithBanana,
   generateModelPhotoWithBananaPro,
-  generateModelPhotoWithBanana2,
   generateModelPhotoWithOpenAI,
   editModelPhotoWithBananaPro,
   editModelPhotoWithOpenAI,
@@ -64,15 +59,10 @@ const runProvider = (
   }
 
   switch (provider) {
-    case 'fal-flux-pro':       return generateModelPhotoWithFluxPro(prompt, aspectRatio, falKey);
-    case 'fal-flux-schnell':   return generateModelPhotoWithFluxSchnell(prompt, aspectRatio, falKey);
-    case 'fal-seedream-v4':    return generateModelPhotoWithSeedreamV4(prompt, aspectRatio, falKey);
     case 'fal-seedream-v4.5':  return generateModelPhotoWithSeedreamV45(prompt, aspectRatio, falKey);
-    case 'fal-banana':         return generateModelPhotoWithBanana(prompt, aspectRatio, falKey);
     case 'fal-banana-pro':     return generateModelPhotoWithBananaPro(prompt, aspectRatio, falKey);
-    case 'fal-banana-2':       return generateModelPhotoWithBanana2(prompt, aspectRatio, falKey);
     case 'openai-dalle':       return generateModelPhotoWithOpenAI(prompt, aspectRatio, openaiKey);
-    default:                   return generateModelPhotoWithFluxPro(prompt, aspectRatio, falKey);
+    default:                   throw new Error(`Proveedor de foto de modelo no reconocido: ${provider}`);
   }
 };
 

@@ -25,6 +25,7 @@ export const Wizard: React.FC = () => {
     totalJobs,
     uploadSummary,
     submitButtonLabel,
+    disabledProviders,
     goToStep,
     handleStepSelect,
     canSelectStep,
@@ -122,6 +123,7 @@ export const Wizard: React.FC = () => {
             totalJobs={totalJobs}
             uploadSummary={uploadSummary}
             submitButtonLabel={submitButtonLabel}
+            disabledProviders={disabledProviders}
             onProviderChange={handleProviderChange}
             onAspectRatioChange={handleAspectRatioChange}
             onPromptChange={handlePromptChange}

@@ -9,13 +9,12 @@ import {
   FAL_KEY,
   GEMINI_API_KEY,
   OPENAI_API_KEY,
-  getGeminiImageReviewModel,
   getJobAutoReviewMaxAttempts,
-  getJobRetryDelayMs,
   getJobStuckSweepLimit,
   getJobTimeoutMs,
 } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { getSystemConfigCached } from '../admin/systemConfig';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
 
@@ -430,8 +429,9 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
       return;
     }
 
+    const systemConfig = await getSystemConfigCached();
     const retryNotBefore = shouldRetry
-      ? Timestamp.fromMillis(Date.now() + getJobRetryDelayMs())
+      ? Timestamp.fromMillis(Date.now() + systemConfig.jobRetryDelayMs)
       : null;
 
     transaction.update(jobRef, {
@@ -613,9 +613,10 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
         downloadStorageImage(claimedJob.garmentFilePath),
       ]);
 
+      const jobSystemConfig = await getSystemConfigCached();
       const review = await reviewGeneratedImageWithGemini({
         apiKey: GEMINI_API_KEY.value(),
-        model: getGeminiImageReviewModel(),
+        model: jobSystemConfig.geminiImageReviewModel,
         batchId: claimedJob.batchId,
         jobId,
         clientId: claimedJob.clientId,

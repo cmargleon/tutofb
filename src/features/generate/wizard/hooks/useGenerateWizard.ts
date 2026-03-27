@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as garmentViewMatchingNamespace from '../../../../../shared/src/utils/garmentViewMatching';
+import { DEFAULT_TRY_ON_PROMPT } from '../../../../../shared/src/domain';
 import { classifyGarmentViewsWithGemini } from '../../firebase';
+import { useSystemConfig } from '../../../system/useSystemConfig';
 import { buildGarmentSuggestionSignature, getGarmentAvailableViews, handleGarmentFiles, revokeGarmentUrls } from '../../garments';
 import { deleteGarmentDraftByStoragePath, uploadGarmentDrafts } from '../../storage';
 import {
@@ -119,6 +121,16 @@ export const useGenerateWizard = () => {
   const [state, setState] = useState<WizardState>(createInitialGenerateWizardState);
   const [flowError, setFlowError] = useState<string | null>(null);
   const [draftBatchId, setDraftBatchId] = useState<string | null>(null);
+
+  const { config: systemConfig } = useSystemConfig();
+
+  useEffect(() => {
+    if (!systemConfig.systemPromptOverride) return;
+    setState((s) => {
+      if (s.prompt !== DEFAULT_TRY_ON_PROMPT) return s; // user already edited it
+      return { ...s, prompt: systemConfig.systemPromptOverride! };
+    });
+  }, [systemConfig.systemPromptOverride]);
 
   const {
     clients,
@@ -538,6 +550,7 @@ export const useGenerateWizard = () => {
     totalJobs,
     uploadSummary,
     submitButtonLabel: submit.submitButtonLabel,
+    disabledProviders: systemConfig.disabledProviders,
     goToStep,
     handleStepSelect,
     canSelectStep,

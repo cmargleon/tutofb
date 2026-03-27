@@ -1,5 +1,6 @@
 import { AspectRatio } from '../../../shared/src/types';
 import { getFalPollIntervalMs, getFalPollTimeoutMs, getOpenAIBaseUrl } from '../config/runtime';
+import { mapAspectRatioToOpenAISize } from './openai';
 
 export interface TextToImageResult {
   imageBytes: Buffer;
@@ -46,12 +47,6 @@ const mapAspectRatioToFluxSize = (aspectRatio: AspectRatio): string => {
     '16:9': 'landscape_16_9',
   };
   return map[aspectRatio] ?? 'square_hd';
-};
-
-const mapAspectRatioToOpenAISize = (aspectRatio: AspectRatio): string => {
-  if (aspectRatio === '1:1') return '1024x1024';
-  const [width, height] = aspectRatio.split(':').map(Number);
-  return width > height ? '1536x1024' : '1024x1536';
 };
 
 const runFalTextToImage = async (
@@ -162,58 +157,6 @@ const runFalImageEdit = async (
   }
 };
 
-// fal.ai Flux Pro v1.1 — alta calidad
-export const generateModelPhotoWithFluxPro = async (
-  prompt: string,
-  aspectRatio: AspectRatio,
-  falKey: string,
-): Promise<TextToImageResult> =>
-  runFalTextToImage(
-    'fal-ai/flux-pro/v1.1',
-    {
-      prompt,
-      image_size: mapAspectRatioToFluxSize(aspectRatio),
-      num_images: 1,
-      enable_safety_checker: false,
-      output_format: 'jpeg',
-    },
-    falKey,
-  );
-
-// fal.ai Flux Schnell — rápido y económico
-export const generateModelPhotoWithFluxSchnell = async (
-  prompt: string,
-  aspectRatio: AspectRatio,
-  falKey: string,
-): Promise<TextToImageResult> =>
-  runFalTextToImage(
-    'fal-ai/flux/schnell',
-    {
-      prompt,
-      image_size: mapAspectRatioToFluxSize(aspectRatio),
-      num_images: 1,
-      enable_safety_checker: false,
-    },
-    falKey,
-  );
-
-// fal.ai Seedream v4 text-to-image
-export const generateModelPhotoWithSeedreamV4 = async (
-  prompt: string,
-  aspectRatio: AspectRatio,
-  falKey: string,
-): Promise<TextToImageResult> =>
-  runFalTextToImage(
-    'fal-ai/bytedance/seedream/v4/text-to-image',
-    {
-      prompt,
-      image_size: mapAspectRatioToFluxSize(aspectRatio),
-      num_images: 1,
-      enable_safety_checker: false,
-    },
-    falKey,
-  );
-
 // fal.ai Seedream v4.5 text-to-image
 export const generateModelPhotoWithSeedreamV45 = async (
   prompt: string,
@@ -245,14 +188,8 @@ const runFalBanana = (endpointId: string, prompt: string, aspectRatio: AspectRat
     falKey,
   );
 
-export const generateModelPhotoWithBanana = (prompt: string, aspectRatio: AspectRatio, falKey: string) =>
-  runFalBanana('fal-ai/nano-banana', prompt, aspectRatio, falKey);
-
 export const generateModelPhotoWithBananaPro = (prompt: string, aspectRatio: AspectRatio, falKey: string) =>
   runFalBanana('fal-ai/nano-banana-pro', prompt, aspectRatio, falKey);
-
-export const generateModelPhotoWithBanana2 = (prompt: string, aspectRatio: AspectRatio, falKey: string) =>
-  runFalBanana('fal-ai/nano-banana-2', prompt, aspectRatio, falKey);
 
 export const editModelPhotoWithSeedreamV45 = (
   prompt: string,

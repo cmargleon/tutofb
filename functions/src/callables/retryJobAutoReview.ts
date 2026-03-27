@@ -2,7 +2,8 @@ import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Job, JobAutoReview, JobOutput, RetryJobAutoReviewRequest, RetryJobAutoReviewResponse } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
-import { GEMINI_API_KEY, getGeminiImageReviewModel, getJobAutoReviewMaxAttempts } from '../config/runtime';
+import { GEMINI_API_KEY, getJobAutoReviewMaxAttempts } from '../config/runtime';
+import { getSystemConfigCached } from '../admin/systemConfig';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
@@ -87,9 +88,10 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
       const attemptNumber = output.generationAttempt || job.generationAttemptCount || 1;
       const maxAttempts = job.autoReviewMaxAttempts || getJobAutoReviewMaxAttempts();
 
+      const systemConfig = await getSystemConfigCached();
       const review = await reviewGeneratedImageWithGemini({
         apiKey: GEMINI_API_KEY.value(),
-        model: getGeminiImageReviewModel(),
+        model: systemConfig.geminiImageReviewModel,
         batchId: job.batchId,
         jobId,
         clientId: job.clientId,

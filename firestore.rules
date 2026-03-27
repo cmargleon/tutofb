@@ -157,5 +157,10 @@ service cloud.firestore {
       allow read: if canReadAnalytics();
       allow write: if false;
     }
+
+    match /system_config/{docId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
   }
 }

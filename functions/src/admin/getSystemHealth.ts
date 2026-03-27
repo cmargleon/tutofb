@@ -3,10 +3,10 @@ import { Timestamp } from 'firebase-admin/firestore';
 import {
   FAL_KEY,
   GEMINI_API_KEY,
-  getGeminiImageReviewModel,
   getOpenAIBaseUrl,
   OPENAI_API_KEY,
 } from '../config/runtime';
+import { getSystemConfigCached } from './systemConfig';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { HealthStatus, Job, ProviderHealthCheck, QueueHealthSnapshot, SystemHealthSnapshot } from '../../../shared/src/types';
@@ -154,7 +154,7 @@ const checkGeminiHealth = async (): Promise<ProviderHealthCheck> => {
     return buildProviderResult('Gemini', 'down', false, 'GEMINI_API_KEY no está configurada.', null, null);
   }
 
-  const model = getGeminiImageReviewModel();
+  const model = (await getSystemConfigCached()).geminiImageReviewModel;
   const normalizedModel = model.startsWith('models/') ? model : `models/${model}`;
   const modelUrl = `${GEMINI_API_BASE_URL}/${normalizedModel}`;
 

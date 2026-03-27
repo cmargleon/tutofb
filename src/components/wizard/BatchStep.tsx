@@ -12,6 +12,7 @@ interface Props {
   totalJobs: number;
   uploadSummary: UploadSummary;
   submitButtonLabel: string;
+  disabledProviders?: string[];
   onProviderChange: (provider: WizardState['provider']) => void;
   onAspectRatioChange: (ratio: WizardState['aspectRatio']) => void;
   onPromptChange: (prompt: string) => void;
@@ -25,6 +26,7 @@ export const BatchStep: React.FC<Props> = ({
   totalJobs,
   uploadSummary,
   submitButtonLabel,
+  disabledProviders,
   onProviderChange,
   onAspectRatioChange,
   onPromptChange,
@@ -32,7 +34,7 @@ export const BatchStep: React.FC<Props> = ({
 }) => (
   <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
     <BatchUploadSummary garments={garments} uploadSummary={uploadSummary} />
-    <ProviderSelection provider={state.provider} onChange={onProviderChange} />
+    <ProviderSelection provider={state.provider} onChange={onProviderChange} disabledProviders={disabledProviders} />
 
     <AspectRatioSelection value={state.aspectRatio} onChange={onAspectRatioChange} />
     <PromptBaseField value={state.prompt} onChange={onPromptChange} />

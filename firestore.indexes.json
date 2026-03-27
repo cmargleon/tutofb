@@ -98,6 +98,23 @@
       ]
     },
     {
+      "collectionGroup": "outputs",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "isCurrent", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "analytics_gemini_usage",
       "queryScope": "COLLECTION",
       "fields": [

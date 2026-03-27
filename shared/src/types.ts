@@ -3,6 +3,44 @@ export type TimestampLike = any;
 export type Role = 'admin' | 'operador' | 'revisor';
 export type Provider = 'fal-seedream' | 'fal-banana-pro' | 'openai-gpt-image-1.5';
 export type AspectRatio = '9:16' | '3:4' | '2:3' | '1:1' | '4:3' | '3:2' | '16:9';
+export type BananaAspectRatio = '21:9' | '16:9' | '3:2' | '4:3' | '5:4' | '1:1' | '4:5' | '3:4' | '2:3' | '9:16';
+export type BananaResolution = '1K' | '2K' | '4K';
+export type OpenAIImageSize = '1024x1024' | '1024x1536' | '1536x1024';
+export type OpenAIImageQuality = 'low' | 'medium' | 'high';
+export type SeedreamImageSizePreset =
+  | 'square_hd'
+  | 'square'
+  | 'portrait_4_3'
+  | 'portrait_16_9'
+  | 'landscape_4_3'
+  | 'landscape_16_9'
+  | 'auto'
+  | 'auto_2K'
+  | 'auto_4K';
+
+export interface SeedreamCustomImageSize {
+  width: number;
+  height: number;
+}
+
+export interface FalSeedreamImageConfig {
+  provider: 'fal-seedream';
+  imageSize: SeedreamImageSizePreset | SeedreamCustomImageSize;
+}
+
+export interface FalBananaProImageConfig {
+  provider: 'fal-banana-pro';
+  aspectRatio: BananaAspectRatio;
+  resolution: BananaResolution;
+}
+
+export interface OpenAIImageConfig {
+  provider: 'openai-gpt-image-1.5';
+  size: OpenAIImageSize;
+  quality: OpenAIImageQuality;
+}
+
+export type ProviderImageConfig = FalSeedreamImageConfig | FalBananaProImageConfig | OpenAIImageConfig;
 export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_failed' | 'failed';
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type GarmentSourceType = 'single' | 'folder-root' | 'subfolder';
@@ -116,6 +154,7 @@ export interface Batch {
   modelSnapshot?: BatchModelSnapshot;
   provider: Provider;
   aspectRatio: AspectRatio;
+  imageConfig?: ProviderImageConfig | null;
   promptBase: string;
   poseIds: string[];
   garmentCount: number;
@@ -226,6 +265,7 @@ export interface JobOutput {
   promptBase: string;
   finalPrompt: string;
   aspectRatio: AspectRatio;
+  imageConfig?: ProviderImageConfig | null;
   resultImagePath: string;
   contentType: string;
   remoteUrl: string | null;
@@ -261,6 +301,7 @@ export interface Job {
   garmentIsMultiAngle: boolean;
   garmentReferenceImageType?: GarmentReferenceImageType;
   aspectRatio: AspectRatio;
+  imageConfig?: ProviderImageConfig | null;
   provider: Provider;
   requestedPromptBase?: string;
   promptBase: string;
@@ -615,7 +656,8 @@ export interface CreateGenerationBatchRequest {
   garments: UploadedGarmentInput[];
   provider: Provider;
   promptBase: string;
-  aspectRatio: AspectRatio;
+  aspectRatio?: AspectRatio;
+  imageConfig?: ProviderImageConfig;
 }
 
 export interface CreateGenerationBatchResponse {
@@ -820,6 +862,7 @@ export interface GenerateModelPhotoRequest {
   prompt: string;
   provider: ModelPhotoProvider;
   aspectRatio: AspectRatio;
+  imageConfig?: ProviderImageConfig | null;
   count: number;
   tempSessionId: string;
   clientId: string;

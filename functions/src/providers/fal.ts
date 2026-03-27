@@ -1,4 +1,5 @@
-import { AspectRatio } from '../../../shared/src/types';
+import { AspectRatio, FalBananaProImageConfig, FalSeedreamImageConfig } from '../../../shared/src/types';
+import { mapLegacyAspectRatioToSeedreamImageSize } from '../../../shared/src/providerImageConfig';
 import { getFalPollIntervalMs, getFalPollTimeoutMs } from '../config/runtime';
 import { ProviderRequest, ProviderResponse } from './types';
 
@@ -30,12 +31,7 @@ const sleep = async (ms: number): Promise<void> =>
   });
 
 export const mapAspectRatioToSeedreamSize = (aspectRatio: AspectRatio): string => {
-  if (aspectRatio === '1:1') {
-    return 'square_hd';
-  }
-
-  const [width, height] = aspectRatio.split(':').map(Number);
-  return width > height ? 'landscape_16_9' : 'portrait_16_9';
+  return mapLegacyAspectRatioToSeedreamImageSize(aspectRatio);
 };
 
 const fetchImageBytes = async (url: string, signal: AbortSignal): Promise<{ bytes: Buffer; contentType: string }> => {
@@ -158,6 +154,7 @@ export const generateWithFalSeedream = async (
   request: ProviderRequest,
   falKey: string,
 ): Promise<ProviderResponse> => {
+  const imageConfig = request.imageConfig as FalSeedreamImageConfig;
   const endpointId = 'fal-ai/bytedance/seedream/v4/edit';
   const queue = await submitFalRequest(
     endpointId,
@@ -165,7 +162,7 @@ export const generateWithFalSeedream = async (
       prompt: request.prompt,
       image_urls: [request.poseImageUrl, request.garmentImageUrl],
       num_images: 1,
-      image_size: mapAspectRatioToSeedreamSize(request.aspectRatio),
+      image_size: imageConfig.imageSize,
       enable_safety_checker: true,
     },
     falKey,
@@ -198,6 +195,7 @@ export const generateWithFalBananaPro = async (
   request: ProviderRequest,
   falKey: string,
 ): Promise<ProviderResponse> => {
+  const imageConfig = request.imageConfig as FalBananaProImageConfig;
   const endpointId = 'fal-ai/nano-banana-pro/edit';
   const queue = await submitFalRequest(
     endpointId,
@@ -205,8 +203,8 @@ export const generateWithFalBananaPro = async (
       prompt: request.prompt,
       image_urls: [request.poseImageUrl, request.garmentImageUrl],
       num_images: 1,
-      aspect_ratio: request.aspectRatio,
-      resolution: '1K',
+      aspect_ratio: imageConfig.aspectRatio,
+      resolution: imageConfig.resolution,
       output_format: 'png',
     },
     falKey,

@@ -73,7 +73,11 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
       ],
       provider: 'fal-banana-pro',
       promptBase: ' Prompt real ',
-      aspectRatio: '9:16',
+      imageConfig: {
+        provider: 'fal-banana-pro',
+        aspectRatio: '9:16',
+        resolution: '2K',
+      },
     },
     'user-1',
     10,
@@ -81,6 +85,8 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
 
   assert.equal(validated.provider, 'fal-banana-pro');
   assert.equal(validated.aspectRatio, '9:16');
+  assert.equal(validated.imageConfig.provider, 'fal-banana-pro');
+  assert.equal(validated.imageConfig.resolution, '2K');
   assert.equal(validated.promptBase, 'Prompt real');
   assert.deepEqual(validated.poseIds, ['pose-1', 'pose-2']);
   assert.equal(validated.totalJobs, 2);
@@ -103,13 +109,18 @@ test('validateCreateGenerationBatchInput conserva provider y calcula jobs por po
       ],
       provider: 'openai-gpt-image-1.5',
       promptBase: 'Prompt lote',
-      aspectRatio: '3:4',
+      imageConfig: {
+        provider: 'openai-gpt-image-1.5',
+        size: '1024x1536',
+        quality: 'high',
+      },
     },
     'user-1',
     20,
   );
 
   assert.equal(validated.provider, 'openai-gpt-image-1.5');
+  assert.equal(validated.aspectRatio, '2:3');
   assert.equal(validated.totalJobs, 2);
 });
 
@@ -131,7 +142,10 @@ test('validateCreateGenerationBatchInput rechaza provider inválido', () => {
           ],
           provider: 'otro-provider' as any,
           promptBase: 'Prompt lote',
-          aspectRatio: '3:4',
+          imageConfig: {
+            provider: 'fal-seedream',
+            imageSize: 'portrait_4_3',
+          },
         },
         'user-1',
         20,
@@ -158,7 +172,10 @@ test('validateCreateGenerationBatchInput rechaza prendas fuera del draft del usu
           ],
           provider: 'fal-seedream',
           promptBase: '',
-          aspectRatio: '3:4',
+          imageConfig: {
+            provider: 'fal-seedream',
+            imageSize: 'portrait_4_3',
+          },
         },
         'user-1',
         10,

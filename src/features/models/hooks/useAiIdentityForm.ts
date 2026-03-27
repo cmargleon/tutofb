@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { AspectRatio, ModelPhotoProvider } from '../../../../shared/src/types';
+import { AspectRatio, ModelPhotoProvider, Provider, ProviderImageConfig } from '../../../../shared/src/types';
 import {
   AGE_OPTIONS,
   ASPECT_OPTIONS,
@@ -15,6 +15,11 @@ import {
   TOP_OPTIONS,
 } from '../constants';
 import { buildIdentityPrompt } from '../prompts';
+import {
+  createDefaultModelProviderImageConfigs,
+  mapModelPhotoProviderToProvider,
+  resolveModelAspectRatioForImageConfig,
+} from '../providerImageConfig';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -55,8 +60,10 @@ export interface AiIdentityFormState {
   setFootwear: SetState<string>;
   provider: ModelPhotoProvider;
   setProvider: SetState<ModelPhotoProvider>;
+  providerImageConfigs: Record<Provider, ProviderImageConfig>;
+  providerImageConfig: ProviderImageConfig;
+  setProviderImageConfig: (config: ProviderImageConfig) => void;
   aspectRatio: AspectRatio;
-  setAspectRatio: SetState<AspectRatio>;
   prompt: string;
   updatePrompt: (value: string) => void;
   promptEdited: boolean;
@@ -78,10 +85,15 @@ export const useAiIdentityForm = (): AiIdentityFormState => {
   const [bottom, setBottom] = useState('plain black pants');
   const [footwear, setFootwear] = useState('plain white sneakers');
   const [provider, setProvider] = useState<ModelPhotoProvider>('openai-dalle');
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('3:4');
+  const [providerImageConfigs, setProviderImageConfigs] = useState<Record<Provider, ProviderImageConfig>>(
+    createDefaultModelProviderImageConfigs,
+  );
   const [prompt, setPrompt] = useState('');
   const [promptEdited, setPromptEdited] = useState(false);
   const [promptExpanded, setPromptExpanded] = useState(false);
+  const mappedProvider = mapModelPhotoProviderToProvider(provider);
+  const providerImageConfig = providerImageConfigs[mappedProvider];
+  const aspectRatio = resolveModelAspectRatioForImageConfig(providerImageConfig);
 
   useEffect(() => {
     if (!promptEdited) {
@@ -114,6 +126,12 @@ export const useAiIdentityForm = (): AiIdentityFormState => {
   }, []);
 
   const restoreAutoPrompt = useCallback(() => setPromptEdited(false), []);
+  const setProviderImageConfig = useCallback((config: ProviderImageConfig) => {
+    setProviderImageConfigs((current) => ({
+      ...current,
+      [config.provider]: config,
+    }));
+  }, []);
 
   return {
     sexOptions: SEX_OPTIONS,
@@ -152,8 +170,10 @@ export const useAiIdentityForm = (): AiIdentityFormState => {
     setFootwear,
     provider,
     setProvider,
+    providerImageConfigs,
+    providerImageConfig,
+    setProviderImageConfig,
     aspectRatio,
-    setAspectRatio,
     prompt,
     updatePrompt,
     promptEdited,

@@ -117,7 +117,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
     job.latestAutoReview?.reviewPrompt ||
     null;
 
-  const { url: displayedImageUrl } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
+  const { url: displayedImageUrl, loading: displayedImageUrlLoading } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
 
   useEffect(() => {
     if (selectedOutputId && !outputsDesc.some((output) => output.id === selectedOutputId)) {
@@ -390,6 +390,26 @@ export const JobEvaluationCard: React.FC<Props> = ({
                   <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
                   <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
                 </select>
+              </div>
+            ) : null}
+
+            {displayedOutput?.resultImagePath ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">URL imagen guardada</p>
+                {displayedImageUrl ? (
+                  <a
+                    href={displayedImageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block break-all font-mono text-[11px] text-indigo-700 underline decoration-indigo-300 underline-offset-2"
+                  >
+                    {displayedImageUrl}
+                  </a>
+                ) : displayedImageUrlLoading ? (
+                  <p className="mt-1 font-mono text-[11px] text-slate-500">Resolviendo URL...</p>
+                ) : (
+                  <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{displayedOutput.resultImagePath}</p>
+                )}
               </div>
             ) : null}
 

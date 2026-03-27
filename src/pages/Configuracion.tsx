@@ -7,6 +7,7 @@ import { useSystemConfig } from '../features/system/useSystemConfig';
 import { useRole } from '../features/auth/AuthProvider';
 import { useToast } from '../features/feedback/FeedbackProvider';
 import { Provider } from '../../shared/src/types';
+import { DEFAULT_TRY_ON_PROMPT } from '../../shared/src/domain';
 
 const KNOWN_PROVIDERS: Provider[] = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5'];
 const PROVIDER_DISPLAY: Record<Provider, string> = {
@@ -115,7 +116,7 @@ export const Configuracion: React.FC = () => {
       setCustomGeminiModel(systemConfig.geminiImageReviewModel);
     }
     setDisabledProviders(systemConfig.disabledProviders);
-    setSystemPrompt(systemConfig.systemPromptOverride ?? '');
+    setSystemPrompt(systemConfig.systemPromptOverride ?? DEFAULT_TRY_ON_PROMPT);
   }, [systemConfigLoading, systemConfig]);
 
   const saveSystemConfigSection = async (patch: Parameters<typeof updateSystemConfig>[0]) => {
@@ -150,7 +151,11 @@ export const Configuracion: React.FC = () => {
   };
 
   const handleSaveSystemPrompt = () => {
-    void saveSystemConfigSection({ systemPromptOverride: systemPrompt.trim() || null });
+    const trimmedPrompt = systemPrompt.trim();
+    void saveSystemConfigSection({
+      systemPromptOverride:
+        !trimmedPrompt || trimmedPrompt === DEFAULT_TRY_ON_PROMPT.trim() ? null : trimmedPrompt,
+    });
   };
 
   return (
@@ -388,7 +393,8 @@ export const Configuracion: React.FC = () => {
           <h2 className="text-base font-semibold text-slate-900">Prompt del sistema</h2>
         </div>
         <p className="text-sm text-slate-500 mb-6">
-          Override del prompt base de generación. Si está vacío se usa el prompt interno por defecto.
+          Puedes editar el prompt base de generación. Si queda igual al prompt interno por defecto,
+          se guarda sin override.
         </p>
         {systemConfigLoading ? (
           <LoadingBlock message="Cargando configuración..." />
@@ -399,7 +405,7 @@ export const Configuracion: React.FC = () => {
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               disabled={!role.canManageUsers}
-              placeholder="Dejar vacío para usar el prompt interno por defecto."
+              placeholder="Cargando prompt base..."
               className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-mono focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400 resize-y"
             />
             {role.canManageUsers ? (

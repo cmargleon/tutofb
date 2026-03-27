@@ -17,7 +17,7 @@ interface UseAiPosesParams {
   selectedClientId: string;
   draftModelId: string;
   selectedCandidate: GeneratedPhotoState | null;
-  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio'>;
+  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio' | 'providerImageConfig'>;
 }
 
 export interface UseAiPosesReturn {
@@ -128,6 +128,7 @@ export const useAiPoses = ({
               prompt: buildPosePrompt(identityForm.prompt.trim(), pose.shotType),
               provider: identityForm.provider,
               aspectRatio: identityForm.aspectRatio,
+              imageConfig: identityForm.providerImageConfig,
               count: 1,
               tempSessionId: uuidv4(),
               clientId: selectedClientId,
@@ -160,6 +161,7 @@ export const useAiPoses = ({
   }, [
     draftModelId,
     identityForm.aspectRatio,
+    identityForm.providerImageConfig,
     identityForm.prompt,
     identityForm.provider,
     selectedCandidate,
@@ -180,6 +182,7 @@ export const useAiPoses = ({
           prompt: buildPosePrompt(identityForm.prompt.trim(), poseRecipe.shotType),
           provider: identityForm.provider,
           aspectRatio: identityForm.aspectRatio,
+          imageConfig: identityForm.providerImageConfig,
           count: 1,
           tempSessionId: uuidv4(),
           clientId: selectedClientId,
@@ -210,6 +213,7 @@ export const useAiPoses = ({
     [
       draftModelId,
       identityForm.aspectRatio,
+      identityForm.providerImageConfig,
       identityForm.prompt,
       identityForm.provider,
       selectedCandidate,

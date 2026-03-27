@@ -1,10 +1,10 @@
-import { AspectRatio, Provider } from '../../../shared/src/types';
+import { Provider, ProviderImageConfig } from '../../../shared/src/types';
 
 export interface ProviderRequest {
   poseImageUrl: string;
   garmentImageUrl: string;
   prompt: string;
-  aspectRatio: AspectRatio;
+  imageConfig: ProviderImageConfig;
   signal: AbortSignal;
 }
 

@@ -1,8 +1,11 @@
 import {
-  AspectRatio,
+  FalBananaProImageConfig,
+  FalSeedreamImageConfig,
   GarmentPhotoClassificationSource,
   GarmentSourceType,
   GarmentView,
+  OpenAIImageConfig,
+  ProviderImageConfig,
   Provider,
 } from '../../../shared/src/types';
 
@@ -109,6 +112,12 @@ export interface WizardState {
   garments: UploadedGarmentDraft[];
   poseSuggestions: PoseSuggestionState;
   provider: Provider;
+  providerImageConfigs: {
+    'fal-seedream': FalSeedreamImageConfig;
+    'fal-banana-pro': FalBananaProImageConfig;
+    'openai-gpt-image-1.5': OpenAIImageConfig;
+  };
   prompt: string;
-  aspectRatio: AspectRatio;
 }
+
+export type WizardProviderImageConfig = ProviderImageConfig;

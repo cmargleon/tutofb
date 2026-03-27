@@ -1,0 +1,317 @@
+import {
+  AspectRatio,
+  BananaAspectRatio,
+  BananaResolution,
+  FalBananaProImageConfig,
+  FalSeedreamImageConfig,
+  OpenAIImageConfig,
+  OpenAIImageQuality,
+  OpenAIImageSize,
+  Provider,
+  ProviderImageConfig,
+  SeedreamCustomImageSize,
+  SeedreamImageSizePreset,
+} from './types';
+
+export const OPENAI_IMAGE_SIZE_VALUES: OpenAIImageSize[] = ['1024x1024', '1024x1536', '1536x1024'];
+export const OPENAI_IMAGE_QUALITY_VALUES: OpenAIImageQuality[] = ['low', 'medium', 'high'];
+export const BANANA_ASPECT_RATIO_VALUES: BananaAspectRatio[] = ['21:9', '16:9', '3:2', '4:3', '5:4', '1:1', '4:5', '3:4', '2:3', '9:16'];
+export const BANANA_RESOLUTION_VALUES: BananaResolution[] = ['1K', '2K', '4K'];
+export const SEEDREAM_IMAGE_SIZE_PRESET_VALUES: SeedreamImageSizePreset[] = [
+  'square_hd',
+  'square',
+  'portrait_4_3',
+  'portrait_16_9',
+  'landscape_4_3',
+  'landscape_16_9',
+  'auto',
+  'auto_2K',
+  'auto_4K',
+];
+export const ASPECT_RATIO_VALUES: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const cloneSeedreamImageSize = (
+  imageSize: FalSeedreamImageConfig['imageSize'],
+): FalSeedreamImageConfig['imageSize'] =>
+  typeof imageSize === 'string' ? imageSize : { width: imageSize.width, height: imageSize.height };
+
+export const createDefaultProviderImageConfig = (provider: Provider): ProviderImageConfig => {
+  switch (provider) {
+    case 'fal-seedream':
+      return {
+        provider,
+        imageSize: 'portrait_4_3',
+      };
+    case 'fal-banana-pro':
+      return {
+        provider,
+        aspectRatio: '3:4',
+        resolution: '1K',
+      };
+    case 'openai-gpt-image-1.5':
+      return {
+        provider,
+        size: '1024x1536',
+        quality: 'medium',
+      };
+    default:
+      throw new Error(`Proveedor no soportado: ${provider satisfies never}`);
+  }
+};
+
+const BANANA_ASPECT_RATIO_NUMBERS: Record<BananaAspectRatio, number> = {
+  '21:9': 21 / 9,
+  '16:9': 16 / 9,
+  '3:2': 3 / 2,
+  '4:3': 4 / 3,
+  '5:4': 5 / 4,
+  '1:1': 1,
+  '4:5': 4 / 5,
+  '3:4': 3 / 4,
+  '2:3': 2 / 3,
+  '9:16': 9 / 16,
+};
+
+const ASPECT_RATIO_NUMBERS: Record<AspectRatio, number> = {
+  '9:16': 9 / 16,
+  '3:4': 3 / 4,
+  '2:3': 2 / 3,
+  '1:1': 1,
+  '4:3': 4 / 3,
+  '3:2': 3 / 2,
+  '16:9': 16 / 9,
+};
+
+export const isOpenAIImageSize = (value: unknown): value is OpenAIImageSize =>
+  OPENAI_IMAGE_SIZE_VALUES.includes(value as OpenAIImageSize);
+
+export const isOpenAIImageQuality = (value: unknown): value is OpenAIImageQuality =>
+  OPENAI_IMAGE_QUALITY_VALUES.includes(value as OpenAIImageQuality);
+
+export const isBananaAspectRatio = (value: unknown): value is BananaAspectRatio =>
+  BANANA_ASPECT_RATIO_VALUES.includes(value as BananaAspectRatio);
+
+export const isBananaResolution = (value: unknown): value is BananaResolution =>
+  BANANA_RESOLUTION_VALUES.includes(value as BananaResolution);
+
+export const isSeedreamImageSizePreset = (value: unknown): value is SeedreamImageSizePreset =>
+  SEEDREAM_IMAGE_SIZE_PRESET_VALUES.includes(value as SeedreamImageSizePreset);
+
+export const isSeedreamCustomImageSize = (value: unknown): value is SeedreamCustomImageSize => {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const width = value.width;
+  const height = value.height;
+  if (
+    typeof width !== 'number'
+    || typeof height !== 'number'
+    || !Number.isFinite(width)
+    || !Number.isFinite(height)
+  ) {
+    return false;
+  }
+
+  const normalizedWidth = Math.trunc(width);
+  const normalizedHeight = Math.trunc(height);
+  return (
+    normalizedWidth >= 512
+    && normalizedHeight >= 512
+    && normalizedWidth <= 4096
+    && normalizedHeight <= 4096
+    && normalizedWidth * normalizedHeight >= 921600
+  );
+};
+
+export const isFalSeedreamImageConfig = (value: unknown): value is FalSeedreamImageConfig =>
+  isRecord(value)
+  && value.provider === 'fal-seedream'
+  && (isSeedreamImageSizePreset(value.imageSize) || isSeedreamCustomImageSize(value.imageSize));
+
+export const isFalBananaProImageConfig = (value: unknown): value is FalBananaProImageConfig =>
+  isRecord(value)
+  && value.provider === 'fal-banana-pro'
+  && isBananaAspectRatio(value.aspectRatio)
+  && isBananaResolution(value.resolution);
+
+export const isOpenAIImageConfig = (value: unknown): value is OpenAIImageConfig =>
+  isRecord(value)
+  && value.provider === 'openai-gpt-image-1.5'
+  && isOpenAIImageSize(value.size)
+  && isOpenAIImageQuality(value.quality);
+
+export const isProviderImageConfig = (value: unknown): value is ProviderImageConfig =>
+  isFalSeedreamImageConfig(value) || isFalBananaProImageConfig(value) || isOpenAIImageConfig(value);
+
+export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio: AspectRatio): ProviderImageConfig => {
+  switch (provider) {
+    case 'fal-seedream':
+      return {
+        provider,
+        imageSize: mapLegacyAspectRatioToSeedreamImageSize(aspectRatio),
+      };
+    case 'fal-banana-pro':
+      return {
+        provider,
+        aspectRatio,
+        resolution: '1K',
+      };
+    case 'openai-gpt-image-1.5':
+      return {
+        provider,
+        size: mapLegacyAspectRatioToOpenAIImageSize(aspectRatio),
+        quality: 'medium',
+      };
+    default:
+      throw new Error(`Proveedor no soportado: ${provider satisfies never}`);
+  }
+};
+
+export const cloneProviderImageConfig = (config: ProviderImageConfig): ProviderImageConfig => {
+  switch (config.provider) {
+    case 'fal-seedream':
+      return {
+        provider: config.provider,
+        imageSize: cloneSeedreamImageSize(config.imageSize),
+      };
+    case 'fal-banana-pro':
+      return {
+        provider: config.provider,
+        aspectRatio: config.aspectRatio,
+        resolution: config.resolution,
+      };
+    case 'openai-gpt-image-1.5':
+      return {
+        provider: config.provider,
+        size: config.size,
+        quality: config.quality,
+      };
+    default:
+      throw new Error(`Proveedor no soportado: ${config satisfies never}`);
+  }
+};
+
+export const mapLegacyAspectRatioToSeedreamImageSize = (aspectRatio: AspectRatio): SeedreamImageSizePreset => {
+  switch (aspectRatio) {
+    case '9:16':
+      return 'portrait_16_9';
+    case '3:4':
+    case '2:3':
+      return 'portrait_4_3';
+    case '1:1':
+      return 'square_hd';
+    case '4:3':
+    case '3:2':
+      return 'landscape_4_3';
+    case '16:9':
+      return 'landscape_16_9';
+    default:
+      return 'square_hd';
+  }
+};
+
+export const mapLegacyAspectRatioToOpenAIImageSize = (aspectRatio: AspectRatio): OpenAIImageSize => {
+  if (aspectRatio === '1:1') {
+    return '1024x1024';
+  }
+
+  const [width, height] = aspectRatio.split(':').map(Number);
+  return width > height ? '1536x1024' : '1024x1536';
+};
+
+const getClosestAspectRatio = (ratio: number): AspectRatio =>
+  ASPECT_RATIO_VALUES.reduce<AspectRatio>((closest, candidate) => {
+    const currentDistance = Math.abs(ASPECT_RATIO_NUMBERS[candidate] - ratio);
+    const closestDistance = Math.abs(ASPECT_RATIO_NUMBERS[closest] - ratio);
+    return currentDistance < closestDistance ? candidate : closest;
+  }, '1:1');
+
+export const resolveAspectRatioForImageConfig = (config: ProviderImageConfig): AspectRatio => {
+  switch (config.provider) {
+    case 'fal-seedream':
+      if (typeof config.imageSize !== 'string') {
+        return getClosestAspectRatio(config.imageSize.width / config.imageSize.height);
+      }
+
+      switch (config.imageSize) {
+        case 'portrait_16_9':
+          return '9:16';
+        case 'portrait_4_3':
+          return '3:4';
+        case 'landscape_4_3':
+          return '4:3';
+        case 'landscape_16_9':
+          return '16:9';
+        case 'square':
+        case 'square_hd':
+        case 'auto':
+        case 'auto_2K':
+        case 'auto_4K':
+        default:
+          return '1:1';
+      }
+    case 'fal-banana-pro':
+      return config.aspectRatio in ASPECT_RATIO_NUMBERS
+        ? (config.aspectRatio as AspectRatio)
+        : getClosestAspectRatio(BANANA_ASPECT_RATIO_NUMBERS[config.aspectRatio]);
+    case 'openai-gpt-image-1.5':
+      switch (config.size) {
+        case '1024x1536':
+          return '2:3';
+        case '1536x1024':
+          return '3:2';
+        case '1024x1024':
+        default:
+          return '1:1';
+      }
+    default:
+      throw new Error(`Proveedor no soportado: ${config satisfies never}`);
+  }
+};
+
+export const normalizeProviderImageConfig = (
+  provider: Provider,
+  config: unknown,
+  legacyAspectRatio?: AspectRatio | null,
+): { imageConfig: ProviderImageConfig; aspectRatio: AspectRatio } => {
+  if (isProviderImageConfig(config) && config.provider === provider) {
+    const cloned = cloneProviderImageConfig(config);
+    return {
+      imageConfig: cloned,
+      aspectRatio: resolveAspectRatioForImageConfig(cloned),
+    };
+  }
+
+  if (legacyAspectRatio) {
+    const fallback = createLegacyProviderImageConfig(provider, legacyAspectRatio);
+    return {
+      imageConfig: fallback,
+      aspectRatio: resolveAspectRatioForImageConfig(fallback),
+    };
+  }
+
+  const fallback = createDefaultProviderImageConfig(provider);
+  return {
+    imageConfig: fallback,
+    aspectRatio: resolveAspectRatioForImageConfig(fallback),
+  };
+};
+
+export const summarizeProviderImageConfig = (config: ProviderImageConfig): string => {
+  switch (config.provider) {
+    case 'fal-seedream':
+      return typeof config.imageSize === 'string'
+        ? config.imageSize
+        : `${config.imageSize.width}x${config.imageSize.height}`;
+    case 'fal-banana-pro':
+      return `${config.aspectRatio} · ${config.resolution}`;
+    case 'openai-gpt-image-1.5':
+      return `${config.size} · ${config.quality}`;
+    default:
+      throw new Error(`Proveedor no soportado: ${config satisfies never}`);
+  }
+};

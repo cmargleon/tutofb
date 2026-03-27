@@ -1,19 +1,21 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
+  AspectRatio,
   Client,
   CreateGenerationBatchRequest,
   Job,
   Model,
   Pose,
+  ProviderImageConfig,
   UploadedGarmentInput,
   UploadedGarmentPhotoInput,
 } from '../../../shared/src/types';
 import {
   buildFinalGenerationPrompt,
   isArchivedCatalogEntity,
-  isAspectRatio,
   isProvider,
 } from '../../../shared/src/domain';
+import { isProviderImageConfig, normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { EMPTY_JOB_REVIEW_SIGNALS } from '../../../shared/src/reviewMetrics';
 import {
   getSortedUniqueGarmentViews,
@@ -141,8 +143,9 @@ export interface ValidatedCreateGenerationBatchInput {
   poseIds: string[];
   garments: UploadedGarmentInput[];
   provider: CreateGenerationBatchRequest['provider'];
+  imageConfig: ProviderImageConfig;
   promptBase: string;
-  aspectRatio: CreateGenerationBatchRequest['aspectRatio'];
+  aspectRatio: AspectRatio;
   totalJobs: number;
 }
 
@@ -155,15 +158,18 @@ export const validateCreateGenerationBatchInput = (
   const modelId = requireNonEmptyString(data?.modelId, 'El modelo');
   const promptBase = typeof data?.promptBase === 'string' ? data.promptBase.trim() : '';
   const provider = data?.provider;
-  const aspectRatio = data?.aspectRatio;
+  const imageConfig = data?.imageConfig;
+  const legacyAspectRatio = data?.aspectRatio;
 
   if (!isProvider(provider)) {
     throw new HttpsError('invalid-argument', 'Se seleccionó un proveedor no compatible.');
   }
 
-  if (!isAspectRatio(aspectRatio)) {
-    throw new HttpsError('invalid-argument', 'Se seleccionó una relación de aspecto no compatible.');
+  if (imageConfig && (!isProviderImageConfig(imageConfig) || imageConfig.provider !== provider)) {
+    throw new HttpsError('invalid-argument', 'La configuracion de imagen no coincide con el proveedor seleccionado.');
   }
+
+  const normalizedImageConfig = normalizeProviderImageConfig(provider, imageConfig, legacyAspectRatio);
 
   const poseIds = Array.isArray(data?.poseIds)
     ? [...new Set(data.poseIds.filter((value): value is string => typeof value === 'string' && value.trim().length > 0))]
@@ -194,8 +200,9 @@ export const validateCreateGenerationBatchInput = (
     poseIds,
     garments,
     provider: provider!,
+    imageConfig: normalizedImageConfig.imageConfig,
     promptBase,
-    aspectRatio,
+    aspectRatio: normalizedImageConfig.aspectRatio,
     totalJobs,
   };
 };

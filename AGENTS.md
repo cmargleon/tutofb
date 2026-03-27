@@ -20,6 +20,7 @@ Validacion recomendada:
 Reglas operativas:
 - si un cambio afecta `functions/src/`, no alcanza con editar TypeScript: hay que compilar Functions
 - si ademas se quiere ver el cambio en Firebase remoto, tambien hace falta deploy
+- si para que un cambio funcione de verdad hace falta deploy en Firebase, el agente debe hacerlo sin esperar una confirmacion adicional del usuario, salvo que el usuario pida explicitamente no desplegar
 - `functions/lib/` es salida generada de build, no fuente de verdad para editar a mano
 - si un cambio requiere cualquier paso adicional para funcionar de verdad en el entorno del usuario, el agente debe hacerlo el mismo
 - esto incluye build, deploy, reinicios, regeneracion de artefactos, migraciones u otros pasos operativos equivalentes

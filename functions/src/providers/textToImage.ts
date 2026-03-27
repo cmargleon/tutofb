@@ -1,6 +1,9 @@
-import { AspectRatio } from '../../../shared/src/types';
+import {
+  FalBananaProImageConfig,
+  FalSeedreamImageConfig,
+  OpenAIImageConfig,
+} from '../../../shared/src/types';
 import { getFalPollIntervalMs, getFalPollTimeoutMs, getOpenAIBaseUrl } from '../config/runtime';
-import { mapAspectRatioToOpenAISize } from './openai';
 
 export interface TextToImageResult {
   imageBytes: Buffer;
@@ -34,19 +37,6 @@ const fetchRemoteImage = async (
     contentType: imgResp.headers.get('content-type') || fallbackContentType,
     remoteUrl: imageUrl,
   };
-};
-
-const mapAspectRatioToFluxSize = (aspectRatio: AspectRatio): string => {
-  const map: Record<AspectRatio, string> = {
-    '9:16': 'portrait_16_9',
-    '3:4': 'portrait_4_3',
-    '2:3': 'portrait_4_3',
-    '1:1': 'square_hd',
-    '4:3': 'landscape_4_3',
-    '3:2': 'landscape_4_3',
-    '16:9': 'landscape_16_9',
-  };
-  return map[aspectRatio] ?? 'square_hd';
 };
 
 const runFalTextToImage = async (
@@ -160,14 +150,14 @@ const runFalImageEdit = async (
 // fal.ai Seedream v4.5 text-to-image
 export const generateModelPhotoWithSeedreamV45 = async (
   prompt: string,
-  aspectRatio: AspectRatio,
+  imageConfig: FalSeedreamImageConfig,
   falKey: string,
 ): Promise<TextToImageResult> =>
   runFalTextToImage(
     'fal-ai/bytedance/seedream/v4.5/text-to-image',
     {
       prompt,
-      image_size: mapAspectRatioToFluxSize(aspectRatio),
+      image_size: imageConfig.imageSize,
       num_images: 1,
       enable_safety_checker: false,
     },
@@ -175,25 +165,25 @@ export const generateModelPhotoWithSeedreamV45 = async (
   );
 
 // fal.ai Nano Banana (Gemini 2.5 Flash Image) text-to-image
-const runFalBanana = (endpointId: string, prompt: string, aspectRatio: AspectRatio, falKey: string) =>
+const runFalBanana = (endpointId: string, prompt: string, imageConfig: FalBananaProImageConfig, falKey: string) =>
   runFalTextToImage(
     endpointId,
     {
       prompt,
-      aspect_ratio: aspectRatio,
-      resolution: '1K',
+      aspect_ratio: imageConfig.aspectRatio,
+      resolution: imageConfig.resolution,
       num_images: 1,
       output_format: 'jpeg',
     },
     falKey,
   );
 
-export const generateModelPhotoWithBananaPro = (prompt: string, aspectRatio: AspectRatio, falKey: string) =>
-  runFalBanana('fal-ai/nano-banana-pro', prompt, aspectRatio, falKey);
+export const generateModelPhotoWithBananaPro = (prompt: string, imageConfig: FalBananaProImageConfig, falKey: string) =>
+  runFalBanana('fal-ai/nano-banana-pro', prompt, imageConfig, falKey);
 
 export const editModelPhotoWithSeedreamV45 = (
   prompt: string,
-  aspectRatio: AspectRatio,
+  imageConfig: FalSeedreamImageConfig,
   referenceImageUrl: string,
   falKey: string,
 ): Promise<TextToImageResult> =>
@@ -203,7 +193,7 @@ export const editModelPhotoWithSeedreamV45 = (
       prompt,
       image_urls: [referenceImageUrl],
       num_images: 1,
-      image_size: mapAspectRatioToFluxSize(aspectRatio),
+      image_size: imageConfig.imageSize,
       enable_safety_checker: false,
     },
     falKey,
@@ -211,7 +201,7 @@ export const editModelPhotoWithSeedreamV45 = (
 
 export const editModelPhotoWithBananaPro = (
   prompt: string,
-  aspectRatio: AspectRatio,
+  imageConfig: FalBananaProImageConfig,
   referenceImageUrl: string,
   falKey: string,
 ): Promise<TextToImageResult> =>
@@ -221,8 +211,8 @@ export const editModelPhotoWithBananaPro = (
       prompt,
       image_urls: [referenceImageUrl],
       num_images: 1,
-      aspect_ratio: aspectRatio,
-      resolution: '1K',
+      aspect_ratio: imageConfig.aspectRatio,
+      resolution: imageConfig.resolution,
       output_format: 'png',
     },
     falKey,
@@ -231,7 +221,7 @@ export const editModelPhotoWithBananaPro = (
 // OpenAI gpt-image-1 (generations)
 export const generateModelPhotoWithOpenAI = async (
   prompt: string,
-  aspectRatio: AspectRatio,
+  imageConfig: OpenAIImageConfig,
   openaiApiKey: string,
 ): Promise<TextToImageResult> => {
   const response = await fetch(`${getOpenAIBaseUrl()}/images/generations`, {
@@ -244,8 +234,8 @@ export const generateModelPhotoWithOpenAI = async (
       model: 'gpt-image-1.5',
       prompt,
       n: 1,
-      size: mapAspectRatioToOpenAISize(aspectRatio),
-      quality: 'medium',
+      size: imageConfig.size,
+      quality: imageConfig.quality,
       output_format: 'png',
     }),
   });
@@ -270,7 +260,7 @@ export const generateModelPhotoWithOpenAI = async (
 
 export const editModelPhotoWithOpenAI = async (
   prompt: string,
-  aspectRatio: AspectRatio,
+  imageConfig: OpenAIImageConfig,
   referenceImageUrl: string,
   openaiApiKey: string,
 ): Promise<TextToImageResult> => {
@@ -283,8 +273,8 @@ export const editModelPhotoWithOpenAI = async (
     body: JSON.stringify({
       model: 'gpt-image-1.5',
       prompt,
-      size: mapAspectRatioToOpenAISize(aspectRatio),
-      quality: 'medium',
+      size: imageConfig.size,
+      quality: imageConfig.quality,
       output_format: 'png',
       input_fidelity: 'high',
       images: [{ image_url: referenceImageUrl }],

@@ -8,6 +8,7 @@ import { deleteGarmentDraftByStoragePath, uploadGarmentDrafts } from '../../stor
 import {
   GenerateWizardStepId,
   UploadedGarmentDraft,
+  WizardProviderImageConfig,
   WizardState,
   createInitialPoseSuggestionState,
 } from '../../types';
@@ -518,8 +519,14 @@ export const useGenerateWizard = () => {
     setState((current) => ({ ...current, provider }));
   };
 
-  const handleAspectRatioChange = (aspectRatio: WizardState['aspectRatio']) => {
-    setState((current) => ({ ...current, aspectRatio }));
+  const handleProviderImageConfigChange = (imageConfig: WizardProviderImageConfig) => {
+    setState((current) => ({
+      ...current,
+      providerImageConfigs: {
+        ...current.providerImageConfigs,
+        [imageConfig.provider]: imageConfig,
+      },
+    }));
   };
 
   const handlePromptChange = (prompt: string) => {
@@ -562,7 +569,7 @@ export const useGenerateWizard = () => {
     handlePoseToggle,
     handleToggleAllPoses,
     handleProviderChange,
-    handleAspectRatioChange,
+    handleProviderImageConfigChange,
     handlePromptChange,
     handleRetryPoseSuggestions,
   };

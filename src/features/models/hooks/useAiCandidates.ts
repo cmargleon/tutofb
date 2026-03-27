@@ -10,7 +10,7 @@ import type { AiIdentityFormState } from './useAiIdentityForm';
 interface UseAiCandidatesParams {
   selectedClientId: string;
   draftModelId: string;
-  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio'>;
+  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio' | 'providerImageConfig'>;
   onResetPoses: () => void;
   onAdvanceToStep2: () => void;
 }
@@ -84,6 +84,7 @@ export const useAiCandidates = ({
         prompt: identityForm.prompt.trim(),
         provider: identityForm.provider,
         aspectRatio: identityForm.aspectRatio,
+        imageConfig: identityForm.providerImageConfig,
         count: IDENTITY_CANDIDATE_COUNT,
         tempSessionId: uuidv4(),
         clientId: selectedClientId,
@@ -116,6 +117,7 @@ export const useAiCandidates = ({
     confirm,
     draftModelId,
     identityForm.aspectRatio,
+    identityForm.providerImageConfig,
     identityForm.prompt,
     identityForm.provider,
     onAdvanceToStep2,
@@ -139,6 +141,7 @@ export const useAiCandidates = ({
           prompt: identityForm.prompt.trim(),
           provider: identityForm.provider,
           aspectRatio: identityForm.aspectRatio,
+          imageConfig: identityForm.providerImageConfig,
           count: 1,
           tempSessionId: uuidv4(),
           clientId: selectedClientId,
@@ -169,6 +172,7 @@ export const useAiCandidates = ({
     [
       draftModelId,
       identityForm.aspectRatio,
+      identityForm.providerImageConfig,
       identityForm.prompt,
       identityForm.provider,
       onResetPoses,

@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { buildFinalGenerationPrompt } from '../../../shared/src/domain';
 import { Job, JobAutoReview, JobLog, JobOutput, Provider } from '../../../shared/src/types';
+import { normalizeProviderImageConfig, summarizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { toMillis } from '../../../shared/src/utils/dateUtils';
 import { generateWithProvider } from '../providers';
 import {
@@ -17,6 +18,7 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { getSystemConfigCached } from '../admin/systemConfig';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
+import { shouldBackstopPendingJob } from './jobWorker.helpers';
 
 const db = getAppFirestore();
 const bucket = admin.storage().bucket();
@@ -174,6 +176,11 @@ const persistGeneratedAttempt = async ({
   const jobRef = db.collection('jobs').doc(jobId);
   const outputRef = jobRef.collection('outputs').doc();
   const outputId = outputRef.id;
+  const normalizedImageConfig = normalizeProviderImageConfig(
+    claimedJob.provider as Provider,
+    claimedJob.imageConfig,
+    claimedJob.aspectRatio,
+  );
   const extension = extensionForContentType(providerResult.contentType);
   const destinationPath = `generated/${claimedJob.clientId}/${claimedJob.batchId}/${jobId}/${outputId}.${extension}`;
 
@@ -207,7 +214,8 @@ const persistGeneratedAttempt = async ({
     requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
     promptBase: claimedJob.promptBase,
     finalPrompt: claimedJob.finalPrompt,
-    aspectRatio: claimedJob.aspectRatio,
+    aspectRatio: normalizedImageConfig.aspectRatio,
+    imageConfig: normalizedImageConfig.imageConfig,
     resultImagePath: destinationPath,
     contentType: providerResult.contentType,
     remoteUrl: providerResult.remoteUrl,
@@ -226,6 +234,8 @@ const persistGeneratedAttempt = async ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const baseJobUpdate: Record<string, any> = {
     provider: providerResult.provider,
+    aspectRatio: normalizedImageConfig.aspectRatio,
+    imageConfig: normalizedImageConfig.imageConfig,
     status: nextStatus,
     queuePriority: nextStatus === 'pending' ? 1 : 0,
     claimToken: null,
@@ -468,13 +478,14 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
 
 export const requeueExpiredJobs = async (): Promise<number> => {
   const now = Timestamp.now();
+  const sweepLimit = getJobStuckSweepLimit();
 
   // 1. Recover stuck jobs (processing but claim expired)
   const stuckSnapshot = await db
     .collection('jobs')
     .where('status', '==', 'processing')
     .where('claimExpiresAt', '<=', now)
-    .limit(getJobStuckSweepLimit())
+    .limit(sweepLimit)
     .get();
 
   if (!stuckSnapshot.empty) {
@@ -525,20 +536,43 @@ export const requeueExpiredJobs = async (): Promise<number> => {
     .collection('jobs')
     .where('status', '==', 'pending')
     .where('retryNotBefore', '<=', now)
-    .limit(getJobStuckSweepLimit())
+    .limit(sweepLimit)
     .get();
 
   if (!deferredSnapshot.empty) {
     await Promise.all(
-      deferredSnapshot.docs.map((docSnapshot) => processJob(docSnapshot.id, 'requeue')),
+      deferredSnapshot.docs.map((docSnapshot) => processJob(docSnapshot.id, 'requeue', { skipBacklogSweep: true })),
     );
   }
 
-  return stuckSnapshot.size + deferredSnapshot.size;
+  // 3. Backstop orphan pending jobs that were never claimed
+  const pendingSnapshot = await db
+    .collection('jobs')
+    .where('status', '==', 'pending')
+    .limit(sweepLimit)
+    .get();
+
+  const orphanPendingDocs = pendingSnapshot.docs.filter((docSnapshot) =>
+    shouldBackstopPendingJob({ id: docSnapshot.id, ...docSnapshot.data() } as Job),
+  );
+
+  if (orphanPendingDocs.length > 0) {
+    await Promise.all(
+      orphanPendingDocs.map((docSnapshot) => processJob(docSnapshot.id, 'requeue', { skipBacklogSweep: true })),
+    );
+  }
+
+  return stuckSnapshot.size + deferredSnapshot.size + orphanPendingDocs.length;
 };
 
-export const processJob = async (jobId: string, source: 'create' | 'requeue'): Promise<void> => {
-  await requeueExpiredJobs();
+export const processJob = async (
+  jobId: string,
+  source: 'create' | 'requeue',
+  options?: { skipBacklogSweep?: boolean },
+): Promise<void> => {
+  if (!options?.skipBacklogSweep) {
+    await requeueExpiredJobs();
+  }
 
   const workerId = `worker:${source}:${randomUUID()}`;
   const claimedJob = await claimJob(jobId, workerId);
@@ -561,6 +595,11 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
   const timeoutHandle = setTimeout(() => controller.abort(), getJobTimeoutMs());
 
   try {
+    const normalizedImageConfig = normalizeProviderImageConfig(
+      claimedJob.provider as Provider,
+      claimedJob.imageConfig,
+      claimedJob.aspectRatio,
+    );
     const [poseImageUrl, garmentImageUrl] = await Promise.all([
       getSignedUrl(claimedJob.poseImagePath),
       getSignedUrl(claimedJob.garmentFilePath),
@@ -572,7 +611,9 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
       message: 'Se enviaron los insumos al proveedor.',
       payload: {
         provider: claimedJob.provider,
-        aspectRatio: claimedJob.aspectRatio,
+        aspectRatio: normalizedImageConfig.aspectRatio,
+        imageConfig: normalizedImageConfig.imageConfig,
+        imageConfigSummary: summarizeProviderImageConfig(normalizedImageConfig.imageConfig),
         poseImagePath: claimedJob.poseImagePath,
         garmentFilePath: claimedJob.garmentFilePath,
         garmentPhotoId: claimedJob.garmentPhotoId || null,
@@ -589,7 +630,7 @@ export const processJob = async (jobId: string, source: 'create' | 'requeue'): P
         poseImageUrl,
         garmentImageUrl,
         prompt: claimedJob.finalPrompt,
-        aspectRatio: claimedJob.aspectRatio,
+        imageConfig: normalizedImageConfig.imageConfig,
         signal: controller.signal,
       },
       {

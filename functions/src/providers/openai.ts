@@ -1,4 +1,5 @@
-import { AspectRatio } from '../../../shared/src/types';
+import { AspectRatio, OpenAIImageConfig } from '../../../shared/src/types';
+import { mapLegacyAspectRatioToOpenAIImageSize } from '../../../shared/src/providerImageConfig';
 import { getOpenAIBaseUrl } from '../config/runtime';
 import { ProviderRequest, ProviderResponse } from './types';
 
@@ -10,18 +11,14 @@ interface OpenAIImageResponse {
 }
 
 export const mapAspectRatioToOpenAISize = (aspectRatio: AspectRatio): string => {
-  if (aspectRatio === '1:1') {
-    return '1024x1024';
-  }
-
-  const [width, height] = aspectRatio.split(':').map(Number);
-  return width > height ? '1536x1024' : '1024x1536';
+  return mapLegacyAspectRatioToOpenAIImageSize(aspectRatio);
 };
 
 export const generateWithOpenAI = async (
   request: ProviderRequest,
   openaiApiKey: string,
 ): Promise<ProviderResponse> => {
+  const imageConfig = request.imageConfig as OpenAIImageConfig;
   const response = await fetch(`${getOpenAIBaseUrl()}/images/edits`, {
     method: 'POST',
     headers: {
@@ -31,8 +28,8 @@ export const generateWithOpenAI = async (
     body: JSON.stringify({
       model: 'gpt-image-1.5',
       prompt: request.prompt,
-      size: mapAspectRatioToOpenAISize(request.aspectRatio),
-      quality: 'medium',
+      size: imageConfig.size,
+      quality: imageConfig.quality,
       output_format: 'png',
       input_fidelity: 'high',
       images: [

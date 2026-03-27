@@ -1,10 +1,12 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
-import { AspectRatio, ModelPhotoProvider } from '../../../../shared/src/types';
+import { ModelPhotoProvider } from '../../../../shared/src/types';
 import { ModelCreateFlowAiState } from '../../../features/models/hooks/useModelCreateFlow';
+import { mapModelPhotoProviderToProvider } from '../../../features/models/providerImageConfig';
 import { MODEL_INPUT_BASE } from '../../../features/models/utils';
 import { Button } from '../../ui';
 import { SelectField } from '../SelectField';
+import { ProviderImageConfigSelection } from '../../wizard/ProviderImageConfigSelection';
 
 interface AiIdentityStepProps {
   ai: ModelCreateFlowAiState;
@@ -169,19 +171,19 @@ export const AiIdentityStep: React.FC<AiIdentityStepProps> = ({ ai }) => (
         </SelectField>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-gray-600">Relación de aspecto</label>
-        <SelectField
-          value={ai.aspectRatio}
-          onChange={(event) => ai.setAspectRatio(event.target.value as AspectRatio)}
-          disabled={ai.busy}
-        >
-          {ai.aspectOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </SelectField>
+        <label className="mb-1 block text-xs font-medium text-gray-600">Relación resultante</label>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+          {ai.aspectOptions.find((option) => option.value === ai.aspectRatio)?.label || ai.aspectRatio}
+        </div>
       </div>
+    </div>
+
+    <div className={ai.busy ? 'pointer-events-none opacity-60' : undefined}>
+      <ProviderImageConfigSelection
+        provider={mapModelPhotoProviderToProvider(ai.provider)}
+        value={ai.providerImageConfig}
+        onChange={ai.setProviderImageConfig}
+      />
     </div>
 
     <div>

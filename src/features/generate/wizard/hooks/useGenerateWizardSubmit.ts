@@ -12,6 +12,7 @@ import {
 } from '../submit';
 import {
   getGenerateWizardSubmitButtonLabel,
+  getSelectedProviderImageConfig,
   isGarmentUploadedForBatch,
 } from '../state';
 
@@ -82,6 +83,25 @@ export const useGenerateWizardSubmit = ({
     ) {
       setFlowError('Completa cliente, modelo, poses y prendas antes de crear el lote.');
       return;
+    }
+
+    const selectedProviderImageConfig = getSelectedProviderImageConfig(state);
+    if (
+      selectedProviderImageConfig.provider === 'fal-seedream'
+      && typeof selectedProviderImageConfig.imageSize !== 'string'
+    ) {
+      const { width, height } = selectedProviderImageConfig.imageSize;
+      const totalPixels = width * height;
+
+      if (width < 512 || height < 512 || width > 4096 || height > 4096) {
+        setFlowError('Seedream admite pixeles custom entre 512 y 4096 por lado.');
+        return;
+      }
+
+      if (totalPixels < 921600) {
+        setFlowError('Con Seedream custom necesitas al menos 921,600 px en total. Un ejemplo valido es 1280x720.');
+        return;
+      }
     }
 
     setIsSubmitting(true);

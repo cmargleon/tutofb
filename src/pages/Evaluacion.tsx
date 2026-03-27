@@ -10,8 +10,10 @@ import { Download, AlertCircle, Clock, RefreshCw, CheckSquare2, ChevronDown, Che
 import { useAuth, useRole } from '../features/auth/AuthProvider';
 import { buildJobPoseIndexMap } from '../features/evaluation/jobSlides';
 import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../shared/src/domain';
-import { Job, JobStatus, Provider } from '../../shared/src/types';
+import { Batch, Job, JobStatus, Provider } from '../../shared/src/types';
 import { usePersistedJobOutputSelections } from '../features/evaluation/usePersistedJobOutputSelections';
+import { useRecentEvaluationBatches } from '../features/evaluation/useRecentEvaluationBatches';
+import { formatDateTimeLong } from '../../shared/src/utils/dateUtils';
 
 const isTypingTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement
@@ -50,6 +52,7 @@ export const Evaluacion: React.FC = () => {
       });
     },
   );
+  const { batches: recentBatches, loading: recentBatchesLoading } = useRecentEvaluationBatches(user?.uid ?? null);
 
   useEffect(() => {
     if (!batchId && resolvedBatchId) {
@@ -68,6 +71,21 @@ export const Evaluacion: React.FC = () => {
   );
 
   const poseIndexes = useMemo(() => buildJobPoseIndexMap(filteredJobs), [filteredJobs]);
+  const batchOptions = useMemo(() => {
+    const merged = new Map<string, Batch>();
+
+    recentBatches.forEach((recentBatch) => {
+      if (recentBatch.id) {
+        merged.set(recentBatch.id, recentBatch);
+      }
+    });
+
+    if (batch?.id && !merged.has(batch.id)) {
+      merged.set(batch.id, batch);
+    }
+
+    return [...merged.values()];
+  }, [batch, recentBatches]);
   const selectedJobs = useMemo(
     () => selectedJobIds.map((jobId) => filteredJobs.find((job) => job.id === jobId)).filter((job): job is Job => Boolean(job)),
     [filteredJobs, selectedJobIds],
@@ -301,6 +319,7 @@ export const Evaluacion: React.FC = () => {
   const canRegenerateFailed = role.canRegenerate && batch.failedJobs > 0;
   const canCancelPending = role.canRegenerate && batch.pendingJobs > 0;
   const hasSelection = selectedJobIds.length > 0;
+  const selectedBatchOptionValue = resolvedBatchId || batch.id || '';
 
   return (
     <div className={`transition-all ${hasSelection ? 'pb-28' : ''}`}>
@@ -372,6 +391,34 @@ export const Evaluacion: React.FC = () => {
               {!headerCollapsed ? (
                 <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
                   <div className="flex flex-wrap items-end gap-3">
+                    <label className="block flex-[1.6] min-w-[260px]">
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Lote</span>
+                      <select
+                        value={selectedBatchOptionValue}
+                        onChange={(event) => {
+                          const nextBatchId = event.target.value;
+                          if (nextBatchId && nextBatchId !== resolvedBatchId) {
+                            navigate(`/evaluacion?batchId=${nextBatchId}`);
+                          }
+                        }}
+                        disabled={recentBatchesLoading || batchOptions.length === 0}
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        {batchOptions.length === 0 ? (
+                          <option value="">{recentBatchesLoading ? 'Cargando lotes...' : 'Sin lotes disponibles'}</option>
+                        ) : null}
+                        {batchOptions.map((batchOption) => (
+                          <option key={batchOption.id} value={batchOption.id}>
+                            {[
+                              batchOption.clientNameSnapshot,
+                              batchOption.modelNameSnapshot,
+                              formatDateTimeLong(batchOption.createdAt),
+                              batchOption.id?.slice(0, 8),
+                            ].filter(Boolean).join(' · ')}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="block flex-1 min-w-[140px]">
                       <span className="mb-1 block text-xs font-medium text-slate-600">Proveedor</span>
                       <select

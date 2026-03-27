@@ -1,6 +1,6 @@
 import React from 'react';
 import { ASPECT_RATIO_VALUES } from '../../../shared/src/domain';
-import { WizardState } from '../../features/generate/types';
+import { AspectRatio } from '../../../shared/src/types';
 
 const RATIO_LABELS: Record<(typeof ASPECT_RATIO_VALUES)[number], string> = {
   '9:16': 'Stories / Reels',
@@ -13,8 +13,8 @@ const RATIO_LABELS: Record<(typeof ASPECT_RATIO_VALUES)[number], string> = {
 };
 
 interface AspectRatioSelectionProps {
-  value: WizardState['aspectRatio'];
-  onChange: (ratio: WizardState['aspectRatio']) => void;
+  value: AspectRatio;
+  onChange: (ratio: AspectRatio) => void;
 }
 
 export const AspectRatioSelection: React.FC<AspectRatioSelectionProps> = ({ value, onChange }) => (

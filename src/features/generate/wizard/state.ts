@@ -1,6 +1,8 @@
 import {
   DEFAULT_TRY_ON_PROMPT,
 } from '../../../../shared/src/domain';
+import { createDefaultProviderImageConfig } from '../../../../shared/src/providerImageConfig';
+import { FalBananaProImageConfig, FalSeedreamImageConfig, OpenAIImageConfig } from '../../../../shared/src/types';
 import { WizardStepDefinition } from '../../wizard/types';
 import {
   GarmentUploadState,
@@ -28,9 +30,15 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   garments: [],
   poseSuggestions: createInitialPoseSuggestionState(),
   provider: 'fal-seedream',
+  providerImageConfigs: {
+    'fal-seedream': createDefaultProviderImageConfig('fal-seedream') as FalSeedreamImageConfig,
+    'fal-banana-pro': createDefaultProviderImageConfig('fal-banana-pro') as FalBananaProImageConfig,
+    'openai-gpt-image-1.5': createDefaultProviderImageConfig('openai-gpt-image-1.5') as OpenAIImageConfig,
+  },
   prompt: DEFAULT_TRY_ON_PROMPT,
-  aspectRatio: '3:4',
 });
+
+export const getSelectedProviderImageConfig = (state: WizardState) => state.providerImageConfigs[state.provider];
 
 export const createEmptyUploadSummary = (): UploadSummary => ({
   total: 0,

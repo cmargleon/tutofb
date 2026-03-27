@@ -1,5 +1,4 @@
-import React from 'react';
-import { AlertCircle } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
 import { LoadingBlock, PageHeader } from '../components/ui';
 import { WizardStepper } from '../components/WizardStepper';
 import { WizardFooter } from '../components/wizard/WizardFooter';
@@ -7,10 +6,13 @@ import { ClientModelStep } from '../components/wizard/ClientModelStep';
 import { GarmentsStep } from '../components/wizard/GarmentsStep';
 import { PoseSelectionStep } from '../components/wizard/PoseSelectionStep';
 import { BatchStep } from '../components/wizard/BatchStep';
+import { useToast } from '../features/feedback/FeedbackProvider';
 import { useWizard } from '../features/generate/hooks/useWizard';
 import { GENERATE_WIZARD_MAX_STEP, GENERATE_WIZARD_STEPS } from '../features/generate/wizard/state';
 
 export const Wizard: React.FC = () => {
+  const toast = useToast();
+  const lastErrorRef = useRef<string | null>(null);
   const {
     state,
     clients,
@@ -37,11 +39,30 @@ export const Wizard: React.FC = () => {
     handlePoseToggle,
     handleToggleAllPoses,
     handleProviderChange,
-    handleAspectRatioChange,
+    handleProviderImageConfigChange,
     handlePromptChange,
     handleRetryPoseSuggestions,
   } = useWizard();
   const isWizardBusy = isSubmitting || state.poseSuggestions.status === 'preparing';
+
+  useEffect(() => {
+    if (!error) {
+      lastErrorRef.current = null;
+      return;
+    }
+
+    if (lastErrorRef.current === error) {
+      return;
+    }
+
+    lastErrorRef.current = error;
+    toast({
+      tone: 'error',
+      title: 'No pudimos continuar',
+      description: error,
+      durationMs: 6500,
+    });
+  }, [error, toast]);
 
   if (loadingData) {
     return (
@@ -61,13 +82,6 @@ export const Wizard: React.FC = () => {
         title="Generar imágenes"
         description="Replica el flujo operativo del catálogo: eliges cliente y modelo, subes prendas, confirmas las poses sugeridas y generas un trabajo por cada combinación compatible pose-prenda."
       />
-
-      {error && (
-        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
 
       <div className="rounded-[32px] border border-slate-200 bg-slate-50 p-6 shadow-sm">
         <div ref={stepperRef}>
@@ -125,7 +139,7 @@ export const Wizard: React.FC = () => {
             submitButtonLabel={submitButtonLabel}
             disabledProviders={disabledProviders}
             onProviderChange={handleProviderChange}
-            onAspectRatioChange={handleAspectRatioChange}
+            onProviderImageConfigChange={handleProviderImageConfigChange}
             onPromptChange={handlePromptChange}
             onSubmit={handleSubmit}
           />

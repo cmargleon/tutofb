@@ -1,7 +1,8 @@
 import { CreateGenerationBatchRequest } from '../../../../shared/src/types';
+import { resolveAspectRatioForImageConfig } from '../../../../shared/src/providerImageConfig';
 import { UploadGarmentDraftsResult } from '../storage';
 import { GarmentUploadState, UploadedGarmentDraft, WizardState } from '../types';
-import { isGarmentUploadedForBatch } from './state';
+import { getSelectedProviderImageConfig, isGarmentUploadedForBatch } from './state';
 
 type UploadedGarmentPhotoRequest = NonNullable<CreateGenerationBatchRequest['garments'][number]['photos']>[number];
 
@@ -138,12 +139,20 @@ export const getUploadFailureMessage = (
   return 'No se pudo completar la subida del lote. Puedes reintentar y las prendas exitosas quedarán recuperadas.';
 };
 
-export const buildCreateGenerationBatchRequest = (state: WizardState, garments: CreateGenerationBatchRequest['garments']): CreateGenerationBatchRequest => ({
-  clientId: state.selectedClientId!,
-  modelId: state.selectedModelId!,
-  poseIds: state.selectedPoseIds,
-  garments,
-  provider: state.provider,
-  promptBase: state.prompt,
-  aspectRatio: state.aspectRatio,
-});
+export const buildCreateGenerationBatchRequest = (
+  state: WizardState,
+  garments: CreateGenerationBatchRequest['garments'],
+): CreateGenerationBatchRequest => {
+  const imageConfig = getSelectedProviderImageConfig(state);
+
+  return {
+    clientId: state.selectedClientId!,
+    modelId: state.selectedModelId!,
+    poseIds: state.selectedPoseIds,
+    garments,
+    provider: state.provider,
+    promptBase: state.prompt,
+    aspectRatio: resolveAspectRatioForImageConfig(imageConfig),
+    imageConfig,
+  };
+};

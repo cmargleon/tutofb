@@ -11,15 +11,40 @@ const { mapAspectRatioToSeedreamSize } = require('../functions/lib/functions/src
 const { mapAspectRatioToOpenAISize } = require('../functions/lib/functions/src/providers/openai.js') as {
   mapAspectRatioToOpenAISize: typeof import('../functions/src/providers/openai').mapAspectRatioToOpenAISize;
 };
+const { normalizeProviderImageConfig } = require('../functions/lib/shared/src/providerImageConfig.js') as {
+  normalizeProviderImageConfig: typeof import('../shared/src/providerImageConfig').normalizeProviderImageConfig;
+};
 
 test('mapea aspect ratios de seedream y openai como espera el worker', () => {
   assert.equal(mapAspectRatioToSeedreamSize('1:1'), 'square_hd');
   assert.equal(mapAspectRatioToSeedreamSize('16:9'), 'landscape_16_9');
-  assert.equal(mapAspectRatioToSeedreamSize('3:4'), 'portrait_16_9');
+  assert.equal(mapAspectRatioToSeedreamSize('3:4'), 'portrait_4_3');
 
   assert.equal(mapAspectRatioToOpenAISize('1:1'), '1024x1024');
   assert.equal(mapAspectRatioToOpenAISize('16:9'), '1536x1024');
   assert.equal(mapAspectRatioToOpenAISize('3:4'), '1024x1536');
+});
+
+test('normaliza configuraciones por proveedor a un payload real de API', () => {
+  const seedream = normalizeProviderImageConfig('fal-seedream', {
+    provider: 'fal-seedream',
+    imageSize: 'portrait_16_9',
+  });
+  assert.equal(seedream.aspectRatio, '9:16');
+
+  const banana = normalizeProviderImageConfig('fal-banana-pro', {
+    provider: 'fal-banana-pro',
+    aspectRatio: '5:4',
+    resolution: '2K',
+  });
+  assert.equal(banana.aspectRatio, '4:3');
+
+  const openai = normalizeProviderImageConfig('openai-gpt-image-1.5', {
+    provider: 'openai-gpt-image-1.5',
+    size: '1024x1536',
+    quality: 'high',
+  });
+  assert.equal(openai.aspectRatio, '2:3');
 });
 
 test('generateWithProvider valida secretos antes de intentar salir a red', async () => {
@@ -31,7 +56,10 @@ test('generateWithProvider valida secretos antes de intentar salir a red', async
           poseImageUrl: 'https://example.com/pose.jpg',
           garmentImageUrl: 'https://example.com/garment.jpg',
           prompt: 'hola',
-          aspectRatio: '3:4',
+          imageConfig: {
+            provider: 'fal-seedream',
+            imageSize: 'portrait_4_3',
+          },
           signal: AbortSignal.timeout(10),
         },
         {},
@@ -47,7 +75,11 @@ test('generateWithProvider valida secretos antes de intentar salir a red', async
           poseImageUrl: 'https://example.com/pose.jpg',
           garmentImageUrl: 'https://example.com/garment.jpg',
           prompt: 'hola',
-          aspectRatio: '3:4',
+          imageConfig: {
+            provider: 'openai-gpt-image-1.5',
+            size: '1024x1536',
+            quality: 'medium',
+          },
           signal: AbortSignal.timeout(10),
         },
         {},

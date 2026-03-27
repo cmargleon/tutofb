@@ -1,8 +1,8 @@
 import React from 'react';
-import { UploadedGarmentDraft, UploadSummary, WizardState } from '../../features/generate/types';
-import { AspectRatioSelection } from './AspectRatioSelection';
+import { UploadedGarmentDraft, UploadSummary, WizardProviderImageConfig, WizardState } from '../../features/generate/types';
 import { BatchUploadSummary } from './BatchUploadSummary';
 import { PromptBaseField } from './PromptBaseField';
+import { ProviderImageConfigSelection } from './ProviderImageConfigSelection';
 import { ProviderSelection } from './ProviderSelection';
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
   submitButtonLabel: string;
   disabledProviders?: string[];
   onProviderChange: (provider: WizardState['provider']) => void;
-  onAspectRatioChange: (ratio: WizardState['aspectRatio']) => void;
+  onProviderImageConfigChange: (config: WizardProviderImageConfig) => void;
   onPromptChange: (prompt: string) => void;
   onSubmit: () => void;
 }
@@ -28,7 +28,7 @@ export const BatchStep: React.FC<Props> = ({
   submitButtonLabel,
   disabledProviders,
   onProviderChange,
-  onAspectRatioChange,
+  onProviderImageConfigChange,
   onPromptChange,
   onSubmit,
 }) => (
@@ -36,7 +36,11 @@ export const BatchStep: React.FC<Props> = ({
     <BatchUploadSummary garments={garments} uploadSummary={uploadSummary} />
     <ProviderSelection provider={state.provider} onChange={onProviderChange} disabledProviders={disabledProviders} />
 
-    <AspectRatioSelection value={state.aspectRatio} onChange={onAspectRatioChange} />
+    <ProviderImageConfigSelection
+      provider={state.provider}
+      value={state.providerImageConfigs[state.provider]}
+      onChange={onProviderImageConfigChange}
+    />
     <PromptBaseField value={state.prompt} onChange={onPromptChange} />
 
     <button

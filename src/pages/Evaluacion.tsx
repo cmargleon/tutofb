@@ -484,8 +484,9 @@ export const Evaluacion: React.FC = () => {
           type="button"
           onClick={() => void handleDownloadAll()}
           disabled={downloading}
-          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-green-500 text-white shadow-xl transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-green-500 text-white shadow-xl transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
           title="Guardar todas las imágenes"
+          style={{ bottom: 'max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 1.5rem))' }}
         >
           {downloading
             ? <RefreshCw className="h-6 w-6 animate-spin" />

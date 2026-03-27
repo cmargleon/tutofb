@@ -290,6 +290,9 @@ export interface Job {
   autoReviewMaxAttempts?: number;
   latestAutoReview?: JobAutoReview | null;
   manualRegenerationCount: number;
+  manuallyFlagged?: boolean;
+  manuallyFlaggedAt?: TimestampLike | null;
+  manuallyFlaggedByUid?: string | null;
   reviewSignals?: JobReviewSignals;
   traceability?: JobTraceabilitySummary;
   createdAt: TimestampLike;

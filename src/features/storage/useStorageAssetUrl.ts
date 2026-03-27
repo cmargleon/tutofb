@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { FirebaseError } from 'firebase/app';
 import { resolveStorageAssetUrl } from './assets';
 
 export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
@@ -29,7 +30,13 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
         }
       })
       .catch((error) => {
-        console.error('Error resolving storage asset URL:', error);
+        const isObjectNotFound =
+          error instanceof FirebaseError && error.code === 'storage/object-not-found';
+
+        if (!isObjectNotFound) {
+          console.error('Error resolving storage asset URL:', error);
+        }
+
         if (isMounted) {
           setUrl(null);
         }

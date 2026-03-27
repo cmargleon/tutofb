@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
 import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRegenerationFirebase';
@@ -7,18 +7,18 @@ import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { buildGarmentSlides } from '../../features/evaluation/jobSlides';
 import { HoverZoomImage } from './HoverZoomImage';
 import { AttemptThumbnail } from './AttemptThumbnail';
-import { MultiFloatingGarmentPreview } from './MultiFloatingGarmentPreview';
 import { BatchErrorLogPanel } from './BatchErrorLogPanel';
 import { JobTraceabilityPanel } from './JobTraceabilityPanel';
-import { StatusBadge } from '../ui';
+import { ImageThumb } from '../ui';
 import {
   RefreshCw, ChevronLeft, ChevronRight, Heart, AlertTriangle,
-  Download, ImageIcon, AlertCircle, XCircle, ChevronDown, ChevronUp,
+  Download, ImageIcon, AlertCircle, XCircle, ChevronDown, ChevronUp, List, Shirt,
 } from 'lucide-react';
 import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
 import { useToast } from '../../features/feedback/FeedbackProvider';
-import { useRole } from '../../features/auth/AuthProvider';
+import { useAuth, useRole } from '../../features/auth/AuthProvider';
 import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils';
+import { setJobManualFlag } from '../../features/evaluation/firebase';
 
 const HISTORY_LIMIT = 18;
 
@@ -28,6 +28,10 @@ const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string =>
 const isTypingTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
+const isInteractiveTarget = (target: EventTarget | null) =>
+  target instanceof Element
+  && Boolean(target.closest('button, a, input, textarea, select, label, [role="button"]'));
 
 interface Props {
   batch: Batch;
@@ -65,8 +69,15 @@ interface PoseViewProps {
   onSelectOutput?: (outputId: string | null, output: JobOutput | null) => void;
   onPrev: () => void;
   onNext: () => void;
+  onPrevGarment: () => void;
+  onNextGarment: () => void;
   canGoPrev: boolean;
   canGoNext: boolean;
+  canGoPrevGarment: boolean;
+  canGoNextGarment: boolean;
+  layoutMode: 'desktop' | 'tablet' | 'mobile';
+  showDetailsOverlay?: boolean;
+  onCloseDetailsOverlay?: () => void;
 }
 
 const PoseView: React.FC<PoseViewProps> = ({
@@ -88,12 +99,26 @@ const PoseView: React.FC<PoseViewProps> = ({
   onSelectOutput,
   onPrev,
   onNext,
+  onPrevGarment,
+  onNextGarment,
   canGoPrev,
   canGoNext,
+  canGoPrevGarment,
+  canGoNextGarment,
+  layoutMode,
+  showDetailsOverlay = false,
+  onCloseDetailsOverlay,
 }) => {
   const role = useRole();
+  const { user } = useAuth();
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
+  const [isUpdatingFlag, setIsUpdatingFlag] = useState(false);
+  const [isGestureDragging, setIsGestureDragging] = useState(false);
+  const [gestureDelta, setGestureDelta] = useState({ x: 0, y: 0 });
+  const [gestureDirection, setGestureDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
+  const gesturePointerIdRef = useRef<number | null>(null);
+  const gestureStartRef = useRef<{ x: number; y: number } | null>(null);
   const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
 
   const outputsDesc = useMemo(() => {
@@ -112,7 +137,11 @@ const PoseView: React.FC<PoseViewProps> = ({
   const historyOutputs = useMemo(() => [...outputsDesc].reverse(), [outputsDesc]);
   const isViewingLatest = displayedOutput?.id === currentOutput?.id;
   const isUserApproved = Boolean(displayedOutput?.id && selectedOutputId === displayedOutput.id);
-  const activeReview = displayedOutput?.autoReview ?? (isViewingLatest ? job.latestAutoReview ?? null : null);
+  const currentOutputAutoReviewVerdict = currentOutput?.autoReview?.verdict ?? job.latestAutoReview?.verdict ?? null;
+  const approvedOutputId =
+    selectedOutputId
+    || (currentOutputAutoReviewVerdict === 'approved' ? currentOutput?.id ?? null : null);
+  const showApprovedBadge = Boolean(displayedOutput?.id && displayedOutput.id === approvedOutputId);
 
   const { url: displayedImageUrl } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
 
@@ -123,6 +152,8 @@ const PoseView: React.FC<PoseViewProps> = ({
   const showInlineLoadingBadge = hasOutput && isLoadingState && isViewingLatest;
   const showLoadingPlaceholder = !hasOutput && isLoadingState;
   const controlsDisabled = isProcessing || isQueueing || isCancellingGeneration;
+  const isManuallyFlagged = Boolean(job.manuallyFlagged);
+  const gesturesEnabled = layoutMode !== 'desktop';
 
   useEffect(() => {
     if (selectedOutputId && !outputsDesc.some((o) => o.id === selectedOutputId)) {
@@ -154,183 +185,405 @@ const PoseView: React.FC<PoseViewProps> = ({
     }
   };
 
-  const handleApprove = () => {
+  const handleApproveAndAdvance = () => {
     if (!displayedOutput) return;
-    onSelectOutput?.(isUserApproved ? null : displayedOutput.id, isUserApproved ? null : displayedOutput);
+    onSelectOutput?.(displayedOutput.id, displayedOutput);
+    if (canGoNext) onNext();
   };
 
-  const verdictBadge = isUserApproved
-    ? { label: '✓ Elegida', cls: 'bg-emerald-600/90 text-white' }
-    : activeReview?.verdict === 'approved'
-      ? { label: '✓ OK', cls: 'bg-emerald-600/90 text-white' }
-      : activeReview?.verdict === 'rejected'
-        ? { label: '↻ Reintento', cls: 'bg-amber-500/90 text-white' }
-        : null;
+  const resetGesture = () => {
+    gesturePointerIdRef.current = null;
+    gestureStartRef.current = null;
+    setIsGestureDragging(false);
+    setGestureDelta({ x: 0, y: 0 });
+    setGestureDirection(null);
+  };
 
-  return (
-    <div className="flex h-full">
-      {/* ── LEFT PANEL ─────────────────────────────────────────── */}
-      <div className="flex w-64 shrink-0 flex-col border-r border-slate-100 overflow-y-auto">
-        {/* Garment & pose info */}
-        <div className="border-b border-slate-100 px-3 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">
-            Prenda {garmentIndex + 1} / {totalGarments}
-          </p>
-          <p className="mt-0.5 truncate text-sm font-semibold text-slate-800">{job.garmentName}</p>
-          <div className="mt-1 flex items-center gap-2">
-            <p className="text-xs text-slate-500">Pose {poseIndex + 1} / {totalPoses}</p>
-            <StatusBadge status={job.status} />
-          </div>
-        </div>
+  const resolveGestureDirection = (deltaX: number, deltaY: number) => {
+    if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+      return deltaX >= 0 ? 'right' : 'left';
+    }
+    return deltaY >= 0 ? 'down' : 'up';
+  };
 
-        {/* History thumbnails — horizontal scroll */}
-        {historyOutputs.length > 0 ? (
-          <div className="border-b border-slate-100 px-3 py-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Historial</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {historyOutputs.map((output, outputIndex) => (
-                <AttemptThumbnail
-                  key={output.id}
-                  output={output}
-                  label={formatOutputLabel(output, outputIndex)}
-                  active={displayedOutput?.id === output.id}
-                  userApproved={selectedOutputId === output.id}
-                  onSelect={() => onSelectOutput?.(output.id, output)}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
+  const handleSwipeAction = (direction: 'left' | 'right' | 'up' | 'down') => {
+    if (!gesturesEnabled) return;
 
-        {/* Prompt + provider */}
-        {role.canRegenerate ? (
-          <div className="flex flex-col gap-3 px-3 py-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Prompt</label>
-              <textarea
-                value={draft.prompt}
-                onChange={(e) => onUpdateDraft({ prompt: e.target.value })}
-                disabled={controlsDisabled}
-                rows={5}
-                className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
-                placeholder="Prompt para regenerar..."
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Modelo IA</label>
-              <select
-                value={draft.provider}
-                onChange={(e) => onUpdateDraft({ provider: e.target.value as Provider })}
-                disabled={controlsDisabled}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
-              >
-                <option value="fal-seedream">{PROVIDER_LABELS['fal-seedream']}</option>
-                <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
-                <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
-              </select>
-            </div>
-          </div>
-        ) : null}
+    if (direction === 'left') {
+      if (!controlsDisabled && draft.prompt.trim() && role.canRegenerate) onRegenerate();
+      return;
+    }
 
-        {/* Download individual */}
-        {hasOutput && !isLoadingState ? (
-          <div className="mt-auto border-t border-slate-100 px-3 py-3">
-            <button
-              onClick={() => void handleDownload()}
-              disabled={downloading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Download className="h-3.5 w-3.5" />
-              {downloading ? 'Descargando...' : 'Descargar imagen'}
-            </button>
-          </div>
-        ) : null}
+    if (direction === 'right') {
+      handleApproveAndAdvance();
+      return;
+    }
 
-        {/* Errors */}
-        {(regenerationError || cancellationError || (job.status === 'failed' && job.lastError)) ? (
-          <div className="space-y-2 px-3 pb-3">
-            {regenerationError ? (
-              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
-                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
-                <span>{regenerationError}</span>
-              </div>
-            ) : null}
-            {cancellationError ? (
-              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
-                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
-                <span>{cancellationError}</span>
-              </div>
-            ) : null}
-            {job.status === 'failed' && job.lastError ? (
-              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
-                <span>{job.lastError}</span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+    if (direction === 'up') {
+      if (canGoPrevGarment) onPrevGarment();
+      return;
+    }
+
+    if (canGoNextGarment) onNextGarment();
+  };
+
+  const handleGesturePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!gesturesEnabled || isInteractiveTarget(event.target)) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    gesturePointerIdRef.current = event.pointerId;
+    gestureStartRef.current = { x: event.clientX, y: event.clientY };
+    setIsGestureDragging(true);
+    setGestureDelta({ x: 0, y: 0 });
+    setGestureDirection(null);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleGesturePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!gesturesEnabled || gesturePointerIdRef.current !== event.pointerId || !gestureStartRef.current) return;
+
+    const deltaX = event.clientX - gestureStartRef.current.x;
+    const deltaY = event.clientY - gestureStartRef.current.y;
+    const nextDirection = Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= 16
+      ? resolveGestureDirection(deltaX, deltaY)
+      : null;
+
+    setGestureDelta({ x: deltaX, y: deltaY });
+    setGestureDirection(nextDirection);
+  };
+
+  const handleGesturePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!gesturesEnabled || gesturePointerIdRef.current !== event.pointerId || !gestureStartRef.current) {
+      resetGesture();
+      return;
+    }
+
+    const deltaX = event.clientX - gestureStartRef.current.x;
+    const deltaY = event.clientY - gestureStartRef.current.y;
+    const direction = resolveGestureDirection(deltaX, deltaY);
+    const movement = direction === 'left' || direction === 'right' ? Math.abs(deltaX) : Math.abs(deltaY);
+
+    if (movement >= 72) {
+      handleSwipeAction(direction);
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    resetGesture();
+  };
+
+  const handleGesturePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    resetGesture();
+  };
+
+  const handleToggleFlag = async () => {
+    if (!job.id || isUpdatingFlag) return;
+
+    setIsUpdatingFlag(true);
+    try {
+      const nextFlaggedState = !isManuallyFlagged;
+      await setJobManualFlag(job.id, nextFlaggedState, user?.uid ?? null);
+      toast({
+        tone: nextFlaggedState ? 'warning' : 'success',
+        title: nextFlaggedState ? 'Foto marcada' : 'Marca removida',
+        description: nextFlaggedState
+          ? 'La pose quedó flagueada en la base de datos.'
+          : 'La pose dejó de estar flagueada.',
+      });
+    } catch (error) {
+      console.error('Error updating manual flag:', error);
+      toast({
+        tone: 'error',
+        title: 'No pudimos actualizar la marca',
+        description: 'Inténtalo de nuevo en unos segundos.',
+      });
+    } finally {
+      setIsUpdatingFlag(false);
+    }
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target)) return;
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canGoPrev) onPrev();
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canGoNext) onNext();
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canGoPrevGarment) onPrevGarment();
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canGoNextGarment) onNextGarment();
+        return;
+      }
+
+      if (event.code === 'Space') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!controlsDisabled && draft.prompt.trim() && role.canRegenerate) onRegenerate();
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleApproveAndAdvance();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [
+    canGoNext,
+    canGoPrev,
+    canGoNextGarment,
+    canGoPrevGarment,
+    controlsDisabled,
+    draft.prompt,
+    onNext,
+    onNextGarment,
+    onPrev,
+    onPrevGarment,
+    onRegenerate,
+    role.canRegenerate,
+    displayedOutput,
+    onSelectOutput,
+  ]);
+
+  const detailsPanelContent = (
+    <>
+      <div className="border-b border-slate-100 px-3 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">
+          Prenda {garmentIndex + 1} / {totalGarments}
+        </p>
       </div>
 
-      {/* ── RIGHT PANEL ────────────────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Image — centered, natural aspect ratio (no gray bars, zoom only on photo) */}
-        <div className="relative min-h-0 flex-1 overflow-hidden">
-          {/* absolute inset-0 gives a definite height so h-full resolves correctly */}
-          <div className="absolute inset-0 flex items-center justify-center">
-          {hasOutput ? (
-            <>
-              {/* Wrapper: full height, width from aspect-ratio → no side whitespace */}
-              <div className="relative" style={{ height: '100%' }}>
-                <HoverZoomImage
-                  src={displayedImageUrl!}
-                  alt={`Pose ${poseIndex + 1}`}
-                  containerClassName="h-full w-auto"
-                  imageClassName="h-full w-full"
-                  preserveNaturalAspectRatio={true}
-                  zoomScale={1.95}
-                >
-                  {verdictBadge && !isLoadingState ? (
-                    <span className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${verdictBadge.cls}`}>
-                      {verdictBadge.label}
-                    </span>
-                  ) : null}
-                  {!isViewingLatest ? (
-                    <span className="absolute left-3 top-3 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-white">
-                      {formatOutputLabel(
-                        displayedOutput!,
-                        historyOutputs.findIndex((o) => o.id === displayedOutput?.id),
-                      )}
-                    </span>
-                  ) : null}
-                </HoverZoomImage>
+      {historyOutputs.length > 0 ? (
+        <div className="border-b border-slate-100 px-3 py-3">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Historial</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {historyOutputs.map((output, outputIndex) => (
+              <AttemptThumbnail
+                key={output.id}
+                output={output}
+                label={formatOutputLabel(output, outputIndex)}
+                active={displayedOutput?.id === output.id}
+                userApproved={selectedOutputId === output.id}
+                onSelect={() => onSelectOutput?.(output.id, output)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
-                {showInlineLoadingBadge ? (
-                  <button
-                    type="button"
-                    onClick={(e) => void handleCancelGeneration(e)}
-                    disabled={!canCancelGeneration}
-                    className={`group absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition-all ${
-                      canCancelGeneration
-                        ? 'border-indigo-200 bg-white/92 text-indigo-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700'
-                        : 'cursor-default border-indigo-200 bg-white/92 text-indigo-700'
-                    }`}
-                  >
-                    <span className={`items-center gap-2 ${canCancelGeneration ? 'flex group-hover:hidden' : 'flex'}`}>
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      {isCancellingGeneration ? 'Cancelando...' : isQueueing ? 'Encolando...' : 'Generando...'}
-                    </span>
-                    {canCancelGeneration ? (
-                      <span className="hidden items-center gap-2 group-hover:flex">
-                        <XCircle className="h-3.5 w-3.5" />
-                        Cancelar
-                      </span>
-                    ) : null}
-                  </button>
+      {role.canRegenerate ? (
+        <div className="flex flex-col gap-3 px-3 py-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Prompt</label>
+            <textarea
+              value={draft.prompt}
+              onChange={(e) => onUpdateDraft({ prompt: e.target.value })}
+              disabled={controlsDisabled}
+              rows={5}
+              className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+              placeholder="Prompt para regenerar..."
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">Modelo IA</label>
+            <select
+              value={draft.provider}
+              onChange={(e) => onUpdateDraft({ provider: e.target.value as Provider })}
+              disabled={controlsDisabled}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+            >
+              <option value="fal-seedream">{PROVIDER_LABELS['fal-seedream']}</option>
+              <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
+              <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
+            </select>
+          </div>
+        </div>
+      ) : null}
+
+      {role.canRegenerate ? (
+        <div className="mt-auto border-t border-slate-100 px-3 py-3">
+          <button
+            type="button"
+            onClick={() => onRegenerate()}
+            disabled={controlsDisabled || !draft.prompt.trim() || !role.canRegenerate}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isQueueing ? 'animate-spin' : ''}`} />
+            Regenerar foto
+          </button>
+        </div>
+      ) : null}
+
+      {(regenerationError || cancellationError || (job.status === 'failed' && job.lastError)) ? (
+        <div className="space-y-2 px-3 pb-3">
+          {regenerationError ? (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
+              <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+              <span>{regenerationError}</span>
+            </div>
+          ) : null}
+          {cancellationError ? (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
+              <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+              <span>{cancellationError}</span>
+            </div>
+          ) : null}
+          {job.status === 'failed' && job.lastError ? (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+              <span>{job.lastError}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+
+  const gestureOffsetX = gesturesEnabled ? Math.max(-120, Math.min(120, gestureDelta.x)) : 0;
+  const gestureOffsetY = gesturesEnabled ? Math.max(-120, Math.min(120, gestureDelta.y)) : 0;
+  const gestureTravel = Math.max(Math.abs(gestureOffsetX), Math.abs(gestureOffsetY));
+  const gestureTransform = isGestureDragging
+    ? `translate3d(${gestureOffsetX}px, ${gestureOffsetY}px, 0) rotate(${gestureOffsetX / 28}deg)`
+    : 'translate3d(0, 0, 0) rotate(0deg)';
+  const gestureHint = gestureDirection
+    ? ({
+      left: 'Regenerar pose',
+      right: 'Aprobar pose',
+      up: 'Prenda anterior',
+      down: 'Siguiente prenda',
+    } satisfies Record<'left' | 'right' | 'up' | 'down', string>)[gestureDirection]
+    : null;
+  const gestureHintOpacity = Math.min(1, gestureTravel / 90);
+
+  const imagePanel = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          className={`absolute inset-0 flex items-center justify-center ${gesturesEnabled ? 'select-none' : ''}`}
+          onPointerDown={handleGesturePointerDown}
+          onPointerMove={handleGesturePointerMove}
+          onPointerUp={handleGesturePointerUp}
+          onPointerCancel={handleGesturePointerCancel}
+          style={gesturesEnabled ? { touchAction: 'none' } : undefined}
+        >
+          {gesturesEnabled && gestureHint ? (
+            <div
+              className="pointer-events-none absolute left-1/2 top-6 z-30 -translate-x-1/2 rounded-full bg-slate-950/82 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm"
+              style={{ opacity: gestureHintOpacity }}
+            >
+              {gestureHint}
+            </div>
+          ) : null}
+          {hasOutput ? (
+            <div
+              className={`relative will-change-transform ${isGestureDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'}`}
+              style={{
+                height: '100%',
+                transform: gestureTransform,
+                opacity: isGestureDragging ? Math.max(0.78, 1 - gestureTravel / 420) : 1,
+              }}
+            >
+              <HoverZoomImage
+                src={displayedImageUrl!}
+                alt={`Pose ${poseIndex + 1}`}
+                containerClassName="h-full w-auto"
+                imageClassName="h-full w-full"
+                preserveNaturalAspectRatio={true}
+                zoomScale={1.95}
+              >
+                {showApprovedBadge && !isLoadingState ? (
+                  <span className="absolute left-3 top-3 z-20 rounded-full bg-emerald-600/90 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+                    ✓ Aprobada
+                  </span>
                 ) : null}
-              </div>
-            </>
+                {!isViewingLatest ? (
+                  <span
+                    className="absolute left-3 z-10 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-white"
+                    style={{ top: showApprovedBadge && !isLoadingState ? '2.75rem' : '0.75rem' }}
+                  >
+                    {formatOutputLabel(
+                      displayedOutput!,
+                      historyOutputs.findIndex((output) => output.id === displayedOutput?.id),
+                    )}
+                  </span>
+                ) : null}
+              </HoverZoomImage>
+
+              {!isLoadingState ? (
+                <button
+                  type="button"
+                  onClick={() => void handleDownload()}
+                  disabled={downloading}
+                  title={downloading ? 'Descargando imagen...' : 'Descargar imagen'}
+                  aria-label={downloading ? 'Descargando imagen' : 'Descargar imagen'}
+                  className="absolute bottom-4 right-4 z-10 inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-slate-950/14 text-white shadow-lg shadow-slate-950/20 backdrop-blur-md transition hover:bg-slate-950/24 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {downloading ? (
+                    <RefreshCw className="h-4.5 w-4.5 animate-spin" />
+                  ) : (
+                    <Download className="h-4.5 w-4.5" />
+                  )}
+                </button>
+              ) : null}
+
+              {showInlineLoadingBadge ? (
+                <button
+                  type="button"
+                  onClick={(event) => void handleCancelGeneration(event)}
+                  disabled={!canCancelGeneration}
+                  className={`group absolute left-1/2 top-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur transition-all ${
+                    canCancelGeneration
+                      ? 'border-indigo-200 bg-white/92 text-indigo-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700'
+                      : 'cursor-default border-indigo-200 bg-white/92 text-indigo-700'
+                  }`}
+                >
+                  <span className={`items-center gap-2 ${canCancelGeneration ? 'flex group-hover:hidden' : 'flex'}`}>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    {isCancellingGeneration ? 'Cancelando...' : isQueueing ? 'Encolando...' : 'Generando...'}
+                  </span>
+                  {canCancelGeneration ? (
+                    <span className="hidden items-center gap-2 group-hover:flex">
+                      <XCircle className="h-3.5 w-3.5" />
+                      Cancelar
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
+            </div>
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center bg-slate-50 text-center">
+            <div
+              className={`flex h-full w-full flex-col items-center justify-center bg-slate-50 text-center will-change-transform ${isGestureDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'}`}
+              style={{
+                transform: gestureTransform,
+                opacity: isGestureDragging ? Math.max(0.78, 1 - gestureTravel / 420) : 1,
+              }}
+            >
               {job.status === 'failed' && !isLoadingState ? (
                 <>
                   <AlertCircle className="mb-2 h-10 w-10 text-red-400" />
@@ -344,7 +597,7 @@ const PoseView: React.FC<PoseViewProps> = ({
                   {canCancelGeneration ? (
                     <button
                       type="button"
-                      onClick={(e) => void handleCancelGeneration(e)}
+                      onClick={(event) => void handleCancelGeneration(event)}
                       className="mt-4 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-700"
                     >
                       <XCircle className="h-3.5 w-3.5" />
@@ -360,69 +613,118 @@ const PoseView: React.FC<PoseViewProps> = ({
               )}
             </div>
           )}
-          </div>{/* end absolute inset-0 centering wrapper */}
-        </div>
-
-        {/* ── Action buttons ──────────────────────────────────── */}
-        <div className="shrink-0 flex items-center justify-center gap-5 border-t border-slate-100 py-4">
-          {/* Regenerate — yellow */}
-          <button
-            type="button"
-            onClick={() => onRegenerate()}
-            disabled={controlsDisabled || !draft.prompt.trim() || !role.canRegenerate}
-            title="Regenerar foto"
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-400 text-white shadow-md transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <RefreshCw className={`h-6 w-6 ${isQueueing ? 'animate-spin' : ''}`} />
-          </button>
-
-          {/* Previous */}
-          <button
-            type="button"
-            onClick={onPrev}
-            disabled={!canGoPrev}
-            title="Pose anterior"
-            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-700 shadow-md transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-
-          {/* Approve — heart */}
-          <button
-            type="button"
-            onClick={handleApprove}
-            disabled={!hasOutput || isLoadingState}
-            title={isUserApproved ? 'Quitar aprobación' : 'Aprobar esta foto'}
-            className={`flex h-14 w-14 items-center justify-center rounded-full shadow-md transition ${
-              isUserApproved
-                ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                : 'border-2 border-slate-200 bg-white text-slate-400 hover:bg-slate-50 hover:text-emerald-500'
-            } disabled:cursor-not-allowed disabled:opacity-40`}
-          >
-            <Heart className={`h-6 w-6 ${isUserApproved ? 'fill-current' : ''}`} />
-          </button>
-
-          {/* Next */}
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={!canGoNext}
-            title="Pose siguiente"
-            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-700 shadow-md transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ChevronRight className="h-6 w-6" />
-          </button>
-
-          {/* Flag — no-op for now */}
-          <button
-            type="button"
-            title="Marcar (próximamente)"
-            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-300 shadow-md transition hover:bg-slate-50"
-          >
-            <AlertTriangle className="h-6 w-6" />
-          </button>
         </div>
       </div>
+
+      <div className="shrink-0 flex items-center justify-center gap-5 border-t border-slate-100 py-4">
+        <button
+          type="button"
+          onClick={() => onRegenerate()}
+          disabled={controlsDisabled || !draft.prompt.trim() || !role.canRegenerate}
+          title="Regenerar foto"
+          className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-amber-400 text-white shadow-md transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <RefreshCw className={`h-6 w-6 ${isQueueing ? 'animate-spin' : ''}`} />
+        </button>
+
+        <button
+          type="button"
+          onClick={onPrev}
+          disabled={!canGoPrev}
+          title="Pose anterior"
+          className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+          style={{
+            backgroundColor: 'var(--color-accent-light)',
+            borderColor: 'var(--color-accent-light)',
+            color: 'var(--color-bg-base)',
+          }}
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+
+        <button
+          type="button"
+          onClick={handleApproveAndAdvance}
+          disabled={!hasOutput || isLoadingState}
+          title="Aprobar esta foto"
+          className={`flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 ${
+            isUserApproved ? '' : 'bg-white/90'
+          }`}
+          style={{
+            backgroundColor: isUserApproved ? 'var(--color-success)' : undefined,
+            borderColor: 'var(--color-success)',
+            color: isUserApproved ? 'var(--color-bg-base)' : 'var(--color-success)',
+          }}
+        >
+          <Heart className={`h-6 w-6 ${isUserApproved ? 'fill-current' : ''}`} />
+        </button>
+
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={!canGoNext}
+          title="Pose siguiente"
+          className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+          style={{
+            backgroundColor: 'var(--color-accent-light)',
+            borderColor: 'var(--color-accent-light)',
+            color: 'var(--color-bg-base)',
+          }}
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void handleToggleFlag()}
+          disabled={isUpdatingFlag}
+          title={isManuallyFlagged ? 'Quitar marca' : 'Marcar foto'}
+          className={`flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 ${
+            isManuallyFlagged ? '' : 'bg-white/90'
+          }`}
+          style={{
+            backgroundColor: isManuallyFlagged ? 'var(--color-danger)' : undefined,
+            borderColor: 'var(--color-danger)',
+            color: isManuallyFlagged ? 'var(--color-bg-base)' : 'var(--color-danger)',
+          }}
+        >
+          <AlertTriangle className={`h-6 w-6 ${isManuallyFlagged ? 'fill-current' : ''}`} />
+        </button>
+      </div>
+    </div>
+  );
+
+  if (layoutMode === 'mobile') {
+    return (
+      <div className="relative flex h-full min-w-0 flex-col">
+        {imagePanel}
+        {showDetailsOverlay ? (
+          <div className="absolute inset-y-0 right-0 z-30 w-[min(24rem,100%)] border-l border-slate-100 bg-white/95 shadow-2xl backdrop-blur-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Detalles</span>
+              <button
+                type="button"
+                onClick={onCloseDetailsOverlay}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="flex h-[calc(100%-3.25rem)] min-h-0 flex-col overflow-y-auto">
+              {detailsPanelContent}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid h-full w-full min-w-0 grid-cols-2">
+      <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto border-r border-slate-100">
+        {detailsPanelContent}
+      </div>
+      {imagePanel}
     </div>
   );
 };
@@ -451,6 +753,70 @@ const CollapsibleTraceability: React.FC<{ batch: Batch; job: Job }> = ({ batch, 
   );
 };
 
+interface GarmentRailProps {
+  garmentSlides: ReturnType<typeof buildGarmentSlides>;
+  activeIndex: number;
+  activePoseIndex: number;
+  onSelect: (garmentIndex: number) => void;
+  mode?: 'desktop' | 'drawer';
+}
+
+const GarmentRail: React.FC<GarmentRailProps> = ({
+  garmentSlides,
+  activeIndex,
+  activePoseIndex,
+  onSelect,
+  mode = 'desktop',
+}) => {
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [activeIndex]);
+
+  if (garmentSlides.length === 0) return null;
+
+  return (
+    <aside className={`${mode === 'desktop' ? 'hidden xl:flex' : 'flex'} min-h-0 flex-col overflow-visible border-l border-slate-100`}>
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-4">
+        <div className="flex flex-col items-center gap-3">
+          {garmentSlides.map((slide, index) => {
+            const isActive = index === activeIndex;
+            const poseCount = slide.jobs.length;
+            const previewJob = slide.jobs[Math.min(activePoseIndex, poseCount - 1)] ?? slide.jobs[0];
+
+            return (
+              <button
+                key={slide.garmentId}
+                ref={isActive ? activeItemRef : null}
+                type="button"
+                onClick={() => onSelect(index)}
+                className={`group relative z-0 w-full max-w-[6.25rem] cursor-pointer overflow-visible rounded-[1.15rem] border bg-white/95 p-1.5 text-left transition duration-200 hover:z-20 ${
+                  isActive
+                    ? 'border-emerald-400 shadow-md shadow-emerald-100/70'
+                    : 'border-slate-200/90 hover:border-slate-300/90 hover:shadow-md'
+                }`}
+                title={slide.garmentName}
+              >
+                <div className="overflow-visible rounded-[0.95rem] border border-slate-100 bg-white">
+                  <div className="relative h-28 w-full overflow-visible bg-white">
+                    <ImageThumb
+                      storagePath={previewJob?.garmentFilePath || slide.garmentFilePath}
+                      alt={slide.garmentName}
+                      fit="contain"
+                      imgClassName="relative z-10 bg-white p-1.5 shadow-lg shadow-slate-950/0 transition duration-200 ease-out group-hover:scale-[1.22] group-hover:shadow-xl group-hover:shadow-slate-950/25"
+                    />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </aside>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main export
 // ─────────────────────────────────────────────────────────────────────────────
@@ -458,7 +824,6 @@ export const PoseSingleView: React.FC<Props> = ({
   batch,
   jobs,
   initialFocusJobId = null,
-  showFloatingGarment = false,
   headerContent,
   selectedOutputIdsByJobId = {},
   onSelectOutput,
@@ -488,6 +853,12 @@ export const PoseSingleView: React.FC<Props> = ({
     }
     return 0;
   });
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1440,
+  );
+  const [isTabletRailOpen, setIsTabletRailOpen] = useState(false);
+  const [isMobileRailOpen, setIsMobileRailOpen] = useState(false);
+  const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
 
   const safeIndex = Math.min(activeJobIndex, Math.max(0, flatJobs.length - 1));
   const activeJob = flatJobs[safeIndex] ?? null;
@@ -509,24 +880,50 @@ export const PoseSingleView: React.FC<Props> = ({
   }, [activeJob, initializeDraft]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        setActiveJobIndex((prev) => Math.max(0, prev - 1));
-      }
-      if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        setActiveJobIndex((prev) => Math.min(flatJobs.length - 1, prev + 1));
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [flatJobs.length]);
+    if (typeof window === 'undefined') return undefined;
+
+    const syncViewport = () => setViewportWidth(window.innerWidth);
+
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
+
+  const isMobileViewport = viewportWidth < 768;
+  const isTabletViewport = viewportWidth >= 768 && viewportWidth < 1280;
+  const isDesktopViewport = viewportWidth >= 1280;
+
+  useEffect(() => {
+    if (!isTabletViewport) {
+      setIsTabletRailOpen(false);
+    }
+    if (!isMobileViewport) {
+      setIsMobileRailOpen(false);
+      setIsMobileDetailsOpen(false);
+    }
+  }, [isMobileViewport, isTabletViewport]);
 
   const handleFocusJob = (jobId: string) => {
     const idx = flatJobs.findIndex((j) => j.id === jobId);
     if (idx >= 0) setActiveJobIndex(idx);
+  };
+
+  const handleFocusGarment = (targetGarmentIndex: number) => {
+    const targetSlide = garmentSlides[targetGarmentIndex];
+    if (!targetSlide) return;
+    const targetJob = targetSlide.jobs[Math.min(Math.max(poseIdxInGarment, 0), targetSlide.jobs.length - 1)] ?? targetSlide.jobs[0];
+    if (targetJob?.id) handleFocusJob(targetJob.id);
+  };
+
+  const handlePrevGarment = () => {
+    if (garmentIdx <= 0) return;
+    handleFocusGarment(garmentIdx - 1);
+  };
+
+  const handleNextGarment = () => {
+    if (garmentIdx >= garmentSlides.length - 1) return;
+    handleFocusGarment(garmentIdx + 1);
   };
 
   if (!activeJob) return null;
@@ -538,15 +935,6 @@ export const PoseSingleView: React.FC<Props> = ({
   const currentSlide = garmentSlides[garmentIdx];
   const poseIdxInGarment = currentSlide ? currentSlide.jobs.findIndex((j) => j.id === activeJobId) : 0;
   const totalPosesInGarment = posesPerGarment[activeJobId] ?? 1;
-
-  const garmentStoragePaths = useMemo((): string[] => {
-    if (!activeJob.garmentIsMultiAngle || !activeJob.garmentOriginalFileNames?.length || activeJob.garmentOriginalFileNames.length < 2) {
-      return [activeJob.garmentFilePath];
-    }
-    const lastSlash = activeJob.garmentFilePath.lastIndexOf('/');
-    const folder = lastSlash >= 0 ? activeJob.garmentFilePath.slice(0, lastSlash + 1) : '';
-    return activeJob.garmentOriginalFileNames.map((name) => `${folder}${name}`);
-  }, [activeJob.garmentFilePath, activeJob.garmentIsMultiAngle, activeJob.garmentOriginalFileNames]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -566,43 +954,144 @@ export const PoseSingleView: React.FC<Props> = ({
 
       {/* Main pose view — fills viewport height minus header area */}
       <div
-        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+        className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
         style={{ height: 'calc(100vh - 9rem)' }}
       >
-        <PoseView
-          batch={batch}
-          job={activeJob}
-          poseIndex={poseIdxInGarment}
-          totalPoses={totalPosesInGarment}
-          garmentIndex={garmentIdx}
-          totalGarments={garmentSlides.length}
-          draft={draft}
-          isQueueing={!!queueingJobs[activeJobId]}
-          isCancellingGeneration={!!cancellingJobs[activeJobId]}
-          regenerationError={regenerationErrors[activeJobId] ?? null}
-          cancellationError={cancellationErrors[activeJobId] ?? null}
-          onUpdateDraft={(updates) => updateDraft(activeJobId, updates)}
-          onRegenerate={() => handleRegenerate(activeJobId)}
-          onCancelGeneration={() => handleCancelGeneration(activeJobId)}
-          selectedOutputId={selectedOutputIdsByJobId[activeJobId] ?? null}
-          onSelectOutput={onSelectOutput ? (outputId, output) => onSelectOutput(activeJobId, outputId, output) : undefined}
-          onPrev={() => setActiveJobIndex((prev) => Math.max(0, prev - 1))}
-          onNext={() => setActiveJobIndex((prev) => Math.min(flatJobs.length - 1, prev + 1))}
-          canGoPrev={safeIndex > 0}
-          canGoNext={safeIndex < flatJobs.length - 1}
-        />
+        {(isTabletViewport || isMobileViewport) ? (
+          <>
+            {isMobileViewport ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileDetailsOpen((current) => !current);
+                  setIsMobileRailOpen(false);
+                }}
+                aria-label={isMobileDetailsOpen ? 'Ocultar detalles' : 'Mostrar detalles'}
+                title={isMobileDetailsOpen ? 'Ocultar detalles' : 'Mostrar detalles'}
+                className={`absolute left-0 top-3 z-30 inline-flex h-14 w-14 items-center justify-center rounded-r-2xl border border-slate-200/70 border-l-0 shadow-xl shadow-slate-950/30 backdrop-blur-md transition ${
+                  isMobileDetailsOpen
+                    ? 'bg-white text-slate-900'
+                    : 'bg-slate-950/76 text-white/92 hover:bg-slate-900/88'
+                }`}
+              >
+                <List className="h-5 w-5" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                if (isTabletViewport) {
+                  setIsTabletRailOpen((current) => !current);
+                } else {
+                  setIsMobileRailOpen((current) => !current);
+                  setIsMobileDetailsOpen(false);
+                }
+              }}
+              aria-label={(isTabletViewport ? isTabletRailOpen : isMobileRailOpen) ? 'Ocultar prendas' : 'Mostrar prendas'}
+              title={(isTabletViewport ? isTabletRailOpen : isMobileRailOpen) ? 'Ocultar prendas' : 'Mostrar prendas'}
+              className={`absolute right-0 top-3 z-30 inline-flex h-14 w-14 items-center justify-center rounded-l-2xl border border-slate-200/70 border-r-0 shadow-xl shadow-slate-950/30 backdrop-blur-md transition ${
+                (isTabletViewport ? isTabletRailOpen : isMobileRailOpen)
+                  ? 'bg-white text-slate-900'
+                  : 'bg-slate-950/76 text-white/92 hover:bg-slate-900/88'
+              }`}
+            >
+              <Shirt className="h-5 w-5" />
+            </button>
+          </>
+        ) : null}
+
+        {isDesktopViewport ? (
+          <div className="grid h-full min-w-0 grid-cols-[minmax(0,9fr)_minmax(0,9fr)_minmax(6rem,2fr)]">
+            <div className="min-w-0 col-span-2">
+              <PoseView
+                batch={batch}
+                job={activeJob}
+                poseIndex={poseIdxInGarment}
+                totalPoses={totalPosesInGarment}
+                garmentIndex={garmentIdx}
+                totalGarments={garmentSlides.length}
+                draft={draft}
+                isQueueing={!!queueingJobs[activeJobId]}
+                isCancellingGeneration={!!cancellingJobs[activeJobId]}
+                regenerationError={regenerationErrors[activeJobId] ?? null}
+                cancellationError={cancellationErrors[activeJobId] ?? null}
+                onUpdateDraft={(updates) => updateDraft(activeJobId, updates)}
+                onRegenerate={() => handleRegenerate(activeJobId)}
+                onCancelGeneration={() => handleCancelGeneration(activeJobId)}
+                selectedOutputId={selectedOutputIdsByJobId[activeJobId] ?? null}
+                onSelectOutput={onSelectOutput ? (outputId, output) => onSelectOutput(activeJobId, outputId, output) : undefined}
+                onPrev={() => setActiveJobIndex((prev) => Math.max(0, prev - 1))}
+                onNext={() => setActiveJobIndex((prev) => Math.min(flatJobs.length - 1, prev + 1))}
+                onPrevGarment={handlePrevGarment}
+                onNextGarment={handleNextGarment}
+                canGoPrev={safeIndex > 0}
+                canGoNext={safeIndex < flatJobs.length - 1}
+                canGoPrevGarment={garmentIdx > 0}
+                canGoNextGarment={garmentIdx < garmentSlides.length - 1}
+                layoutMode="desktop"
+              />
+            </div>
+            <GarmentRail
+              garmentSlides={garmentSlides}
+              activeIndex={garmentIdx}
+              activePoseIndex={poseIdxInGarment}
+              onSelect={handleFocusGarment}
+              mode="desktop"
+            />
+          </div>
+        ) : (
+          <>
+            <PoseView
+              batch={batch}
+              job={activeJob}
+              poseIndex={poseIdxInGarment}
+              totalPoses={totalPosesInGarment}
+              garmentIndex={garmentIdx}
+              totalGarments={garmentSlides.length}
+              draft={draft}
+              isQueueing={!!queueingJobs[activeJobId]}
+              isCancellingGeneration={!!cancellingJobs[activeJobId]}
+              regenerationError={regenerationErrors[activeJobId] ?? null}
+              cancellationError={cancellationErrors[activeJobId] ?? null}
+              onUpdateDraft={(updates) => updateDraft(activeJobId, updates)}
+              onRegenerate={() => handleRegenerate(activeJobId)}
+              onCancelGeneration={() => handleCancelGeneration(activeJobId)}
+              selectedOutputId={selectedOutputIdsByJobId[activeJobId] ?? null}
+              onSelectOutput={onSelectOutput ? (outputId, output) => onSelectOutput(activeJobId, outputId, output) : undefined}
+              onPrev={() => setActiveJobIndex((prev) => Math.max(0, prev - 1))}
+              onNext={() => setActiveJobIndex((prev) => Math.min(flatJobs.length - 1, prev + 1))}
+              onPrevGarment={handlePrevGarment}
+              onNextGarment={handleNextGarment}
+              canGoPrev={safeIndex > 0}
+              canGoNext={safeIndex < flatJobs.length - 1}
+              canGoPrevGarment={garmentIdx > 0}
+              canGoNextGarment={garmentIdx < garmentSlides.length - 1}
+              layoutMode={isTabletViewport ? 'tablet' : 'mobile'}
+              showDetailsOverlay={isMobileDetailsOpen}
+              onCloseDetailsOverlay={() => setIsMobileDetailsOpen(false)}
+            />
+            {(isTabletRailOpen || isMobileRailOpen) ? (
+              <div className="absolute inset-y-0 right-0 z-20 w-[6.75rem] bg-white/95 shadow-2xl backdrop-blur-sm">
+                <GarmentRail
+                  garmentSlides={garmentSlides}
+                  activeIndex={garmentIdx}
+                  activePoseIndex={poseIdxInGarment}
+                  onSelect={(index) => {
+                    handleFocusGarment(index);
+                    setIsTabletRailOpen(false);
+                    setIsMobileRailOpen(false);
+                  }}
+                  mode="drawer"
+                />
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
 
       {/* Traceability — collapsed by default */}
       <CollapsibleTraceability batch={batch} job={activeJob} />
 
-      {/* Floating garment preview */}
-      {showFloatingGarment ? (
-        <MultiFloatingGarmentPreview
-          garmentName={activeJob.garmentName}
-          storagePaths={garmentStoragePaths}
-        />
-      ) : null}
     </div>
   );
 };

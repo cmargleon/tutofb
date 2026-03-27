@@ -1,5 +1,7 @@
 import { functions } from '../../firebase';
+import { db } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import {
   CancelJobGenerationResponse,
   CancelPendingBatchJobsResponse,
@@ -116,4 +118,19 @@ export const selectJobOutput = async (
     console.error('Error calling selectJobOutput:', error);
     throw error;
   }
+};
+
+export const setJobManualFlag = async (
+  jobId: string,
+  flagged: boolean,
+  userUid: string | null,
+) => {
+  const jobRef = doc(db, 'jobs', jobId);
+
+  await updateDoc(jobRef, {
+    manuallyFlagged: flagged,
+    manuallyFlaggedAt: flagged ? serverTimestamp() : null,
+    manuallyFlaggedByUid: flagged ? userUid : null,
+    updatedAt: serverTimestamp(),
+  });
 };

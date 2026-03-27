@@ -24,6 +24,9 @@ Reglas operativas:
 - si un cambio requiere cualquier paso adicional para funcionar de verdad en el entorno del usuario, el agente debe hacerlo el mismo
 - esto incluye build, deploy, reinicios, regeneracion de artefactos, migraciones u otros pasos operativos equivalentes
 - no dejar cambios solo en codigo si la app local o remota sigue ejecutando una version vieja
+- este proyecto debe asumirse por defecto sobre Firebase real, no sobre emuladores
+- correr el frontend en `localhost:3000` no cambia eso por si solo
+- antes de responder o ejecutar cambios con impacto en datos, reglas, storage, functions o auth, revisar esta premisa y confirmar si el cambio necesita deploy o una validacion sobre el proyecto remoto
 
 Cambios transversales:
 - si una tarea toca frontend + functions + `shared/`, debe pasar por un agente coordinador

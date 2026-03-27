@@ -50,6 +50,13 @@ firebase deploy --project tutofb-260320-1003
 - No alcanza con dejar el codigo cambiado si el sistema sigue corriendo una version vieja local o remota.
 - La responsabilidad termina solo cuando el cambio queda aplicado en el entorno que el usuario esta usando, o cuando falte un permiso externo real y eso quede explicado claramente.
 
+## Premisa persistente de entorno
+
+- Este proyecto debe asumirse por defecto conectado a Firebase real.
+- Correr la app en `localhost:3000` no implica emuladores.
+- Antes de responder, proponer pasos o ejecutar cambios que toquen Firestore, Storage, Functions, Auth, reglas o deploy, releer esta premisa.
+- Solo asumir emuladores si `VITE_USE_FIREBASE_EMULATORS=true` y ademas el usuario confirmo ese flujo local.
+
 **Correr un test específico:**
 ```bash
 node --import tsx --test tests/createGenerationBatch.test.ts

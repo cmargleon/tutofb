@@ -60,6 +60,21 @@ service cloud.firestore {
         ]);
     }
 
+    function canUpdateJobManualFlag() {
+      return canReview()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'manuallyFlagged',
+          'manuallyFlaggedAt',
+          'manuallyFlaggedByUid',
+          'updatedAt',
+        ])
+        && request.resource.data.manuallyFlagged is bool
+        && (
+          (request.resource.data.manuallyFlagged == true && request.resource.data.manuallyFlaggedByUid == request.auth.uid)
+          || (request.resource.data.manuallyFlagged == false && request.resource.data.manuallyFlaggedByUid == null)
+        );
+    }
+
     match /users/{uid} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
       allow create: if isAdmin()
@@ -89,7 +104,7 @@ service cloud.firestore {
     match /jobs/{jobId} {
       allow read: if canReview();
       allow create, delete: if false;
-      allow update: if canUpdateJobSelection();
+      allow update: if canUpdateJobSelection() || canUpdateJobManualFlag();
 
       match /outputs/{outputId} {
         allow read: if canReview();

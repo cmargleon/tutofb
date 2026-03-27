@@ -52,11 +52,6 @@ export const AttemptThumbnail: React.FC<Props> = ({
             <ImageIcon className="h-4 w-4" />
           </div>
         )}
-        {output.isCurrent ? (
-          <span className="absolute left-1.5 top-1.5 rounded-full bg-slate-900/85 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-            Actual
-          </span>
-        ) : null}
         {userApproved ? (
           <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
             Elegida

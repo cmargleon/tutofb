@@ -77,18 +77,6 @@ export const Evaluacion: React.FC = () => {
     setSelectedJobIds((current) => current.filter((jobId) => filteredJobs.some((job) => job.id === jobId)));
   }, [filteredJobs]);
 
-  const toggleJob = (jobId: string) => {
-    setSelectedJobIds((current) =>
-      current.includes(jobId) ? current.filter((value) => value !== jobId) : [...current, jobId],
-    );
-  };
-
-  const selectJobs = (jobIds: string[], selected: boolean) => {
-    setSelectedJobIds((current) =>
-      selected ? Array.from(new Set([...current, ...jobIds])) : current.filter((jobId) => !jobIds.includes(jobId)),
-    );
-  };
-
   const handleDownloadSelected = async () => {
     if (!batch || selectedJobs.length === 0) return;
 
@@ -359,7 +347,6 @@ export const Evaluacion: React.FC = () => {
           batch={batch}
           jobs={filteredJobs}
           initialFocusJobId={initialFocusJobId}
-          showFloatingGarment
           headerContent={(
             <div>
               {/* Always-visible row: lote tag + toggle */}

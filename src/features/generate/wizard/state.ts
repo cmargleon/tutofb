@@ -1,6 +1,5 @@
 import {
   DEFAULT_TRY_ON_PROMPT,
-  PROVIDER_LABELS,
 } from '../../../../shared/src/domain';
 import { WizardStepDefinition } from '../../wizard/types';
 import {

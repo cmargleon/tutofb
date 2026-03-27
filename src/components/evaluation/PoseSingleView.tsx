@@ -37,12 +37,8 @@ interface Props {
   batch: Batch;
   jobs: Job[];
   initialFocusJobId?: string | null;
-  showFloatingGarment?: boolean;
   headerContent?: React.ReactNode;
-  selectedJobIds?: string[];
   selectedOutputIdsByJobId?: Record<string, string | null>;
-  onToggleJob?: (jobId: string) => void;
-  onSelectJobs?: (jobIds: string[], selected: boolean) => void;
   onSelectOutput?: (jobId: string, outputId: string | null, output: JobOutput | null) => void;
   bulkActions?: React.ReactNode;
 }
@@ -54,7 +50,6 @@ interface PoseViewProps {
   batch: Batch;
   job: Job;
   poseIndex: number;
-  totalPoses: number;
   garmentIndex: number;
   totalGarments: number;
   draft: { provider: Provider; prompt: string };
@@ -84,7 +79,6 @@ const PoseView: React.FC<PoseViewProps> = ({
   batch,
   job,
   poseIndex,
-  totalPoses,
   garmentIndex,
   totalGarments,
   draft,
@@ -829,21 +823,19 @@ export const PoseSingleView: React.FC<Props> = ({
   onSelectOutput,
   bulkActions,
 }) => {
-  const { flatJobs, garmentIndexByJobId, posesPerGarment, garmentSlides } = useMemo(() => {
+  const { flatJobs, garmentIndexByJobId, garmentSlides } = useMemo(() => {
     const slides = buildGarmentSlides(jobs);
     const flat: Job[] = [];
     const garmentIdx: Record<string, number> = {};
-    const posesPerG: Record<string, number> = {};
     slides.forEach((slide, sIdx) => {
       slide.jobs.forEach((job) => {
         if (job.id) {
           garmentIdx[job.id] = sIdx;
-          posesPerG[job.id] = slide.jobs.length;
         }
         flat.push(job);
       });
     });
-    return { flatJobs: flat, garmentIndexByJobId: garmentIdx, posesPerGarment: posesPerG, garmentSlides: slides };
+    return { flatJobs: flat, garmentIndexByJobId: garmentIdx, garmentSlides: slides };
   }, [jobs]);
 
   const [activeJobIndex, setActiveJobIndex] = useState(() => {
@@ -934,7 +926,6 @@ export const PoseSingleView: React.FC<Props> = ({
   const garmentIdx = garmentIndexByJobId[activeJobId] ?? 0;
   const currentSlide = garmentSlides[garmentIdx];
   const poseIdxInGarment = currentSlide ? currentSlide.jobs.findIndex((j) => j.id === activeJobId) : 0;
-  const totalPosesInGarment = posesPerGarment[activeJobId] ?? 1;
 
   return (
     <div className="flex flex-col gap-3">
@@ -1007,7 +998,6 @@ export const PoseSingleView: React.FC<Props> = ({
                 batch={batch}
                 job={activeJob}
                 poseIndex={poseIdxInGarment}
-                totalPoses={totalPosesInGarment}
                 garmentIndex={garmentIdx}
                 totalGarments={garmentSlides.length}
                 draft={draft}
@@ -1045,7 +1035,6 @@ export const PoseSingleView: React.FC<Props> = ({
               batch={batch}
               job={activeJob}
               poseIndex={poseIdxInGarment}
-              totalPoses={totalPosesInGarment}
               garmentIndex={garmentIdx}
               totalGarments={garmentSlides.length}
               draft={draft}

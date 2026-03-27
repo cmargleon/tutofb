@@ -39,10 +39,6 @@ service cloud.firestore {
       return hasRole('admin');
     }
 
-    function canGenerate() {
-      return isActiveUser() && (currentRole() in ['admin', 'operador']);
-    }
-
     function canReview() {
       return isActiveUser() && (currentRole() in ['admin', 'operador', 'revisor']);
     }

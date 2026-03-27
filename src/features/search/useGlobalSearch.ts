@@ -3,6 +3,7 @@ import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestor
 import { db } from '../../firebase';
 import { Batch, Client, Model } from '../../../shared/src/types';
 import { isActiveCatalogEntity } from '../../../shared/src/domain';
+import { formatDateTime as formatRelativeDate } from '../../../shared/src/utils/dateUtils';
 
 export type GlobalSearchResultType = 'client' | 'model' | 'batch';
 
@@ -30,8 +31,6 @@ const normalize = (value: string) =>
     .trim();
 
 const includesNormalized = (value: string, queryText: string) => normalize(value).includes(queryText);
-
-import { formatDateTime as formatRelativeDate, toDate as getDate } from '../../../shared/src/utils/dateUtils';
 
 const getBatchStatusLabel = (status: Batch['status']) => {
   switch (status) {

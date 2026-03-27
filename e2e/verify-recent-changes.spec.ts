@@ -133,7 +133,6 @@ test('Verify recent changes', async () => {
   await expect(oldCarousel).not.toBeVisible();
 
   // Should have "Guardar todas" as a FAB (fixed button)
-  const fab = page.locator('button.fixed.rounded-full').first();
   // Check for the floating action button or at least the evaluacion page loads
   const evaluacionLoaded = await page.getByText(/lote actual|evaluaci/i).isVisible().catch(() => false);
   console.log(`✅ Evaluación: Page loaded (has content: ${evaluacionLoaded})`);

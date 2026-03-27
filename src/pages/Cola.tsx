@@ -8,7 +8,7 @@ import { useRole } from '../features/auth/AuthProvider';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { PROVIDER_LABELS } from '../../shared/src/domain';
 import { Batch, Job, Provider } from '../../shared/src/types';
-import { formatDateTime, toDate, toMillis } from '../../shared/src/utils/dateUtils';
+import { formatDateTime, toMillis } from '../../shared/src/utils/dateUtils';
 
 interface QueueRow {
   id: string;

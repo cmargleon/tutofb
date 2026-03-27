@@ -10,7 +10,7 @@ import {
 } from '../../features/evaluation/useJobTraceability';
 import { LoadingBlock, StatusBadge } from '../ui';
 
-import { formatDateTimeFull as formatDateTime, toMillis } from '../../../shared/src/utils/dateUtils';
+import { formatDateTimeFull as formatDateTime } from '../../../shared/src/utils/dateUtils';
 
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat('es-MX', {

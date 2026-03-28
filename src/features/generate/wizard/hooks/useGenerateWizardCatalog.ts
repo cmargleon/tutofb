@@ -12,6 +12,7 @@ interface UseGenerateWizardCatalogParams {
 interface UseGenerateWizardCatalogResult {
   clients: Client[];
   models: Model[];
+  selectedClient: Client | null;
   selectedModel: Model | null;
   loadingData: boolean;
   error: string | null;
@@ -65,10 +66,15 @@ export const useGenerateWizardCatalog = ({
     () => models.find((model) => model.id === selectedModelId) ?? null,
     [models, selectedModelId],
   );
+  const selectedClient = useMemo(
+    () => clients.find((client) => client.id === selectedClientId) ?? null,
+    [clients, selectedClientId],
+  );
 
   return {
     clients,
     models,
+    selectedClient,
     selectedModel,
     loadingData,
     error,

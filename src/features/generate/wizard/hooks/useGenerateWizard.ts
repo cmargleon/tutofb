@@ -122,20 +122,14 @@ export const useGenerateWizard = () => {
   const [state, setState] = useState<WizardState>(createInitialGenerateWizardState);
   const [flowError, setFlowError] = useState<string | null>(null);
   const [draftBatchId, setDraftBatchId] = useState<string | null>(null);
+  const [isPromptDirty, setIsPromptDirty] = useState(false);
 
   const { config: systemConfig } = useSystemConfig();
-
-  useEffect(() => {
-    if (!systemConfig.systemPromptOverride) return;
-    setState((s) => {
-      if (s.prompt !== DEFAULT_TRY_ON_PROMPT) return s; // user already edited it
-      return { ...s, prompt: systemConfig.systemPromptOverride! };
-    });
-  }, [systemConfig.systemPromptOverride]);
 
   const {
     clients,
     models,
+    selectedClient,
     selectedModel,
     loadingData,
     error: catalogError,
@@ -143,6 +137,44 @@ export const useGenerateWizard = () => {
     selectedClientId: state.selectedClientId,
     selectedModelId: state.selectedModelId,
   });
+
+  const resolvedPromptBase = useMemo(() => {
+    const clientPrompt = selectedClient?.generationPromptBase?.trim();
+    if (clientPrompt) {
+      return clientPrompt;
+    }
+
+    const globalPrompt = systemConfig.systemPromptOverride?.trim();
+    if (globalPrompt) {
+      return globalPrompt;
+    }
+
+    return DEFAULT_TRY_ON_PROMPT;
+  }, [selectedClient?.generationPromptBase, systemConfig.systemPromptOverride]);
+
+  const promptSourceLabel = useMemo(() => {
+    if (selectedClient?.generationPromptBase?.trim()) {
+      return `el cliente ${selectedClient.name}`;
+    }
+
+    if (systemConfig.systemPromptOverride?.trim()) {
+      return 'la configuración global';
+    }
+
+    return 'el prompt interno por defecto';
+  }, [selectedClient?.generationPromptBase, selectedClient?.name, systemConfig.systemPromptOverride]);
+
+  useEffect(() => {
+    if (isPromptDirty) {
+      return;
+    }
+
+    setState((current) => (
+      current.prompt === resolvedPromptBase
+        ? current
+        : { ...current, prompt: resolvedPromptBase }
+    ));
+  }, [isPromptDirty, resolvedPromptBase]);
 
   const error = flowError ?? catalogError;
 
@@ -478,12 +510,20 @@ export const useGenerateWizard = () => {
   };
 
   const handleClientChange = (clientId: string | null) => {
+    const nextClient = clients.find((client) => client.id === clientId) ?? null;
+    const nextPrompt =
+      nextClient?.generationPromptBase?.trim()
+      || systemConfig.systemPromptOverride?.trim()
+      || DEFAULT_TRY_ON_PROMPT;
+
+    setIsPromptDirty(false);
     setState((current) => ({
       ...current,
       selectedClientId: clientId,
       selectedModelId: null,
       selectedPoseIds: [],
       poseSuggestions: createInitialPoseSuggestionState(),
+      prompt: nextPrompt,
     }));
   };
 
@@ -530,6 +570,7 @@ export const useGenerateWizard = () => {
   };
 
   const handlePromptChange = (prompt: string) => {
+    setIsPromptDirty(true);
     setState((current) => ({ ...current, prompt }));
   };
 
@@ -556,6 +597,7 @@ export const useGenerateWizard = () => {
     canAdvance,
     totalJobs,
     uploadSummary,
+    promptSourceLabel,
     submitButtonLabel: submit.submitButtonLabel,
     disabledProviders: systemConfig.disabledProviders,
     goToStep,

@@ -3,9 +3,10 @@ import React from 'react';
 interface PromptBaseFieldProps {
   value: string;
   onChange: (prompt: string) => void;
+  sourceLabel: string;
 }
 
-export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChange }) => (
+export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChange, sourceLabel }) => (
   <div>
     <label className="mb-2 block text-sm font-medium text-slate-700">Prompt base</label>
     <textarea
@@ -16,7 +17,8 @@ export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChang
       placeholder="Describe la instrucción base del try-on"
     />
     <p className="mt-2 text-xs text-slate-500">
-      Se usa como base directa del prompt final y agrega una nota extra cuando la prenda es multiangulo.
+      Se precarga desde {sourceLabel} y puedes ajustarlo antes de crear el lote. Tambien se usa como base
+      directa del prompt final y agrega una nota extra cuando la prenda es multiangulo.
     </p>
   </div>
 );

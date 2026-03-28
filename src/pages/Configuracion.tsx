@@ -390,11 +390,11 @@ export const Configuracion: React.FC = () => {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-1">
           <FileText className="w-5 h-5 text-slate-500" />
-          <h2 className="text-base font-semibold text-slate-900">Prompt del sistema</h2>
+          <h2 className="text-base font-semibold text-slate-900">Prompt global por defecto</h2>
         </div>
         <p className="text-sm text-slate-500 mb-6">
-          Puedes editar el prompt base de generación. Si queda igual al prompt interno por defecto,
-          se guarda sin override.
+          Se usa en el wizard solo cuando el cliente seleccionado no tiene un prompt propio. Si queda
+          igual al prompt interno por defecto, se guarda sin override.
         </p>
         {systemConfigLoading ? (
           <LoadingBlock message="Cargando configuración..." />

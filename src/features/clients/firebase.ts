@@ -10,6 +10,11 @@ interface SubscribeClientsOptions {
   includeArchived?: boolean;
 }
 
+const normalizeClientGenerationPrompt = (prompt: string): string | null => {
+  const trimmed = prompt.trim();
+  return trimmed ? trimmed : null;
+};
+
 export const subscribeToClients = (
   callback: (clients: Client[]) => void,
   onError: (error: Error) => void,
@@ -27,12 +32,13 @@ export const subscribeToClients = (
   }, onError);
 };
 
-export const createClient = async (name: string) => {
+export const createClient = async (name: string, generationPromptBase: string = '') => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
   
   const newClientRef = doc(collection(db, 'clients'));
   const clientData: Omit<Client, 'id'> = {
     name: name.trim(),
+    generationPromptBase: normalizeClientGenerationPrompt(generationPromptBase),
     status: 'active',
     archivedAt: null,
     archivedByUid: null,
@@ -47,12 +53,13 @@ export const createClient = async (name: string) => {
   return newClientRef.id;
 };
 
-export const updateClient = async (id: string, name: string) => {
+export const updateClient = async (id: string, name: string, generationPromptBase: string = '') => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
   
   const clientRef = doc(db, 'clients', id);
   await updateDoc(clientRef, {
     name: name.trim(),
+    generationPromptBase: normalizeClientGenerationPrompt(generationPromptBase),
     updatedAt: serverTimestamp()
   });
 };

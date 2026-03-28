@@ -89,6 +89,7 @@ export interface User {
 export interface Client {
   id?: string;
   name: string;
+  generationPromptBase?: string | null;
   status?: CatalogEntityStatus;
   archivedAt?: TimestampLike | null;
   archivedByUid?: string | null;

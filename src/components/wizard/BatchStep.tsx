@@ -12,6 +12,7 @@ interface Props {
   totalJobs: number;
   uploadSummary: UploadSummary;
   submitButtonLabel: string;
+  promptSourceLabel: string;
   disabledProviders?: string[];
   onProviderChange: (provider: WizardState['provider']) => void;
   onProviderImageConfigChange: (config: WizardProviderImageConfig) => void;
@@ -26,6 +27,7 @@ export const BatchStep: React.FC<Props> = ({
   totalJobs,
   uploadSummary,
   submitButtonLabel,
+  promptSourceLabel,
   disabledProviders,
   onProviderChange,
   onProviderImageConfigChange,
@@ -41,7 +43,7 @@ export const BatchStep: React.FC<Props> = ({
       value={state.providerImageConfigs[state.provider]}
       onChange={onProviderImageConfigChange}
     />
-    <PromptBaseField value={state.prompt} onChange={onPromptChange} />
+    <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
 
     <button
       type="button"

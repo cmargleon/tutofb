@@ -4,6 +4,7 @@ import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../../shared/src/d
 import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRegenerationFirebase';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
+import { trimUrlAfterImageExtension } from '../../features/storage/urlDisplay';
 import { buildGarmentSlides } from '../../features/evaluation/jobSlides';
 import { HoverZoomImage } from './HoverZoomImage';
 import { AttemptThumbnail } from './AttemptThumbnail';
@@ -138,6 +139,7 @@ const PoseView: React.FC<PoseViewProps> = ({
   const showApprovedBadge = Boolean(displayedOutput?.id && displayedOutput.id === approvedOutputId);
 
   const { url: displayedImageUrl, loading: displayedImageUrlLoading } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
+  const displayedImageUrlLabel = displayedImageUrl ? trimUrlAfterImageExtension(displayedImageUrl) : null;
 
   const isProcessing = job.status === 'pending' || job.status === 'processing';
   const isLoadingState = isProcessing || isQueueing;
@@ -427,7 +429,7 @@ const PoseView: React.FC<PoseViewProps> = ({
                   rel="noreferrer"
                   className="mt-1 block break-all font-mono text-[11px] text-indigo-700 underline decoration-indigo-300 underline-offset-2"
                 >
-                  {displayedImageUrl}
+                  {displayedImageUrlLabel}
                 </a>
               ) : displayedImageUrlLoading ? (
                 <p className="mt-1 font-mono text-[11px] text-slate-500">Resolviendo URL...</p>

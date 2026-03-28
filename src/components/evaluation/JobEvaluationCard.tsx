@@ -6,6 +6,7 @@ import { StatusBadge } from '../ui';
 import { AlertCircle, ChevronDown, ChevronUp, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
+import { trimUrlAfterImageExtension } from '../../features/storage/urlDisplay';
 import { downloadSingleJobImage } from '../../features/evaluation/downloadBatchImages';
 import { useToast } from '../../features/feedback/FeedbackProvider';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
@@ -118,6 +119,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
     null;
 
   const { url: displayedImageUrl, loading: displayedImageUrlLoading } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
+  const displayedImageUrlLabel = displayedImageUrl ? trimUrlAfterImageExtension(displayedImageUrl) : null;
 
   useEffect(() => {
     if (selectedOutputId && !outputsDesc.some((output) => output.id === selectedOutputId)) {
@@ -403,7 +405,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
                     rel="noreferrer"
                     className="mt-1 block break-all font-mono text-[11px] text-indigo-700 underline decoration-indigo-300 underline-offset-2"
                   >
-                    {displayedImageUrl}
+                    {displayedImageUrlLabel}
                   </a>
                 ) : displayedImageUrlLoading ? (
                   <p className="mt-1 font-mono text-[11px] text-slate-500">Resolviendo URL...</p>

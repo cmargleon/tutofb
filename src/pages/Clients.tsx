@@ -12,6 +12,15 @@ import { formatDateTimeLong as formatDate } from '../../shared/src/utils/dateUti
 const INPUT_BASE =
   'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400';
 
+const summarizePrompt = (prompt: string | null | undefined): string | null => {
+  const trimmed = prompt?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.length > 180 ? `${trimmed.slice(0, 177)}...` : trimmed;
+};
+
 export const Clients: React.FC = () => {
   const location = useLocation();
   const toast = useToast();
@@ -21,11 +30,13 @@ export const Clients: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [newClientName, setNewClientName] = useState('');
+  const [newClientPrompt, setNewClientPrompt] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [editPrompt, setEditPrompt] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
@@ -57,8 +68,9 @@ export const Clients: React.FC = () => {
     setCreateSuccess(false);
 
     try {
-      await createClient(trimmedName);
+      await createClient(trimmedName, newClientPrompt);
       setNewClientName('');
+      setNewClientPrompt('');
       setCreateSuccess(true);
       setTimeout(() => setCreateSuccess(false), 3000);
     } catch (err: any) {
@@ -71,6 +83,7 @@ export const Clients: React.FC = () => {
   const handleStartEdit = (client: Client) => {
     setEditingId(client.id!);
     setEditName(client.name);
+    setEditPrompt(client.generationPromptBase ?? '');
   };
 
   const handleSaveEdit = async (id: string) => {
@@ -78,7 +91,7 @@ export const Clients: React.FC = () => {
     if (!trimmedName) return;
 
     try {
-      await updateClient(id, trimmedName);
+      await updateClient(id, trimmedName, editPrompt);
       setEditingId(null);
     } catch (err: any) {
       toast({
@@ -258,6 +271,23 @@ export const Clients: React.FC = () => {
                   disabled={isCreating}
                 />
               </div>
+              <div>
+                <label htmlFor="client-prompt" className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Prompt general del cliente
+                </label>
+                <textarea
+                  id="client-prompt"
+                  rows={7}
+                  value={newClientPrompt}
+                  onChange={(e) => setNewClientPrompt(e.target.value)}
+                  className={INPUT_BASE}
+                  placeholder="Opcional. Si lo dejas vacío, este cliente usará el prompt global por defecto de Configuración."
+                  disabled={isCreating}
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Este texto se precarga en el wizard cuando se selecciona el cliente.
+                </p>
+              </div>
               <Button
                 type="submit"
                 variant="primary"
@@ -366,7 +396,7 @@ export const Clients: React.FC = () => {
 
                         {/* Edit form — replaces row on all screen sizes */}
                         {isEditing ? (
-                          <div className="flex items-center gap-2">
+                          <div className="space-y-3">
                             <input
                               type="text"
                               value={editName}
@@ -374,12 +404,21 @@ export const Clients: React.FC = () => {
                               className={INPUT_BASE}
                               autoFocus
                             />
-                            <Button variant="primary" size="sm" icon={Check} onClick={() => void handleSaveEdit(client.id!)}>
-                              Guardar
-                            </Button>
-                            <Button variant="ghost" size="sm" icon={X} onClick={() => setEditingId(null)}>
-                              Cancelar
-                            </Button>
+                            <textarea
+                              rows={7}
+                              value={editPrompt}
+                              onChange={(e) => setEditPrompt(e.target.value)}
+                              className={INPUT_BASE}
+                              placeholder="Si queda vacío, este cliente usará el prompt global por defecto."
+                            />
+                            <div className="flex items-center gap-2">
+                              <Button variant="primary" size="sm" icon={Check} onClick={() => void handleSaveEdit(client.id!)}>
+                                Guardar
+                              </Button>
+                              <Button variant="ghost" size="sm" icon={X} onClick={() => setEditingId(null)}>
+                                Cancelar
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <>
@@ -388,6 +427,16 @@ export const Clients: React.FC = () => {
                               <div>
                                 <p className="text-sm font-medium text-slate-900">{client.name}</p>
                                 <p className="mt-0.5 text-xs text-gray-500">Alta: {formatDate(client.createdAt)}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {client.generationPromptBase?.trim()
+                                    ? 'Tiene prompt propio para el wizard.'
+                                    : 'Usa el prompt global por defecto.'}
+                                </p>
+                                {summarizePrompt(client.generationPromptBase) ? (
+                                  <p className="mt-1 text-xs text-slate-400 break-words">
+                                    {summarizePrompt(client.generationPromptBase)}
+                                  </p>
+                                ) : null}
                               </div>
                               <div className="flex shrink-0 items-center gap-2">{actionButtons}</div>
                             </div>
@@ -407,11 +456,23 @@ export const Clients: React.FC = () => {
                                 <div>
                                   <p className="text-sm font-medium text-slate-900">{client.name}</p>
                                   <p className="mt-0.5 text-xs text-gray-500">Alta: {formatDate(client.createdAt)}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {client.generationPromptBase?.trim()
+                                      ? 'Tiene prompt propio para el wizard.'
+                                      : 'Usa el prompt global por defecto.'}
+                                  </p>
                                 </div>
                               </button>
 
                               {isExpanded && (
-                                <div className="mt-3 flex items-center gap-2 pl-7">{actionButtons}</div>
+                                <div className="mt-3 space-y-3 pl-7">
+                                  {summarizePrompt(client.generationPromptBase) ? (
+                                    <p className="text-xs text-slate-400 break-words">
+                                      {summarizePrompt(client.generationPromptBase)}
+                                    </p>
+                                  ) : null}
+                                  <div className="flex items-center gap-2">{actionButtons}</div>
+                                </div>
                               )}
                             </div>
                           </>

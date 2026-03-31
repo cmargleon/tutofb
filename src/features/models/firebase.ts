@@ -3,6 +3,7 @@ import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverT
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   Model,
+  ModelIdentityTraits,
   ModelPoseTaggingRequest,
   ModelPoseTaggingResponse,
   Pose,
@@ -20,6 +21,7 @@ import { httpsCallable } from 'firebase/functions';
 interface UpdateModelInput {
   name: string;
   clientId: string;
+  identityTraits?: ModelIdentityTraits | null;
   filesToAdd?: File[];
   poseIdsToRemove?: string[];
 }
@@ -28,6 +30,12 @@ interface CreateGeneratedModelOptions {
   modelId?: string;
   generatedPhotoCount?: number;
   generatedPhotoCostUsd?: number;
+  identityTraits?: ModelIdentityTraits | null;
+}
+
+interface UploadedModelReference {
+  storagePath: string;
+  contentType: string;
 }
 
 const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -56,7 +64,11 @@ export const subscribeToModels = (
   }, onError);
 };
 
-export const createModel = async (clientId: string, name: string, files: File[]) => {
+export const createModel = async (
+  clientId: string,
+  name: string,
+  files: File[],
+) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
   const clientRef = doc(db, 'clients', clientId);
@@ -200,6 +212,7 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
       clientId: input.clientId,
       clientNameSnapshot,
       name: trimmedName,
+      identityTraits: input.identityTraits || null,
       status: model.status ?? 'active',
       storageRootPath,
       poses: nextPoses,
@@ -269,6 +282,30 @@ export const generateModelPoses = async (
   return result.data;
 };
 
+export const uploadModelReferenceFile = async (
+  clientId: string,
+  modelId: string,
+  file: File,
+): Promise<UploadedModelReference> => {
+  if (!auth.currentUser) throw new Error('Usuario no autenticado');
+
+  const fileName = sanitizeFileName(file.name || 'referencia.png');
+  const storagePath = `garments/drafts/${auth.currentUser.uid}/${modelId}/reference/${uuidv4()}-${fileName}`;
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, file, {
+    contentType: file.type || 'image/png',
+  });
+
+  return {
+    storagePath,
+    contentType: file.type || 'image/png',
+  };
+};
+
+export const deleteStorageAsset = async (storagePath: string): Promise<void> => {
+  await deleteObject(ref(storage, storagePath));
+};
+
 export const tagModelPosesWithGemini = async (
   data: ModelPoseTaggingRequest,
 ): Promise<ModelPoseTaggingResponse> => {
@@ -311,6 +348,7 @@ export const createModelFromPaths = async (
     clientId,
     clientNameSnapshot: client.name,
     name: name.trim(),
+    identityTraits: options.identityTraits || null,
     status: 'active',
     archivedAt: null,
     archivedByUid: null,

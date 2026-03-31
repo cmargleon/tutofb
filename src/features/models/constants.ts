@@ -234,7 +234,9 @@ export const ASPECT_OPTIONS: { value: AspectRatio; label: string }[] = [
 ];
 
 export const PROVIDER_OPTIONS: { value: ModelPhotoProvider; label: string; hint: string }[] = [
-  { value: 'fal-seedream-v4.5', label: 'Seedream v4.5 (fal.ai)',   hint: 'ByteDance mejorado · ~$0.04/foto' },
-  { value: 'fal-banana-pro',    label: 'Nano Banana Pro (fal.ai)', hint: 'Gemini 3 Pro · ~$0.04/foto' },
-  { value: 'openai-dalle',      label: 'OpenAI gpt-image-1.5',     hint: 'Alta fidelidad · ~$0.04/foto' },
+  { value: 'fal-seedream-v4.5', label: 'Seedream v4.5 (fal.ai)',    hint: 'ByteDance · ~$0.04/foto' },
+  { value: 'fal-banana-pro',    label: 'Nano Banana Pro (fal.ai)',  hint: 'Gemini Pro · ~$0.04/foto' },
+  { value: 'openai-dalle',      label: 'OpenAI gpt-image-1.5',      hint: 'Alta fidelidad · ~$0.04/foto' },
+  { value: 'fal-nano-banana-2', label: 'Nano Banana 2 (fal.ai)',    hint: 'Gemini 3.1 Flash · ~$0.05/foto' },
+  { value: 'fal-seedream-5',    label: 'Seedream 5 Lite (fal.ai)',  hint: 'ByteDance v5 · ~$0.035/foto' },
 ];

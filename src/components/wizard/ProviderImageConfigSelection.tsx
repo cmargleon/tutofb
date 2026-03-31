@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import {
   BANANA_ASPECT_RATIO_VALUES,
   BANANA_RESOLUTION_VALUES,
+  NANO_BANANA_2_ASPECT_RATIO_VALUES,
+  NANO_BANANA_2_RESOLUTION_VALUES,
   OPENAI_IMAGE_QUALITY_VALUES,
   OPENAI_IMAGE_SIZE_VALUES,
+  SEEDREAM_5_IMAGE_SIZE_PRESET_VALUES,
   SEEDREAM_IMAGE_SIZE_PRESET_VALUES,
 } from '../../../shared/src/providerImageConfig';
 import { Provider } from '../../../shared/src/types';
@@ -140,6 +143,41 @@ const renderCompactOptions = ({
   </div>
 );
 
+const getNanoBanana2RatioHint = (ratio: string): string => {
+  const hints: Record<string, string> = {
+    'auto': 'Auto',
+    '21:9': 'Ultra wide',
+    '16:9': 'Hero wide',
+    '3:2': 'Editorial',
+    '4:3': 'Landscape',
+    '5:4': 'Catálogo ancho',
+    '1:1': 'Cuadrado',
+    '4:5': 'Feed retrato',
+    '3:4': 'Catálogo vertical',
+    '2:3': 'Portrait',
+    '9:16': 'Stories / Reels',
+    '4:1': 'Panorámico',
+    '1:4': 'Columna alta',
+    '8:1': 'Banner ultra wide',
+    '1:8': 'Columna extrema',
+  };
+  return hints[ratio] ?? ratio;
+};
+
+const getSeedream5PresetCopy = (preset: (typeof SEEDREAM_5_IMAGE_SIZE_PRESET_VALUES)[number]) => {
+  switch (preset) {
+    case 'square_hd':     return { title: 'Square HD',     description: 'Cuadrado alta definición.' };
+    case 'square':        return { title: 'Square',         description: 'Cuadrado compacto.' };
+    case 'portrait_4_3':  return { title: 'Portrait 4:3',  description: 'Vertical catálogo, similar a 3:4.' };
+    case 'portrait_16_9': return { title: 'Portrait 16:9', description: 'Vertical alto para stories.' };
+    case 'landscape_4_3': return { title: 'Landscape 4:3', description: 'Horizontal clásico.' };
+    case 'landscape_16_9':return { title: 'Landscape 16:9',description: 'Horizontal wide.' };
+    case 'auto_2K':       return { title: 'Auto 2K',        description: 'Automático en resolución 2K.' };
+    case 'auto_3K':       return { title: 'Auto 3K',        description: 'Automático en resolución 3K.' };
+    default:              return { title: preset,           description: 'Preset de Seedream 5 Lite.' };
+  }
+};
+
 export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelectionProps> = ({
   provider,
   value,
@@ -149,7 +187,10 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
   const [customHeightInput, setCustomHeightInput] = useState('2048');
 
   useEffect(() => {
-    if (provider === 'fal-seedream' && value.provider === 'fal-seedream' && typeof value.imageSize !== 'string') {
+    if (
+      (provider === 'fal-seedream' && value.provider === 'fal-seedream' && typeof value.imageSize !== 'string')
+      || (provider === 'fal-seedream-5' && value.provider === 'fal-seedream-5' && typeof value.imageSize !== 'string')
+    ) {
       setCustomWidthInput(String(value.imageSize.width));
       setCustomHeightInput(String(value.imageSize.height));
     }
@@ -209,6 +250,51 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
           selected: value.resolution,
           onSelect: (resolution) => onChange({ ...value, resolution: resolution as typeof value.resolution }),
         })}
+      </div>
+    );
+  }
+
+  if (provider === 'fal-nano-banana-2' && value.provider === 'fal-nano-banana-2') {
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-700">Relación de aspecto</label>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            {NANO_BANANA_2_ASPECT_RATIO_VALUES.map((ratio) =>
+              renderChoiceButton({
+                keyValue: ratio,
+                title: ratio,
+                description: getNanoBanana2RatioHint(ratio),
+                selected: value.aspectRatio === ratio,
+                onClick: () => onChange({ ...value, aspectRatio: ratio }),
+              }),
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Resolución</div>
+          <div className="flex flex-wrap gap-2">
+            {NANO_BANANA_2_RESOLUTION_VALUES.map((res) => {
+              const isSelected = value.resolution === res;
+              const isCostly = res === '2K' || res === '4K';
+              return (
+                <button
+                  type="button"
+                  key={res}
+                  onClick={() => onChange({ ...value, resolution: res })}
+                  className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                    isSelected
+                      ? 'border-emerald-700 bg-emerald-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  {res}{isCostly ? (res === '2K' ? ' (+50% costo)' : ' (+100% costo)') : ''}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }
@@ -317,6 +403,97 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
             </p>
             <p className="mt-2 text-xs text-slate-500">
               Referencia util: 1280x720 es el minimo practico por area, y tu seleccion actual equivale a {customArea.toLocaleString('en-US')} px.
+            </p>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (provider === 'fal-seedream-5' && value.provider === 'fal-seedream-5') {
+    const selectedPreset = typeof value.imageSize === 'string' ? value.imageSize : null;
+    const customWidth = typeof value.imageSize === 'string' ? 1536 : value.imageSize.width;
+    const customHeight = typeof value.imageSize === 'string' ? 2048 : value.imageSize.height;
+    const customArea = customWidth * customHeight;
+
+    const commitDimension = (dimension: 'width' | 'height', rawValue: string) => {
+      const numericValue = Number(rawValue);
+      const fallbackValue = dimension === 'width' ? customWidth : customHeight;
+      const nextValue = Number.isFinite(numericValue)
+        ? Math.max(256, Math.min(4096, Math.round(numericValue)))
+        : fallbackValue;
+      const nextImageSize = {
+        width: dimension === 'width' ? nextValue : customWidth,
+        height: dimension === 'height' ? nextValue : customHeight,
+      };
+      onChange({ ...value, imageSize: nextImageSize });
+      if (dimension === 'width') setCustomWidthInput(String(nextImageSize.width));
+      else setCustomHeightInput(String(nextImageSize.height));
+    };
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-700">Tamaño de imagen</label>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {SEEDREAM_5_IMAGE_SIZE_PRESET_VALUES.map((preset) => {
+              const copy = getSeedream5PresetCopy(preset);
+              return renderChoiceButton({
+                keyValue: preset,
+                title: copy.title,
+                description: copy.description,
+                selected: selectedPreset === preset,
+                onClick: () => onChange({ ...value, imageSize: preset }),
+              });
+            })}
+
+            {renderChoiceButton({
+              keyValue: 'custom',
+              title: 'Píxeles exactos',
+              description: 'Define width y height para Seedream 5.',
+              selected: typeof value.imageSize !== 'string',
+              onClick: () => {
+                setCustomWidthInput(String(customWidth));
+                setCustomHeightInput(String(customHeight));
+                onChange({ ...value, imageSize: { width: customWidth, height: customHeight } });
+              },
+            })}
+          </div>
+        </div>
+
+        {typeof value.imageSize !== 'string' ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 text-sm font-medium text-slate-700">Dimensiones personalizadas</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="block text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Width (px)</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={customWidthInput}
+                  onChange={(event) => setCustomWidthInput(event.target.value.replace(/[^\d]/g, ''))}
+                  onBlur={() => commitDimension('width', customWidthInput)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-500"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="block text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Height (px)</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={customHeightInput}
+                  onChange={(event) => setCustomHeightInput(event.target.value.replace(/[^\d]/g, ''))}
+                  onBlur={() => commitDimension('height', customHeightInput)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-500"
+                />
+              </label>
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              Seedream 5 acepta dimensiones exactas entre 256 y 4096 px por lado. Área actual: {customArea.toLocaleString('en-US')} px.
             </p>
           </div>
         ) : null}

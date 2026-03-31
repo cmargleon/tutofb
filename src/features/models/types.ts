@@ -1,5 +1,8 @@
-export type CreateTab = 'upload' | 'generate';
-export type GeneratedPhotoSource = 'candidate' | 'pose';
+export type CreateTab = 'upload' | 'generate' | 'reference';
+export type GeneratedPhotoSource = 'candidate' | 'pose' | 'reference';
+export type ReferenceIdentityMode = 'exact' | 'similar';
+export type ReferenceBackgroundMode = 'preserve' | 'custom';
+export type ReferenceClothingMode = 'preserve' | 'custom';
 
 export type PoseRecipe = {
   id: string;

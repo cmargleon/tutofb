@@ -3,6 +3,8 @@ import * as admin from 'firebase-admin';
 import { FAL_KEY, OPENAI_API_KEY } from '../config/runtime';
 import {
   FalBananaProImageConfig,
+  FalNanoBanana2ImageConfig,
+  FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
   GenerateModelPhotoRequest,
   GenerateModelPhotoResponse,
@@ -16,8 +18,12 @@ import { normalizeProviderImageConfig } from '../../../shared/src/providerImageC
 import {
   generateModelPhotoWithSeedreamV45,
   generateModelPhotoWithBananaPro,
+  generateModelPhotoWithNanoBanana2,
+  generateModelPhotoWithSeedream5,
   generateModelPhotoWithOpenAI,
   editModelPhotoWithBananaPro,
+  editModelPhotoWithNanoBanana2,
+  editModelPhotoWithSeedream5,
   editModelPhotoWithOpenAI,
   editModelPhotoWithSeedreamV45,
   TextToImageResult,
@@ -51,6 +57,10 @@ const mapModelPhotoProviderToProvider = (provider: ModelPhotoProvider): Provider
       return 'fal-banana-pro';
     case 'openai-dalle':
       return 'openai-gpt-image-1.5';
+    case 'fal-nano-banana-2':
+      return 'fal-nano-banana-2';
+    case 'fal-seedream-5':
+      return 'fal-seedream-5';
     default:
       throw new Error(`Proveedor de foto de modelo no reconocido: ${provider satisfies never}`);
   }
@@ -63,6 +73,7 @@ const runProvider = (
   falKey: string,
   openaiKey: string,
   referenceImageUrl?: string | null,
+  preserveReferenceDetails = true,
 ): Promise<TextToImageResult> => {
   if (referenceImageUrl) {
     switch (provider) {
@@ -71,17 +82,29 @@ const runProvider = (
       case 'fal-banana-pro':
         return editModelPhotoWithBananaPro(prompt, imageConfig as FalBananaProImageConfig, referenceImageUrl, falKey);
       case 'openai-dalle':
-        return editModelPhotoWithOpenAI(prompt, imageConfig as OpenAIImageConfig, referenceImageUrl, openaiKey);
+        return editModelPhotoWithOpenAI(
+          prompt,
+          imageConfig as OpenAIImageConfig,
+          referenceImageUrl,
+          openaiKey,
+          preserveReferenceDetails,
+        );
+      case 'fal-nano-banana-2':
+        return editModelPhotoWithNanoBanana2(prompt, imageConfig as FalNanoBanana2ImageConfig, referenceImageUrl, falKey);
+      case 'fal-seedream-5':
+        return editModelPhotoWithSeedream5(prompt, imageConfig as FalSeedream5ImageConfig, referenceImageUrl, falKey);
       default:
         throw new Error(`El proveedor ${provider} no soporta generación de poses desde referencia.`);
     }
   }
 
   switch (provider) {
-    case 'fal-seedream-v4.5':  return generateModelPhotoWithSeedreamV45(prompt, imageConfig as FalSeedreamImageConfig, falKey);
-    case 'fal-banana-pro':     return generateModelPhotoWithBananaPro(prompt, imageConfig as FalBananaProImageConfig, falKey);
-    case 'openai-dalle':       return generateModelPhotoWithOpenAI(prompt, imageConfig as OpenAIImageConfig, openaiKey);
-    default:                   throw new Error(`Proveedor de foto de modelo no reconocido: ${provider}`);
+    case 'fal-seedream-v4.5':   return generateModelPhotoWithSeedreamV45(prompt, imageConfig as FalSeedreamImageConfig, falKey);
+    case 'fal-banana-pro':      return generateModelPhotoWithBananaPro(prompt, imageConfig as FalBananaProImageConfig, falKey);
+    case 'openai-dalle':        return generateModelPhotoWithOpenAI(prompt, imageConfig as OpenAIImageConfig, openaiKey);
+    case 'fal-nano-banana-2':   return generateModelPhotoWithNanoBanana2(prompt, imageConfig as FalNanoBanana2ImageConfig, falKey);
+    case 'fal-seedream-5':      return generateModelPhotoWithSeedream5(prompt, imageConfig as FalSeedream5ImageConfig, falKey);
+    default:                    throw new Error(`Proveedor de foto de modelo no reconocido: ${provider}`);
   }
 };
 
@@ -104,6 +127,7 @@ export const generateModelPose = onCall(
       modelId = null,
       stage = null,
       referenceStoragePath = null,
+      preserveReferenceDetails = true,
     } = data;
 
     if (!prompt || !provider || !aspectRatio || !count || !tempSessionId || !clientId) {
@@ -130,7 +154,15 @@ export const generateModelPose = onCall(
       : null;
 
     const generatePhoto = async (index: number) => {
-        const result = await runProvider(provider, prompt, normalizedImageConfig, falKey, openaiKey, referenceImageUrl);
+        const result = await runProvider(
+          provider,
+          prompt,
+          normalizedImageConfig,
+          falKey,
+          openaiKey,
+          referenceImageUrl,
+          preserveReferenceDetails,
+        );
 
         const ext = result.contentType.includes('jpeg') || result.contentType.includes('jpg') ? 'jpg' : 'png';
         const storageBasePath = modelId

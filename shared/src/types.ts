@@ -1,10 +1,13 @@
 export type TimestampLike = any;
 
 export type Role = 'admin' | 'operador' | 'revisor';
-export type Provider = 'fal-seedream' | 'fal-banana-pro' | 'openai-gpt-image-1.5';
+export type Provider = 'fal-seedream' | 'fal-banana-pro' | 'openai-gpt-image-1.5' | 'fal-nano-banana-2' | 'fal-seedream-5';
+export type BatchOutputMode = 'spreadsheet' | 'photos_only';
 export type AspectRatio = '9:16' | '3:4' | '2:3' | '1:1' | '4:3' | '3:2' | '16:9';
 export type BananaAspectRatio = '21:9' | '16:9' | '3:2' | '4:3' | '5:4' | '1:1' | '4:5' | '3:4' | '2:3' | '9:16';
 export type BananaResolution = '1K' | '2K' | '4K';
+export type NanoBanana2AspectRatio = 'auto' | '21:9' | '16:9' | '3:2' | '4:3' | '5:4' | '1:1' | '4:5' | '3:4' | '2:3' | '9:16' | '4:1' | '1:4' | '8:1' | '1:8';
+export type NanoBanana2Resolution = '0.5K' | '1K' | '2K' | '4K';
 export type OpenAIImageSize = '1024x1024' | '1024x1536' | '1536x1024';
 export type OpenAIImageQuality = 'low' | 'medium' | 'high';
 export type SeedreamImageSizePreset =
@@ -17,6 +20,16 @@ export type SeedreamImageSizePreset =
   | 'auto'
   | 'auto_2K'
   | 'auto_4K';
+
+export type Seedream5ImageSizePreset =
+  | 'square_hd'
+  | 'square'
+  | 'portrait_4_3'
+  | 'portrait_16_9'
+  | 'landscape_4_3'
+  | 'landscape_16_9'
+  | 'auto_2K'
+  | 'auto_3K';
 
 export interface SeedreamCustomImageSize {
   width: number;
@@ -40,7 +53,23 @@ export interface OpenAIImageConfig {
   quality: OpenAIImageQuality;
 }
 
-export type ProviderImageConfig = FalSeedreamImageConfig | FalBananaProImageConfig | OpenAIImageConfig;
+export interface FalNanoBanana2ImageConfig {
+  provider: 'fal-nano-banana-2';
+  aspectRatio: NanoBanana2AspectRatio;
+  resolution: NanoBanana2Resolution;
+}
+
+export interface FalSeedream5ImageConfig {
+  provider: 'fal-seedream-5';
+  imageSize: Seedream5ImageSizePreset | SeedreamCustomImageSize;
+}
+
+export type ProviderImageConfig =
+  | FalSeedreamImageConfig
+  | FalBananaProImageConfig
+  | OpenAIImageConfig
+  | FalNanoBanana2ImageConfig
+  | FalSeedream5ImageConfig;
 export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_failed' | 'failed';
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type GarmentSourceType = 'single' | 'folder-root' | 'subfolder';
@@ -49,6 +78,8 @@ export type GarmentView = 'front' | 'back' | 'side';
 export type GarmentPhotoClassificationSource = 'assumed_single_front' | 'gemini';
 export type GarmentReferenceImageType = 'single_view' | 'multi_angle_composite';
 export type PoseOrientationGroup = 'front' | 'back' | 'side' | 'ambiguous';
+export type SpreadsheetTemplateImportStatus = 'active' | 'archived';
+export type ProductDraftSuggestionSource = 'gemini' | 'wizard' | 'system' | 'user';
 export type PoseOrientationDetail =
   | 'front'
   | 'front_three_quarter'
@@ -86,6 +117,15 @@ export interface User {
   lastLoginAt?: TimestampLike | null;
 }
 
+export interface ModelIdentityTraits {
+  sex: string | null;
+  age: string | null;
+  skin: string | null;
+  hairColor: string | null;
+  hairLength: string | null;
+  build: string | null;
+}
+
 export interface Client {
   id?: string;
   name: string;
@@ -116,6 +156,7 @@ export interface Model {
   clientId: string;
   clientNameSnapshot: string;
   name: string;
+  identityTraits?: ModelIdentityTraits | null;
   status?: CatalogEntityStatus;
   archivedAt?: TimestampLike | null;
   archivedByUid?: string | null;
@@ -143,6 +184,124 @@ export interface BatchModelSnapshot {
   poseCount: number;
   coverPoseId: string | null;
   coverPosePath: string | null;
+  identityTraits?: ModelIdentityTraits | null;
+}
+
+export interface SpreadsheetTemplateCategorySummary {
+  id: string;
+  sheetName: string;
+  label: string;
+  columnCount: number;
+  attributeCount: number;
+  rowStart: number;
+}
+
+export interface SpreadsheetTemplateOriginOption {
+  label: string;
+  code: string;
+}
+
+export interface SpreadsheetTemplate {
+  id?: string;
+  clientId: string;
+  clientNameSnapshot: string;
+  name: string;
+  originalFileName: string;
+  storagePath: string;
+  mimeType: string;
+  status?: SpreadsheetTemplateImportStatus;
+  archivedAt?: TimestampLike | null;
+  archivedByUid?: string | null;
+  parserVersion: number;
+  templateFingerprint: string;
+  categoryIds: string[];
+  categories: SpreadsheetTemplateCategorySummary[];
+  defaultCategoryId?: string | null;
+  defaultCategoryLabel?: string | null;
+  brandOptions: string[];
+  originOptions: SpreadsheetTemplateOriginOption[];
+  createdAt: TimestampLike;
+  updatedAt: TimestampLike;
+  createdByUid: string;
+}
+
+export interface SpreadsheetTemplateCategoryColumn {
+  index: number;
+  letter: string;
+  label: string;
+  key: string;
+  required: boolean;
+  requirementLabel: string | null;
+  guidance: string | null;
+  validation: string | null;
+}
+
+export interface SpreadsheetTemplateCategoryAttribute {
+  attributeType: string | null;
+  name: string;
+  required: boolean;
+  important: boolean;
+  values: string[];
+}
+
+export interface SpreadsheetTemplateCategory {
+  id?: string;
+  templateId: string;
+  clientId: string;
+  sheetName: string;
+  label: string;
+  rowStart: number;
+  columns: SpreadsheetTemplateCategoryColumn[];
+  attributes: SpreadsheetTemplateCategoryAttribute[];
+  createdAt: TimestampLike;
+  updatedAt: TimestampLike;
+}
+
+export interface ProductDraftValueSuggestion {
+  value: string;
+  confidence: number | null;
+  reasoning: string | null;
+  source: ProductDraftSuggestionSource;
+}
+
+export interface ProductDraftRow {
+  id: string;
+  values: Record<string, string>;
+}
+
+export interface ProductDraftGeneratedImage {
+  jobId: string;
+  outputId: string;
+  poseId: string | null;
+  label: string;
+  storagePath: string;
+  downloadUrl: string | null;
+  selectedAt: TimestampLike;
+}
+
+export interface ProductDraft {
+  id?: string;
+  batchId: string;
+  clientId: string;
+  clientNameSnapshot: string;
+  modelId: string;
+  modelNameSnapshot: string;
+  templateId: string;
+  templateNameSnapshot: string;
+  categoryId: string;
+  categoryNameSnapshot: string;
+  garmentId: string;
+  garmentName: string;
+  garmentFilePath: string;
+  garmentPhotoId?: string | null;
+  garmentPhotoFileName?: string | null;
+  inferredValues: Record<string, ProductDraftValueSuggestion>;
+  rows: ProductDraftRow[];
+  generatedImages: ProductDraftGeneratedImage[];
+  createdAt: TimestampLike;
+  updatedAt: TimestampLike;
+  createdByUid: string;
+  updatedByUid: string | null;
 }
 
 export interface Batch {
@@ -153,6 +312,11 @@ export interface Batch {
   modelId: string;
   modelNameSnapshot: string;
   modelSnapshot?: BatchModelSnapshot;
+  outputMode?: BatchOutputMode | null;
+  spreadsheetTemplateId?: string | null;
+  spreadsheetTemplateNameSnapshot?: string | null;
+  spreadsheetCategoryId?: string | null;
+  spreadsheetCategoryNameSnapshot?: string | null;
   provider: Provider;
   aspectRatio: AspectRatio;
   imageConfig?: ProviderImageConfig | null;
@@ -297,6 +461,7 @@ export interface Job {
   garmentPhotoId?: string | null;
   garmentPhotoFileName?: string | null;
   garmentView?: GarmentView | null;
+  productDraftId?: string | null;
   garmentSourceType?: GarmentSourceType;
   garmentOriginalFileNames?: string[];
   garmentIsMultiAngle: boolean;
@@ -516,7 +681,11 @@ export interface AnalyticsData {
   productivityByClientModel: AnalyticsClientModelStats[];
 }
 
-export type GeminiUsageFeature = 'image_review' | 'garment_view_classification' | 'pose_classification';
+export type GeminiUsageFeature =
+  | 'image_review'
+  | 'garment_view_classification'
+  | 'pose_classification'
+  | 'product_draft_enrichment';
 export type GeminiUsageStatus = 'success' | 'error';
 
 export interface GeminiUsageRecord {
@@ -650,11 +819,22 @@ export interface UploadedGarmentInput {
   photos?: UploadedGarmentPhotoInput[];
 }
 
+export interface ProductDraftInput {
+  garmentId: string;
+  garmentName: string;
+  rows: ProductDraftRow[];
+  inferredValues?: Record<string, ProductDraftValueSuggestion>;
+}
+
 export interface CreateGenerationBatchRequest {
   clientId: string;
   modelId: string;
+  outputMode?: BatchOutputMode;
+  spreadsheetTemplateId?: string | null;
+  spreadsheetCategoryId?: string | null;
   poseIds: string[];
   garments: UploadedGarmentInput[];
+  productDrafts: ProductDraftInput[];
   provider: Provider;
   promptBase: string;
   aspectRatio?: AspectRatio;
@@ -664,6 +844,19 @@ export interface CreateGenerationBatchRequest {
 export interface CreateGenerationBatchResponse {
   batchId: string;
   createdJobs: number;
+}
+
+export interface PreviewProductDraftsRequest {
+  clientId: string;
+  modelId: string;
+  spreadsheetTemplateId: string;
+  spreadsheetCategoryId: string;
+  garments: UploadedGarmentInput[];
+}
+
+export interface PreviewProductDraftsResponse {
+  success: boolean;
+  productDrafts: ProductDraftInput[];
 }
 
 export interface ClassifyGarmentViewsGarmentInput {
@@ -769,6 +962,18 @@ export interface CancelJobGenerationResponse {
   jobId: string;
 }
 
+export interface UpdateBatchProductDraftRequest {
+  batchId: string;
+  draftId: string;
+  rows: ProductDraftRow[];
+}
+
+export interface UpdateBatchProductDraftResponse {
+  success: boolean;
+  batchId: string;
+  draftId: string;
+}
+
 export interface SelectJobOutputRequest {
   jobId: string;
   outputId: string | null;
@@ -778,6 +983,43 @@ export interface SelectJobOutputResponse {
   success: boolean;
   jobId: string;
   outputId: string | null;
+}
+
+export interface ImportClientSpreadsheetTemplateRequest {
+  clientId: string;
+  storagePath: string;
+  originalFileName: string;
+}
+
+export interface ImportClientSpreadsheetTemplateResponse {
+  success: boolean;
+  templateId: string;
+  categoryCount: number;
+  defaultCategoryId: string | null;
+}
+
+export interface UpdateClientSpreadsheetTemplateCategoryRequest {
+  clientId: string;
+  templateId: string;
+  categoryId: string | null;
+}
+
+export interface UpdateClientSpreadsheetTemplateCategoryResponse {
+  success: boolean;
+  templateId: string;
+  categoryId: string | null;
+}
+
+export interface ExportBatchSpreadsheetRequest {
+  batchId: string;
+}
+
+export interface ExportBatchSpreadsheetResponse {
+  success: boolean;
+  batchId: string;
+  storagePath: string;
+  downloadUrl: string;
+  fileName: string;
 }
 
 export interface RegenerateFailedBatchJobsRequest {
@@ -800,6 +1042,18 @@ export interface CancelPendingBatchJobsResponse {
   success: boolean;
   batchId: string;
   cancelledJobs: number;
+}
+
+export interface CancelBatchProcessingRequest {
+  batchId: string;
+}
+
+export interface CancelBatchProcessingResponse {
+  success: boolean;
+  batchId: string;
+  cancelledJobs: number;
+  cancelledPendingJobs: number;
+  cancelledProcessingJobs: number;
 }
 
 export interface ArchiveSearchRequest {
@@ -855,7 +1109,9 @@ export interface RegenerateJobsBulkResponse {
 export type ModelPhotoProvider =
   | 'fal-seedream-v4.5'
   | 'fal-banana-pro'
-  | 'openai-dalle';
+  | 'openai-dalle'
+  | 'fal-nano-banana-2'
+  | 'fal-seedream-5';
 
 export type ModelPhotoGenerationStage = 'identity' | 'pose';
 
@@ -870,6 +1126,7 @@ export interface GenerateModelPhotoRequest {
   modelId?: string | null;
   stage?: ModelPhotoGenerationStage | null;
   referenceStoragePath?: string | null;
+  preserveReferenceDetails?: boolean;
 }
 
 export interface GeneratedModelPhoto {

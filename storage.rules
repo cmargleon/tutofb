@@ -29,6 +29,15 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    function isSpreadsheetUpload() {
+      return request.resource != null
+        && request.resource.size < 20 * 1024 * 1024
+        && (
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          || request.resource.contentType == 'application/vnd.ms-excel'
+        );
+    }
+
     match /models/{clientId}/{modelId}/poses/{fileName} {
       allow read: if isActiveUser();
       allow write: if isAdmin() && isImageUpload();
@@ -48,6 +57,18 @@ service firebase.storage {
     }
 
     match /generated/{clientId}/{batchId}/{jobId}/{fileName} {
+      allow read: if isActiveUser();
+      allow write: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /client_spreadsheets/{clientId}/{templateId}/{fileName} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin() && isSpreadsheetUpload();
+      allow delete: if isAdmin();
+    }
+
+    match /client_spreadsheet_exports/{clientId}/{batchId}/{fileName} {
       allow read: if isActiveUser();
       allow write: if false;
       allow delete: if isAdmin();

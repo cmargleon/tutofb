@@ -3,8 +3,13 @@ import { db } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import {
+  CancelBatchProcessingRequest,
+  CancelBatchProcessingResponse,
   CancelJobGenerationResponse,
   CancelPendingBatchJobsResponse,
+  ExportBatchSpreadsheetRequest,
+  ExportBatchSpreadsheetResponse,
+  ProductDraft,
   Provider,
   RegenerateFailedBatchJobsResponse,
   RegenerateJobsBulkRequest,
@@ -13,6 +18,8 @@ import {
   RetryJobAutoReviewResponse,
   SelectJobOutputRequest,
   SelectJobOutputResponse,
+  UpdateBatchProductDraftRequest,
+  UpdateBatchProductDraftResponse,
 } from '../../../shared/src/types';
 
 export const regenerateJob = async (jobId: string, provider: Provider, prompt: string) => {
@@ -51,6 +58,23 @@ export const cancelJobGeneration = async (jobId: string): Promise<CancelJobGener
     return result.data;
   } catch (error) {
     console.error('Error calling cancelJobGeneration:', error);
+    throw error;
+  }
+};
+
+export const cancelBatchProcessing = async (
+  batchId: string,
+): Promise<CancelBatchProcessingResponse> => {
+  const callable = httpsCallable<CancelBatchProcessingRequest, CancelBatchProcessingResponse>(
+    functions,
+    'cancelBatchProcessing',
+  );
+
+  try {
+    const result = await callable({ batchId });
+    return result.data;
+  } catch (error) {
+    console.error('Error calling cancelBatchProcessing:', error);
     throw error;
   }
 };
@@ -133,4 +157,31 @@ export const setJobManualFlag = async (
     manuallyFlaggedByUid: flagged ? userUid : null,
     updatedAt: serverTimestamp(),
   });
+};
+
+export const updateBatchProductDraft = async (
+  batchId: string,
+  draftId: string,
+  rows: ProductDraft['rows'],
+): Promise<UpdateBatchProductDraftResponse> => {
+  const callable = httpsCallable<UpdateBatchProductDraftRequest, UpdateBatchProductDraftResponse>(
+    functions,
+    'updateBatchProductDraft',
+  );
+
+  const result = await callable({ batchId, draftId, rows });
+  return result.data;
+};
+
+export const exportBatchSpreadsheet = async (
+  batchId: string,
+): Promise<ExportBatchSpreadsheetResponse> => {
+  const callable = httpsCallable<ExportBatchSpreadsheetRequest, ExportBatchSpreadsheetResponse>(
+    functions,
+    'exportBatchSpreadsheet',
+    { timeout: 300000 },
+  );
+
+  const result = await callable({ batchId });
+  return result.data;
 };

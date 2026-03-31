@@ -85,6 +85,26 @@ service cloud.firestore {
     match /clients/{clientId} {
       allow read: if canReview();
       allow create, update, delete: if isAdmin();
+
+      match /spreadsheetTemplates/{templateId} {
+        allow read: if canReview();
+        allow create, update, delete: if false;
+
+        match /categories/{categoryId} {
+          allow read: if canReview();
+          allow create, update, delete: if false;
+        }
+      }
+    }
+
+    match /{path=**}/spreadsheetTemplates/{templateId} {
+      allow read: if canReview();
+      allow create, update, delete: if false;
+
+      match /categories/{categoryId} {
+        allow read: if canReview();
+        allow create, update, delete: if false;
+      }
     }
 
     match /models/{modelId} {
@@ -95,6 +115,11 @@ service cloud.firestore {
     match /batches/{batchId} {
       allow read: if canReview();
       allow create, update, delete: if false;
+
+      match /productDrafts/{draftId} {
+        allow read: if canReview();
+        allow create, update, delete: if false;
+      }
     }
 
     match /jobs/{jobId} {

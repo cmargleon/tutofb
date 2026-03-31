@@ -8,10 +8,16 @@ setGlobalOptions({ maxInstances: 10 });
 // Export callables
 export * from './callables/createGenerationBatch';
 export * from './callables/classifyGarmentViewsWithGemini';
+export * from './callables/importClientSpreadsheetTemplate';
+export * from './callables/updateClientSpreadsheetTemplateCategory';
+export * from './callables/previewProductDrafts';
 export * from './callables/regenerateJob';
 export * from './callables/retryJobAutoReview';
 export * from './callables/cancelJobGeneration';
+export * from './callables/cancelBatchProcessing';
 export * from './callables/selectJobOutput';
+export * from './callables/updateBatchProductDraft';
+export * from './callables/exportBatchSpreadsheet';
 export * from './callables/regenerateFailedBatchJobs';
 export * from './callables/cancelPendingBatchJobs';
 export * from './callables/regenerateJobsBulk';

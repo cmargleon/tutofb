@@ -55,7 +55,7 @@ export const CandidatePhotoCard: React.FC<CandidatePhotoCardProps> = ({
           type="button"
           onClick={onSelect}
           disabled={disabled}
-          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+          className={`flex-1 cursor-pointer rounded-lg px-2 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
             isSelected
               ? 'bg-indigo-600 text-white hover:bg-indigo-700'
               : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
@@ -67,7 +67,7 @@ export const CandidatePhotoCard: React.FC<CandidatePhotoCardProps> = ({
           type="button"
           onClick={onRegenerate}
           disabled={disabled || isRegenerating}
-          className="rounded-lg bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100 transition disabled:opacity-50"
+          className="cursor-pointer rounded-lg bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
           title="Regenerar esta foto"
         >
           <RefreshCw className="w-3.5 h-3.5" />

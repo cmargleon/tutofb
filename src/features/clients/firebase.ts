@@ -1,6 +1,15 @@
-import { db, auth } from '../../firebase';
-import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { Client } from '../../../shared/src/types';
+import { db, auth, storage } from '../../firebase';
+import { collection, collectionGroup, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes } from 'firebase/storage';
+import {
+  Client,
+  ImportClientSpreadsheetTemplateRequest,
+  ImportClientSpreadsheetTemplateResponse,
+  SpreadsheetTemplate,
+  SpreadsheetTemplateCategory,
+  UpdateClientSpreadsheetTemplateCategoryRequest,
+  UpdateClientSpreadsheetTemplateCategoryResponse,
+} from '../../../shared/src/types';
 import { isActiveCatalogEntity } from '../../../shared/src/domain';
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -29,6 +38,51 @@ export const subscribeToClients = (
       } as Client))
       .filter((client) => options.includeArchived ? true : isActiveCatalogEntity(client));
     callback(clients);
+  }, onError);
+};
+
+export const subscribeToSpreadsheetTemplates = (
+  callback: (templates: SpreadsheetTemplate[]) => void,
+  onError: (error: Error) => void,
+) => {
+  const q = query(collectionGroup(db, 'spreadsheetTemplates'));
+  return onSnapshot(q, (snapshot) => {
+    const templates = snapshot.docs.map((templateDoc) => ({
+      id: templateDoc.id,
+      ...templateDoc.data(),
+    } as SpreadsheetTemplate));
+    callback(templates);
+  }, onError);
+};
+
+export const subscribeToClientSpreadsheetTemplates = (
+  clientId: string,
+  callback: (templates: SpreadsheetTemplate[]) => void,
+  onError: (error: Error) => void,
+) => {
+  const q = query(collection(db, 'clients', clientId, 'spreadsheetTemplates'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    const templates = snapshot.docs.map((templateDoc) => ({
+      id: templateDoc.id,
+      ...templateDoc.data(),
+    } as SpreadsheetTemplate));
+    callback(templates);
+  }, onError);
+};
+
+export const subscribeToSpreadsheetTemplateCategories = (
+  clientId: string,
+  templateId: string,
+  callback: (categories: SpreadsheetTemplateCategory[]) => void,
+  onError: (error: Error) => void,
+) => {
+  const q = query(collection(db, 'clients', clientId, 'spreadsheetTemplates', templateId, 'categories'), orderBy('sheetName', 'asc'));
+  return onSnapshot(q, (snapshot) => {
+    const categories = snapshot.docs.map((categoryDoc) => ({
+      id: categoryDoc.id,
+      ...categoryDoc.data(),
+    } as SpreadsheetTemplateCategory));
+    callback(categories);
   }, onError);
 };
 
@@ -62,6 +116,54 @@ export const updateClient = async (id: string, name: string, generationPromptBas
     generationPromptBase: normalizeClientGenerationPrompt(generationPromptBase),
     updatedAt: serverTimestamp()
   });
+};
+
+const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+export const importClientSpreadsheetTemplate = async (
+  clientId: string,
+  file: File,
+): Promise<ImportClientSpreadsheetTemplateResponse> => {
+  if (!auth.currentUser) throw new Error('Usuario no autenticado');
+
+  const storagePath = `client_spreadsheets/${clientId}/${crypto.randomUUID()}/${sanitizeFileName(file.name)}`;
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, file, { contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+  const callable = httpsCallable<ImportClientSpreadsheetTemplateRequest, ImportClientSpreadsheetTemplateResponse>(
+    functions,
+    'importClientSpreadsheetTemplate',
+    { timeout: 300000 },
+  );
+
+  const result = await callable({
+    clientId,
+    storagePath,
+    originalFileName: file.name,
+  });
+
+  return result.data;
+};
+
+export const updateClientSpreadsheetTemplateCategory = async (
+  clientId: string,
+  templateId: string,
+  categoryId: string | null,
+): Promise<UpdateClientSpreadsheetTemplateCategoryResponse> => {
+  if (!auth.currentUser) throw new Error('Usuario no autenticado');
+
+  const callable = httpsCallable<
+    UpdateClientSpreadsheetTemplateCategoryRequest,
+    UpdateClientSpreadsheetTemplateCategoryResponse
+  >(functions, 'updateClientSpreadsheetTemplateCategory');
+
+  const result = await callable({
+    clientId,
+    templateId,
+    categoryId,
+  });
+
+  return result.data;
 };
 
 export const archiveClient = async (id: string) => {

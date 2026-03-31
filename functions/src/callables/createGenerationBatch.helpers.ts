@@ -1,9 +1,12 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   AspectRatio,
+  BatchOutputMode,
   Client,
   CreateGenerationBatchRequest,
   Job,
+  ProductDraftInput,
+  ProductDraftRow,
   Model,
   Pose,
   ProviderImageConfig,
@@ -140,14 +143,82 @@ export const getPoseMap = (model: Model): Map<string, Pose> =>
 export interface ValidatedCreateGenerationBatchInput {
   clientId: string;
   modelId: string;
+  outputMode: BatchOutputMode;
+  spreadsheetTemplateId: string | null;
+  spreadsheetCategoryId: string | null;
   poseIds: string[];
   garments: UploadedGarmentInput[];
+  productDrafts: ProductDraftInput[];
   provider: CreateGenerationBatchRequest['provider'];
   imageConfig: ProviderImageConfig;
   promptBase: string;
   aspectRatio: AspectRatio;
   totalJobs: number;
 }
+
+const normalizeProductDraftRow = (value: unknown, rowIndex: number, garmentName: string): ProductDraftRow => {
+  if (!value || typeof value !== 'object') {
+    throw new HttpsError('invalid-argument', `La fila ${rowIndex + 1} del draft de ${garmentName} es inválida.`);
+  }
+
+  const row = value as Partial<ProductDraftRow>;
+  const id = requireNonEmptyString(row.id, `El id de la fila ${rowIndex + 1} de ${garmentName}`);
+  const values = row.values;
+
+  if (!values || typeof values !== 'object' || Array.isArray(values)) {
+    throw new HttpsError('invalid-argument', `Los valores de la fila ${rowIndex + 1} de ${garmentName} son inválidos.`);
+  }
+
+  return {
+    id,
+    values: Object.fromEntries(
+      Object.entries(values).map(([key, entryValue]) => [key, typeof entryValue === 'string' ? entryValue : String(entryValue ?? '')]),
+    ),
+  };
+};
+
+const normalizeProductDraft = (value: unknown): ProductDraftInput => {
+  if (!value || typeof value !== 'object') {
+    throw new HttpsError('invalid-argument', 'Cada product draft debe ser un objeto válido.');
+  }
+
+  const draft = value as Partial<ProductDraftInput>;
+  const garmentName = requireNonEmptyString(draft.garmentName, 'El nombre del garment draft');
+  const rows = Array.isArray(draft.rows) ? draft.rows.map((row, index) => normalizeProductDraftRow(row, index, garmentName)) : [];
+
+  if (rows.length === 0) {
+    throw new HttpsError('invalid-argument', `El product draft de ${garmentName} debe tener al menos una fila.`);
+  }
+
+  return {
+    garmentId: requireNonEmptyString(draft.garmentId, `El garmentId del draft de ${garmentName}`),
+    garmentName,
+    rows,
+    inferredValues:
+      draft.inferredValues && typeof draft.inferredValues === 'object' && !Array.isArray(draft.inferredValues)
+        ? Object.fromEntries(
+            Object.entries(draft.inferredValues).map(([key, rawValue]) => {
+              const record =
+                rawValue && typeof rawValue === 'object'
+                  ? rawValue as unknown as Record<string, unknown>
+                  : {};
+              return [
+                key,
+                {
+                  value: typeof record.value === 'string' ? record.value : '',
+                  confidence: typeof record.confidence === 'number' && Number.isFinite(record.confidence) ? record.confidence : null,
+                  reasoning: typeof record.reasoning === 'string' ? record.reasoning : null,
+                  source:
+                    record.source === 'user' || record.source === 'wizard' || record.source === 'system' || record.source === 'gemini'
+                      ? record.source
+                      : 'system',
+                },
+              ];
+            }),
+          )
+        : {},
+  };
+};
 
 export const validateCreateGenerationBatchInput = (
   data: Partial<CreateGenerationBatchRequest> | null | undefined,
@@ -156,6 +227,15 @@ export const validateCreateGenerationBatchInput = (
 ): ValidatedCreateGenerationBatchInput => {
   const clientId = requireNonEmptyString(data?.clientId, 'El cliente');
   const modelId = requireNonEmptyString(data?.modelId, 'El modelo');
+  const outputMode = data?.outputMode === 'photos_only' ? 'photos_only' : 'spreadsheet';
+  const spreadsheetTemplateId =
+    outputMode === 'spreadsheet'
+      ? requireNonEmptyString(data?.spreadsheetTemplateId, 'La plantilla')
+      : null;
+  const spreadsheetCategoryId =
+    outputMode === 'spreadsheet'
+      ? requireNonEmptyString(data?.spreadsheetCategoryId, 'La categoría del spreadsheet')
+      : null;
   const promptBase = typeof data?.promptBase === 'string' ? data.promptBase.trim() : '';
   const provider = data?.provider;
   const imageConfig = data?.imageConfig;
@@ -185,6 +265,22 @@ export const validateCreateGenerationBatchInput = (
   }
 
   garments.forEach((garment) => ensureDraftOwnership(authUid, garment));
+  const productDrafts = Array.isArray(data?.productDrafts) ? data.productDrafts.map(normalizeProductDraft) : [];
+  if (outputMode === 'spreadsheet') {
+    if (productDrafts.length !== garments.length) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Debes enviar exactamente un product draft por cada prenda del lote.',
+      );
+    }
+
+    const draftByGarmentId = new Map(productDrafts.map((draft) => [draft.garmentId, draft]));
+    garments.forEach((garment) => {
+      if (!draftByGarmentId.has(garment.id)) {
+        throw new HttpsError('invalid-argument', `Falta el product draft para la prenda ${garment.name}.`);
+      }
+    });
+  }
 
   const totalJobs = poseIds.length * garments.length;
   if (totalJobs > maxJobs) {
@@ -197,8 +293,12 @@ export const validateCreateGenerationBatchInput = (
   return {
     clientId,
     modelId,
+    outputMode,
+    spreadsheetTemplateId,
+    spreadsheetCategoryId,
     poseIds,
     garments,
+    productDrafts,
     provider: provider!,
     imageConfig: normalizedImageConfig.imageConfig,
     promptBase,

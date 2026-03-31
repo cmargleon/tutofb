@@ -1,4 +1,9 @@
 import { MODEL_POSE_RECIPES } from './constants';
+import {
+  ReferenceBackgroundMode,
+  ReferenceClothingMode,
+  ReferenceIdentityMode,
+} from './types';
 
 export const buildIdentityPrompt = (params: {
   sex: string; age: string; skin: string;
@@ -42,6 +47,64 @@ export const buildPosePrompt = (basePrompt: string, shotType: string): string =>
     'Use the reference image as the exact same model identity.',
     'Preserve the same face, hair, skin tone, body proportions, age, and overall appearance.',
     'Change only the pose and camera angle while keeping the same plain replaceable clothing and studio style.',
+    basePrompt,
+    `Update the pose to: ${shotType}.`,
+  ].join(' ');
+
+export const buildReferencePoseBasePrompt = (params: {
+  identityMode: ReferenceIdentityMode;
+  backgroundMode: ReferenceBackgroundMode;
+  backgroundPrompt: string;
+  clothingMode: ReferenceClothingMode;
+  clothingPrompt: string;
+}): string => {
+  const identityInstructions =
+    params.identityMode === 'exact'
+      ? [
+          'Use the reference image as the exact same model identity.',
+          'Preserve the same face, hair, skin tone, body proportions, age, and distinctive traits.',
+        ]
+      : [
+          'Use the reference image only as inspiration for a similar model identity.',
+          'Create a similar person with comparable age range, body type, styling, and overall vibe, but not an identical face.',
+        ];
+
+  const backgroundInstructions =
+    params.backgroundMode === 'preserve'
+      ? [
+          'Keep the same background, floor, lighting direction, and studio context whenever possible.',
+        ]
+      : params.backgroundPrompt.trim()
+      ? [`Update the background to: ${params.backgroundPrompt.trim()}.`]
+      : ['The background can change if needed, but keep the image production-ready.'];
+
+  const clothingInstructions =
+    params.clothingMode === 'preserve'
+      ? ['Keep the same clothing and styling from the reference image.']
+      : params.clothingPrompt.trim()
+      ? [`Update the clothing to: ${params.clothingPrompt.trim()}.`]
+      : ['The clothing can change, but keep it plain, solid, and easy to replace digitally.'];
+
+  return [
+    ...identityInstructions,
+    ...clothingInstructions,
+    ...backgroundInstructions,
+    'Photorealistic fashion catalog image, professional lighting, no text or watermarks.',
+  ].join(' ');
+};
+
+export const buildReferenceCandidatePrompt = (basePrompt: string): string =>
+  [
+    basePrompt,
+    'Keep a full-body front-facing standing pose suitable for choosing a base model candidate.',
+    'Return a polished catalog-ready image.',
+  ].join(' ');
+
+export const buildReferencePosePrompt = (basePrompt: string, shotType: string): string =>
+  [
+    'Use the reference image as the exact same chosen model identity.',
+    'Preserve the same face, hair, skin tone, body proportions, clothing, background, and lighting from the chosen candidate.',
+    'Change only the pose and camera angle.',
     basePrompt,
     `Update the pose to: ${shotType}.`,
   ].join(' ');

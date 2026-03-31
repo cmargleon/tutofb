@@ -4,6 +4,7 @@ import { useConfirm, useToast } from '../../feedback/FeedbackProvider';
 import { AI_WIZARD_MAX_STEP, AI_WIZARD_STEPS, IDENTITY_CANDIDATE_COUNT } from '../constants';
 import { isAiWizardStepComplete } from '../aiWizard';
 import { createModelFromPaths } from '../firebase';
+import { buildModelIdentityTraitsFromAiForm } from '../identityTraits';
 import { AiIdentityFormState, useAiIdentityForm } from './useAiIdentityForm';
 import { useAiCandidates, UseAiCandidatesReturn } from './useAiCandidates';
 import { useAiPoses, UseAiPosesReturn } from './useAiPoses';
@@ -146,7 +147,17 @@ export const useAiWizard = ({
 
     setIsCreating(true);
     try {
-      await createModelFromPaths(selectedClientId, trimmedName, accepted, { modelId: draftModelId });
+      await createModelFromPaths(selectedClientId, trimmedName, accepted, {
+        modelId: draftModelId,
+        identityTraits: buildModelIdentityTraitsFromAiForm({
+          sex: identityForm.sex,
+          age: identityForm.age,
+          skin: identityForm.skin,
+          hairColor: identityForm.hairColor,
+          hairLength: identityForm.hairLength,
+          build: identityForm.build,
+        }),
+      });
       setNewModelName('');
       setSelectedClientId('');
       resetFlow();
@@ -162,6 +173,12 @@ export const useAiWizard = ({
     }
   }, [
     draftModelId,
+    identityForm.age,
+    identityForm.build,
+    identityForm.hairColor,
+    identityForm.hairLength,
+    identityForm.sex,
+    identityForm.skin,
     newModelName,
     onSuccess,
     poses.posePhotos,

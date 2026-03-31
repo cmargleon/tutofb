@@ -5,6 +5,8 @@ import {
   ClassifyGarmentViewsResponse,
   CreateGenerationBatchRequest,
   CreateGenerationBatchResponse,
+  PreviewProductDraftsRequest,
+  PreviewProductDraftsResponse,
 } from '../../../shared/src/types';
 
 export const createGenerationBatch = async (data: CreateGenerationBatchRequest): Promise<CreateGenerationBatchResponse> => {
@@ -23,6 +25,19 @@ export const classifyGarmentViewsWithGemini = async (
   const callable = httpsCallable<ClassifyGarmentViewsRequest, ClassifyGarmentViewsResponse>(
     functions,
     'classifyGarmentViewsWithGemini',
+  );
+
+  const result = await callable(data);
+  return result.data;
+};
+
+export const previewProductDrafts = async (
+  data: PreviewProductDraftsRequest,
+): Promise<PreviewProductDraftsResponse> => {
+  const callable = httpsCallable<PreviewProductDraftsRequest, PreviewProductDraftsResponse>(
+    functions,
+    'previewProductDrafts',
+    { timeout: 300000 },
   );
 
   const result = await callable(data);

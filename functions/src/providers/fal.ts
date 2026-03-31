@@ -1,4 +1,4 @@
-import { AspectRatio, FalBananaProImageConfig, FalSeedreamImageConfig } from '../../../shared/src/types';
+import { AspectRatio, FalBananaProImageConfig, FalNanoBanana2ImageConfig, FalSeedream5ImageConfig, FalSeedreamImageConfig } from '../../../shared/src/types';
 import { mapLegacyAspectRatioToSeedreamImageSize } from '../../../shared/src/providerImageConfig';
 import { getFalPollIntervalMs, getFalPollTimeoutMs } from '../config/runtime';
 import { ProviderRequest, ProviderResponse } from './types';
@@ -221,6 +221,89 @@ export const generateWithFalBananaPro = async (
   const downloaded = await fetchImageBytes(image.url, request.signal);
   return {
     provider: 'fal-banana-pro',
+    contentType: image.contentType || downloaded.contentType,
+    imageBytes: downloaded.bytes,
+    remoteUrl: image.url,
+    requestId: queue.request_id || null,
+    responseSummary: {
+      endpointId,
+      requestId: queue.request_id || null,
+      remoteUrl: image.url,
+    },
+  };
+};
+
+export const generateWithFalNanoBanana2 = async (
+  request: ProviderRequest,
+  falKey: string,
+): Promise<ProviderResponse> => {
+  const imageConfig = request.imageConfig as FalNanoBanana2ImageConfig;
+  const endpointId = 'fal-ai/nano-banana-2/edit';
+  const queue = await submitFalRequest(
+    endpointId,
+    {
+      prompt: request.prompt,
+      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      num_images: 1,
+      aspect_ratio: imageConfig.aspectRatio,
+      resolution: imageConfig.resolution,
+      output_format: 'png',
+    },
+    falKey,
+    request.signal,
+  );
+
+  const payload = await pollFalResponse(endpointId, queue, falKey, request.signal);
+  const image = extractImage(payload);
+
+  if (!image) {
+    throw new Error('fal.ai nano-banana-2 no devolvió una imagen utilizable.');
+  }
+
+  const downloaded = await fetchImageBytes(image.url, request.signal);
+  return {
+    provider: 'fal-nano-banana-2',
+    contentType: image.contentType || downloaded.contentType,
+    imageBytes: downloaded.bytes,
+    remoteUrl: image.url,
+    requestId: queue.request_id || null,
+    responseSummary: {
+      endpointId,
+      requestId: queue.request_id || null,
+      remoteUrl: image.url,
+    },
+  };
+};
+
+export const generateWithFalSeedream5 = async (
+  request: ProviderRequest,
+  falKey: string,
+): Promise<ProviderResponse> => {
+  const imageConfig = request.imageConfig as FalSeedream5ImageConfig;
+  const endpointId = 'fal-ai/bytedance/seedream/v5/lite/edit';
+  const queue = await submitFalRequest(
+    endpointId,
+    {
+      prompt: request.prompt,
+      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      num_images: 1,
+      image_size: imageConfig.imageSize,
+      enable_safety_checker: false,
+    },
+    falKey,
+    request.signal,
+  );
+
+  const payload = await pollFalResponse(endpointId, queue, falKey, request.signal);
+  const image = extractImage(payload);
+
+  if (!image) {
+    throw new Error('fal.ai seedream-5 no devolvió una imagen utilizable.');
+  }
+
+  const downloaded = await fetchImageBytes(image.url, request.signal);
+  return {
+    provider: 'fal-seedream-5',
     contentType: image.contentType || downloaded.contentType,
     imageBytes: downloaded.bytes,
     remoteUrl: image.url,

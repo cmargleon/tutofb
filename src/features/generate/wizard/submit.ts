@@ -148,8 +148,12 @@ export const buildCreateGenerationBatchRequest = (
   return {
     clientId: state.selectedClientId!,
     modelId: state.selectedModelId!,
+    outputMode: state.outputMode,
+    spreadsheetTemplateId: state.outputMode === 'spreadsheet' ? state.selectedSpreadsheetTemplateId : null,
+    spreadsheetCategoryId: state.outputMode === 'spreadsheet' ? state.selectedSpreadsheetCategoryId : null,
     poseIds: state.selectedPoseIds,
     garments,
+    productDrafts: state.outputMode === 'spreadsheet' ? state.productDrafts : [],
     provider: state.provider,
     promptBase: state.prompt,
     aspectRatio: resolveAspectRatioForImageConfig(imageConfig),

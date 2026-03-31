@@ -1,5 +1,7 @@
 import {
   FalBananaProImageConfig,
+  FalNanoBanana2ImageConfig,
+  FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
   OpenAIImageConfig,
 } from '../../../shared/src/types';
@@ -218,6 +220,80 @@ export const editModelPhotoWithBananaPro = (
     falKey,
   );
 
+// fal.ai Nano Banana 2 (text-to-image)
+export const generateModelPhotoWithNanoBanana2 = async (
+  prompt: string,
+  imageConfig: FalNanoBanana2ImageConfig,
+  falKey: string,
+): Promise<TextToImageResult> =>
+  runFalTextToImage(
+    'fal-ai/nano-banana-2',
+    {
+      prompt,
+      aspect_ratio: imageConfig.aspectRatio,
+      resolution: imageConfig.resolution,
+      num_images: 1,
+      output_format: 'jpeg',
+    },
+    falKey,
+  );
+
+// fal.ai Nano Banana 2 (image-to-image edit)
+export const editModelPhotoWithNanoBanana2 = (
+  prompt: string,
+  imageConfig: FalNanoBanana2ImageConfig,
+  referenceImageUrl: string,
+  falKey: string,
+): Promise<TextToImageResult> =>
+  runFalImageEdit(
+    'fal-ai/nano-banana-2/edit',
+    {
+      prompt,
+      image_urls: [referenceImageUrl],
+      num_images: 1,
+      aspect_ratio: imageConfig.aspectRatio,
+      resolution: imageConfig.resolution,
+      output_format: 'png',
+    },
+    falKey,
+  );
+
+// fal.ai Seedream 5 Lite (text-to-image)
+export const generateModelPhotoWithSeedream5 = async (
+  prompt: string,
+  imageConfig: FalSeedream5ImageConfig,
+  falKey: string,
+): Promise<TextToImageResult> =>
+  runFalTextToImage(
+    'fal-ai/bytedance/seedream/v5/lite/text-to-image',
+    {
+      prompt,
+      image_size: imageConfig.imageSize,
+      num_images: 1,
+      enable_safety_checker: false,
+    },
+    falKey,
+  );
+
+// fal.ai Seedream 5 Lite (image-to-image edit)
+export const editModelPhotoWithSeedream5 = (
+  prompt: string,
+  imageConfig: FalSeedream5ImageConfig,
+  referenceImageUrl: string,
+  falKey: string,
+): Promise<TextToImageResult> =>
+  runFalImageEdit(
+    'fal-ai/bytedance/seedream/v5/lite/edit',
+    {
+      prompt,
+      image_urls: [referenceImageUrl],
+      num_images: 1,
+      image_size: imageConfig.imageSize,
+      enable_safety_checker: false,
+    },
+    falKey,
+  );
+
 // OpenAI gpt-image-1 (generations)
 export const generateModelPhotoWithOpenAI = async (
   prompt: string,
@@ -263,6 +339,7 @@ export const editModelPhotoWithOpenAI = async (
   imageConfig: OpenAIImageConfig,
   referenceImageUrl: string,
   openaiApiKey: string,
+  preserveReferenceDetails = true,
 ): Promise<TextToImageResult> => {
   const response = await fetch(`${getOpenAIBaseUrl()}/images/edits`, {
     method: 'POST',
@@ -276,7 +353,7 @@ export const editModelPhotoWithOpenAI = async (
       size: imageConfig.size,
       quality: imageConfig.quality,
       output_format: 'png',
-      input_fidelity: 'high',
+      ...(preserveReferenceDetails ? { input_fidelity: 'high' } : {}),
       images: [{ image_url: referenceImageUrl }],
     }),
   });

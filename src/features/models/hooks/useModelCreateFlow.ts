@@ -1,9 +1,14 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { CreateTab } from '../types';
 import { ModelCreateFlowAiState, useAiWizard } from './useAiWizard';
+import {
+  ModelCreateFlowReferenceState,
+  useReferenceModelFlow,
+} from './useReferenceModelFlow';
 import { ModelCreateFlowUploadState, useModelUploadFlow } from './useModelUploadFlow';
 
 export type { ModelCreateFlowAiState } from './useAiWizard';
+export type { ModelCreateFlowReferenceState } from './useReferenceModelFlow';
 export type { ModelCreateFlowUploadState } from './useModelUploadFlow';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -25,6 +30,7 @@ export interface UseModelCreateFlowResult {
   shared: ModelCreateFlowSharedState;
   upload: ModelCreateFlowUploadState;
   ai: ModelCreateFlowAiState;
+  reference: ModelCreateFlowReferenceState;
 }
 
 export const useModelCreateFlow = (): UseModelCreateFlowResult => {
@@ -58,7 +64,19 @@ export const useModelCreateFlow = (): UseModelCreateFlowResult => {
     onSuccess: showCreateSuccess,
   });
 
-  const isCreating = uploadCreating || aiCreating;
+  const {
+    reference,
+    isCreating: referenceCreating,
+    error: referenceError,
+  } = useReferenceModelFlow({
+    newModelName,
+    selectedClientId,
+    setNewModelName,
+    setSelectedClientId,
+    onSuccess: showCreateSuccess,
+  });
+
+  const isCreating = uploadCreating || aiCreating || referenceCreating;
 
   return {
     shared: {
@@ -70,10 +88,11 @@ export const useModelCreateFlow = (): UseModelCreateFlowResult => {
       setSelectedClientId,
       isCreating,
       createSuccess,
-      inputsDisabled: isCreating || ai.busy,
-      error,
+      inputsDisabled: isCreating || ai.busy || reference.busy,
+      error: error || referenceError,
     },
     upload,
     ai,
+    reference,
   };
 };

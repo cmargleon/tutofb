@@ -419,9 +419,23 @@ const PoseView: React.FC<PoseViewProps> = ({
               <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
             </select>
           </div>
+        </div>
+      ) : null}
+
+      {role.canRegenerate ? (
+        <div className="mt-auto space-y-3 border-t border-slate-100 px-3 py-3">
+          <button
+            type="button"
+            onClick={() => onRegenerate()}
+            disabled={controlsDisabled || !draft.prompt.trim() || !role.canRegenerate}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isQueueing ? 'animate-spin' : ''}`} />
+            Regenerar foto
+          </button>
           {displayedOutput?.resultImagePath ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">URL imagen guardada</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Archivo</p>
               {displayedImageUrl ? (
                 <a
                   href={displayedImageUrl}
@@ -438,20 +452,6 @@ const PoseView: React.FC<PoseViewProps> = ({
               )}
             </div>
           ) : null}
-        </div>
-      ) : null}
-
-      {role.canRegenerate ? (
-        <div className="mt-auto border-t border-slate-100 px-3 py-3">
-          <button
-            type="button"
-            onClick={() => onRegenerate()}
-            disabled={controlsDisabled || !draft.prompt.trim() || !role.canRegenerate}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isQueueing ? 'animate-spin' : ''}`} />
-            Regenerar foto
-          </button>
         </div>
       ) : null}
 
@@ -495,7 +495,6 @@ const PoseView: React.FC<PoseViewProps> = ({
     } satisfies Record<'left' | 'right' | 'up' | 'down', string>)[gestureDirection]
     : null;
   const gestureHintOpacity = Math.min(1, gestureTravel / 90);
-
   const imagePanel = (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="relative min-h-0 flex-1 overflow-hidden">

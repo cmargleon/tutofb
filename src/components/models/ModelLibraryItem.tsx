@@ -15,6 +15,7 @@ import { UseModelLibraryResult } from '../../features/models/hooks/useModelLibra
 import { MODEL_INPUT_BASE, formatModelTimestamp } from '../../features/models/utils';
 import { Button, ImageThumb } from '../ui';
 import { LocalFileThumb } from './LocalFileThumb';
+import { ModelIdentityTraitsFields } from './ModelIdentityTraitsFields';
 
 interface ModelLibraryItemProps {
   model: Model;
@@ -157,6 +158,18 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <h4 className="mb-1 text-sm font-medium text-gray-900">Rasgos físicos del modelo</h4>
+              <p className="mb-3 text-xs text-gray-500">
+                Usa los mismos rasgos del flujo de IA para completar modelos creados sin IA.
+              </p>
+              <ModelIdentityTraitsFields
+                value={library.editIdentityTraits}
+                onChange={library.setEditIdentityTraits}
+                disabled={library.isSavingEdit}
+              />
             </div>
 
             {hasPoses && <EditPosesGrid model={model} library={library} />}

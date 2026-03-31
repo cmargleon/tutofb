@@ -4,8 +4,9 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import { Model } from '../../../../shared/src/types';
+import { Model, ModelIdentityTraits } from '../../../../shared/src/types';
 import { useConfirm, useToast } from '../../feedback/FeedbackProvider';
+import { createEmptyModelIdentityTraits, normalizeModelIdentityTraits } from '../identityTraits';
 import {
   archiveModel,
   permanentlyDeleteModel,
@@ -20,6 +21,8 @@ export interface UseModelLibraryResult {
   setEditName: Dispatch<SetStateAction<string>>;
   editClientId: string;
   setEditClientId: Dispatch<SetStateAction<string>>;
+  editIdentityTraits: ModelIdentityTraits;
+  setEditIdentityTraits: Dispatch<SetStateAction<ModelIdentityTraits>>;
   editFilesToAdd: File[];
   editPoseIdsToRemove: string[];
   isSavingEdit: boolean;
@@ -42,6 +45,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editClientId, setEditClientId] = useState('');
+  const [editIdentityTraits, setEditIdentityTraits] = useState<ModelIdentityTraits>(createEmptyModelIdentityTraits);
   const [editFilesToAdd, setEditFilesToAdd] = useState<File[]>([]);
   const [editPoseIdsToRemove, setEditPoseIdsToRemove] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -51,6 +55,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
     setEditingId(model.id ?? null);
     setEditName(model.name);
     setEditClientId(model.clientId);
+    setEditIdentityTraits(model.identityTraits || createEmptyModelIdentityTraits());
     setEditFilesToAdd([]);
     setEditPoseIdsToRemove([]);
   };
@@ -59,6 +64,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
     setEditingId(null);
     setEditName('');
     setEditClientId('');
+    setEditIdentityTraits(createEmptyModelIdentityTraits());
     setEditFilesToAdd([]);
     setEditPoseIdsToRemove([]);
     setIsSavingEdit(false);
@@ -107,6 +113,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
       await updateModel(id, {
         name: trimmedName,
         clientId: editClientId,
+        identityTraits: normalizeModelIdentityTraits(editIdentityTraits),
         filesToAdd: editFilesToAdd,
         poseIdsToRemove: editPoseIdsToRemove,
       });
@@ -242,6 +249,8 @@ export const useModelLibrary = (): UseModelLibraryResult => {
     setEditName,
     editClientId,
     setEditClientId,
+    editIdentityTraits,
+    setEditIdentityTraits,
     editFilesToAdd,
     editPoseIdsToRemove,
     isSavingEdit,

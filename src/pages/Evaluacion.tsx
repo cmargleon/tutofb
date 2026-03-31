@@ -3,16 +3,25 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LoadingBlock, EmptyState, StatusBadge, Button } from '../components/ui';
 import { useEvaluationBatch } from '../features/evaluation/useEvaluationBatch';
 import { PoseSingleView } from '../components/evaluation/PoseSingleView';
+import { ProductDraftEditor } from '../components/product-drafts/ProductDraftEditor';
 import { downloadBatchImages, downloadMultipleJobImages } from '../features/evaluation/downloadBatchImages';
-import { cancelPendingBatchJobs, regenerateFailedBatchJobs, regenerateJobsBulk } from '../features/evaluation/firebase';
+import {
+  cancelBatchProcessing,
+  exportBatchSpreadsheet,
+  regenerateFailedBatchJobs,
+  regenerateJobsBulk,
+  updateBatchProductDraft,
+} from '../features/evaluation/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
-import { Download, AlertCircle, Clock, RefreshCw, CheckSquare2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, AlertCircle, RefreshCw, CheckSquare2, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { useAuth, useRole } from '../features/auth/AuthProvider';
 import { buildJobPoseIndexMap } from '../features/evaluation/jobSlides';
 import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../shared/src/domain';
-import { Batch, Job, JobStatus, Provider } from '../../shared/src/types';
+import { Batch, Job, JobStatus, ProductDraft, Provider } from '../../shared/src/types';
 import { usePersistedJobOutputSelections } from '../features/evaluation/usePersistedJobOutputSelections';
 import { useRecentEvaluationBatches } from '../features/evaluation/useRecentEvaluationBatches';
+import { useBatchProductDrafts } from '../features/evaluation/useBatchProductDrafts';
+import { useBatchSpreadsheetCategory } from '../features/evaluation/useBatchSpreadsheetCategory';
 import { formatDateTimeLong } from '../../shared/src/utils/dateUtils';
 
 const isTypingTarget = (target: EventTarget | null) =>
@@ -31,7 +40,7 @@ export const Evaluacion: React.FC = () => {
   const role = useRole();
   const [downloading, setDownloading] = useState(false);
   const [isRegeneratingFailed, setIsRegeneratingFailed] = useState(false);
-  const [isCancellingPending, setIsCancellingPending] = useState(false);
+  const [isCancellingBatch, setIsCancellingBatch] = useState(false);
   const [batchActionMessage, setBatchActionMessage] = useState<string | null>(null);
   const [providerFilter, setProviderFilter] = useState<'all' | Provider>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | JobStatus>('all');
@@ -39,6 +48,12 @@ export const Evaluacion: React.FC = () => {
   const [headerCollapsed, setHeaderCollapsed] = useState(true);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [busySelectionAction, setBusySelectionAction] = useState<'download' | 'requeue' | null>(null);
+  const [editableProductDrafts, setEditableProductDrafts] = useState<ProductDraft[]>([]);
+  const [dirtyDraftIds, setDirtyDraftIds] = useState<string[]>([]);
+  const [savingDraftId, setSavingDraftId] = useState<string | null>(null);
+  const [isSavingAllDrafts, setIsSavingAllDrafts] = useState(false);
+  const [isExportingSpreadsheet, setIsExportingSpreadsheet] = useState(false);
+  const [latestSpreadsheetDownloadUrl, setLatestSpreadsheetDownloadUrl] = useState<string | null>(null);
   const initialFocusJobId = openedWithoutBatchIdRef.current ? jobs[jobs.length - 1]?.id || null : null;
   const { selectedOutputIdsByJobId, selectOutput } = usePersistedJobOutputSelections(
     resolvedBatchId || batchId,
@@ -53,6 +68,12 @@ export const Evaluacion: React.FC = () => {
     },
   );
   const { batches: recentBatches, loading: recentBatchesLoading } = useRecentEvaluationBatches(user?.uid ?? null);
+  const { productDrafts, loading: productDraftsLoading, error: productDraftsError } = useBatchProductDrafts(resolvedBatchId || batchId);
+  const {
+    category: spreadsheetCategory,
+    loading: spreadsheetCategoryLoading,
+    error: spreadsheetCategoryError,
+  } = useBatchSpreadsheetCategory(batch);
 
   useEffect(() => {
     if (!batchId && resolvedBatchId) {
@@ -94,6 +115,29 @@ export const Evaluacion: React.FC = () => {
   useEffect(() => {
     setSelectedJobIds((current) => current.filter((jobId) => filteredJobs.some((job) => job.id === jobId)));
   }, [filteredJobs]);
+
+  useEffect(() => {
+    setEditableProductDrafts((current) => {
+      const currentById = new Map<string, ProductDraft>();
+      current.forEach((draft) => {
+        if (draft.id) {
+          currentById.set(draft.id, draft);
+        }
+      });
+
+      return productDrafts.map((draft) => {
+        const currentDraft = draft.id ? currentById.get(draft.id) : null;
+        if (!currentDraft || !draft.id || !dirtyDraftIds.includes(draft.id)) {
+          return draft;
+        }
+
+        return {
+          ...draft,
+          rows: currentDraft.rows,
+        };
+      });
+    });
+  }, [dirtyDraftIds, productDrafts]);
 
   const handleDownloadSelected = async () => {
     if (!batch || selectedJobs.length === 0) return;
@@ -155,6 +199,111 @@ export const Evaluacion: React.FC = () => {
       });
     } finally {
       setBusySelectionAction(null);
+    }
+  };
+
+  const handleDraftRowsChange = (draft: ProductDraft, rows: ProductDraft['rows']) => {
+    if (!draft.id) {
+      return;
+    }
+
+    setEditableProductDrafts((current) =>
+      current.map((entry) => (entry.id === draft.id ? { ...entry, rows } : entry)),
+    );
+    setDirtyDraftIds((current) => (current.includes(draft.id!) ? current : [...current, draft.id!]));
+  };
+
+  const saveDraft = async (draftId: string) => {
+    if (!resolvedBatchId) {
+      return;
+    }
+
+    const draft = editableProductDrafts.find((entry) => entry.id === draftId);
+    if (!draft) {
+      return;
+    }
+
+    setSavingDraftId(draftId);
+    try {
+      await updateBatchProductDraft(resolvedBatchId, draftId, draft.rows);
+      setDirtyDraftIds((current) => current.filter((entry) => entry !== draftId));
+      toast({
+        tone: 'success',
+        title: 'Product draft guardado',
+        description: `${draft.garmentName} quedó actualizado en el lote.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos guardar el product draft',
+        description: err.message || 'Inténtalo de nuevo en unos segundos.',
+      });
+    } finally {
+      setSavingDraftId(null);
+    }
+  };
+
+  const saveDirtyDrafts = async () => {
+    if (!resolvedBatchId || dirtyDraftIds.length === 0) {
+      return;
+    }
+
+    setIsSavingAllDrafts(true);
+    try {
+      for (const draftId of dirtyDraftIds) {
+        const draft = editableProductDrafts.find((entry) => entry.id === draftId);
+        if (!draft) {
+          continue;
+        }
+
+        await updateBatchProductDraft(resolvedBatchId, draftId, draft.rows);
+      }
+
+      setDirtyDraftIds([]);
+      toast({
+        tone: 'success',
+        title: 'Drafts guardados',
+        description: 'Todos los cambios pendientes quedaron persistidos.',
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos guardar todos los drafts',
+        description: err.message || 'Revisa el draft marcado y vuelve a intentarlo.',
+      });
+      throw err;
+    } finally {
+      setIsSavingAllDrafts(false);
+    }
+  };
+
+  const handleExportSpreadsheet = async () => {
+    if (!resolvedBatchId) {
+      return;
+    }
+
+    setIsExportingSpreadsheet(true);
+    try {
+      if (dirtyDraftIds.length > 0) {
+        await saveDirtyDrafts();
+      }
+
+      const result = await exportBatchSpreadsheet(resolvedBatchId);
+      setLatestSpreadsheetDownloadUrl(result.downloadUrl);
+      window.open(result.downloadUrl, '_blank', 'noopener,noreferrer');
+      toast({
+        tone: 'success',
+        title: 'Spreadsheet exportado',
+        description: `${result.fileName} quedó listo para descarga.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos exportar el spreadsheet',
+        description: err.message || 'Completa los campos requeridos y vuelve a intentarlo.',
+      });
+    } finally {
+      setIsExportingSpreadsheet(false);
     }
   };
 
@@ -278,38 +427,58 @@ export const Evaluacion: React.FC = () => {
     }
   };
 
-  const handleCancelPendingJobs = async () => {
+  const handleCancelBatchProcessing = async () => {
     if (!batch?.id) return;
 
+    const activeJobs = batch.pendingJobs + batch.processingJobs;
+    const activeJobsLabel = `${activeJobs} trabajo${activeJobs === 1 ? '' : 's'}`;
+    const pendingLabel = batch.pendingJobs > 0
+      ? `${batch.pendingJobs} pendiente${batch.pendingJobs === 1 ? '' : 's'}`
+      : null;
+    const processingLabel = batch.processingJobs > 0
+      ? `${batch.processingJobs} en procesamiento`
+      : null;
+    const scopeLabel = [pendingLabel, processingLabel].filter(Boolean).join(' y ');
+
     const accepted = await confirm({
-      title: 'Cancelar trabajos pendientes',
-      description: `Vas a detener los ${batch.pendingJobs} trabajos que siguen en cola para este lote.`,
-      impact: 'Los trabajos pendientes dejarán de procesarse y tendrás que relanzarlos manualmente si todavía los necesitas.',
-      confirmLabel: 'Sí, cancelar pendientes',
-      cancelLabel: 'Mantener cola',
+      title: 'Cancelar procesamiento del lote',
+      description: `Vas a detener ${activeJobsLabel}${scopeLabel ? ` (${scopeLabel})` : ''} para este lote.`,
+      impact: 'Los jobs en cola dejarán de ejecutarse y los que ya estaban procesando ignorarán cualquier resultado tardío. Si los necesitas después, tendrás que relanzarlos manualmente.',
+      confirmLabel: 'Sí, cancelar lote',
+      cancelLabel: 'Seguir procesando',
       tone: 'warning',
     });
 
     if (!accepted) return;
 
-    setIsCancellingPending(true);
+    setIsCancellingBatch(true);
     setBatchActionMessage(null);
 
     try {
-      const result = await cancelPendingBatchJobs(batch.id);
+      const result = await cancelBatchProcessing(batch.id);
       if (result.cancelledJobs === 0) {
-        setBatchActionMessage('No había trabajos pendientes para cancelar.');
+        setBatchActionMessage('No había trabajos activos para cancelar en este lote.');
       } else {
-        setBatchActionMessage(`Se cancelaron ${result.cancelledJobs} trabajo${result.cancelledJobs === 1 ? '' : 's'} pendiente${result.cancelledJobs === 1 ? '' : 's'} del lote.`);
+        const segments = [
+          result.cancelledPendingJobs > 0
+            ? `${result.cancelledPendingJobs} pendiente${result.cancelledPendingJobs === 1 ? '' : 's'}`
+            : null,
+          result.cancelledProcessingJobs > 0
+            ? `${result.cancelledProcessingJobs} en procesamiento`
+            : null,
+        ].filter(Boolean);
+        setBatchActionMessage(
+          `Se cancelaron ${result.cancelledJobs} trabajo${result.cancelledJobs === 1 ? '' : 's'} del lote${segments.length > 0 ? `: ${segments.join(' y ')}.` : '.'}`,
+        );
       }
     } catch (err: any) {
       toast({
         tone: 'error',
-        title: 'No pudimos cancelar los trabajos pendientes',
+        title: 'No pudimos cancelar el lote',
         description: err.message || 'Inténtalo nuevamente cuando el sistema esté disponible.',
       });
     } finally {
-      setIsCancellingPending(false);
+      setIsCancellingBatch(false);
     }
   };
 
@@ -317,23 +486,23 @@ export const Evaluacion: React.FC = () => {
     (job) => Boolean(resolveApprovedJobOutput(job)?.resultImagePath || (job.id && selectedOutputIdsByJobId[job.id])),
   );
   const canRegenerateFailed = role.canRegenerate && batch.failedJobs > 0;
-  const canCancelPending = role.canRegenerate && batch.pendingJobs > 0;
+  const canCancelBatch = role.canRegenerate && (batch.pendingJobs > 0 || batch.processingJobs > 0);
   const hasSelection = selectedJobIds.length > 0;
   const selectedBatchOptionValue = resolvedBatchId || batch.id || '';
 
   return (
     <div className={`transition-all ${hasSelection ? 'pb-28' : ''}`}>
       {/* Batch-level action pills (cancel/retry) */}
-      {(canCancelPending || canRegenerateFailed) ? (
+      {(canCancelBatch || canRegenerateFailed) ? (
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          {canCancelPending ? (
+          {canCancelBatch ? (
             <Button
-              variant="secondary"
-              icon={Clock}
-              loading={isCancellingPending}
-              onClick={() => void handleCancelPendingJobs()}
+              variant="danger"
+              icon={AlertCircle}
+              loading={isCancellingBatch}
+              onClick={() => void handleCancelBatchProcessing()}
             >
-              Cancelar pendientes
+              Cancelar lote
             </Button>
           ) : null}
           {canRegenerateFailed ? (
@@ -353,6 +522,77 @@ export const Evaluacion: React.FC = () => {
         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {batchActionMessage}
         </div>
+      ) : null}
+
+      {batch.spreadsheetTemplateId ? (
+        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Product drafts del lote</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Edita lo inferido por Gemini, completa los campos comerciales faltantes y exporta la plantilla masiva del cliente.
+              </p>
+              <p className="mt-2 text-xs text-slate-400">
+                Plantilla: {batch.spreadsheetTemplateNameSnapshot || 'Sin nombre'} · Categoría: {batch.spreadsheetCategoryNameSnapshot || 'Sin categoría'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {dirtyDraftIds.length > 0 ? (
+                <Button
+                  variant="secondary"
+                  icon={Save}
+                  loading={isSavingAllDrafts}
+                  disabled={isExportingSpreadsheet}
+                  onClick={() => void saveDirtyDrafts()}
+                >
+                  Guardar pendientes ({dirtyDraftIds.length})
+                </Button>
+              ) : null}
+              <Button
+                variant="primary"
+                icon={Download}
+                loading={isExportingSpreadsheet}
+                disabled={productDraftsLoading || spreadsheetCategoryLoading || editableProductDrafts.length === 0}
+                onClick={() => void handleExportSpreadsheet()}
+              >
+                Exportar spreadsheet
+              </Button>
+            </div>
+          </div>
+
+          {latestSpreadsheetDownloadUrl ? (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              Export más reciente listo.
+              {' '}
+              <a
+                href={latestSpreadsheetDownloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold underline decoration-emerald-300 underline-offset-2"
+              >
+                Abrir descarga
+              </a>
+            </div>
+          ) : null}
+
+          <div className="mt-4">
+            <ProductDraftEditor
+              category={spreadsheetCategory}
+              drafts={editableProductDrafts}
+              loading={productDraftsLoading || spreadsheetCategoryLoading}
+              error={productDraftsError || spreadsheetCategoryError}
+              emptyCopy="Este lote todavía no tiene product drafts listos para editar."
+              saveLabel="Guardar draft"
+              savingDraftId={savingDraftId}
+              onChangeRows={(draft, rows) => handleDraftRowsChange(draft as ProductDraft, rows)}
+              onSaveDraft={(draft) => {
+                if (draft.id) {
+                  void saveDraft(draft.id);
+                }
+              }}
+            />
+          </div>
+        </section>
       ) : null}
 
       {filteredJobs.length === 0 ? (

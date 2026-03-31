@@ -7,6 +7,8 @@ const PROVIDER_DESCRIPTIONS: Record<Provider, string> = {
   'fal-seedream': 'Ruta equilibrada para lotes de catálogo consistentes.',
   'fal-banana-pro': 'Mayor fidelidad en edición cuando la prenda necesita ajuste fino.',
   'openai-gpt-image-1.5': 'Edición con OpenAI usando ambas referencias de imagen.',
+  'fal-nano-banana-2': 'Gemini 3.1 Flash Image · edición precisa con control de aspecto y resolución.',
+  'fal-seedream-5': 'Seedream 5 Lite · ByteDance v5 con soporte de dimensiones custom.',
 };
 
 interface ProviderSelectionProps {

@@ -31,6 +31,7 @@ const GEMINI_FEATURE_LABELS: Record<GeminiUsageFeature, string> = {
   image_review: 'Auto review',
   garment_view_classification: 'Clasif. prendas',
   pose_classification: 'Tagging de poses',
+  product_draft_enrichment: 'Drafts de producto',
 };
 
 const GEMINI_STATUS_LABELS: Record<GeminiUsageStatus, string> = {

@@ -5,6 +5,8 @@ const MODEL_PROVIDER_TO_PROVIDER: Record<ModelPhotoProvider, Provider> = {
   'fal-seedream-v4.5': 'fal-seedream',
   'fal-banana-pro': 'fal-banana-pro',
   'openai-dalle': 'openai-gpt-image-1.5',
+  'fal-nano-banana-2': 'fal-nano-banana-2',
+  'fal-seedream-5': 'fal-seedream-5',
 };
 
 export const mapModelPhotoProviderToProvider = (provider: ModelPhotoProvider): Provider =>
@@ -14,6 +16,8 @@ export const createDefaultModelProviderImageConfigs = (): Record<Provider, Provi
   'fal-seedream': createDefaultProviderImageConfig('fal-seedream'),
   'fal-banana-pro': createDefaultProviderImageConfig('fal-banana-pro'),
   'openai-gpt-image-1.5': createDefaultProviderImageConfig('openai-gpt-image-1.5'),
+  'fal-nano-banana-2': createDefaultProviderImageConfig('fal-nano-banana-2'),
+  'fal-seedream-5': createDefaultProviderImageConfig('fal-seedream-5'),
 });
 
 export const resolveModelAspectRatioForImageConfig = (config: ProviderImageConfig): AspectRatio =>

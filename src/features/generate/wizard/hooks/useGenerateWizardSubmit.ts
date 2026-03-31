@@ -75,13 +75,21 @@ export const useGenerateWizardSubmit = ({
   };
 
   const handleSubmit = async () => {
+    const requiresSpreadsheet = state.outputMode === 'spreadsheet';
+
     if (
       !state.selectedClientId ||
       !state.selectedModelId ||
       state.selectedPoseIds.length === 0 ||
-      state.garments.length === 0
+      state.garments.length === 0 ||
+      (requiresSpreadsheet && (!state.selectedSpreadsheetTemplateId || !state.selectedSpreadsheetCategoryId)) ||
+      (requiresSpreadsheet && state.productDrafts.length === 0)
     ) {
-      setFlowError('Completa cliente, modelo, poses y prendas antes de crear el lote.');
+      setFlowError(
+        requiresSpreadsheet
+          ? 'Completa cliente, modelo, spreadsheet, poses, prendas y drafts antes de crear el lote.'
+          : 'Completa cliente, modelo, poses y prendas antes de crear el lote.',
+      );
       return;
     }
 

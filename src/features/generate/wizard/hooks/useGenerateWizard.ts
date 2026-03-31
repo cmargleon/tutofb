@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as garmentViewMatchingNamespace from '../../../../../shared/src/utils/garmentViewMatching';
 import { DEFAULT_TRY_ON_PROMPT } from '../../../../../shared/src/domain';
-import { classifyGarmentViewsWithGemini } from '../../firebase';
+import { classifyGarmentViewsWithGemini, previewProductDrafts } from '../../firebase';
 import { useSystemConfig } from '../../../system/useSystemConfig';
 import { buildGarmentSuggestionSignature, getGarmentAvailableViews, handleGarmentFiles, revokeGarmentUrls } from '../../garments';
 import { deleteGarmentDraftByStoragePath, uploadGarmentDrafts } from '../../storage';
@@ -10,6 +10,7 @@ import {
   UploadedGarmentDraft,
   WizardProviderImageConfig,
   WizardState,
+  createInitialProductDraftPreparationState,
   createInitialPoseSuggestionState,
 } from '../../types';
 import { canSelectWizardStep, clampWizardStep } from '../../../wizard/navigation';
@@ -129,13 +130,19 @@ export const useGenerateWizard = () => {
   const {
     clients,
     models,
+    spreadsheetTemplates,
+    spreadsheetCategories,
     selectedClient,
     selectedModel,
+    selectedSpreadsheetCategory,
     loadingData,
     error: catalogError,
   } = useGenerateWizardCatalog({
     selectedClientId: state.selectedClientId,
     selectedModelId: state.selectedModelId,
+    outputMode: state.outputMode,
+    selectedSpreadsheetTemplateId: state.selectedSpreadsheetTemplateId,
+    selectedSpreadsheetCategoryId: state.selectedSpreadsheetCategoryId,
   });
 
   const resolvedPromptBase = useMemo(() => {
@@ -176,7 +183,23 @@ export const useGenerateWizard = () => {
     ));
   }, [isPromptDirty, resolvedPromptBase]);
 
-  const error = flowError ?? catalogError;
+  const error = useMemo(() => {
+    if (flowError) {
+      return flowError;
+    }
+
+    if (
+      state.outputMode === 'photos_only'
+      && (
+        catalogError === 'No se pudieron cargar los spreadsheets del cliente.'
+        || catalogError === 'No se pudieron cargar las categorías del spreadsheet.'
+      )
+    ) {
+      return null;
+    }
+
+    return catalogError;
+  }, [catalogError, flowError, state.outputMode]);
 
   useEffect(() => {
     garmentUrlsRef.current = state.garments;
@@ -221,6 +244,31 @@ export const useGenerateWizard = () => {
   const suggestionSignature = useMemo(
     () => buildGarmentSuggestionSignature(state.selectedModelId, state.garments),
     [state.selectedModelId, state.garments],
+  );
+  const productDraftSignature = useMemo(
+    () =>
+      JSON.stringify({
+        outputMode: state.outputMode,
+        clientId: state.selectedClientId,
+        modelId: state.selectedModelId,
+        templateId: state.selectedSpreadsheetTemplateId,
+        categoryId: state.selectedSpreadsheetCategoryId,
+        garments: state.garments.map((garment) => ({
+          id: garment.id,
+          photos: garment.originalPhotos.map((photo) => ({
+            id: photo.id,
+            storagePath: photo.upload.storagePath,
+          })),
+        })),
+      }),
+    [
+      state.garments,
+      state.outputMode,
+      state.selectedClientId,
+      state.selectedModelId,
+      state.selectedSpreadsheetCategoryId,
+      state.selectedSpreadsheetTemplateId,
+    ],
   );
   const missingPoseClassificationCount = useMemo(
     () =>
@@ -441,6 +489,84 @@ export const useGenerateWizard = () => {
     }
   };
 
+  const prepareProductDrafts = async (signature: string) => {
+    if (
+      state.outputMode !== 'spreadsheet'
+      || !selectedClient
+      || !selectedModel
+      || !state.selectedSpreadsheetTemplateId
+      || !state.selectedSpreadsheetCategoryId
+      || !selectedSpreadsheetCategory
+      || state.garments.length === 0
+    ) {
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      productDraftPreparation: {
+        status: 'preparing',
+        error: null,
+        signature,
+      },
+    }));
+    setFlowError(null);
+
+    try {
+      const { garments: uploadedGarments } = await ensureGarmentsUploadedForSuggestions(signature);
+      const result = await previewProductDrafts({
+        clientId: selectedClient.id!,
+        modelId: selectedModel.id!,
+        spreadsheetTemplateId: state.selectedSpreadsheetTemplateId,
+        spreadsheetCategoryId: state.selectedSpreadsheetCategoryId,
+        garments: uploadedGarments.map((garment) => ({
+          id: garment.id,
+          name: garment.name,
+          storagePath: garment.originalPhotos[0]?.upload.storagePath || garment.upload.storagePath || '',
+          isMultiAngle: garment.isMultiAngle,
+          sourceType: garment.sourceType,
+          originalFileNames: garment.originalFileNames,
+          originalPhotoCount: garment.originalPhotos.length,
+          photos: garment.originalPhotos
+            .filter((photo) => photo.upload.storagePath)
+            .map((photo) => ({
+              id: photo.id,
+              fileName: photo.fileName,
+              storagePath: photo.upload.storagePath!,
+              sourceIndex: photo.sourceIndex,
+              view: photo.classification.view || 'front',
+              confidence: photo.classification.confidence,
+              reasoning: photo.classification.reasoning,
+              classifiedBy: photo.classification.classifiedBy || 'assumed_single_front',
+            })),
+        })),
+      });
+
+      setState((current) => ({
+        ...current,
+        productDrafts: result.productDrafts,
+        productDraftPreparation: {
+          status: 'ready',
+          error: null,
+          signature,
+        },
+      }));
+    } catch (prepareError: any) {
+      const message =
+        prepareError?.message
+        || 'No se pudieron preparar los drafts del producto. Puedes reintentar desde este paso.';
+      setState((current) => ({
+        ...current,
+        productDraftPreparation: {
+          status: 'failed',
+          error: message,
+          signature,
+        },
+      }));
+      setFlowError(message);
+    }
+  };
+
   useEffect(() => {
     if (
       state.step !== 3
@@ -463,6 +589,29 @@ export const useGenerateWizard = () => {
     suggestionSignature,
   ]);
 
+  useEffect(() => {
+    if (
+      state.step !== 4
+      || state.outputMode !== 'spreadsheet'
+      || !selectedSpreadsheetCategory
+      || state.garments.length === 0
+      || state.productDraftPreparation.status === 'preparing'
+      || state.productDraftPreparation.signature === productDraftSignature
+    ) {
+      return;
+    }
+
+    void prepareProductDrafts(productDraftSignature);
+  }, [
+    productDraftSignature,
+    selectedSpreadsheetCategory,
+    state.garments.length,
+    state.outputMode,
+    state.productDraftPreparation.signature,
+    state.productDraftPreparation.status,
+    state.step,
+  ]);
+
   const handleFiles = async (files: File[]) => {
     try {
       const nextGarments = await handleGarmentFiles(files, state.garments);
@@ -471,6 +620,8 @@ export const useGenerateWizard = () => {
         garments: nextGarments,
         selectedPoseIds: [],
         poseSuggestions: createInitialPoseSuggestionState(),
+        productDrafts: [],
+        productDraftPreparation: createInitialProductDraftPreparationState(),
       }));
       setFlowError(null);
     } catch (uploadError: any) {
@@ -505,6 +656,8 @@ export const useGenerateWizard = () => {
         garments: current.garments.filter((item) => item.id !== garmentId),
         selectedPoseIds: [],
         poseSuggestions: createInitialPoseSuggestionState(),
+        productDrafts: [],
+        productDraftPreparation: createInitialProductDraftPreparationState(),
       };
     });
   };
@@ -521,8 +674,12 @@ export const useGenerateWizard = () => {
       ...current,
       selectedClientId: clientId,
       selectedModelId: null,
+      selectedSpreadsheetTemplateId: null,
+      selectedSpreadsheetCategoryId: null,
       selectedPoseIds: [],
       poseSuggestions: createInitialPoseSuggestionState(),
+      productDrafts: [],
+      productDraftPreparation: createInitialProductDraftPreparationState(),
       prompt: nextPrompt,
     }));
   };
@@ -533,6 +690,39 @@ export const useGenerateWizard = () => {
       selectedModelId: modelId,
       selectedPoseIds: [],
       poseSuggestions: createInitialPoseSuggestionState(),
+      productDrafts: [],
+      productDraftPreparation: createInitialProductDraftPreparationState(),
+    }));
+  };
+
+  const handleOutputModeChange = (outputMode: WizardState['outputMode']) => {
+    setState((current) => ({
+      ...current,
+      outputMode,
+      selectedSpreadsheetTemplateId: outputMode === 'spreadsheet' ? current.selectedSpreadsheetTemplateId : null,
+      selectedSpreadsheetCategoryId: outputMode === 'spreadsheet' ? current.selectedSpreadsheetCategoryId : null,
+      productDrafts: [],
+      productDraftPreparation: createInitialProductDraftPreparationState(),
+    }));
+  };
+
+  const handleSpreadsheetTemplateChange = (templateId: string | null) => {
+    const nextTemplate = spreadsheetTemplates.find((template) => template.id === templateId) ?? null;
+    setState((current) => ({
+      ...current,
+      selectedSpreadsheetTemplateId: templateId,
+      selectedSpreadsheetCategoryId: nextTemplate?.defaultCategoryId ?? null,
+      productDrafts: [],
+      productDraftPreparation: createInitialProductDraftPreparationState(),
+    }));
+  };
+
+  const handleSpreadsheetCategoryChange = (categoryId: string | null) => {
+    setState((current) => ({
+      ...current,
+      selectedSpreadsheetCategoryId: categoryId,
+      productDrafts: [],
+      productDraftPreparation: createInitialProductDraftPreparationState(),
     }));
   };
 
@@ -584,15 +774,32 @@ export const useGenerateWizard = () => {
     }));
   };
 
+  const handleProductDraftRowsChange = (
+    draft: WizardState['productDrafts'][number],
+    rows: WizardState['productDrafts'][number]['rows'],
+  ) => {
+    setState((current) => ({
+      ...current,
+      productDrafts: current.productDrafts.map((entry) =>
+        entry.garmentId === draft.garmentId
+          ? { ...entry, rows }
+          : entry,
+      ),
+    }));
+  };
+
   return {
     state,
     clients,
     models,
+    spreadsheetTemplates,
+    spreadsheetCategories,
     loadingData,
     isSubmitting: submit.isSubmitting,
     error,
     stepperRef,
     selectedModel,
+    selectedSpreadsheetCategory,
     allPosesSelected,
     canAdvance,
     totalJobs,
@@ -607,6 +814,9 @@ export const useGenerateWizard = () => {
     removeGarment,
     handleSubmit: submit.handleSubmit,
     handleClientChange,
+    handleOutputModeChange,
+    handleSpreadsheetTemplateChange,
+    handleSpreadsheetCategoryChange,
     handleModelSelect,
     handlePoseToggle,
     handleToggleAllPoses,
@@ -614,5 +824,6 @@ export const useGenerateWizard = () => {
     handleProviderImageConfigChange,
     handlePromptChange,
     handleRetryPoseSuggestions,
+    handleProductDraftRowsChange,
   };
 };

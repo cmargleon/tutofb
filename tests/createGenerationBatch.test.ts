@@ -36,9 +36,28 @@ const baseModel: Model = {
   createdByUid: 'admin',
 };
 
+const baseTemplateFields = {
+  spreadsheetTemplateId: 'template-1',
+  spreadsheetCategoryId: 'category-1',
+};
+
+const buildProductDraft = (garmentId: string, garmentName: string) => ({
+  garmentId,
+  garmentName,
+  rows: [
+    {
+      id: `row-${garmentId}`,
+      values: {
+        supplier_code: `${garmentId}-sku`,
+      },
+    },
+  ],
+});
+
 test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el prompt', () => {
   const validated = validateCreateGenerationBatchInput(
     {
+      ...baseTemplateFields,
       clientId: 'client-1',
       modelId: 'model-1',
       poseIds: ['pose-1', 'pose-1', 'pose-2'],
@@ -71,6 +90,7 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
           ],
         },
       ],
+      productDrafts: [buildProductDraft('gar-1', 'Vestido Azul')],
       provider: 'fal-banana-pro',
       promptBase: ' Prompt real ',
       imageConfig: {
@@ -96,6 +116,7 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
 test('validateCreateGenerationBatchInput conserva provider y calcula jobs por pose-prenda', () => {
   const validated = validateCreateGenerationBatchInput(
     {
+      ...baseTemplateFields,
       clientId: 'client-1',
       modelId: 'model-1',
       poseIds: ['pose-1', 'pose-2'],
@@ -107,6 +128,7 @@ test('validateCreateGenerationBatchInput conserva provider y calcula jobs por po
           isMultiAngle: false,
         },
       ],
+      productDrafts: [buildProductDraft('gar-1', 'Vestido Azul')],
       provider: 'openai-gpt-image-1.5',
       promptBase: 'Prompt lote',
       imageConfig: {
@@ -129,6 +151,7 @@ test('validateCreateGenerationBatchInput rechaza provider inválido', () => {
     () =>
       validateCreateGenerationBatchInput(
         {
+          ...baseTemplateFields,
           clientId: 'client-1',
           modelId: 'model-1',
           poseIds: ['pose-1'],
@@ -140,6 +163,7 @@ test('validateCreateGenerationBatchInput rechaza provider inválido', () => {
               isMultiAngle: false,
             },
           ],
+          productDrafts: [buildProductDraft('gar-1', 'Vestido Azul')],
           provider: 'otro-provider' as any,
           promptBase: 'Prompt lote',
           imageConfig: {
@@ -159,6 +183,7 @@ test('validateCreateGenerationBatchInput rechaza prendas fuera del draft del usu
     () =>
       validateCreateGenerationBatchInput(
         {
+          ...baseTemplateFields,
           clientId: 'client-1',
           modelId: 'model-1',
           poseIds: ['pose-1'],
@@ -170,6 +195,7 @@ test('validateCreateGenerationBatchInput rechaza prendas fuera del draft del usu
               isMultiAngle: false,
             },
           ],
+          productDrafts: [buildProductDraft('gar-1', 'Vestido Azul')],
           provider: 'fal-seedream',
           promptBase: '',
           imageConfig: {

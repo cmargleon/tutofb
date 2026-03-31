@@ -1,18 +1,23 @@
 import {
+  BatchOutputMode,
   FalBananaProImageConfig,
+  FalNanoBanana2ImageConfig,
+  FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
   GarmentPhotoClassificationSource,
   GarmentSourceType,
   GarmentView,
   OpenAIImageConfig,
+  ProductDraftInput,
   ProviderImageConfig,
   Provider,
 } from '../../../shared/src/types';
 
 export type SourceType = GarmentSourceType;
-export type GenerateWizardStepId = 1 | 2 | 3 | 4;
+export type GenerateWizardStepId = 1 | 2 | 3 | 4 | 5;
 export type GenerateSubmitStage = 'idle' | 'uploading' | 'creating-batch';
 export type PoseSuggestionStatus = 'idle' | 'preparing' | 'ready' | 'failed';
+export type ProductDraftPreparationStatus = 'idle' | 'preparing' | 'ready' | 'failed';
 
 export type GarmentUploadStatus = 'idle' | 'queued' | 'uploading' | 'retrying' | 'uploaded' | 'failed';
 
@@ -94,6 +99,18 @@ export const createInitialPoseSuggestionState = (): PoseSuggestionState => ({
   missingPoseClassificationCount: 0,
 });
 
+export interface ProductDraftPreparationState {
+  status: ProductDraftPreparationStatus;
+  error: string | null;
+  signature: string | null;
+}
+
+export const createInitialProductDraftPreparationState = (): ProductDraftPreparationState => ({
+  status: 'idle',
+  error: null,
+  signature: null,
+});
+
 export interface UploadSummary {
   total: number;
   uploaded: number;
@@ -108,14 +125,21 @@ export interface WizardState {
   step: GenerateWizardStepId;
   selectedClientId: string | null;
   selectedModelId: string | null;
+  outputMode: BatchOutputMode;
+  selectedSpreadsheetTemplateId: string | null;
+  selectedSpreadsheetCategoryId: string | null;
   selectedPoseIds: string[];
   garments: UploadedGarmentDraft[];
   poseSuggestions: PoseSuggestionState;
+  productDrafts: ProductDraftInput[];
+  productDraftPreparation: ProductDraftPreparationState;
   provider: Provider;
   providerImageConfigs: {
     'fal-seedream': FalSeedreamImageConfig;
     'fal-banana-pro': FalBananaProImageConfig;
     'openai-gpt-image-1.5': OpenAIImageConfig;
+    'fal-nano-banana-2': FalNanoBanana2ImageConfig;
+    'fal-seedream-5': FalSeedream5ImageConfig;
   };
   prompt: string;
 }

@@ -9,11 +9,13 @@ import { useToast } from '../features/feedback/FeedbackProvider';
 import { Provider } from '../../shared/src/types';
 import { DEFAULT_TRY_ON_PROMPT } from '../../shared/src/domain';
 
-const KNOWN_PROVIDERS: Provider[] = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5'];
+const KNOWN_PROVIDERS: Provider[] = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5', 'fal-nano-banana-2', 'fal-seedream-5'];
 const PROVIDER_DISPLAY: Record<Provider, string> = {
-  'fal-seedream': 'Fal Seedream',
-  'fal-banana-pro': 'Fal Banana Pro',
+  'fal-seedream': 'Fal Seedream v4',
+  'fal-banana-pro': 'Fal Nano Banana Pro',
   'openai-gpt-image-1.5': 'OpenAI GPT Image 1.5',
+  'fal-nano-banana-2': 'Fal Nano Banana 2',
+  'fal-seedream-5': 'Fal Seedream 5 Lite',
 };
 const KNOWN_GEMINI_MODELS = [
   { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (recomendado)' },

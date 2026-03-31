@@ -2,7 +2,7 @@ import {
   DEFAULT_TRY_ON_PROMPT,
 } from '../../../../shared/src/domain';
 import { createDefaultProviderImageConfig } from '../../../../shared/src/providerImageConfig';
-import { FalBananaProImageConfig, FalSeedreamImageConfig, OpenAIImageConfig } from '../../../../shared/src/types';
+import { FalBananaProImageConfig, FalNanoBanana2ImageConfig, FalSeedream5ImageConfig, FalSeedreamImageConfig, OpenAIImageConfig } from '../../../../shared/src/types';
 import { WizardStepDefinition } from '../../wizard/types';
 import {
   GarmentUploadState,
@@ -10,30 +10,39 @@ import {
   UploadedGarmentDraft,
   UploadSummary,
   WizardState,
+  createInitialProductDraftPreparationState,
   createInitialPoseSuggestionState,
 } from '../types';
 
 export const GENERATE_WIZARD_STEPS: WizardStepDefinition[] = [
-  { id: 1, name: 'Cliente y modelo' },
+  { id: 1, name: 'Cliente, modelo y salida' },
   { id: 2, name: 'Prendas' },
   { id: 3, name: 'Poses sugeridas' },
-  { id: 4, name: 'Lote' },
+  { id: 4, name: 'Productos o salida' },
+  { id: 5, name: 'Lote' },
 ];
 
-export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_STEPS.length - 1]?.id ?? 4;
+export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_STEPS.length - 1]?.id ?? 5;
 
 export const createInitialGenerateWizardState = (): WizardState => ({
   step: 1,
   selectedClientId: null,
   selectedModelId: null,
+  outputMode: 'spreadsheet',
+  selectedSpreadsheetTemplateId: null,
+  selectedSpreadsheetCategoryId: null,
   selectedPoseIds: [],
   garments: [],
   poseSuggestions: createInitialPoseSuggestionState(),
+  productDrafts: [],
+  productDraftPreparation: createInitialProductDraftPreparationState(),
   provider: 'fal-seedream',
   providerImageConfigs: {
     'fal-seedream': createDefaultProviderImageConfig('fal-seedream') as FalSeedreamImageConfig,
     'fal-banana-pro': createDefaultProviderImageConfig('fal-banana-pro') as FalBananaProImageConfig,
     'openai-gpt-image-1.5': createDefaultProviderImageConfig('openai-gpt-image-1.5') as OpenAIImageConfig,
+    'fal-nano-banana-2': createDefaultProviderImageConfig('fal-nano-banana-2') as FalNanoBanana2ImageConfig,
+    'fal-seedream-5': createDefaultProviderImageConfig('fal-seedream-5') as FalSeedream5ImageConfig,
   },
   prompt: DEFAULT_TRY_ON_PROMPT,
 });
@@ -129,12 +138,21 @@ export const getGenerateWizardTotalJobs = (
 export const isGenerateWizardStepComplete = (state: WizardState, stepId: number): boolean => {
   switch (stepId) {
     case 1:
-      return Boolean(state.selectedClientId && state.selectedModelId);
+      return Boolean(
+        state.selectedClientId
+        && state.selectedModelId
+        && (
+          state.outputMode === 'photos_only'
+          || (state.selectedSpreadsheetTemplateId && state.selectedSpreadsheetCategoryId)
+        ),
+      );
     case 2:
       return state.garments.length > 0;
     case 3:
       return state.selectedPoseIds.length > 0;
     case 4:
+      return state.outputMode === 'photos_only' || state.productDrafts.length > 0;
+    case 5:
       return true;
     default:
       return false;
@@ -143,7 +161,8 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
 
 export const getGenerateWizardCanAdvance = (state: WizardState): boolean =>
   isGenerateWizardStepComplete(state, state.step)
-  && !(state.step === 3 && state.poseSuggestions.status === 'preparing');
+  && !(state.step === 3 && state.poseSuggestions.status === 'preparing')
+  && !(state.step === 4 && state.productDraftPreparation.status === 'preparing');
 
 interface SubmitButtonLabelParams {
   isSubmitting: boolean;

@@ -10,7 +10,8 @@ interface GeneratedPoseCardProps {
   rejected: boolean;
   isRegenerating: boolean;
   isLoading?: boolean;
-  disabled?: boolean;
+  selectionDisabled?: boolean;
+  regenerateDisabled?: boolean;
   onReject: () => void;
   onAccept: () => void;
   onRegenerate?: () => void;
@@ -23,7 +24,8 @@ export const GeneratedPoseCard: React.FC<GeneratedPoseCardProps> = ({
   rejected,
   isRegenerating,
   isLoading = false,
-  disabled = false,
+  selectionDisabled = false,
+  regenerateDisabled = false,
   onReject,
   onAccept,
   onRegenerate,
@@ -61,8 +63,8 @@ export const GeneratedPoseCard: React.FC<GeneratedPoseCardProps> = ({
           <button
             type="button"
             onClick={onAccept}
-            disabled={disabled}
-            className="flex-1 rounded-lg bg-emerald-50 px-2 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50"
+            disabled={selectionDisabled}
+            className="flex-1 cursor-pointer rounded-lg bg-emerald-50 px-2 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Incluir
           </button>
@@ -70,8 +72,8 @@ export const GeneratedPoseCard: React.FC<GeneratedPoseCardProps> = ({
           <button
             type="button"
             onClick={onReject}
-            disabled={disabled}
-            className="flex-1 rounded-lg bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-50"
+            disabled={selectionDisabled}
+            className="flex-1 cursor-pointer rounded-lg bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Quitar
           </button>
@@ -80,8 +82,8 @@ export const GeneratedPoseCard: React.FC<GeneratedPoseCardProps> = ({
           <button
             type="button"
             onClick={onRegenerate}
-            disabled={disabled || isRegenerating}
-            className="rounded-lg bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-100 transition disabled:opacity-50"
+            disabled={regenerateDisabled || isRegenerating}
+            className="cursor-pointer rounded-lg bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-600 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
             title="Regenerar esta pose"
           >
             <RefreshCw className="w-3.5 h-3.5" />

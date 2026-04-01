@@ -155,7 +155,7 @@ export const generateWithFalSeedream = async (
   falKey: string,
 ): Promise<ProviderResponse> => {
   const imageConfig = request.imageConfig as FalSeedreamImageConfig;
-  const endpointId = 'fal-ai/bytedance/seedream/v4/edit';
+  const endpointId = 'fal-ai/bytedance/seedream/v4.5/edit';
   const queue = await submitFalRequest(
     endpointId,
     {

@@ -13,7 +13,7 @@ export const PROVIDER_VALUES: Provider[] = ['fal-seedream', 'fal-banana-pro', 'o
 export const ASPECT_RATIO_VALUES: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'];
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
-  'fal-seedream': 'fal.ai Seedream v4',
+  'fal-seedream': 'fal.ai Seedream v4.5',
   'fal-banana-pro': 'fal.ai Nano Banana Pro',
   'openai-gpt-image-1.5': 'OpenAI gpt-image-1.5',
   'fal-nano-banana-2': 'fal.ai Nano Banana 2',

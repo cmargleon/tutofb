@@ -1,10 +1,12 @@
-import type { TimestampLike, CatalogEntityStatus, GarmentView, PoseOrientationGroup, PoseOrientationDetail, PoseFraming, AspectRatio } from './common';
+import type { TimestampLike, CatalogEntityStatus, GarmentView, PoseOrientationGroup, PoseOrientationDetail, PoseFraming, PoseBodyFocus, AspectRatio } from './common';
 import type { ProviderImageConfig } from './provider';
 
 export interface PoseAiClassification {
   orientationGroup: PoseOrientationGroup;
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
+  bodyFocus: PoseBodyFocus;
+  faceVisible: boolean;
   autoCategory: string;
   usableForGarmentViews: GarmentView[];
   confidence: number | null;
@@ -110,6 +112,8 @@ export interface TaggedModelPoseSummary {
   orientationGroup: PoseOrientationGroup;
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
+  bodyFocus: PoseBodyFocus;
+  faceVisible: boolean;
   autoCategory: string;
   usableForGarmentViews: GarmentView[];
   confidence: number | null;

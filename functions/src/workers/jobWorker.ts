@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import sharp from 'sharp';
 import { buildFinalGenerationPrompt } from '../../../shared/src/domain';
 import { Job, JobAutoReview, JobLog, JobOutput, Provider } from '../../../shared/src/types';
 import { normalizeProviderImageConfig, summarizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
@@ -22,6 +23,9 @@ import { shouldBackstopPendingJob } from './jobWorker.helpers';
 
 const db = getAppFirestore();
 const bucket = admin.storage().bucket();
+const MAX_STORED_OUTPUT_BYTES = 3 * 1024 * 1024;
+const OUTPUT_JPEG_QUALITIES = [90, 82, 74, 66, 58, 50] as const;
+const OUTPUT_LONGEST_SIDES = [2200, 2000, 1800, 1600, 1400, 1200, 1000] as const;
 
 const getSignedUrl = async (storagePath: string): Promise<string> => {
   const file = bucket.file(storagePath);
@@ -44,6 +48,66 @@ const mimeTypeFromStoragePath = (storagePath: string): string => {
   if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
   if (normalized.endsWith('.webp')) return 'image/webp';
   return 'image/png';
+};
+
+const compressGeneratedImageIfNeeded = async ({
+  bytes,
+  contentType,
+}: {
+  bytes: Buffer;
+  contentType: string;
+}): Promise<{ bytes: Buffer; contentType: string }> => {
+  if (bytes.length <= MAX_STORED_OUTPUT_BYTES) {
+    return { bytes, contentType };
+  }
+
+  const source = sharp(bytes, { failOn: 'none' }).rotate();
+  const metadata = await source.metadata();
+  const sourceWidth = metadata.width || null;
+  const sourceHeight = metadata.height || null;
+  const longestSide = Math.max(sourceWidth || 0, sourceHeight || 0);
+  let bestCandidate: Buffer | null = null;
+
+  for (const targetLongestSide of OUTPUT_LONGEST_SIDES) {
+    const shouldResize = longestSide > 0 && longestSide > targetLongestSide;
+
+    for (const quality of OUTPUT_JPEG_QUALITIES) {
+      let pipeline = sharp(bytes, { failOn: 'none' }).rotate();
+      if (shouldResize) {
+        pipeline = pipeline.resize({
+          width: sourceWidth && sourceWidth >= (sourceHeight || 0) ? targetLongestSide : undefined,
+          height: sourceHeight && sourceHeight > (sourceWidth || 0) ? targetLongestSide : undefined,
+          fit: 'inside',
+          withoutEnlargement: true,
+        });
+      }
+
+      const candidate = await pipeline.jpeg({
+        quality,
+        mozjpeg: true,
+      }).toBuffer();
+
+      if (!bestCandidate || candidate.length < bestCandidate.length) {
+        bestCandidate = candidate;
+      }
+
+      if (candidate.length <= MAX_STORED_OUTPUT_BYTES) {
+        return {
+          bytes: candidate,
+          contentType: 'image/jpeg',
+        };
+      }
+    }
+  }
+
+  if (bestCandidate && bestCandidate.length < bytes.length) {
+    return {
+      bytes: bestCandidate,
+      contentType: 'image/jpeg',
+    };
+  }
+
+  return { bytes, contentType };
 };
 
 const serializeError = (error: unknown): Record<string, unknown> => {
@@ -181,13 +245,17 @@ const persistGeneratedAttempt = async ({
     claimedJob.imageConfig,
     claimedJob.aspectRatio,
   );
-  const extension = extensionForContentType(providerResult.contentType);
+  const storedImage = await compressGeneratedImageIfNeeded({
+    bytes: providerResult.imageBytes,
+    contentType: providerResult.contentType,
+  });
+  const extension = extensionForContentType(storedImage.contentType);
   const destinationPath = `generated/${claimedJob.clientId}/${claimedJob.batchId}/${jobId}/${outputId}.${extension}`;
 
-  await bucket.file(destinationPath).save(providerResult.imageBytes, {
+  await bucket.file(destinationPath).save(storedImage.bytes, {
     resumable: false,
     metadata: {
-      contentType: providerResult.contentType,
+      contentType: storedImage.contentType,
       cacheControl: 'private, max-age=31536000',
     },
   });
@@ -217,7 +285,7 @@ const persistGeneratedAttempt = async ({
     aspectRatio: normalizedImageConfig.aspectRatio,
     imageConfig: normalizedImageConfig.imageConfig,
     resultImagePath: destinationPath,
-    contentType: providerResult.contentType,
+    contentType: storedImage.contentType,
     remoteUrl: providerResult.remoteUrl,
     requestId: providerResult.requestId,
     costUsd,

@@ -111,6 +111,7 @@ export const tagModelPosesWithGemini = onCall<ModelPoseTaggingRequest, Promise<M
       const aiClassification = buildPoseAiClassification({
         orientationDetail: classification.orientationDetail,
         framing: classification.framing,
+        faceVisible: classification.faceVisible,
         confidence: classification.confidence,
         taggedAt,
         reasoning: classification.reasoning,
@@ -126,6 +127,8 @@ export const tagModelPosesWithGemini = onCall<ModelPoseTaggingRequest, Promise<M
           orientationGroup: aiClassification.orientationGroup,
           orientationDetail: aiClassification.orientationDetail,
           framing: aiClassification.framing,
+          bodyFocus: aiClassification.bodyFocus,
+          faceVisible: aiClassification.faceVisible,
           autoCategory: aiClassification.autoCategory,
           usableForGarmentViews: aiClassification.usableForGarmentViews,
           confidence: aiClassification.confidence,

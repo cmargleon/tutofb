@@ -208,7 +208,6 @@ export const useGenerateWizard = () => {
     missingPoseClassificationCount,
     selectedModel,
     selectedClient,
-    selectedSpreadsheetCategory,
     suggestionSignature,
     productDraftSignature,
   });

@@ -10,10 +10,15 @@ import {
   SpreadsheetTemplateCategory,
   UploadedGarmentInput,
 } from '../../../shared/src/types';
+import {
+  getProductDraftSpecificationAttributeName,
+  resolveProductDraftColumnValue,
+} from '../../../shared/src/utils/spreadsheetDraftColumns';
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 import { GEMINI_API_KEY, getGeminiImageReviewModel } from '../config/runtime';
 
 const bucket = admin.storage().bucket();
+const PRODUCT_DRAFT_PREVIEW_CONCURRENCY = 2;
 
 interface GeminiDraftExtractionPayload {
   title?: unknown;
@@ -178,10 +183,12 @@ const addSuggestion = (
 const buildInferenceFromGemini = ({
   template,
   category,
+  garment,
   payload,
 }: {
   template: SpreadsheetTemplate;
   category: SpreadsheetTemplateCategory;
+  garment: UploadedGarmentInput;
   payload: GeminiDraftExtractionPayload;
 }): Record<string, ProductDraftValueSuggestion> => {
   const inferredValues: Record<string, ProductDraftValueSuggestion> = {};
@@ -203,7 +210,7 @@ const buildInferenceFromGemini = ({
   const estimatedPackageHeightCm = normalizeNumber(payload.estimatedPackageHeightCm);
 
   const brandOption = pickBestOption(template.brandOptions, [brand]);
-  const colorOption = pickBestOption(findAttributeValues(category, /color/), [primaryColor]);
+  const colorOption = pickBestOption(findAttributeValues(category, /color/), [garment.matchedColor || null, primaryColor]);
   const materialOption = pickBestOption(findAttributeValues(category, /material|composicion/), [material]);
   const sleeveLengthOption = pickBestOption(findAttributeValues(category, /manga/), [sleeveLength]);
   const necklineOption = pickBestOption(findAttributeValues(category, /escote|cuello/), [neckline]);
@@ -216,6 +223,10 @@ const buildInferenceFromGemini = ({
   category.columns.forEach((column) => {
     const normalizedKey = normalizeComparable(column.key);
     const normalizedLabel = normalizeComparable(column.label);
+    const specificationAttributeName = getProductDraftSpecificationAttributeName(category, column);
+    const isColorSpecificationValueColumn = Boolean(
+      specificationAttributeName && normalizeComparable(specificationAttributeName).includes('color'),
+    );
 
     if (normalizedKey.includes('default_product_name') || normalizedLabel.includes('nombre de producto')) {
       addSuggestion(inferredValues, column.key, title, 0.88, 'Sugerido por Gemini a partir de la prenda y la categoría.');
@@ -246,11 +257,11 @@ const buildInferenceFromGemini = ({
       return;
     }
 
-    if (normalizedLabel.includes('color')) {
+    if (normalizedLabel.includes('color') || isColorSpecificationValueColumn) {
       addSuggestion(
         inferredValues,
         column.key,
-        colorOption || primaryColor,
+        colorOption || garment.matchedColor || primaryColor,
         colorOption ? 0.9 : 0.6,
         colorOption
           ? 'Color visible alineado con un valor permitido del template.'
@@ -445,6 +456,7 @@ const extractGeminiDraftPayload = async ({
     `Cliente: ${client.name}`,
     `Categoria del template: ${category.label}`,
     `Nombre de prenda interna: ${garment.name}`,
+    garment.matchedColor ? `Color detectado previamente: ${garment.matchedColor}` : 'Color detectado previamente: sin dato.',
     `Marca visible esperable: ${template.brandOptions.slice(0, 25).join(', ') || 'sin catalogo de marcas'}`,
     model.identityTraits
       ? `Rasgos fisicos del modelo: sexo=${model.identityTraits.sex || 'sin dato'}, edad=${model.identityTraits.age || 'sin dato'}, tono_piel=${model.identityTraits.skin || 'sin dato'}, color_pelo=${model.identityTraits.hairColor || 'sin dato'}, largo_pelo=${model.identityTraits.hairLength || 'sin dato'}, complexion=${model.identityTraits.build || 'sin dato'}`
@@ -492,30 +504,103 @@ const extractGeminiDraftPayload = async ({
 const buildSeedRow = (
   category: SpreadsheetTemplateCategory,
   inferredValues: Record<string, ProductDraftValueSuggestion>,
-): ProductDraftRow => ({
-  id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-  values: Object.fromEntries(
-    category.columns.map((column) => [column.key, inferredValues[column.key]?.value || '']),
-  ),
-});
+): ProductDraftRow => {
+  const values = category.columns.reduce<Record<string, string>>((result, column) => {
+    result[column.key] = resolveProductDraftColumnValue({
+      category,
+      column,
+      rowValues: result,
+      candidates: [inferredValues[column.key]?.value || null],
+    });
+    return result;
+  }, {});
+
+  return {
+    id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    values,
+  };
+};
+
+const mapWithConcurrencyLimit = async <TInput, TOutput>(
+  items: TInput[],
+  limit: number,
+  mapper: (item: TInput, index: number) => Promise<TOutput>,
+): Promise<TOutput[]> => {
+  const concurrency = Math.max(1, Math.trunc(limit) || 1);
+  const results = new Array<TOutput>(items.length);
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+
+  return results;
+};
+
+const resolveDraftCategory = ({
+  categoriesById,
+  garment,
+  fallbackCategoryId,
+}: {
+  categoriesById: Map<string, SpreadsheetTemplateCategory>;
+  garment: UploadedGarmentInput;
+  fallbackCategoryId?: string | null;
+}): SpreadsheetTemplateCategory => {
+  const requestedCategoryId = garment.matchedCategoryId || fallbackCategoryId || null;
+  if (requestedCategoryId) {
+    const category = categoriesById.get(requestedCategoryId);
+    if (category) {
+      return category;
+    }
+  }
+
+  const [firstCategory] = categoriesById.values();
+  if (!firstCategory) {
+    throw new Error(`No hay categorías disponibles para preparar el draft de ${garment.name}.`);
+  }
+
+  return firstCategory;
+};
 
 export const buildPreviewProductDrafts = async ({
   client,
   model,
   template,
-  category,
+  categoriesById,
   garments,
   userUid,
+  fallbackCategoryId,
 }: {
   client: Client;
   model: Model;
   template: SpreadsheetTemplate;
-  category: SpreadsheetTemplateCategory;
+  categoriesById: Map<string, SpreadsheetTemplateCategory>;
   garments: UploadedGarmentInput[];
   userUid: string;
+  fallbackCategoryId?: string | null;
 }): Promise<ProductDraftInput[]> =>
-  Promise.all(
-    garments.map(async (garment) => {
+  mapWithConcurrencyLimit(
+    garments,
+    PRODUCT_DRAFT_PREVIEW_CONCURRENCY,
+    async (garment) => {
+      const category = resolveDraftCategory({
+        categoriesById,
+        garment,
+        fallbackCategoryId,
+      });
       const geminiPayload = await extractGeminiDraftPayload({
         client,
         model,
@@ -527,16 +612,20 @@ export const buildPreviewProductDrafts = async ({
       const inferredValues = buildInferenceFromGemini({
         template,
         category,
+        garment,
         payload: geminiPayload,
       });
 
       return {
         garmentId: garment.id,
         garmentName: garment.name,
+        categoryId: category.id!,
+        categoryName: category.label,
+        matchedColor: garment.matchedColor || null,
         inferredValues,
         rows: [buildSeedRow(category, inferredValues)],
       };
-    }),
+    },
   );
 
 export const buildStoredProductDraft = ({
@@ -572,8 +661,16 @@ export const buildStoredProductDraft = ({
   garmentFilePath: garment.storagePath,
   garmentPhotoId: garment.photos?.[0]?.id || null,
   garmentPhotoFileName: garment.photos?.[0]?.fileName || null,
+  matchedColor: draftInput.matchedColor || garment.matchedColor || null,
   inferredValues: draftInput.inferredValues || {},
   rows: draftInput.rows,
+  originalImages: (garment.photos || []).map((photo) => ({
+    photoId: photo.id,
+    fileName: photo.fileName,
+    storagePath: photo.storagePath,
+    view: photo.view || null,
+    sourceIndex: photo.sourceIndex,
+  })),
   generatedImages: [],
   createdByUid,
   updatedByUid: createdByUid,

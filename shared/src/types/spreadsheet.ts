@@ -1,5 +1,6 @@
 import type { TimestampLike, SpreadsheetTemplateImportStatus, ProductDraftSuggestionSource } from './common';
 import type { UploadedGarmentInput } from './garment';
+import type { PoseFraming, PoseOrientationDetail, PoseOrientationGroup } from './common';
 
 export interface SpreadsheetTemplateCategorySummary {
   id: string;
@@ -48,6 +49,8 @@ export interface SpreadsheetTemplateCategoryColumn {
   requirementLabel: string | null;
   guidance: string | null;
   validation: string | null;
+  dropdownOptions?: string[];
+  dropdownFormula?: string | null;
 }
 
 export interface SpreadsheetTemplateCategoryAttribute {
@@ -90,7 +93,18 @@ export interface ProductDraftGeneratedImage {
   label: string;
   storagePath: string;
   downloadUrl: string | null;
+  poseOrientationGroup?: PoseOrientationGroup | null;
+  poseOrientationDetail?: PoseOrientationDetail | null;
+  poseFraming?: PoseFraming | null;
   selectedAt: TimestampLike;
+}
+
+export interface ProductDraftOriginalImage {
+  photoId: string;
+  fileName: string;
+  storagePath: string;
+  view: string | null;
+  sourceIndex: number;
 }
 
 export interface ProductDraft {
@@ -109,8 +123,10 @@ export interface ProductDraft {
   garmentFilePath: string;
   garmentPhotoId?: string | null;
   garmentPhotoFileName?: string | null;
+  matchedColor?: string | null;
   inferredValues: Record<string, ProductDraftValueSuggestion>;
   rows: ProductDraftRow[];
+  originalImages: ProductDraftOriginalImage[];
   generatedImages: ProductDraftGeneratedImage[];
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
@@ -121,6 +137,9 @@ export interface ProductDraft {
 export interface ProductDraftInput {
   garmentId: string;
   garmentName: string;
+  categoryId: string;
+  categoryName: string;
+  matchedColor?: string | null;
   rows: ProductDraftRow[];
   inferredValues?: Record<string, ProductDraftValueSuggestion>;
 }
@@ -129,7 +148,7 @@ export interface PreviewProductDraftsRequest {
   clientId: string;
   modelId: string;
   spreadsheetTemplateId: string;
-  spreadsheetCategoryId: string;
+  fallbackCategoryId?: string | null;
   garments: UploadedGarmentInput[];
 }
 
@@ -161,4 +180,14 @@ export interface UpdateClientSpreadsheetTemplateCategoryResponse {
   success: boolean;
   templateId: string;
   categoryId: string | null;
+}
+
+export interface DeleteClientSpreadsheetTemplateRequest {
+  clientId: string;
+  templateId: string;
+}
+
+export interface DeleteClientSpreadsheetTemplateResponse {
+  success: boolean;
+  templateId: string;
 }

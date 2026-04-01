@@ -22,5 +22,13 @@ export type PoseOrientationDetail =
   | 'left_profile'
   | 'right_profile'
   | 'ambiguous';
-export type PoseFraming = 'full_body' | 'three_quarter_body' | 'medium_body' | 'unknown';
+export type PoseFraming =
+  | 'full_body'
+  | 'three_quarter_body'
+  | 'medium_body'
+  | 'lower_body'
+  | 'feet_closeup'
+  | 'unknown';
+export type PoseBodyFocus = 'full_body' | 'upper_body' | 'lower_body' | 'feet';
+export type GarmentBodyArea = 'upper_body' | 'lower_body' | 'footwear' | 'full_body';
 export type HealthStatus = 'healthy' | 'degraded' | 'down';

@@ -1,4 +1,16 @@
-import type { TimestampLike, Provider, AspectRatio, JobStatus, GarmentSourceType, GarmentReferenceImageType, GarmentView } from './common';
+import type {
+  TimestampLike,
+  Provider,
+  AspectRatio,
+  JobStatus,
+  GarmentSourceType,
+  GarmentReferenceImageType,
+  GarmentView,
+  PoseFraming,
+  PoseOrientationDetail,
+  PoseOrientationGroup,
+  PoseBodyFocus,
+} from './common';
 import type { ProviderImageConfig } from './provider';
 
 export interface ProviderUsageStats {
@@ -118,6 +130,10 @@ export interface Job {
   poseImageId: string;
   poseImagePath: string;
   poseFileName?: string;
+  poseOrientationGroup?: PoseOrientationGroup | null;
+  poseOrientationDetail?: PoseOrientationDetail | null;
+  poseFraming?: PoseFraming | null;
+  poseBodyFocus?: PoseBodyFocus | null;
   garmentId: string;
   garmentName: string;
   garmentFilePath: string;

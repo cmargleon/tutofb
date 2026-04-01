@@ -3,7 +3,7 @@ import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { PROVIDER_LABELS } from '../../../shared/src/domain';
 import { StatusBadge } from '../ui';
-import { AlertCircle, ChevronDown, ChevronUp, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Copy, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { trimUrlAfterImageExtension } from '../../features/storage/urlDisplay';
@@ -144,6 +144,27 @@ export const JobEvaluationCard: React.FC<Props> = ({
       });
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleCopyImageUrl = async () => {
+    const valueToCopy = displayedImageUrl || displayedOutput?.resultImagePath;
+    if (!valueToCopy) return;
+
+    try {
+      await navigator.clipboard.writeText(valueToCopy);
+      toast({
+        tone: 'success',
+        title: 'URL copiada',
+        description: 'La URL de la imagen quedó en el portapapeles.',
+      });
+    } catch (error) {
+      console.error('Failed to copy image URL:', error);
+      toast({
+        tone: 'error',
+        title: 'No pudimos copiar la URL',
+        description: 'Inténtalo de nuevo o abre el enlace manualmente.',
+      });
     }
   };
 
@@ -353,6 +374,41 @@ export const JobEvaluationCard: React.FC<Props> = ({
           </div>
         )}
 
+        {displayedOutput?.resultImagePath ? (
+          <div
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">URL imagen guardada</p>
+            <div className="mt-1 flex items-center gap-2">
+              {displayedImageUrl ? (
+                <a
+                  href={displayedImageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 flex-1 truncate font-mono text-[11px] text-indigo-700 underline decoration-indigo-300 underline-offset-2"
+                >
+                  {displayedImageUrlLabel}
+                </a>
+              ) : displayedImageUrlLoading ? (
+                <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-500">Resolviendo URL...</p>
+              ) : (
+                <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-slate-500">{displayedOutput.resultImagePath}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => void handleCopyImageUrl()}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-100"
+                title="Copiar URL"
+                aria-label="Copiar URL"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* Details toggle */}
         <button
           type="button"
@@ -392,26 +448,6 @@ export const JobEvaluationCard: React.FC<Props> = ({
                   <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
                   <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
                 </select>
-              </div>
-            ) : null}
-
-            {displayedOutput?.resultImagePath ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">URL imagen guardada</p>
-                {displayedImageUrl ? (
-                  <a
-                    href={displayedImageUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 block break-all font-mono text-[11px] text-indigo-700 underline decoration-indigo-300 underline-offset-2"
-                  >
-                    {displayedImageUrlLabel}
-                  </a>
-                ) : displayedImageUrlLoading ? (
-                  <p className="mt-1 font-mono text-[11px] text-slate-500">Resolviendo URL...</p>
-                ) : (
-                  <p className="mt-1 break-all font-mono text-[11px] text-slate-500">{displayedOutput.resultImagePath}</p>
-                )}
               </div>
             ) : null}
 

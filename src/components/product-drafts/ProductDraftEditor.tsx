@@ -5,11 +5,17 @@ import {
   ProductDraftRow,
   SpreadsheetTemplateCategory,
 } from '../../../shared/src/types';
+import {
+  getProductDraftColumnAllowedValues,
+  getProductDraftColumnDefaultValue,
+  isProductDraftDropdownColumn,
+  resolveProductDraftColumnValue,
+} from '../../../shared/src/utils/spreadsheetDraftColumns';
 
 type EditableDraft = ProductDraft | ProductDraftInput;
 
 interface ProductDraftEditorProps {
-  category: SpreadsheetTemplateCategory | null;
+  categories: SpreadsheetTemplateCategory[];
   drafts: EditableDraft[];
   loading?: boolean;
   error?: string | null;
@@ -31,11 +37,16 @@ const buildEmptyRow = (category: SpreadsheetTemplateCategory): ProductDraftRow =
 const getMissingRequiredKeys = (category: SpreadsheetTemplateCategory, row: ProductDraftRow): string[] =>
   category.columns
     .filter((column) => column.required)
-    .filter((column) => !row.values[column.key]?.trim())
+    .filter((column) => !resolveProductDraftColumnValue({
+      category,
+      column,
+      rowValues: row.values,
+      candidates: [row.values[column.key]],
+    }))
     .map((column) => column.key);
 
 export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
-  category,
+  categories,
   drafts,
   loading = false,
   error = null,
@@ -51,6 +62,10 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
     const preferredId = activeDraftId || drafts[0]?.garmentId || (drafts[0] as ProductDraft | undefined)?.id || null;
     return drafts.find((draft) => draft.garmentId === preferredId || (draft as ProductDraft).id === preferredId) || drafts[0] || null;
   }, [activeDraftId, drafts]);
+  const activeCategory = useMemo(
+    () => categories.find((category) => category.id === resolvedActiveDraft?.categoryId) || null,
+    [categories, resolvedActiveDraft?.categoryId],
+  );
 
   if (loading) {
     return (
@@ -68,7 +83,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
     );
   }
 
-  if (!category || drafts.length === 0 || !resolvedActiveDraft) {
+  if (!activeCategory || drafts.length === 0 || !resolvedActiveDraft) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
         {emptyCopy}
@@ -109,13 +124,16 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
           <div>
             <p className="text-sm font-semibold text-slate-900">{activeDraft.garmentName}</p>
             <p className="mt-1 text-xs text-slate-500">
-              {activeDraft.rows.length} fila{activeDraft.rows.length === 1 ? '' : 's'} para exportar en {category.label}
+              {activeDraft.rows.length} fila{activeDraft.rows.length === 1 ? '' : 's'} para exportar en {activeCategory.label}
             </p>
+            {activeDraft.matchedColor ? (
+              <p className="mt-1 text-[11px] text-slate-500">Color detectado: {activeDraft.matchedColor}</p>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => patchRows((rows) => [...rows, buildEmptyRow(category)])}
+              onClick={() => patchRows((rows) => [...rows, buildEmptyRow(activeCategory)])}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
             >
               Agregar fila
@@ -158,7 +176,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
           <thead className="bg-slate-50">
             <tr>
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Fila</th>
-              {category.columns.map((column) => (
+              {activeCategory.columns.map((column) => (
                 <th key={column.key} className="min-w-[220px] px-3 py-2 text-left text-[11px] font-semibold text-slate-600">
                   <div>{column.label}</div>
                   <div className="mt-1 font-mono text-[10px] text-slate-400">{column.key}</div>
@@ -170,7 +188,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
             {activeDraft.rows.map((row, rowIndex) => {
-              const missingRequiredKeys = getMissingRequiredKeys(category, row);
+              const missingRequiredKeys = getMissingRequiredKeys(activeCategory, row);
               return (
                 <tr key={row.id} className="align-top">
                   <td className="px-3 py-3 text-xs text-slate-700">
@@ -183,12 +201,28 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
                       <div className="mt-1 text-[11px] text-emerald-600">Completa</div>
                     )}
                   </td>
-                  {category.columns.map((column) => (
+                  {activeCategory.columns.map((column) => (
                     <td key={`${row.id}-${column.key}`} className="px-3 py-3">
-                      <input
-                        type="text"
-                        value={row.values[column.key] || ''}
-                        onChange={(event) =>
+                      {(() => {
+                        const allowedValues = Array.from(
+                          new Set(getProductDraftColumnAllowedValues(activeCategory, column, row.values)),
+                        );
+                        const defaultValue = getProductDraftColumnDefaultValue(activeCategory, column);
+                        const resolvedValue = resolveProductDraftColumnValue({
+                          category: activeCategory,
+                          column,
+                          rowValues: row.values,
+                          candidates: [row.values[column.key], activeDraft.inferredValues?.[column.key]?.value],
+                        });
+                        const isDropdown = isProductDraftDropdownColumn(activeCategory, column, row.values);
+                        const isFixedDropdown = Boolean(defaultValue && allowedValues.length === 1 && allowedValues[0] === defaultValue);
+                        const placeholder =
+                          activeDraft.inferredValues?.[column.key]?.value
+                          || column.guidance
+                          || column.validation
+                          || '';
+
+                        const updateValue = (nextValue: string) => {
                           patchRows((rows) =>
                             rows.map((entry) =>
                               entry.id === row.id
@@ -196,16 +230,46 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
                                     ...entry,
                                     values: {
                                       ...entry.values,
-                                      [column.key]: event.target.value,
+                                      [column.key]: nextValue,
                                     },
                                   }
                                 : entry,
                             ),
-                          )
+                          );
+                        };
+
+                        if (isDropdown) {
+                          return (
+                            <select
+                              value={resolvedValue}
+                              onChange={(event) => updateValue(event.target.value)}
+                              disabled={isFixedDropdown}
+                              className={INPUT_CLASS}
+                            >
+                              {!isFixedDropdown ? (
+                                <option value="">
+                                  {placeholder || 'Selecciona una opción'}
+                                </option>
+                              ) : null}
+                              {allowedValues.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          );
                         }
-                        className={INPUT_CLASS}
-                        placeholder={activeDraft.inferredValues?.[column.key]?.value || column.guidance || column.validation || ''}
-                      />
+
+                        return (
+                          <input
+                            type="text"
+                            value={row.values[column.key] || ''}
+                            onChange={(event) => updateValue(event.target.value)}
+                            className={INPUT_CLASS}
+                            placeholder={placeholder}
+                          />
+                        );
+                      })()}
                     </td>
                   ))}
                   <td className="px-3 py-3">

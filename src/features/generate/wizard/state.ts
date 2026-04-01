@@ -143,7 +143,7 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
         && state.selectedModelId
         && (
           state.outputMode === 'photos_only'
-          || (state.selectedSpreadsheetTemplateId && state.selectedSpreadsheetCategoryId)
+          || state.selectedSpreadsheetTemplateId
         ),
       );
     case 2:

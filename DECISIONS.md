@@ -207,6 +207,87 @@ Consecuencias:
 - la operacion puede detectar problemas antes de que sean visibles en el dashboard general
 - ajustar umbrales de alertas impacta al equipo completo
 
+## DEC-011: un batch puede salir en modo `photos_only` o en modo `spreadsheet`
+
+Estado:
+- aceptada
+
+Contexto:
+- no todos los clientes necesitan el mismo output final
+- algunos flujos solo requieren imagenes aprobadas
+- otros necesitan ademas metadata estructurada para marketplace
+
+Decision:
+- `Batch` guarda `outputMode`
+- si `outputMode == 'spreadsheet'`, el wizard prepara `productDrafts` antes de crear el lote
+- al crear el batch, el backend persiste `batches/{batchId}/productDrafts`
+- la evaluacion puede editar esos drafts y exportarlos a XLSX mas tarde
+
+Consecuencias:
+- `createGenerationBatch` valida template, categoria y drafts cuando corresponde
+- el flujo de evaluacion ya no termina en imagenes: tambien puede cerrar un entregable tabular
+- cambios en `productDrafts` impactan frontend, Functions, `shared/` y templates XLSX
+
+## DEC-012: la compatibilidad pose-prenda se apoya en clasificacion IA explicita
+
+Estado:
+- aceptada
+
+Contexto:
+- el wizard ya no trabaja solo con una imagen unica de prenda
+- hay prendas con varias fotos y modelos con bibliotecas grandes de poses
+- sugerir combinaciones validas con heuristicas blandas genera errores operativos
+
+Decision:
+- las fotos multiangulo de prendas se clasifican con Gemini en `front`, `back` o `side` y en `garmentBodyArea`
+- las poses se etiquetan en `pose.aiClassification` con orientacion, framing, body focus y vistas utilizables
+- la sugerencia automatica de poses usa esas clasificaciones compartidas, no reglas manuales dispersas
+
+Consecuencias:
+- el matching pose-prenda vive como contrato transversal en `shared/src/utils/garmentViewMatching.ts`
+- una degradacion en tagging de poses o clasificacion de prendas reduce automatizacion pero no bloquea la seleccion manual
+- tocar el schema de clasificacion impacta modelos, wizard, tests y prompts de Gemini
+
+## DEC-013: la configuracion operativa compartida vive en `system_config/main`
+
+Estado:
+- aceptada
+
+Contexto:
+- retries, limites de batch, modelo Gemini y proveedores deshabilitados pueden necesitar ajuste sin redeploy
+- parte de esa config debe estar visible para frontend y backend al mismo tiempo
+
+Decision:
+- los defaults tecnicos siguen viviendo en params runtime de Functions
+- las overrides operativas compartidas viven en Firestore bajo `system_config/main`
+- el frontend la escucha en tiempo real y Functions la lee con cache controlado
+- solo admins la mutan desde callables y la pagina de configuracion
+
+Consecuencias:
+- cambios de config pueden afectar wizard, worker, review y health checks sin tocar codigo
+- permisos y saneamiento de esta config son parte critica del sistema
+- una nueva feature operativa deberia decidir explicitamente si vive en params, en Firestore o en ambos
+
+## DEC-014: el uso de Gemini se mide como analytics de primer nivel
+
+Estado:
+- aceptada
+
+Contexto:
+- Gemini ya no se usa solo para auto review
+- ahora participa tambien en clasificacion de prendas, tagging de poses y enriquecimiento de drafts
+- sin una medicion comun se pierde visibilidad de costo, errores y throughput
+
+Decision:
+- cada llamada relevante a `generateContent` persiste un registro en `analytics_gemini_usage`
+- los registros distinguen `feature`, `model`, `status`, tokens, costo estimado y contexto operativo
+- la UI de analytics consume esa coleccion directamente para breakdowns y tendencias
+
+Consecuencias:
+- el costo de Gemini puede analizarse separado del costo de generacion de imagen
+- agregar un nuevo uso de Gemini sin instrumentarlo deja metricas incompletas
+- cambios en naming de `feature` impactan analytics, filtros e interpretacion historica
+
 ## Como mantener este archivo
 
 Agregar una decision cuando:
@@ -219,4 +300,3 @@ Actualizar una decision cuando:
 - se replace por otra
 - cambien sus consecuencias
 - la implementacion real ya no coincida con lo documentado
-

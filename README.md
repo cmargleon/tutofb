@@ -1,54 +1,73 @@
 # Tuto Firebase
 
-Migración incremental de la app interna de catálogo ecommerce hacia Firebase.
+App interna de catalogo sobre Firebase para operar un flujo completo de virtual try-on.
 
-Backend definitivo:
-- Firebase Auth
-- Firestore
-- Cloud Storage
-- Cloud Functions v2
+Hoy el sistema cubre:
+- login interno con roles `admin`, `operador`, `revisor`
+- alta de clientes y modelos
+- wizard de generacion con clasificacion de prendas, sugerencia de poses y batches reales
+- dos modos de salida: `photos_only` y `spreadsheet`
+- evaluacion, reintentos, cancelaciones, descargas, archivo y catalogo visual
+- analytics operativos, uso/costo de Gemini, salud del sistema y configuracion compartida
 
-Objetivo funcional:
-- mantener paridad con el flujo original de catálogo
-- crear lotes desde wizard
-- procesar jobs reales con fal.ai seedream, fal.ai banana-pro y OpenAI gpt-image-1.5
-- evaluar, regenerar, descargar y archivar resultados
-- medir operación y costo sin dobles conteos por regeneraciones
-
-## Arquitectura
+## Stack
 
 Frontend:
 - React 19 + TypeScript + Vite
-- UI interna en español
-- conexión opcional a emuladores con `VITE_USE_FIREBASE_EMULATORS=true`
+- UI interna en espanol
+- `src/firebase.ts` usa `firebase-applet-config.json`
+- solo conecta a emuladores si `VITE_USE_FIREBASE_EMULATORS=true`
 
-Functions:
-- `createGenerationBatch`: valida wizard real y crea `batches` + `jobs`
-- `regenerateJob`: reencola un job conservando la imagen actual hasta que termine la nueva
-- `processJobOnCreate` / `processJobOnRequeue`: worker server-side real
-- `requeueExpiredJobsOnSchedule`: detecta jobs atascados y los reencola o falla
-- triggers de analytics: separan estado actual de `jobs` vs costo acumulado por `outputs`
-- triggers de cascada: limpian jobs/subcolecciones/storage al borrar clientes o modelos
+Backend:
+- Firebase Auth
+- Firestore
+- Cloud Storage
+- Cloud Functions v2 sobre Node 22
+
+Contrato compartido:
+- `shared/src/types/`
+- `shared/src/domain.ts`
+- `shared/src/utils/`
+
+Providers de imagen activos en codigo:
+- `fal-seedream`
+- `fal-banana-pro`
+- `openai-gpt-image-1.5`
+- `fal-nano-banana-2`
+- `fal-seedream-5`
+
+## Arquitectura funcional
+
+Frontend:
+- `Dashboard`, `Analytics` y `Configuracion` para operacion, salud y config global
+- `Clients` y `Models` para catalogo base
+- `Wizard` para crear batches
+- `Cola`, `Evaluacion`, `Archivo` y `Catalogo` para el ciclo operativo posterior
+
+Backend:
+- `createGenerationBatch` crea `batches` + `jobs`
+- `classifyGarmentViewsWithGemini` clasifica fotos multiangulo de prendas
+- `previewProductDrafts` arma drafts de spreadsheet antes de crear el batch
+- `processJobOnCreate` / `processJobOnRequeue` disparan el worker real
+- `retryJobAutoReview` permite reejecutar review Gemini sobre la salida vigente
+- `exportBatchSpreadsheet` exporta el batch a XLSX desde los `productDrafts`
+- `getSystemHealth`, `updateSystemAlertSettings`, `getSystemConfig`, `updateSystemConfig` exponen salud y config compartida
 
 Modelo operativo:
-- `jobs` representan estado actual del trabajo
+- `jobs` representa estado actual del trabajo
 - `jobs/{jobId}/outputs` representa cada output completado real
-- `currentOutput` apunta al resultado vigente del job
+- `currentOutput` apunta al resultado vigente
 - el costo se acumula por `outputs`
 - los contadores operativos se calculan por estado actual de `jobs`
+- `batches/{batchId}/productDrafts` existe cuando el lote sale en modo `spreadsheet`
 
-Flujo server-side documentado:
-- ver [PROCESSING_FLOW.md](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/PROCESSING_FLOW.md)
+Flujos IA visibles hoy:
+- review de imagen generada con Gemini
+- clasificacion de vistas de prenda con Gemini
+- tagging de poses de modelos con Gemini
+- enriquecimiento de `productDrafts` con Gemini
 
 ## Setup local
-
-## Estado actual de entorno
-
-Importante:
-- correr el frontend en `localhost:3000` no implica usar Firebase local
-- hoy este repo está configurado para trabajar contra Firebase en la nube cuando `VITE_USE_FIREBASE_EMULATORS=false`
-- en este workspace, [`.env.local`](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/.env.local#L1) tiene `VITE_USE_FIREBASE_EMULATORS="false"`, así que el frontend local usa Firestore, Functions y Storage remotos
-- solo se usan emuladores si cambias esa variable a `true` y además levantas `firebase emulators:start`
 
 ### 1. Instalar dependencias
 
@@ -62,29 +81,44 @@ npm --prefix functions install
 Usa `.env.local` o `.env`:
 
 ```bash
-VITE_USE_FIREBASE_EMULATORS=true
-DISABLE_HMR=false
+VITE_USE_FIREBASE_EMULATORS="true"
+DISABLE_HMR="false"
 ```
+
+Notas:
+- si `VITE_USE_FIREBASE_EMULATORS=false` o no esta definido, el frontend usa el proyecto Firebase configurado en `firebase-applet-config.json`
+- correr el frontend en `localhost:3000` no implica usar Firebase local
 
 ### 3. Configurar secrets y params de Functions
 
-Producción:
+Secrets:
 
 ```bash
 firebase functions:secrets:set FAL_KEY
 firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set GEMINI_API_KEY
+```
+
+Params runtime:
+
+```bash
 firebase functions:params:set BATCH_MAX_JOBS=100
 firebase functions:params:set JOB_MAX_RETRIES=3
 firebase functions:params:set JOB_TIMEOUT_MS=300000
 firebase functions:params:set JOB_STUCK_SWEEP_LIMIT=50
+firebase functions:params:set JOB_RETRY_DELAY_MS=300000
+firebase functions:params:set JOB_AUTO_REVIEW_MAX_ATTEMPTS=3
 firebase functions:params:set FAL_POLL_INTERVAL_MS=2000
 firebase functions:params:set FAL_POLL_TIMEOUT_MS=240000
 firebase functions:params:set OPENAI_BASE_URL=https://api.openai.com/v1
+firebase functions:params:set GEMINI_IMAGE_REVIEW_MODEL=gemini-3.1-flash-lite-preview
+firebase functions:params:set GEMINI_POSE_CLASSIFICATION_MODEL=gemini-3.1-flash-lite-preview
+firebase functions:params:set GEMINI_GARMENT_VIEW_CLASSIFICATION_MODEL=gemini-3.1-flash-lite-preview
 ```
 
 Emuladores:
-- usa `.secret.local` dentro de `functions/` para `FAL_KEY` y `OPENAI_API_KEY`
-- exporta params como env vars o configúralos vía Firebase params localmente
+- usa `.secret.local` dentro de `functions/` para `FAL_KEY`, `OPENAI_API_KEY` y `GEMINI_API_KEY`
+- exporta params como env vars o configuralos via Firebase params localmente
 
 ### 4. Levantar emuladores
 
@@ -104,6 +138,23 @@ Puertos por defecto:
 npm run dev
 ```
 
+## Config operativa en tiempo real
+
+Ademas de los params runtime, la app usa `system_config/main` para cambios operativos sin redeploy.
+
+Hoy ahi viven:
+- `jobMaxRetries`
+- `jobRetryDelayMs`
+- `batchMaxJobs`
+- `geminiImageReviewModel`
+- `disabledProviders`
+- `systemPromptOverride`
+
+Lectura/escritura:
+- frontend la lee por snapshot con `src/features/system/useSystemConfig.ts`
+- Functions la cachea desde `functions/src/admin/systemConfig.ts`
+- solo `admin` puede mutarla desde `/configuracion` o callables asociados
+
 ## Auth y roles
 
 Roles soportados:
@@ -113,58 +164,80 @@ Roles soportados:
 
 Reglas principales:
 - login interno con email/password
-- no existe autocreación libre por Google
 - el documento `users/{uid}` define `role` y `active`
-- `syncClaimsOnUserWrite` mantiene custom claims sincronizados con Firestore
-- `syncUserClaims` permite autosincronizar claims al iniciar sesión y a admins sincronizar terceros
+- `syncClaimsOnUserWrite` y `syncUserClaims` mantienen custom claims sincronizados
 
-Permisos:
-- `admin`: clientes, modelos, borrados, configuración
-- `operador`: generar, evaluar, regenerar, archivo
-- `revisor`: evaluar, archivo, analytics
+Permisos principales:
+- `admin`: usuarios, clientes, modelos, configuracion y borrados permanentes
+- `operador`: generar, evaluar, regenerar y exportar
+- `revisor`: evaluar, archivo, catalogo y analytics
 
-## Storage y rutas
+## Storage y datos
 
-Rutas activas:
+Rutas activas de Storage:
 - poses: `models/{clientId}/{modelId}/poses/{fileName}`
 - drafts de wizard: `garments/drafts/{uid}/{draftBatchId}/{garmentId}.jpg`
+- drafts multiarchivo: `garments/drafts/{uid}/{draftBatchId}/{garmentId}/{fileName}`
 - outputs generados: `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`
+- templates de cliente: `client_spreadsheets/{clientId}/{templateId}/{fileName}`
+- exports de spreadsheet: `client_spreadsheet_exports/{clientId}/{batchId}/{fileName}`
+- fotos IA de modelos: `model_generations/...`
 
-## Pruebas y validación
+Colecciones relevantes:
+- `users`
+- `clients`
+- `clients/{clientId}/spreadsheetTemplates`
+- `models`
+- `batches`
+- `batches/{batchId}/productDrafts`
+- `jobs`
+- `jobs/{jobId}/outputs`
+- `jobs/{jobId}/logs`
+- `analytics_*`
+- `analytics_gemini_usage`
+- `system_alert_settings`
+- `system_config`
+- `model_generation_logs`
 
-Compilación frontend:
+## Pruebas y validacion
+
+Chequeo frontend y tipos:
 
 ```bash
 npm run lint
 ```
 
-Compilación functions:
+Compilacion de Functions:
 
 ```bash
 npm --prefix functions run build
 ```
 
-Suite de tests:
+Suite principal:
 
 ```bash
 npm test
 ```
 
-Cobertura mínima actual:
-- validación de `createGenerationBatch`
-- reglas de agrupado de prendas del wizard
-- composición multiángulo
-- regeneración
-- dispatch y mapeo de providers
-- analytics/rebuild por estado actual y outputs reales
-- planes de cascada para delete
-- naming de descargas
+Cobertura visible en el repo:
+- `createGenerationBatch`
+- `jobWorker`
+- `providers`
+- `analytics`
+- `regeneration`
+- `downloads`
+- `deletePlans`
+- matching de vistas de prenda
+- tagging/clasificacion de poses
 
-## Notas de analytics
+Smoke E2E:
 
-Semántica explícita:
-- `completedJobs`, `failedJobs`, `pendingJobs`, `processingJobs`: estado actual de `jobs`
-- `totalCompletedOutputs` y `totalCostUsd`: outputs completados reales
-- `analytics_providers` y `analytics_clients` acumulan outputs reales
-- `analytics_daily.completed` y `analytics_daily.costUsd` reflejan outputs completados
-- `analytics_daily.failed` refleja jobs actualmente fallidos agrupados por fecha de actualización
+```bash
+npx playwright test
+```
+
+## Referencias rapidas
+
+- arquitectura detallada: [ARCHITECTURE.md](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/ARCHITECTURE.md)
+- decisiones tecnicas: [DECISIONS.md](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/DECISIONS.md)
+- flujo server-side: [PROCESSING_FLOW.md](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/PROCESSING_FLOW.md)

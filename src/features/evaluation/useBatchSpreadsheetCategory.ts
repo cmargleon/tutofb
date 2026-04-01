@@ -1,20 +1,19 @@
 import { useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { Batch, SpreadsheetTemplateCategory } from '../../../shared/src/types';
 import { db } from '../../firebase';
 
 export const useBatchSpreadsheetCategory = (batch: Batch | null) => {
-  const [category, setCategory] = useState<SpreadsheetTemplateCategory | null>(null);
-  const [loading, setLoading] = useState(Boolean(batch?.id && batch.spreadsheetTemplateId && batch.spreadsheetCategoryId));
+  const [categories, setCategories] = useState<SpreadsheetTemplateCategory[]>([]);
+  const [loading, setLoading] = useState(Boolean(batch?.id && batch.spreadsheetTemplateId));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const clientId = batch?.clientId || null;
     const templateId = batch?.spreadsheetTemplateId || null;
-    const categoryId = batch?.spreadsheetCategoryId || null;
 
-    if (!clientId || !templateId || !categoryId) {
-      setCategory(null);
+    if (!clientId || !templateId) {
+      setCategories([]);
       setLoading(false);
       setError(null);
       return undefined;
@@ -22,44 +21,28 @@ export const useBatchSpreadsheetCategory = (batch: Batch | null) => {
 
     setLoading(true);
     setError(null);
-
-    const categoryRef = doc(
-      db,
-      'clients',
-      clientId,
-      'spreadsheetTemplates',
-      templateId,
-      'categories',
-      categoryId,
+    const q = query(
+      collection(db, 'clients', clientId, 'spreadsheetTemplates', templateId, 'categories'),
+      orderBy('sheetName', 'asc'),
     );
 
     return onSnapshot(
-      categoryRef,
+      q,
       (snapshot) => {
-        if (!snapshot.exists()) {
-          setCategory(null);
-          setError('La categoría del spreadsheet asociada a este lote ya no existe.');
-          setLoading(false);
-          return;
-        }
-
-        setCategory({
-          id: snapshot.id,
-          ...snapshot.data(),
-        } as SpreadsheetTemplateCategory);
+        setCategories(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as SpreadsheetTemplateCategory)));
         setLoading(false);
       },
       (snapshotError) => {
-        console.error('Error loading batch spreadsheet category:', snapshotError);
-        setCategory(null);
-        setError('No se pudo cargar la categoría del spreadsheet del lote.');
+        console.error('Error loading batch spreadsheet categories:', snapshotError);
+        setCategories([]);
+        setError('No se pudieron cargar las categorías del spreadsheet del lote.');
         setLoading(false);
       },
     );
-  }, [batch?.clientId, batch?.id, batch?.spreadsheetCategoryId, batch?.spreadsheetTemplateId]);
+  }, [batch?.clientId, batch?.id, batch?.spreadsheetTemplateId]);
 
   return {
-    category,
+    categories,
     loading,
     error,
   };

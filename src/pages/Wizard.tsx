@@ -25,7 +25,6 @@ export const Wizard: React.FC = () => {
     error,
     stepperRef,
     selectedModel,
-    selectedSpreadsheetCategory,
     allPosesSelected,
     canAdvance,
     totalJobs,
@@ -149,7 +148,7 @@ export const Wizard: React.FC = () => {
         {state.step === 4 && (
           <ProductDraftsStep
             outputMode={state.outputMode}
-            category={selectedSpreadsheetCategory}
+            categories={spreadsheetCategories}
             productDrafts={state.productDrafts}
             preparationStatus={state.productDraftPreparation.status}
             preparationError={state.productDraftPreparation.error}

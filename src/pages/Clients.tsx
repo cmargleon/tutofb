@@ -10,6 +10,7 @@ import {
   restoreClient,
   permanentlyDeleteClient,
   importClientSpreadsheetTemplate,
+  deleteClientSpreadsheetTemplate,
   updateClientSpreadsheetTemplateCategory,
 } from '../features/clients/firebase';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
@@ -54,6 +55,7 @@ export const Clients: React.FC = () => {
   const [clientsPage, setClientsPage] = useState(1);
   const [uploadingTemplateClientId, setUploadingTemplateClientId] = useState<string | null>(null);
   const [savingTemplateCategoryId, setSavingTemplateCategoryId] = useState<string | null>(null);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = subscribeToClients(
@@ -290,6 +292,39 @@ export const Clients: React.FC = () => {
       });
     } finally {
       setSavingTemplateCategoryId(null);
+    }
+  };
+
+  const handleTemplateDelete = async (client: Client, template: SpreadsheetTemplate) => {
+    if (!client.id || !template.id) return;
+
+    const accepted = await confirm({
+      title: 'Eliminar spreadsheet',
+      description: `Vas a eliminar "${template.name}" del cliente "${client.name}".`,
+      impact: 'Se borrará la plantilla importada y sus categorías. Si algún lote ya la usa, el sistema no permitirá eliminarla.',
+      confirmLabel: 'Sí, eliminar spreadsheet',
+      cancelLabel: 'Mantener plantilla',
+      tone: 'danger',
+    });
+
+    if (!accepted) return;
+
+    setDeletingTemplateId(template.id);
+    try {
+      await deleteClientSpreadsheetTemplate(client.id, template.id);
+      toast({
+        tone: 'success',
+        title: 'Spreadsheet eliminado',
+        description: `"${template.name}" ya no está disponible para este cliente.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos eliminar el spreadsheet',
+        description: err.message || 'Vuelve a intentarlo en un momento.',
+      });
+    } finally {
+      setDeletingTemplateId(null);
     }
   };
 
@@ -582,10 +617,25 @@ export const Clients: React.FC = () => {
                                       key={template.id}
                                       className="rounded-xl border border-slate-200 bg-white px-3 py-2"
                                     >
-                                      <p className="text-sm font-medium text-slate-900">{template.name}</p>
-                                      <p className="mt-1 text-xs text-slate-500">
-                                        {template.categories.length} categoría{template.categories.length === 1 ? '' : 's'} · {template.originalFileName}
-                                      </p>
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <p className="text-sm font-medium text-slate-900">{template.name}</p>
+                                          <p className="mt-1 text-xs text-slate-500">
+                                            {template.categories.length} categoría{template.categories.length === 1 ? '' : 's'} · {template.originalFileName}
+                                          </p>
+                                        </div>
+                                        {!isArchivedCatalogEntity(client) ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => void handleTemplateDelete(client, template)}
+                                            disabled={!template.id || deletingTemplateId === template.id}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            {deletingTemplateId === template.id ? 'Eliminando...' : 'Eliminar'}
+                                          </button>
+                                        ) : null}
+                                      </div>
                                       <div className="mt-3">
                                         <label className="mb-1.5 block text-xs font-medium text-slate-600">
                                           Categoría por defecto para el wizard

@@ -286,6 +286,8 @@ export const getGarmentAvailableViews = (garment: UploadedGarmentDraft) =>
       .filter((view): view is GarmentView => Boolean(view)),
   );
 
+export const getGarmentBodyArea = (garment: UploadedGarmentDraft) => garment.garmentBodyArea ?? null;
+
 export const buildGarmentSuggestionSignature = (
   selectedModelId: string | null,
   garments: UploadedGarmentDraft[],

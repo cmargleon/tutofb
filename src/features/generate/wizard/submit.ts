@@ -121,6 +121,13 @@ export const getUploadedGarmentsForBatch = (
         sourceType: garment.sourceType,
         originalFileNames: garment.originalFileNames,
         originalPhotoCount: garment.originalPhotos.length,
+        matchedCategoryId: garment.matchedCategoryId || null,
+        matchedCategoryLabel: garment.matchedCategoryLabel || null,
+        matchedCategoryConfidence: garment.matchedCategoryConfidence ?? null,
+        matchedCategoryReasoning: garment.matchedCategoryReasoning || null,
+        matchedColor: garment.matchedColor || null,
+        matchedColorConfidence: garment.matchedColorConfidence ?? null,
+        matchedColorReasoning: garment.matchedColorReasoning || null,
         photos,
       };
     });

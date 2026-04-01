@@ -340,7 +340,7 @@ export const Archive: React.FC = () => {
             >
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-semibold text-slate-900">Filtros</h2>
+                  <h2 className="text-base font-semibold text-slate-900">Filtros y lotes encontrados</h2>
                   {activeFilterCount > 0 ? (
                     <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                       {activeFilterCount} activo{activeFilterCount === 1 ? '' : 's'}
@@ -352,8 +352,18 @@ export const Archive: React.FC = () => {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-slate-500">
-                  Filtra por cliente, proveedor, estado, modelo y fechas.
+                  Filtra por cliente, proveedor, estado, modelo y fechas, y navega los lotes desde este mismo panel.
                 </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+                    {results.length} lote{results.length === 1 ? '' : 's'} encontrado{results.length === 1 ? '' : 's'}
+                  </span>
+                  {resultsLoading ? (
+                    <span>Buscando en Firebase...</span>
+                  ) : (
+                    <span>Se revisaron {scannedBatches} lote{scannedBatches === 1 ? '' : 's'}.</span>
+                  )}
+                </div>
               </div>
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500">
                 {filtersCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
@@ -361,242 +371,242 @@ export const Archive: React.FC = () => {
             </button>
 
             {!filtersCollapsed ? (
-              <div id="archive-filters-panel" className="mt-5 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2 xl:grid-cols-4">
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Cliente</span>
-                  <select
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    value={clientId}
-                    onChange={(event) => setClientId(event.target.value)}
-                  >
-                    <option value="all">Todos los clientes</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div id="archive-filters-panel" className="mt-5 space-y-5 border-t border-slate-200 pt-5">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Cliente</span>
+                    <select
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      value={clientId}
+                      onChange={(event) => setClientId(event.target.value)}
+                    >
+                      <option value="all">Todos los clientes</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Proveedor</span>
-                  <select
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    value={provider}
-                    onChange={(event) => setProvider(event.target.value as 'all' | Provider)}
-                  >
-                    <option value="all">Todos los proveedores</option>
-                    {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
-                      <option key={providerValue} value={providerValue}>
-                        {PROVIDER_LABELS[providerValue]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Proveedor</span>
+                    <select
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      value={provider}
+                      onChange={(event) => setProvider(event.target.value as 'all' | Provider)}
+                    >
+                      <option value="all">Todos los proveedores</option>
+                      {(Object.keys(PROVIDER_LABELS) as Provider[]).map((providerValue) => (
+                        <option key={providerValue} value={providerValue}>
+                          {PROVIDER_LABELS[providerValue]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Estado del lote</span>
-                  <select
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    value={batchStatus}
-                    onChange={(event) => setBatchStatus(event.target.value as 'all' | Batch['status'])}
-                  >
-                    <option value="all">Todos</option>
-                    <option value="pending">Pendiente</option>
-                    <option value="processing">Procesando</option>
-                    <option value="completed">Completado</option>
-                    <option value="partial_failed">Parcial</option>
-                    <option value="failed">Fallido</option>
-                  </select>
-                </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Estado del lote</span>
+                    <select
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      value={batchStatus}
+                      onChange={(event) => setBatchStatus(event.target.value as 'all' | Batch['status'])}
+                    >
+                      <option value="all">Todos</option>
+                      <option value="pending">Pendiente</option>
+                      <option value="processing">Procesando</option>
+                      <option value="completed">Completado</option>
+                      <option value="partial_failed">Parcial</option>
+                      <option value="failed">Fallido</option>
+                    </select>
+                  </label>
 
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Estado del job</span>
-                  <select
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    value={jobStatus}
-                    onChange={(event) => setJobStatus(event.target.value as 'all' | JobStatus)}
-                  >
-                    <option value="all">Todos</option>
-                    <option value="pending">Pendiente</option>
-                    <option value="processing">Procesando</option>
-                    <option value="completed">Completado</option>
-                    <option value="failed">Fallido</option>
-                  </select>
-                </label>
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Estado del job</span>
+                    <select
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      value={jobStatus}
+                      onChange={(event) => setJobStatus(event.target.value as 'all' | JobStatus)}
+                    >
+                      <option value="all">Todos</option>
+                      <option value="pending">Pendiente</option>
+                      <option value="processing">Procesando</option>
+                      <option value="completed">Completado</option>
+                      <option value="failed">Fallido</option>
+                    </select>
+                  </label>
 
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Modelo</span>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Modelo</span>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        ref={searchInputRef}
+                        value={modelQuery}
+                        onChange={(event) => setModelQuery(event.target.value)}
+                        placeholder="Busca por modelo"
+                        className="w-full rounded-xl border border-slate-300 py-2 pl-9 pr-3 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                    </div>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Desde</span>
                     <input
-                      ref={searchInputRef}
-                      value={modelQuery}
-                      onChange={(event) => setModelQuery(event.target.value)}
-                      placeholder="Busca por modelo"
-                      className="w-full rounded-xl border border-slate-300 py-2 pl-9 pr-3 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      type="date"
+                      value={dateFrom}
+                      onChange={(event) => setDateFrom(event.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
                     />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-slate-700">Hasta</span>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(event) => setDateTo(event.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                  <span>{results.length} lote{results.length === 1 ? '' : 's'} cargado{results.length === 1 ? '' : 's'} hasta ahora.</span>
+                  <span>La búsqueda corre en Firebase y revisó {scannedBatches} lote{scannedBatches === 1 ? '' : 's'} acumulado{scannedBatches === 1 ? '' : 's'}.</span>
+                  {hasMore ? <span>Hay más historial disponible para estos filtros.</span> : <span>Llegaste al final del historial para esta búsqueda.</span>}
+                  <span>Atajos: `/` enfoca modelo, `A` selecciona visibles, `D` descarga, `R` reencola, `Esc` limpia.</span>
+                </div>
+                {hasMore ? (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => void loadMore()}
+                      disabled={resultsLoading || loadingMore}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {loadingMore ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
+                      {loadingMore ? 'Buscando más lotes...' : 'Cargar más resultados'}
+                    </button>
                   </div>
-                </label>
+                ) : null}
 
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Desde</span>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(event) => setDateFrom(event.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                {resultsLoading ? (
+                  <LoadingBlock message="Buscando en el archivo..." />
+                ) : resultsError ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    {resultsError}
+                  </div>
+                ) : results.length === 0 ? (
+                  <EmptyState
+                    icon={<Search className="w-6 h-6" />}
+                    title="No encontramos lotes para esa búsqueda"
+                    description="Ajusta cliente, estado, modelo, fecha o proveedor para ampliar resultados."
                   />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-slate-700">Hasta</span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(event) => setDateTo(event.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </label>
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-              <span>{results.length} lote{results.length === 1 ? '' : 's'} cargado{results.length === 1 ? '' : 's'} hasta ahora.</span>
-              <span>La búsqueda corre en Firebase y revisó {scannedBatches} lote{scannedBatches === 1 ? '' : 's'} acumulado{scannedBatches === 1 ? '' : 's'}.</span>
-              {hasMore ? <span>Hay más historial disponible para estos filtros.</span> : <span>Llegaste al final del historial para esta búsqueda.</span>}
-              <span>Atajos: `/` enfoca modelo, `A` selecciona visibles, `D` descarga, `R` reencola, `Esc` limpia.</span>
-            </div>
-            {hasMore ? (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => void loadMore()}
-                  disabled={resultsLoading || loadingMore}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loadingMore ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
-                  {loadingMore ? 'Buscando más lotes...' : 'Cargar más resultados'}
-                </button>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <p className="mb-3 text-sm font-medium text-slate-700">
+                      {results.length} lote{results.length === 1 ? '' : 's'} encontrado{results.length === 1 ? '' : 's'}
+                    </p>
+                    <div className="max-h-72 space-y-1 overflow-y-auto">
+                      {results.map((result) => (
+                        <button
+                          key={result.batch.id}
+                          type="button"
+                          onClick={() => setSelectedBatchId(result.batch.id!)}
+                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                            selectedBatchId === result.batch.id
+                              ? 'bg-indigo-50 ring-1 ring-indigo-200'
+                              : 'bg-white hover:bg-slate-100'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-800">
+                              {result.batch.clientNameSnapshot} / {result.batch.modelNameSnapshot}
+                            </p>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                              <span>{formatDateTime(result.batch.createdAt)}</span>
+                              <span>·</span>
+                              <span>{result.matchedJobCount} job{result.matchedJobCount === 1 ? '' : 's'}</span>
+                              {result.matchedGarments.length > 0 ? (
+                                <>
+                                  <span>·</span>
+                                  <span className="truncate max-w-[160px]">
+                                    {result.matchedGarments.slice(0, 2).join(', ')}
+                                    {result.matchedGarments.length > 2 ? ` +${result.matchedGarments.length - 2}` : ''}
+                                  </span>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                          <StatusBadge status={result.batch.status} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
 
-          {resultsLoading ? (
-            <LoadingBlock message="Buscando en el archivo..." />
-          ) : resultsError ? (
+          {batchLoading ? (
+            <LoadingBlock message="Cargando detalle del lote..." />
+          ) : batchError ? (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              {resultsError}
+              {batchError}
             </div>
-          ) : results.length === 0 ? (
-            <EmptyState
-              icon={<Search className="w-6 h-6" />}
-              title="No encontramos lotes para esa búsqueda"
-              description="Ajusta cliente, estado, modelo, fecha o proveedor para ampliar resultados."
-            />
-          ) : (
-            <>
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="mb-3 text-sm font-medium text-slate-700">
-                  {results.length} lote{results.length === 1 ? '' : 's'} encontrado{results.length === 1 ? '' : 's'}
-                </p>
-                <div className="max-h-72 space-y-1 overflow-y-auto">
-                  {results.map((result) => (
+          ) : batch && visibleJobs.length > 0 ? (
+            <div className="space-y-6">
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">
+                      {batch.clientNameSnapshot} <span className="mx-2 font-normal text-slate-400">/</span> {batch.modelNameSnapshot}
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Lote {batch.id?.slice(0, 8)} · {formatDateTime(batch.createdAt)} · {visibleJobs.length} job{visibleJobs.length === 1 ? '' : 's'} visibles
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
-                      key={result.batch.id}
                       type="button"
-                      onClick={() => setSelectedBatchId(result.batch.id!)}
-                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                        selectedBatchId === result.batch.id
-                          ? 'bg-indigo-50 ring-1 ring-indigo-200'
-                          : 'hover:bg-slate-50'
-                      }`}
+                      onClick={() => void handleDownloadAll()}
+                      disabled={busyAction === 'download' || downloadableVisibleJobsCount === 0}
+                      className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-800">
-                          {result.batch.clientNameSnapshot} / {result.batch.modelNameSnapshot}
-                        </p>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                          <span>{formatDateTime(result.batch.createdAt)}</span>
-                          <span>·</span>
-                          <span>{result.matchedJobCount} job{result.matchedJobCount === 1 ? '' : 's'}</span>
-                          {result.matchedGarments.length > 0 ? (
-                            <>
-                              <span>·</span>
-                              <span className="truncate max-w-[160px]">
-                                {result.matchedGarments.slice(0, 2).join(', ')}
-                                {result.matchedGarments.length > 2 ? ` +${result.matchedGarments.length - 2}` : ''}
-                              </span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                      <StatusBadge status={result.batch.status} />
+                      <Download className="h-4 w-4" />
+                      {busyAction === 'download' ? 'Preparando descarga...' : 'Descargar visibles'}
                     </button>
-                  ))}
+                    {selectedJobs.length > 0 ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        {selectedJobs.length} job{selectedJobs.length === 1 ? '' : 's'} seleccionado{selectedJobs.length === 1 ? '' : 's'}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
-              {batchLoading ? (
-                <LoadingBlock message="Cargando detalle del lote..." />
-              ) : batchError ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                  {batchError}
-                </div>
-              ) : batch && visibleJobs.length > 0 ? (
-                <div className="space-y-6">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div>
-                        <h2 className="text-2xl font-bold text-slate-900">
-                          {batch.clientNameSnapshot} <span className="mx-2 font-normal text-slate-400">/</span> {batch.modelNameSnapshot}
-                        </h2>
-                        <p className="mt-2 text-sm text-slate-500">
-                          Lote {batch.id?.slice(0, 8)} · {formatDateTime(batch.createdAt)} · {visibleJobs.length} job{visibleJobs.length === 1 ? '' : 's'} visibles
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => void handleDownloadAll()}
-                          disabled={busyAction === 'download' || downloadableVisibleJobsCount === 0}
-                          className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Download className="h-4 w-4" />
-                          {busyAction === 'download' ? 'Preparando descarga...' : 'Descargar visibles'}
-                        </button>
-                        {selectedJobs.length > 0 ? (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                            {selectedJobs.length} job{selectedJobs.length === 1 ? '' : 's'} seleccionado{selectedJobs.length === 1 ? '' : 's'}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-
-                  <JobBatchCarousel
-                    batch={batch}
-                    jobs={visibleJobs}
-                    showFloatingGarment
-                    selectedJobIds={selectedJobIds}
-                    selectedOutputIdsByJobId={selectedOutputIdsByJobId}
-                    onToggleJob={toggleJob}
-                    onSelectJobs={selectJobs}
-                    onSelectOutput={selectOutput}
-                    bulkActions={bulkActions}
-                    keyboardShortcutLabel="Flechas cambian de prenda. A selecciona visibles. D descarga. R reencola."
-                  />
-                </div>
-              ) : selectedResult ? (
-                <EmptyState
-                  icon={<AlertCircle className="w-6 h-6" />}
-                  title="El lote no tiene trabajos para este filtro"
-                  description="Prueba con otro estado o proveedor para volver a ver resultados."
-                />
-              ) : null}
-            </>
-          )}
+              <JobBatchCarousel
+                batch={batch}
+                jobs={visibleJobs}
+                showFloatingGarment
+                selectedJobIds={selectedJobIds}
+                selectedOutputIdsByJobId={selectedOutputIdsByJobId}
+                onToggleJob={toggleJob}
+                onSelectJobs={selectJobs}
+                onSelectOutput={selectOutput}
+                bulkActions={bulkActions}
+                keyboardShortcutLabel="Flechas cambian de prenda. A selecciona visibles. D descarga. R reencola."
+              />
+            </div>
+          ) : selectedResult && !resultsLoading && !resultsError && results.length > 0 ? (
+            <EmptyState
+              icon={<AlertCircle className="w-6 h-6" />}
+              title="El lote no tiene trabajos para este filtro"
+              description="Prueba con otro estado o proveedor para volver a ver resultados."
+            />
+          ) : null}
         </div>
       )}
     </div>

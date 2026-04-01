@@ -1,8 +1,10 @@
 import { db, auth, storage } from '../../firebase';
 import { collection, collectionGroup, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes } from 'firebase/storage';
+import { ref, uploadBytes, deleteObject } from 'firebase/storage';
 import {
   Client,
+  DeleteClientSpreadsheetTemplateRequest,
+  DeleteClientSpreadsheetTemplateResponse,
   ImportClientSpreadsheetTemplateRequest,
   ImportClientSpreadsheetTemplateResponse,
   SpreadsheetTemplate,
@@ -136,13 +138,18 @@ export const importClientSpreadsheetTemplate = async (
     { timeout: 300000 },
   );
 
-  const result = await callable({
-    clientId,
-    storagePath,
-    originalFileName: file.name,
-  });
+  try {
+    const result = await callable({
+      clientId,
+      storagePath,
+      originalFileName: file.name,
+    });
 
-  return result.data;
+    return result.data;
+  } catch (error) {
+    await deleteObject(storageRef).catch(() => undefined);
+    throw error;
+  }
 };
 
 export const updateClientSpreadsheetTemplateCategory = async (
@@ -161,6 +168,25 @@ export const updateClientSpreadsheetTemplateCategory = async (
     clientId,
     templateId,
     categoryId,
+  });
+
+  return result.data;
+};
+
+export const deleteClientSpreadsheetTemplate = async (
+  clientId: string,
+  templateId: string,
+): Promise<DeleteClientSpreadsheetTemplateResponse> => {
+  if (!auth.currentUser) throw new Error('Usuario no autenticado');
+
+  const callable = httpsCallable<
+    DeleteClientSpreadsheetTemplateRequest,
+    DeleteClientSpreadsheetTemplateResponse
+  >(functions, 'deleteClientSpreadsheetTemplate');
+
+  const result = await callable({
+    clientId,
+    templateId,
   });
 
   return result.data;

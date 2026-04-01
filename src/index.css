@@ -108,6 +108,20 @@ body {
   transition: background-color 200ms ease, color 200ms ease;
 }
 
+button:not(:disabled),
+select:not(:disabled),
+summary,
+a[href],
+label[for],
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled) {
+  cursor: pointer;
+}
+
 * {
   transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity, transform;
   transition-duration: 200ms;

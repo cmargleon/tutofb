@@ -4,11 +4,13 @@ import {
   isPoseFraming,
   isPoseOrientationDetail,
 } from '../../../shared/src/utils/poseAiClassification';
+
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 
 export interface PoseClassificationResult {
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
+  faceVisible: boolean;
   confidence: number | null;
   reasoning: string | null;
 }
@@ -16,6 +18,7 @@ export interface PoseClassificationResult {
 interface GeminiPoseClassificationPayload {
   orientationDetail?: unknown;
   framing?: unknown;
+  faceVisible?: unknown;
   confidence?: unknown;
   reasoning?: unknown;
 }
@@ -39,9 +42,13 @@ const POSE_CLASSIFICATION_RESPONSE_SCHEMA = {
     },
     framing: {
       type: 'string',
-      enum: ['full_body', 'three_quarter_body', 'medium_body', 'unknown'],
+      enum: ['full_body', 'three_quarter_body', 'medium_body', 'lower_body', 'feet_closeup', 'unknown'],
       description:
-        'Classify the crop/framing of the pose image. full_body means the full body is visible, three_quarter_body means most of the body is visible, medium_body means torso/upper body dominant.',
+        'Classify the crop/framing of the pose image. full_body: whole body head to feet. three_quarter_body: head to roughly knee. medium_body: torso/upper body dominant. lower_body: hips to feet with no upper body or face visible. feet_closeup: close-up shot focused on feet and ankles only. unknown: unclear framing.',
+    },
+    faceVisible: {
+      type: 'boolean',
+      description: 'True if the face or head of the model is clearly visible in the image.',
     },
     confidence: {
       type: 'number',
@@ -52,7 +59,7 @@ const POSE_CLASSIFICATION_RESPONSE_SCHEMA = {
       description: 'Very short explanation in Spanish.',
     },
   },
-  required: ['orientationDetail', 'framing', 'confidence', 'reasoning'],
+  required: ['orientationDetail', 'framing', 'faceVisible', 'confidence', 'reasoning'],
 };
 
 const mimeTypeFromStoragePath = (storagePath: string): string => {
@@ -122,10 +129,13 @@ export const classifyPoseWithGemini = async ({
     '- back_three_quarter: cuerpo de espalda con giro parcial visible',
     '- left_profile / right_profile: perfil claro del cuerpo',
     '- ambiguous: si la orientacion no es clara',
-    '- full_body: cuerpo completo visible',
-    '- three_quarter_body: se ve casi todo el cuerpo, pero no completamente',
-    '- medium_body: domina torso/medio cuerpo',
+    '- full_body: cuerpo completo visible de cabeza a pies',
+    '- three_quarter_body: se ve casi todo el cuerpo, hasta aproximadamente la rodilla',
+    '- medium_body: domina torso/medio cuerpo, sin ver piernas',
+    '- lower_body: encuadre de cadera hacia abajo, sin torso ni cara visibles (ideal para pantalones, faldas, zapatos)',
+    '- feet_closeup: plano cerrado enfocado en pies y tobillos solamente',
     '- unknown: encuadre no claro',
+    'faceVisible: true si la cara/cabeza del modelo es claramente visible en la imagen.',
     `Nombre de archivo: ${pose.fileName}`,
     'Devuelve solo JSON con el schema solicitado.',
   ].join('\n');
@@ -174,6 +184,7 @@ export const classifyPoseWithGemini = async ({
       ? parsed.orientationDetail
       : 'ambiguous',
     framing: isPoseFraming(parsed.framing) ? parsed.framing : 'unknown',
+    faceVisible: parsed.faceVisible === true,
     confidence: clampConfidence(parsed.confidence),
     reasoning:
       typeof parsed.reasoning === 'string' && parsed.reasoning.trim().length > 0

@@ -1,9 +1,9 @@
 import React from 'react';
 import { AlertCircle, Check, RefreshCcw, Sparkles } from 'lucide-react';
-import { Model } from '../../../shared/src/types';
+import { GarmentBodyArea, Model } from '../../../shared/src/types';
 import { formatPoseAutoCategoryLabel } from '../../../shared/src/utils/poseAiClassification';
 import { countCompatibleGarmentsForPose } from '../../../shared/src/utils/garmentViewMatching';
-import { getGarmentAvailableViews } from '../../features/generate/garments';
+import { getGarmentAvailableViews, getGarmentBodyArea } from '../../features/generate/garments';
 import { UploadedGarmentDraft } from '../../features/generate/types';
 import { EmptyState, ImageThumb } from '../ui';
 import { GarmentOriginalPhotosGrid } from './GarmentOriginalPhotosGrid';
@@ -32,6 +32,21 @@ const formatGarmentViewLabel = (value: string): string => {
       return 'Perfil';
     default:
       return value;
+  }
+};
+
+const formatGarmentBodyAreaLabel = (area: GarmentBodyArea | null | undefined): string | null => {
+  switch (area) {
+    case 'upper_body':
+      return 'Parte superior';
+    case 'lower_body':
+      return 'Parte inferior';
+    case 'footwear':
+      return 'Calzado';
+    case 'full_body':
+      return 'Cuerpo completo';
+    default:
+      return null;
   }
 };
 
@@ -135,6 +150,8 @@ export const PoseSelectionStep: React.FC<Props> = ({
           {garments.map((garment) => {
             const availableViews = getGarmentAvailableViews(garment);
 
+            const bodyAreaLabel = formatGarmentBodyAreaLabel(getGarmentBodyArea(garment));
+
             return (
               <div key={garment.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-3 rounded-2xl bg-white p-3">
@@ -145,6 +162,11 @@ export const PoseSelectionStep: React.FC<Props> = ({
                   {garment.originalPhotos.length} foto{garment.originalPhotos.length === 1 ? '' : 's'} original
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {bodyAreaLabel ? (
+                    <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-medium text-violet-700">
+                      {bodyAreaLabel}
+                    </span>
+                  ) : null}
                   {availableViews.length > 0 ? (
                     availableViews.map((view) => (
                       <span
@@ -191,6 +213,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
               pose.aiClassification,
               garments.map((garment) => ({
                 availableViews: getGarmentAvailableViews(garment),
+                garmentBodyArea: getGarmentBodyArea(garment),
               })),
             );
 
@@ -223,6 +246,11 @@ export const PoseSelectionStep: React.FC<Props> = ({
                     <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                       {formatPoseAutoCategoryLabel(pose.aiClassification?.autoCategory)}
                     </span>
+                    {pose.aiClassification ? (
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                        {pose.aiClassification.faceVisible ? 'Con cara' : 'Sin cara'}
+                      </span>
+                    ) : null}
                     <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                       {compatibleGarmentCount} prenda{compatibleGarmentCount === 1 ? '' : 's'}
                     </span>

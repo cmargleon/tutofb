@@ -28,6 +28,7 @@ test('buildPoseAiClassification genera metadata lista para Firestore y UI', () =
   const classification = buildPoseAiClassification({
     orientationDetail: 'right_profile',
     framing: 'three_quarter_body',
+    faceVisible: true,
     confidence: 0.82,
     taggedAt: new Date().toISOString(),
     reasoning: 'Perfil claro del cuerpo hacia la derecha.',

@@ -154,6 +154,7 @@ export interface AnalyticsData {
 export type GeminiUsageFeature =
   | 'image_review'
   | 'garment_view_classification'
+  | 'garment_view_category_color_classification'
   | 'pose_classification'
   | 'product_draft_enrichment';
 export type GeminiUsageStatus = 'success' | 'error';

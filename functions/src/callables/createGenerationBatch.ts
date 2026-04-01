@@ -36,14 +36,11 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     const templateRef = validated.spreadsheetTemplateId
       ? clientRef.collection('spreadsheetTemplates').doc(validated.spreadsheetTemplateId)
       : null;
-    const categoryRef = templateRef && validated.spreadsheetCategoryId
-      ? templateRef.collection('categories').doc(validated.spreadsheetCategoryId)
-      : null;
-    const [clientSnapshot, modelSnapshot, templateSnapshot, categorySnapshot, userSnapshot] = await Promise.all([
+    const [clientSnapshot, modelSnapshot, templateSnapshot, categoriesSnapshot, userSnapshot] = await Promise.all([
       clientRef.get(),
       modelRef.get(),
       templateRef?.get() ?? Promise.resolve(null),
-      categoryRef?.get() ?? Promise.resolve(null),
+      templateRef?.collection('categories').get() ?? Promise.resolve(null),
       userRef.get(),
     ]);
 
@@ -57,8 +54,8 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     if (validated.outputMode === 'spreadsheet' && (!templateSnapshot || !templateSnapshot.exists)) {
       throw new HttpsError('not-found', 'No se encontró la plantilla seleccionada.');
     }
-    if (validated.outputMode === 'spreadsheet' && (!categorySnapshot || !categorySnapshot.exists)) {
-      throw new HttpsError('not-found', 'No se encontró la categoría del spreadsheet seleccionada.');
+    if (validated.outputMode === 'spreadsheet' && (!categoriesSnapshot || categoriesSnapshot.empty)) {
+      throw new HttpsError('not-found', 'La plantilla seleccionada no tiene categorías disponibles.');
     }
 
     const client = { id: clientSnapshot.id, ...clientSnapshot.data() } as Client;
@@ -67,10 +64,13 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
       templateSnapshot && templateSnapshot.exists
         ? ({ id: templateSnapshot.id, ...templateSnapshot.data() } as SpreadsheetTemplate)
         : null;
-    const category =
-      categorySnapshot && categorySnapshot.exists
-        ? ({ id: categorySnapshot.id, ...categorySnapshot.data() } as SpreadsheetTemplateCategory)
-        : null;
+    const categoriesById = new Map<string, SpreadsheetTemplateCategory>(
+      categoriesSnapshot?.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() } as SpreadsheetTemplateCategory]) || [],
+    );
+    const uniqueDraftCategoryIds = [...new Set(validated.productDrafts.map((draft) => draft.categoryId).filter(Boolean))];
+    const batchCategory = uniqueDraftCategoryIds.length === 1
+      ? categoriesById.get(uniqueDraftCategoryIds[0]) || null
+      : null;
     const createdByDisplayName =
       userSnapshot.exists && typeof userSnapshot.data()?.displayName === 'string'
         ? userSnapshot.data()!.displayName
@@ -124,8 +124,10 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
       outputMode: validated.outputMode,
       spreadsheetTemplateId: template?.id || null,
       spreadsheetTemplateNameSnapshot: template?.name || null,
-      spreadsheetCategoryId: category?.id || null,
-      spreadsheetCategoryNameSnapshot: category?.label || null,
+      spreadsheetCategoryId: batchCategory?.id || null,
+      spreadsheetCategoryNameSnapshot:
+        batchCategory?.label
+        || (uniqueDraftCategoryIds.length > 1 ? 'Múltiples categorías' : null),
       provider: validated.provider,
       aspectRatio: validated.aspectRatio,
       imageConfig: validated.imageConfig,
@@ -149,13 +151,17 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
 
     const writeBatch = db.batch();
     writeBatch.set(batchRef, batchData);
-    if (validated.outputMode === 'spreadsheet' && template && category) {
+    if (validated.outputMode === 'spreadsheet' && template) {
       const productDraftsByGarmentId = new Map(validated.productDrafts.map((draft) => [draft.garmentId, draft]));
 
       validated.garments.forEach((garment) => {
         const draftInput = productDraftsByGarmentId.get(garment.id);
         if (!draftInput) {
           throw new HttpsError('invalid-argument', `Falta el product draft para ${garment.name}.`);
+        }
+        const category = categoriesById.get(draftInput.categoryId);
+        if (!category) {
+          throw new HttpsError('invalid-argument', `La categoría ${draftInput.categoryId} ya no existe para ${garment.name}.`);
         }
 
         const productDraftRef = batchRef.collection('productDrafts').doc(garment.id);
@@ -200,6 +206,10 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         poseImageId: pose.id,
         poseImagePath: pose.storagePath,
         poseFileName: pose.fileName,
+        poseOrientationGroup: pose.aiClassification?.orientationGroup || null,
+        poseOrientationDetail: pose.aiClassification?.orientationDetail || null,
+        poseFraming: pose.aiClassification?.framing || null,
+        poseBodyFocus: pose.aiClassification?.bodyFocus || null,
         garmentId: garment.id,
         garmentName: garment.name,
         garmentFilePath: selectedGarmentPhoto.storagePath,

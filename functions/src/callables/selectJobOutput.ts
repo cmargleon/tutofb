@@ -120,6 +120,9 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
         label: job.poseFileName || `Pose ${job.poseImageId}`,
         storagePath: output.resultImagePath,
         downloadUrl,
+        poseOrientationGroup: job.poseOrientationGroup || null,
+        poseOrientationDetail: job.poseOrientationDetail || null,
+        poseFraming: job.poseFraming || null,
         selectedAt: now,
       },
     ];

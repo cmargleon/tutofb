@@ -4,7 +4,7 @@ import { ProductDraftEditor } from '../product-drafts/ProductDraftEditor';
 
 interface ProductDraftsStepProps {
   outputMode: BatchOutputMode;
-  category: SpreadsheetTemplateCategory | null;
+  categories: SpreadsheetTemplateCategory[];
   productDrafts: ProductDraftInput[];
   preparationStatus: 'idle' | 'preparing' | 'ready' | 'failed';
   preparationError: string | null;
@@ -13,7 +13,7 @@ interface ProductDraftsStepProps {
 
 export const ProductDraftsStep: React.FC<ProductDraftsStepProps> = ({
   outputMode,
-  category,
+  categories,
   productDrafts,
   preparationStatus,
   preparationError,
@@ -33,7 +33,7 @@ export const ProductDraftsStep: React.FC<ProductDraftsStepProps> = ({
 
   return (
     <ProductDraftEditor
-      category={category}
+      categories={categories}
       drafts={productDrafts}
       loading={preparationStatus === 'preparing'}
       error={preparationError}

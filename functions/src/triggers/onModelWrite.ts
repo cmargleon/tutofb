@@ -59,6 +59,7 @@ export const onModelWrite = onDocumentWritten(
         const aiClassification = buildPoseAiClassification({
           orientationDetail: result.orientationDetail,
           framing: result.framing,
+          faceVisible: result.faceVisible,
           confidence: result.confidence,
           taggedAt,
           reasoning: result.reasoning,

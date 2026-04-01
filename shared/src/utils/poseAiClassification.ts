@@ -1,13 +1,14 @@
 import {
   GarmentView,
   PoseAiClassification,
+  PoseBodyFocus,
   PoseFraming,
   PoseOrientationDetail,
   PoseOrientationGroup,
   TimestampLike,
 } from '../types';
 
-export const POSE_AI_CLASSIFICATION_VERSION = 1;
+export const POSE_AI_CLASSIFICATION_VERSION = 2;
 
 export const POSE_ORIENTATION_DETAILS = [
   'front',
@@ -23,8 +24,36 @@ export const POSE_FRAMINGS = [
   'full_body',
   'three_quarter_body',
   'medium_body',
+  'lower_body',
+  'feet_closeup',
   'unknown',
 ] as const satisfies readonly PoseFraming[];
+
+export const POSE_BODY_FOCUSES = [
+  'full_body',
+  'upper_body',
+  'lower_body',
+  'feet',
+] as const satisfies readonly PoseBodyFocus[];
+
+export const isPoseBodyFocus = (value: unknown): value is PoseBodyFocus =>
+  typeof value === 'string' && (POSE_BODY_FOCUSES as readonly string[]).includes(value);
+
+export const derivePoseBodyFocus = (framing: PoseFraming): PoseBodyFocus => {
+  switch (framing) {
+    case 'lower_body':
+      return 'lower_body';
+    case 'feet_closeup':
+      return 'feet';
+    case 'full_body':
+    case 'three_quarter_body':
+      return 'full_body';
+    case 'medium_body':
+    case 'unknown':
+    default:
+      return 'upper_body';
+  }
+};
 
 export const isPoseOrientationDetail = (value: unknown): value is PoseOrientationDetail =>
   typeof value === 'string' && (POSE_ORIENTATION_DETAILS as readonly string[]).includes(value);
@@ -86,6 +115,8 @@ const AUTO_CATEGORY_FRAMING_LABELS: Record<PoseFraming, string> = {
   full_body: 'cuerpo_completo',
   three_quarter_body: 'tres_cuartos',
   medium_body: 'medio_cuerpo',
+  lower_body: 'tren_inferior',
+  feet_closeup: 'primer_plano_pies',
   unknown: 'encuadre_desconocido',
 };
 
@@ -109,12 +140,14 @@ export const formatPoseAutoCategoryLabel = (autoCategory: string | null | undefi
 export const buildPoseAiClassification = ({
   orientationDetail,
   framing,
+  faceVisible,
   confidence,
   taggedAt,
   reasoning = null,
 }: {
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
+  faceVisible: boolean;
   confidence: number | null;
   taggedAt: TimestampLike;
   reasoning?: string | null;
@@ -122,6 +155,8 @@ export const buildPoseAiClassification = ({
   orientationGroup: derivePoseOrientationGroup(orientationDetail),
   orientationDetail,
   framing,
+  bodyFocus: derivePoseBodyFocus(framing),
+  faceVisible,
   autoCategory: buildPoseAutoCategory(orientationDetail, framing),
   usableForGarmentViews: derivePoseUsableForGarmentViews(orientationDetail),
   confidence,

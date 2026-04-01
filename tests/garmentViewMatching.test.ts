@@ -19,12 +19,14 @@ const buildAiClassification = (usableForGarmentViews: GarmentView[]): PoseAiClas
   orientationGroup: 'front',
   orientationDetail: 'front',
   framing: 'full_body',
+  bodyFocus: 'full_body',
+  faceVisible: true,
   autoCategory: 'frente_cuerpo_completo',
   usableForGarmentViews,
   confidence: 0.9,
   taggedBy: 'gemini',
   taggedAt: new Date(),
-  version: 1,
+  version: 2,
 });
 
 test('getSuggestedPoseIdsForGarments arma una union util para el lote y no solo la interseccion', () => {

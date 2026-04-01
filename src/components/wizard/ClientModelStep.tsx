@@ -104,20 +104,23 @@ export const ClientModelStep: React.FC<Props> = ({
               ))}
             </select>
 
-            <label className="mb-2 mt-4 block text-sm font-medium text-slate-700">Categoría del spreadsheet</label>
+            <label className="mb-2 mt-4 block text-sm font-medium text-slate-700">Categoría fallback del spreadsheet</label>
             <select
               value={selectedSpreadsheetCategoryId || ''}
               onChange={(event) => onSpreadsheetCategoryChange(event.target.value || null)}
               disabled={!selectedSpreadsheetTemplateId}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <option value="">Selecciona una categoría</option>
+              <option value="">Detectar automáticamente por prenda</option>
               {spreadsheetCategories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.label}
                 </option>
               ))}
             </select>
+            <p className="mt-2 text-[11px] text-slate-500">
+              Gemini intentará detectar la categoría correcta de cada prenda. Este valor solo se usa como fallback.
+            </p>
           </>
         ) : (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">

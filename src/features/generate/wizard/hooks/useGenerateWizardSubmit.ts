@@ -82,7 +82,7 @@ export const useGenerateWizardSubmit = ({
       !state.selectedModelId ||
       state.selectedPoseIds.length === 0 ||
       state.garments.length === 0 ||
-      (requiresSpreadsheet && (!state.selectedSpreadsheetTemplateId || !state.selectedSpreadsheetCategoryId)) ||
+      (requiresSpreadsheet && !state.selectedSpreadsheetTemplateId) ||
       (requiresSpreadsheet && state.productDrafts.length === 0)
     ) {
       setFlowError(

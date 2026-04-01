@@ -120,6 +120,21 @@ export const normalizeGarment = (value: unknown): UploadedGarmentInput => {
         ? Math.max(1, Math.trunc(garment.originalPhotoCount))
         : photos.length,
     photos,
+    matchedCategoryId: typeof garment.matchedCategoryId === 'string' ? garment.matchedCategoryId.trim() || null : null,
+    matchedCategoryLabel: typeof garment.matchedCategoryLabel === 'string' ? garment.matchedCategoryLabel.trim() || null : null,
+    matchedCategoryConfidence:
+      typeof garment.matchedCategoryConfidence === 'number' && Number.isFinite(garment.matchedCategoryConfidence)
+        ? garment.matchedCategoryConfidence
+        : null,
+    matchedCategoryReasoning:
+      typeof garment.matchedCategoryReasoning === 'string' ? garment.matchedCategoryReasoning.trim() || null : null,
+    matchedColor: typeof garment.matchedColor === 'string' ? garment.matchedColor.trim() || null : null,
+    matchedColorConfidence:
+      typeof garment.matchedColorConfidence === 'number' && Number.isFinite(garment.matchedColorConfidence)
+        ? garment.matchedColorConfidence
+        : null,
+    matchedColorReasoning:
+      typeof garment.matchedColorReasoning === 'string' ? garment.matchedColorReasoning.trim() || null : null,
   };
 };
 
@@ -193,6 +208,9 @@ const normalizeProductDraft = (value: unknown): ProductDraftInput => {
   return {
     garmentId: requireNonEmptyString(draft.garmentId, `El garmentId del draft de ${garmentName}`),
     garmentName,
+    categoryId: requireNonEmptyString(draft.categoryId, `La categoría del draft de ${garmentName}`),
+    categoryName: requireNonEmptyString(draft.categoryName, `El nombre de la categoría del draft de ${garmentName}`),
+    matchedColor: typeof draft.matchedColor === 'string' ? draft.matchedColor.trim() || null : null,
     rows,
     inferredValues:
       draft.inferredValues && typeof draft.inferredValues === 'object' && !Array.isArray(draft.inferredValues)
@@ -233,8 +251,8 @@ export const validateCreateGenerationBatchInput = (
       ? requireNonEmptyString(data?.spreadsheetTemplateId, 'La plantilla')
       : null;
   const spreadsheetCategoryId =
-    outputMode === 'spreadsheet'
-      ? requireNonEmptyString(data?.spreadsheetCategoryId, 'La categoría del spreadsheet')
+    typeof data?.spreadsheetCategoryId === 'string' && data.spreadsheetCategoryId.trim()
+      ? data.spreadsheetCategoryId.trim()
       : null;
   const promptBase = typeof data?.promptBase === 'string' ? data.promptBase.trim() : '';
   const provider = data?.provider;

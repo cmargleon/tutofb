@@ -30,6 +30,7 @@ const formatTokenCount = (value: unknown) => {
 const GEMINI_FEATURE_LABELS: Record<GeminiUsageFeature, string> = {
   image_review: 'Auto review',
   garment_view_classification: 'Clasif. prendas',
+  garment_view_category_color_classification: 'Clasif. prendas + categoría/color',
   pose_classification: 'Tagging de poses',
   product_draft_enrichment: 'Drafts de producto',
 };

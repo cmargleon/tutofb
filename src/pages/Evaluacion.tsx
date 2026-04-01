@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LoadingBlock, EmptyState, StatusBadge, Button } from '../components/ui';
 import { useEvaluationBatch } from '../features/evaluation/useEvaluationBatch';
-import { PoseSingleView } from '../components/evaluation/PoseSingleView';
+import { JobBatchCarousel } from '../components/evaluation/JobBatchCarousel';
 import { ProductDraftEditor } from '../components/product-drafts/ProductDraftEditor';
 import { downloadBatchImages, downloadMultipleJobImages } from '../features/evaluation/downloadBatchImages';
 import {
@@ -70,9 +70,9 @@ export const Evaluacion: React.FC = () => {
   const { batches: recentBatches, loading: recentBatchesLoading } = useRecentEvaluationBatches(user?.uid ?? null);
   const { productDrafts, loading: productDraftsLoading, error: productDraftsError } = useBatchProductDrafts(resolvedBatchId || batchId);
   const {
-    category: spreadsheetCategory,
-    loading: spreadsheetCategoryLoading,
-    error: spreadsheetCategoryError,
+    categories: spreadsheetCategories,
+    loading: spreadsheetCategoriesLoading,
+    error: spreadsheetCategoriesError,
   } = useBatchSpreadsheetCategory(batch);
 
   useEffect(() => {
@@ -115,6 +115,18 @@ export const Evaluacion: React.FC = () => {
   useEffect(() => {
     setSelectedJobIds((current) => current.filter((jobId) => filteredJobs.some((job) => job.id === jobId)));
   }, [filteredJobs]);
+
+  function toggleJob(jobId: string) {
+    setSelectedJobIds((current) =>
+      current.includes(jobId) ? current.filter((value) => value !== jobId) : [...current, jobId],
+    );
+  }
+
+  function selectJobs(jobIds: string[], selected: boolean) {
+    setSelectedJobIds((current) =>
+      selected ? Array.from(new Set([...current, ...jobIds])) : current.filter((jobId) => !jobIds.includes(jobId)),
+    );
+  }
 
   useEffect(() => {
     setEditableProductDrafts((current) => {
@@ -552,7 +564,7 @@ export const Evaluacion: React.FC = () => {
                 variant="primary"
                 icon={Download}
                 loading={isExportingSpreadsheet}
-                disabled={productDraftsLoading || spreadsheetCategoryLoading || editableProductDrafts.length === 0}
+                disabled={productDraftsLoading || spreadsheetCategoriesLoading || editableProductDrafts.length === 0}
                 onClick={() => void handleExportSpreadsheet()}
               >
                 Exportar spreadsheet
@@ -577,10 +589,10 @@ export const Evaluacion: React.FC = () => {
 
           <div className="mt-4">
             <ProductDraftEditor
-              category={spreadsheetCategory}
+              categories={spreadsheetCategories}
               drafts={editableProductDrafts}
-              loading={productDraftsLoading || spreadsheetCategoryLoading}
-              error={productDraftsError || spreadsheetCategoryError}
+              loading={productDraftsLoading || spreadsheetCategoriesLoading}
+              error={productDraftsError || spreadsheetCategoriesError}
               emptyCopy="Este lote todavía no tiene product drafts listos para editar."
               saveLabel="Guardar draft"
               savingDraftId={savingDraftId}
@@ -602,10 +614,11 @@ export const Evaluacion: React.FC = () => {
           icon={<AlertCircle className="w-6 h-6" />}
         />
       ) : (
-        <PoseSingleView
+        <JobBatchCarousel
           batch={batch}
           jobs={filteredJobs}
           initialFocusJobId={initialFocusJobId}
+          showFloatingGarment
           headerContent={(
             <div>
               {/* Always-visible row: lote tag + toggle */}
@@ -706,8 +719,12 @@ export const Evaluacion: React.FC = () => {
               ) : null}
             </div>
           )}
+          selectedJobIds={selectedJobIds}
           selectedOutputIdsByJobId={selectedOutputIdsByJobId}
+          onToggleJob={toggleJob}
+          onSelectJobs={selectJobs}
           onSelectOutput={selectOutput}
+          keyboardShortcutLabel="Flechas cambian de prenda. A selecciona visibles. D descarga. R reencola."
         />
       )}
 

@@ -5,44 +5,93 @@ import {
   ClassifyGarmentViewsRequest,
   ClassifyGarmentViewsResponse,
   ClassifiedGarmentPhoto,
+  GarmentBodyArea,
   GarmentPhotoAssetInput,
+  SpreadsheetTemplateCategory,
 } from '../../../shared/src/types';
-import { getSortedUniqueGarmentViews } from '../../../shared/src/utils/garmentViewMatching';
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 import { assertCallableRoles } from '../auth/roles';
 import {
   GEMINI_API_KEY,
   getGeminiGarmentViewClassificationModel,
 } from '../config/runtime';
+import { getAppFirestore } from '../firebase/appFirestore';
 
-interface GeminiGarmentViewClassificationPayload {
+interface GeminiGarmentPhotoClassificationPayload {
+  photoId?: unknown;
   view?: unknown;
   confidence?: unknown;
   reasoning?: unknown;
 }
 
-const GARMENT_VIEW_CLASSIFICATION_RESPONSE_SCHEMA = {
+interface GeminiGarmentClassificationPayload {
+  photos?: unknown;
+  bodyArea?: unknown;
+  matchedCategory?: unknown;
+  matchedCategoryConfidence?: unknown;
+  matchedCategoryReasoning?: unknown;
+  matchedColor?: unknown;
+  matchedColorConfidence?: unknown;
+  matchedColorReasoning?: unknown;
+}
+
+const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
-    view: {
-      type: 'string',
-      enum: ['front', 'back', 'side'],
-      description:
-        'Classify the garment image orientation. Use front for frontal view, back for rear view, and side for profile/lateral view.',
+    photos: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          photoId: { type: 'string' },
+          view: {
+            type: 'string',
+            enum: ['front', 'back', 'side'],
+          },
+          confidence: { type: 'number' },
+          reasoning: { type: 'string' },
+        },
+        required: ['photoId', 'view', 'confidence', 'reasoning'],
+      },
     },
-    confidence: {
-      type: 'number',
-      description: 'Confidence between 0 and 1.',
+    bodyArea: {
+      type: ['string', 'null'],
+      enum: ['upper_body', 'lower_body', 'footwear', 'full_body', null],
     },
-    reasoning: {
-      type: 'string',
-      description: 'Very short explanation in Spanish.',
+    matchedCategory: {
+      type: ['string', 'null'],
+    },
+    matchedCategoryConfidence: {
+      type: ['number', 'null'],
+    },
+    matchedCategoryReasoning: {
+      type: ['string', 'null'],
+    },
+    matchedColor: {
+      type: ['string', 'null'],
+    },
+    matchedColorConfidence: {
+      type: ['number', 'null'],
+    },
+    matchedColorReasoning: {
+      type: ['string', 'null'],
     },
   },
-  required: ['view', 'confidence', 'reasoning'],
+  required: [
+    'photos',
+    'bodyArea',
+    'matchedCategory',
+    'matchedCategoryConfidence',
+    'matchedCategoryReasoning',
+    'matchedColor',
+    'matchedColorConfidence',
+    'matchedColorReasoning',
+  ],
 };
 
 const bucket = admin.storage().bucket();
+const db = getAppFirestore();
+const VALID_GARMENT_BODY_AREAS: GarmentBodyArea[] = ['upper_body', 'lower_body', 'footwear', 'full_body'];
 
 const requireNonEmptyString = (value: unknown, label: string): string => {
   const normalized = typeof value === 'string' ? value.trim() : '';
@@ -120,6 +169,45 @@ const clampConfidence = (value: unknown): number | null => {
   return Math.max(0, Math.min(1, value));
 };
 
+const normalizeText = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim() : null;
+
+const normalizeComparable = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const pickBestOption = (options: string[], candidates: Array<string | null | undefined>): string | null => {
+  const normalizedOptions = options.map((option) => ({ raw: option, normalized: normalizeComparable(option) }));
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const normalizedCandidate = normalizeComparable(candidate);
+    const exact = normalizedOptions.find((option) => option.normalized === normalizedCandidate);
+    if (exact) {
+      return exact.raw;
+    }
+
+    const partial = normalizedOptions.find(
+      (option) => option.normalized.includes(normalizedCandidate) || normalizedCandidate.includes(option.normalized),
+    );
+    if (partial) {
+      return partial.raw;
+    }
+  }
+
+  return null;
+};
+
+const isGarmentBodyArea = (value: unknown): value is GarmentBodyArea =>
+  typeof value === 'string' && (VALID_GARMENT_BODY_AREAS as string[]).includes(value);
+
 const extractResponseText = (payload: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }): string => {
   const text = payload.candidates?.[0]?.content?.parts
     ?.map((part) => (typeof part.text === 'string' ? part.text : ''))
@@ -141,31 +229,114 @@ const downloadStorageImage = async (storagePath: string): Promise<{ bytes: Buffe
   };
 };
 
-const classifyGarmentPhotoWithGemini = async ({
+const findColorOptions = (category: SpreadsheetTemplateCategory | null): string[] =>
+  category?.attributes.find((attribute) => /color/.test(normalizeComparable(attribute.name)))?.values || [];
+
+const resolveCategoryMatch = (
+  categories: SpreadsheetTemplateCategory[],
+  candidate: string | null,
+  fallbackCategoryId: string | null,
+): SpreadsheetTemplateCategory | null => {
+  if (categories.length === 0) {
+    return null;
+  }
+
+  if (candidate) {
+    const normalizedCandidate = normalizeComparable(candidate);
+    const exact = categories.find((category) => normalizeComparable(category.label) === normalizedCandidate);
+    if (exact) {
+      return exact;
+    }
+
+    const partial = categories.find((category) => {
+      const normalizedLabel = normalizeComparable(category.label);
+      return normalizedLabel.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedLabel);
+    });
+    if (partial) {
+      return partial;
+    }
+  }
+
+  if (fallbackCategoryId) {
+    return categories.find((category) => category.id === fallbackCategoryId) || null;
+  }
+
+  return categories.length === 1 ? categories[0] : null;
+};
+
+const loadTemplateCategories = async (
+  clientId: string | null,
+  spreadsheetTemplateId: string | null,
+): Promise<SpreadsheetTemplateCategory[]> => {
+  if (!clientId || !spreadsheetTemplateId) {
+    return [];
+  }
+
+  const snapshot = await db
+    .collection('clients')
+    .doc(clientId)
+    .collection('spreadsheetTemplates')
+    .doc(spreadsheetTemplateId)
+    .collection('categories')
+    .get();
+
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as SpreadsheetTemplateCategory));
+};
+
+const classifyGarmentWithGemini = async ({
   apiKey,
   model,
-  garmentId,
-  garmentName,
-  photo,
+  garment,
   userUid,
+  categories,
+  fallbackCategoryId,
 }: {
   apiKey: string;
   model: string;
-  garmentId: string;
-  garmentName: string;
-  photo: GarmentPhotoAssetInput;
+  garment: ClassifyGarmentViewsGarmentInput;
   userUid?: string | null;
-}): Promise<Pick<ClassifiedGarmentPhoto, 'view' | 'confidence' | 'reasoning' | 'classifiedBy'>> => {
-  const image = await downloadStorageImage(photo.storagePath);
+  categories: SpreadsheetTemplateCategory[];
+  fallbackCategoryId: string | null;
+}): Promise<ClassifyGarmentViewsResponse['garments'][number]> => {
+  const photos = garment.photos.slice(0, 4);
+  const imageParts = await Promise.all(
+    photos.map(async (photo) => {
+      const image = await downloadStorageImage(photo.storagePath);
+      return {
+        photo,
+        part: {
+          inline_data: {
+            mime_type: image.mimeType,
+            data: image.bytes.toString('base64'),
+          },
+        },
+      };
+    }),
+  );
+
+  const categoryLines = categories.length === 0
+    ? ['No hay categorías de spreadsheet cargadas para esta clasificación.']
+    : categories.map((category, index) => {
+        const colorPreview = findColorOptions(category).slice(0, 12).join(' / ') || 'sin catálogo de color';
+        const requiredPreview = category.columns
+          .filter((column) => column.required)
+          .slice(0, 8)
+          .map((column) => column.label)
+          .join(', ');
+
+        return `${index + 1}. ${category.label} | colores: ${colorPreview} | requeridos: ${requiredPreview || 'sin requeridos destacados'}`;
+      });
 
   const prompt = [
-    'Clasifica una foto individual de una prenda para un catalogo.',
-    'Devuelve solo una vista principal entre front, back o side.',
-    'front = se ve el frente principal de la prenda.',
-    'back = se ve la espalda o parte trasera principal.',
-    'side = vista lateral o perfil; usa side si no es claramente front ni back.',
-    'No inventes detalles fuera de la imagen.',
-    `Nombre de archivo: ${photo.fileName}`,
+    'Clasifica una prenda para un workflow de catálogo y spreadsheet.',
+    'Devuelve la vista principal de cada foto (front/back/side), el área del cuerpo (upper_body/lower_body/footwear/full_body), la categoría final más probable del spreadsheet y el color principal visible de la prenda.',
+    'Usa front si la foto muestra el frente de la prenda o si es la única foto y no hay evidencia de espalda.',
+    'El color debe salir en español y, si hay categorías disponibles, conviene aproximarlo a un valor real del catálogo de color de la categoría elegida.',
+    'No inventes categoría ni color si la imagen no da base suficiente; en ese caso devuelve null.',
+    `Prenda interna: ${garment.garmentName}`,
+    `Fotos recibidas: ${photos.map((photo, index) => `${index + 1}:${photo.id}:${photo.fileName}`).join(' | ')}`,
+    `Categorías disponibles: ${categoryLines.join(' || ')}`,
+    fallbackCategoryId ? `Categoría fallback sugerida por el usuario: ${fallbackCategoryId}` : 'Sin categoría fallback del usuario.',
     'Devuelve solo JSON con el schema solicitado.',
   ].join('\n');
 
@@ -175,9 +346,9 @@ const classifyGarmentPhotoWithGemini = async ({
     apiKey,
     model,
     context: {
-      feature: 'garment_view_classification',
-      garmentId,
-      garmentName,
+      feature: 'garment_view_category_color_classification',
+      garmentId: garment.garmentId,
+      garmentName: garment.garmentName,
       userUid,
     },
     body: {
@@ -186,29 +357,58 @@ const classifyGarmentPhotoWithGemini = async ({
           role: 'user',
           parts: [
             { text: prompt },
-            {
-              inline_data: {
-                mime_type: image.mimeType,
-                data: image.bytes.toString('base64'),
-              },
-            },
+            ...imageParts.map((entry) => entry.part),
           ],
         },
       ],
       generationConfig: {
         responseMimeType: 'application/json',
-        responseJsonSchema: GARMENT_VIEW_CLASSIFICATION_RESPONSE_SCHEMA,
+        responseJsonSchema: GARMENT_CLASSIFICATION_RESPONSE_SCHEMA,
       },
     },
   });
-  const parsed = JSON.parse(extractResponseText(payload)) as GeminiGarmentViewClassificationPayload;
-  const view = parsed.view === 'back' || parsed.view === 'side' ? parsed.view : 'front';
+
+  const parsed = JSON.parse(extractResponseText(payload)) as GeminiGarmentClassificationPayload;
+  const parsedPhotos = Array.isArray(parsed.photos) ? parsed.photos as GeminiGarmentPhotoClassificationPayload[] : [];
+  const parsedPhotosById = new Map(
+    parsedPhotos
+      .map((photo) => {
+        const photoId = normalizeText(photo.photoId);
+        return photoId ? [photoId, photo] : null;
+      })
+      .filter((entry): entry is [string, GeminiGarmentPhotoClassificationPayload] => Boolean(entry)),
+  );
+
+  const matchedCategory = resolveCategoryMatch(categories, normalizeText(parsed.matchedCategory), fallbackCategoryId);
+  const matchedColor = matchedCategory
+    ? pickBestOption(findColorOptions(matchedCategory), [normalizeText(parsed.matchedColor)])
+    : normalizeText(parsed.matchedColor);
+
+  const classifiedPhotos: ClassifiedGarmentPhoto[] = photos.map((photo) => {
+    const parsedPhoto = parsedPhotosById.get(photo.id);
+    return {
+      ...photo,
+      view: parsedPhoto?.view === 'back' || parsedPhoto?.view === 'side' ? parsedPhoto.view : 'front',
+      confidence: clampConfidence(parsedPhoto?.confidence),
+      reasoning: normalizeText(parsedPhoto?.reasoning),
+      classifiedBy: 'gemini',
+    };
+  });
 
   return {
-    view,
-    confidence: clampConfidence(parsed.confidence),
-    reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning.trim() || null : null,
-    classifiedBy: 'gemini',
+    garmentId: garment.garmentId,
+    garmentName: garment.garmentName,
+    photos: classifiedPhotos,
+    availableViews: [...new Set(classifiedPhotos.map((photo) => photo.view))] as ClassifyGarmentViewsResponse['garments'][number]['availableViews'],
+    garmentBodyArea: isGarmentBodyArea(parsed.bodyArea) ? parsed.bodyArea : null,
+    usedGemini: true,
+    matchedCategoryId: matchedCategory?.id || null,
+    matchedCategoryLabel: matchedCategory?.label || null,
+    matchedCategoryConfidence: clampConfidence(parsed.matchedCategoryConfidence),
+    matchedCategoryReasoning: normalizeText(parsed.matchedCategoryReasoning),
+    matchedColor,
+    matchedColorConfidence: clampConfidence(parsed.matchedColorConfidence),
+    matchedColorReasoning: normalizeText(parsed.matchedColorReasoning),
   };
 };
 
@@ -231,54 +431,52 @@ export const classifyGarmentViewsWithGemini = onCall<ClassifyGarmentViewsRequest
       ),
     );
 
+    const clientId = typeof request.data?.clientId === 'string' ? request.data.clientId.trim() : '';
+    const spreadsheetTemplateId = typeof request.data?.spreadsheetTemplateId === 'string'
+      ? request.data.spreadsheetTemplateId.trim()
+      : '';
+    const fallbackCategoryId = typeof request.data?.fallbackCategoryId === 'string' && request.data.fallbackCategoryId.trim()
+      ? request.data.fallbackCategoryId.trim()
+      : null;
+    const categories = await loadTemplateCategories(clientId || null, spreadsheetTemplateId || null);
     const geminiModel = getGeminiGarmentViewClassificationModel();
     const responseGarments: ClassifyGarmentViewsResponse['garments'] = [];
 
     for (const garment of garments) {
-      if (garment.photos.length === 1) {
+      if (garment.photos.length === 1 && categories.length === 0) {
         const [photo] = garment.photos;
-        const assumedPhoto: ClassifiedGarmentPhoto = {
-          ...photo,
-          view: 'front',
-          confidence: null,
-          reasoning: 'Se asumió frente porque la prenda solo tiene una foto.',
-          classifiedBy: 'assumed_single_front',
-        };
-
         responseGarments.push({
           garmentId: garment.garmentId,
           garmentName: garment.garmentName,
-          photos: [assumedPhoto],
+          photos: [{
+            ...photo,
+            view: 'front',
+            confidence: null,
+            reasoning: 'Se asumió frente porque la prenda solo tiene una foto.',
+            classifiedBy: 'assumed_single_front',
+          }],
           availableViews: ['front'],
+          garmentBodyArea: null,
           usedGemini: false,
+          matchedCategoryId: null,
+          matchedCategoryLabel: null,
+          matchedCategoryConfidence: null,
+          matchedCategoryReasoning: null,
+          matchedColor: null,
+          matchedColorConfidence: null,
+          matchedColorReasoning: null,
         });
         continue;
       }
 
-      const classifiedPhotos: ClassifiedGarmentPhoto[] = [];
-      for (const photo of garment.photos) {
-        const classification = await classifyGarmentPhotoWithGemini({
-          apiKey: GEMINI_API_KEY.value(),
-          model: geminiModel,
-          garmentId: garment.garmentId,
-          garmentName: garment.garmentName,
-          photo,
-          userUid: request.auth?.uid,
-        });
-
-        classifiedPhotos.push({
-          ...photo,
-          ...classification,
-        });
-      }
-
-      responseGarments.push({
-        garmentId: garment.garmentId,
-        garmentName: garment.garmentName,
-        photos: classifiedPhotos,
-        availableViews: getSortedUniqueGarmentViews(classifiedPhotos.map((photo) => photo.view)),
-        usedGemini: true,
-      });
+      responseGarments.push(await classifyGarmentWithGemini({
+        apiKey: GEMINI_API_KEY.value(),
+        model: geminiModel,
+        garment,
+        userUid: request.auth?.uid,
+        categories,
+        fallbackCategoryId,
+      }));
     }
 
     return {

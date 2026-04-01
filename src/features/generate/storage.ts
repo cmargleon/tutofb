@@ -4,10 +4,15 @@ import { GarmentOriginalPhotoDraft, GarmentUploadStatus, UploadedGarmentDraft } 
 
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
 const DEFAULT_MAX_RETRIES = 2;
+const MAX_IMAGE_UPLOAD_BYTES = 3 * 1024 * 1024;
+const MAX_IMAGE_UPLOAD_DIMENSION = 2_200;
+const MIN_IMAGE_UPLOAD_DIMENSION = 900;
 const MIN_UPLOAD_STALL_TIMEOUT_MS = 45_000;
 const MAX_UPLOAD_STALL_TIMEOUT_MS = 3 * 60 * 1000;
 const UPLOAD_TIMEOUT_PER_MB_MS = 15_000;
 const RETRY_BACKOFF_MS = 1_200;
+const JPEG_QUALITY_STEPS = [0.9, 0.82, 0.74, 0.66, 0.58, 0.5] as const;
+const DIMENSION_SCALE_STEPS = [1, 0.9, 0.8, 0.7, 0.6] as const;
 
 interface UploadAttemptResult {
   storagePath: string;
@@ -67,16 +72,138 @@ const sleep = (ms: number): Promise<void> =>
 
 const sanitizeFileName = (fileName: string): string => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
 
+const replaceFileExtension = (fileName: string, nextExtension: string): string => {
+  const sanitizedExtension = nextExtension.replace(/^\.+/, '') || 'jpg';
+  return `${fileName.replace(/\.[^.]+$/, '')}.${sanitizedExtension}`;
+};
+
+const compressionCache = new WeakMap<File, Promise<File>>();
+
+const loadImage = (file: File): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error(`No se pudo preparar ${file.name} para comprimir.`));
+    };
+
+    image.src = objectUrl;
+  });
+
+const toBlob = (
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+  quality?: number,
+): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('No se pudo generar la imagen comprimida.'));
+        return;
+      }
+
+      resolve(blob);
+    }, mimeType, quality);
+  });
+
+const resolveCompressedMimeType = (file: File): { mimeType: string; extension: string } => {
+  if (file.type === 'image/webp') {
+    return { mimeType: 'image/webp', extension: 'webp' };
+  }
+
+  return { mimeType: 'image/jpeg', extension: 'jpg' };
+};
+
+const compressImageIfNeeded = async (file: File): Promise<File> => {
+  if (file.size <= MAX_IMAGE_UPLOAD_BYTES) {
+    return file;
+  }
+
+  if (!file.type.startsWith('image/')) {
+    return file;
+  }
+
+  const image = await loadImage(file);
+  const { mimeType, extension } = resolveCompressedMimeType(file);
+  let bestCandidate: File | null = null;
+  const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
+
+  for (const dimensionScale of DIMENSION_SCALE_STEPS) {
+    const targetLongestSide = Math.min(
+      longestSide,
+      Math.max(MIN_IMAGE_UPLOAD_DIMENSION, Math.round(MAX_IMAGE_UPLOAD_DIMENSION * dimensionScale)),
+    );
+    const combinedScale = Math.min(1, targetLongestSide / longestSide);
+    const targetWidth = Math.max(1, Math.round(image.naturalWidth * combinedScale));
+    const targetHeight = Math.max(1, Math.round(image.naturalHeight * combinedScale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Canvas no disponible para comprimir imágenes.');
+    }
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    for (const quality of JPEG_QUALITY_STEPS) {
+      const blob = await toBlob(canvas, mimeType, quality);
+      const candidate = new File(
+        [blob],
+        replaceFileExtension(file.name, extension),
+        { type: mimeType, lastModified: file.lastModified },
+      );
+
+      if (!bestCandidate || candidate.size < bestCandidate.size) {
+        bestCandidate = candidate;
+      }
+
+      if (candidate.size <= MAX_IMAGE_UPLOAD_BYTES) {
+        return candidate;
+      }
+    }
+  }
+
+  if (bestCandidate && bestCandidate.size < file.size) {
+    return bestCandidate;
+  }
+
+  throw new Error(`No pudimos comprimir ${file.name} por debajo de 3 MB.`);
+};
+
+const getUploadFile = (file: File): Promise<File> => {
+  const cached = compressionCache.get(file);
+  if (cached) {
+    return cached;
+  }
+
+  const prepared = compressImageIfNeeded(file);
+  compressionCache.set(file, prepared);
+  return prepared;
+};
+
 const getStoragePath = (
   draftBatchId: string,
   garment: UploadedGarmentDraft,
   photo: GarmentOriginalPhotoDraft,
+  uploadFileName: string = photo.fileName,
 ): string => {
   if (!auth.currentUser) {
     throw new Error('Usuario no autenticado');
   }
 
-  return `garments/drafts/${auth.currentUser.uid}/${draftBatchId}/${garment.id}/${photo.id}-${sanitizeFileName(photo.fileName)}`;
+  return `garments/drafts/${auth.currentUser.uid}/${draftBatchId}/${garment.id}/${photo.id}-${sanitizeFileName(uploadFileName)}`;
 };
 
 const resolveUploadTimeoutMs = (fileSizeBytes: number): number => {
@@ -124,15 +251,16 @@ const uploadSinglePhoto = async ({
   totalPhotos: number;
   onProgress?: UploadGarmentDraftsOptions['onProgress'];
 }): Promise<string> => {
-  const storagePath = getStoragePath(draftBatchId, garment, photo);
+  const uploadFile = await getUploadFile(photo.file);
+  const storagePath = getStoragePath(draftBatchId, garment, photo, uploadFile.name);
   const storageRef = ref(storage, storagePath);
-  const uploadTask = uploadBytesResumable(storageRef, photo.file, {
-    contentType: photo.file.type || 'image/jpeg',
+  const uploadTask = uploadBytesResumable(storageRef, uploadFile, {
+    contentType: uploadFile.type || 'image/jpeg',
   });
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
-    const timeoutMs = resolveUploadTimeoutMs(photo.file.size);
+    const timeoutMs = resolveUploadTimeoutMs(uploadFile.size);
     let timeoutId = globalThis.setTimeout(() => {
       settled = true;
       uploadTask.cancel();

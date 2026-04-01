@@ -44,6 +44,14 @@ export const mergeGarmentClassificationResults = (
     const photosById = new Map(classifiedGarment.photos.map((photo) => [photo.id, photo]));
     return {
       ...garment,
+      garmentBodyArea: classifiedGarment.garmentBodyArea ?? garment.garmentBodyArea ?? null,
+      matchedCategoryId: classifiedGarment.matchedCategoryId ?? garment.matchedCategoryId ?? null,
+      matchedCategoryLabel: classifiedGarment.matchedCategoryLabel ?? garment.matchedCategoryLabel ?? null,
+      matchedCategoryConfidence: classifiedGarment.matchedCategoryConfidence ?? garment.matchedCategoryConfidence ?? null,
+      matchedCategoryReasoning: classifiedGarment.matchedCategoryReasoning ?? garment.matchedCategoryReasoning ?? null,
+      matchedColor: classifiedGarment.matchedColor ?? garment.matchedColor ?? null,
+      matchedColorConfidence: classifiedGarment.matchedColorConfidence ?? garment.matchedColorConfidence ?? null,
+      matchedColorReasoning: classifiedGarment.matchedColorReasoning ?? garment.matchedColorReasoning ?? null,
       originalPhotos: garment.originalPhotos.map((photo) => {
         const classifiedPhoto = photosById.get(photo.id);
         if (!classifiedPhoto) {

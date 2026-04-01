@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import { Client, Model, SpreadsheetTemplateCategory } from '../../../../../shared/src/types';
+import { Client, Model } from '../../../../../shared/src/types';
 import { classifyGarmentViewsWithGemini, previewProductDrafts } from '../../firebase';
-import { getGarmentAvailableViews } from '../../garments';
+import { getGarmentAvailableViews, getGarmentBodyArea } from '../../garments';
 import { uploadGarmentDrafts } from '../../storage';
 import {
   UploadedGarmentDraft,
@@ -30,7 +30,6 @@ interface GarmentPreparationParams {
   missingPoseClassificationCount: number;
   selectedModel: Model | null;
   selectedClient: Client | null;
-  selectedSpreadsheetCategory: SpreadsheetTemplateCategory | null;
   suggestionSignature: string;
   productDraftSignature: string;
 }
@@ -44,7 +43,6 @@ export const useGarmentPreparation = ({
   missingPoseClassificationCount,
   selectedModel,
   selectedClient,
-  selectedSpreadsheetCategory,
   suggestionSignature,
   productDraftSignature,
 }: GarmentPreparationParams) => {
@@ -131,11 +129,21 @@ export const useGarmentPreparation = ({
 
     try {
       const { garments: uploadedGarments } = await ensureGarmentsUploadedForSuggestions(signature);
-      const garmentsNeedingClassification = uploadedGarments.filter(
-        (garment) =>
-          garment.originalPhotos.length > 1
-          && garment.originalPhotos.some((photo) => photo.classification.status !== 'classified'),
+      const shouldClassifySpreadsheetData = (
+        state.outputMode === 'spreadsheet'
+        && Boolean(selectedClient?.id)
+        && Boolean(state.selectedSpreadsheetTemplateId)
       );
+      const garmentsNeedingClassification = uploadedGarments.filter((garment) => {
+        const needsPhotoViews = garment.originalPhotos.some((photo) => photo.classification.status !== 'classified');
+        const needsSpreadsheetMatch = shouldClassifySpreadsheetData && (!garment.matchedCategoryId || !garment.matchedColor);
+
+        if (shouldClassifySpreadsheetData) {
+          return needsPhotoViews || needsSpreadsheetMatch;
+        }
+
+        return garment.originalPhotos.length > 1 && needsPhotoViews;
+      });
 
       let preparedGarments = uploadedGarments;
 
@@ -147,6 +155,9 @@ export const useGarmentPreparation = ({
         }));
 
         const classificationResult = await classifyGarmentViewsWithGemini({
+          clientId: selectedClient?.id || null,
+          spreadsheetTemplateId: state.selectedSpreadsheetTemplateId || null,
+          fallbackCategoryId: state.selectedSpreadsheetCategoryId || null,
           garments: garmentsNeedingClassification.map((garment) => ({
             garmentId: garment.id,
             garmentName: garment.name,
@@ -176,6 +187,7 @@ export const useGarmentPreparation = ({
         selectedModel.poses,
         preparedGarments.map((garment) => ({
           availableViews: getGarmentAvailableViews(garment),
+          garmentBodyArea: getGarmentBodyArea(garment),
         })),
       );
 
@@ -226,8 +238,6 @@ export const useGarmentPreparation = ({
       || !selectedClient
       || !selectedModel
       || !state.selectedSpreadsheetTemplateId
-      || !state.selectedSpreadsheetCategoryId
-      || !selectedSpreadsheetCategory
       || state.garments.length === 0
     ) {
       return;
@@ -249,7 +259,7 @@ export const useGarmentPreparation = ({
         clientId: selectedClient.id!,
         modelId: selectedModel.id!,
         spreadsheetTemplateId: state.selectedSpreadsheetTemplateId,
-        spreadsheetCategoryId: state.selectedSpreadsheetCategoryId,
+        fallbackCategoryId: state.selectedSpreadsheetCategoryId || null,
         garments: uploadedGarments.map((garment) => ({
           id: garment.id,
           name: garment.name,
@@ -258,6 +268,13 @@ export const useGarmentPreparation = ({
           sourceType: garment.sourceType,
           originalFileNames: garment.originalFileNames,
           originalPhotoCount: garment.originalPhotos.length,
+          matchedCategoryId: garment.matchedCategoryId || null,
+          matchedCategoryLabel: garment.matchedCategoryLabel || null,
+          matchedCategoryConfidence: garment.matchedCategoryConfidence ?? null,
+          matchedCategoryReasoning: garment.matchedCategoryReasoning || null,
+          matchedColor: garment.matchedColor || null,
+          matchedColorConfidence: garment.matchedColorConfidence ?? null,
+          matchedColorReasoning: garment.matchedColorReasoning || null,
           photos: garment.originalPhotos
             .filter((photo) => photo.upload.storagePath)
             .map((photo) => ({
@@ -324,7 +341,7 @@ export const useGarmentPreparation = ({
     if (
       state.step !== 4
       || state.outputMode !== 'spreadsheet'
-      || !selectedSpreadsheetCategory
+      || !state.selectedSpreadsheetTemplateId
       || state.garments.length === 0
       || state.productDraftPreparation.status === 'preparing'
       || state.productDraftPreparation.signature === productDraftSignature
@@ -335,9 +352,9 @@ export const useGarmentPreparation = ({
     void prepareProductDrafts(productDraftSignature);
   }, [
     productDraftSignature,
-    selectedSpreadsheetCategory,
     state.garments.length,
     state.outputMode,
+    state.selectedSpreadsheetTemplateId,
     state.productDraftPreparation.signature,
     state.productDraftPreparation.status,
     state.step,

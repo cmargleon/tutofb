@@ -4,6 +4,7 @@ import {
   FalNanoBanana2ImageConfig,
   FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
+  GarmentBodyArea,
   GarmentPhotoClassificationSource,
   GarmentSourceType,
   GarmentView,
@@ -81,6 +82,14 @@ export interface UploadedGarmentDraft {
   originalFileNames: string[];
   originalPhotos: GarmentOriginalPhotoDraft[];
   upload: GarmentUploadState;
+  garmentBodyArea?: GarmentBodyArea | null;
+  matchedCategoryId?: string | null;
+  matchedCategoryLabel?: string | null;
+  matchedCategoryConfidence?: number | null;
+  matchedCategoryReasoning?: string | null;
+  matchedColor?: string | null;
+  matchedColorConfidence?: number | null;
+  matchedColorReasoning?: string | null;
 }
 
 export interface PoseSuggestionState {

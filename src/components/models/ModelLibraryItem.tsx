@@ -45,6 +45,11 @@ const ViewPosesGrid: React.FC<{ model: Model }> = ({ model }) => (
             <p className="mt-1 inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white">
               {formatPoseAutoCategoryLabel(pose.aiClassification?.autoCategory)}
             </p>
+            {pose.aiClassification ? (
+              <p className="mt-1 inline-flex rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/70">
+                {pose.aiClassification.faceVisible ? 'Con cara' : 'Sin cara'}
+              </p>
+            ) : null}
           </div>
         </div>
       ))}
@@ -77,6 +82,11 @@ const EditPosesGrid: React.FC<{
               <p className="mt-1 inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white">
                 {formatPoseAutoCategoryLabel(pose.aiClassification?.autoCategory)}
               </p>
+              {pose.aiClassification ? (
+                <p className="mt-1 inline-flex rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/70">
+                  {pose.aiClassification.faceVisible ? 'Con cara' : 'Sin cara'}
+                </p>
+              ) : null}
               {poseMarked && (
                 <p className="mt-1 text-[11px] font-medium text-amber-200">
                   Se eliminará al guardar

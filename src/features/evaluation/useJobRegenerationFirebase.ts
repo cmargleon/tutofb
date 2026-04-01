@@ -36,7 +36,7 @@ export const useJobRegenerationFirebase = () => {
     const draft = localDrafts[jobId];
     if (!draft || !draft.prompt.trim()) {
       setRegenerationErrors(prev => ({ ...prev, [jobId]: 'El prompt no puede estar vacío' }));
-      return;
+      return false;
     }
 
     setQueueingJobs(prev => ({ ...prev, [jobId]: true }));
@@ -44,8 +44,10 @@ export const useJobRegenerationFirebase = () => {
 
     try {
       await regenerateJob(jobId, draft.provider, draft.prompt);
+      return true;
     } catch (error: any) {
       setRegenerationErrors(prev => ({ ...prev, [jobId]: error.message || 'Error al encolar regeneración' }));
+      return false;
     } finally {
       setQueueingJobs(prev => ({ ...prev, [jobId]: false }));
     }

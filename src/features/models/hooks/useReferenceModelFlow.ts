@@ -18,9 +18,7 @@ import {
   PROVIDER_OPTIONS,
 } from '../constants';
 import {
-  buildGeneratedPosePhotoState,
   buildPendingPosePhotos,
-  buildReferencePosePhotoState,
   getAcceptedPoseCount,
   toCandidatePhotoState,
 } from '../aiWizard';
@@ -32,14 +30,15 @@ import {
 import {
   createModelFromPaths,
   deleteStorageAsset,
-  generateModelPoses,
   uploadModelReferenceFile,
 } from '../firebase';
 import {
-  buildReferenceCandidatePrompt,
   buildReferencePoseBasePrompt,
-  buildReferencePosePrompt,
 } from '../prompts';
+import {
+  generateCandidatesApi,
+  generatePoseApi,
+} from '../referenceGenerationApi';
 import {
   GeneratedPhotoState,
   ReferenceBackgroundMode,
@@ -409,29 +408,27 @@ export const useReferenceModelFlow = ({
     count: number,
   ): Promise<GeneratedPhotoState[]> => {
     const reference = await ensureReferenceUploaded();
-    const response = await generateModelPoses({
-      prompt: buildReferenceCandidatePrompt(prompt.trim()),
+    const result = await generateCandidatesApi({
+      prompt: prompt.trim(),
       provider,
       aspectRatio,
-      imageConfig: providerImageConfig,
+      providerImageConfig,
       count,
-      tempSessionId: uuidv4(),
       clientId: selectedClientId,
       modelId: draftModelId,
-      stage: 'identity',
+      identityMode,
       referenceStoragePath: reference.storagePath,
-      preserveReferenceDetails: identityMode === 'exact',
     });
 
-    if (response.errors.length > 0) {
+    if (result.errors.length > 0) {
       toast({
         tone: 'warning',
-        title: `${response.errors.length} modelo(s) no se pudieron generar`,
-        description: response.errors[0]?.message ?? 'Error desconocido',
+        title: `${result.errors.length} modelo(s) no se pudieron generar`,
+        description: result.errors[0]?.message ?? 'Error desconocido',
       });
     }
 
-    return response.photos.map(toCandidatePhotoState);
+    return result.photos;
   }, [
     aspectRatio,
     draftModelId,
@@ -528,40 +525,22 @@ export const useReferenceModelFlow = ({
     candidate: GeneratedPhotoState,
     poseId: string,
   ) => {
-    const poseRecipe = MODEL_POSE_RECIPES.find((recipe) => recipe.id === poseId);
-    if (!poseRecipe) return;
-
-    if (poseRecipe.usesReferenceImage) {
-      setPosePhotos((prev) =>
-        prev.map((photo, photoIndex) =>
-          photoIndex === poseIndex
-            ? buildReferencePosePhotoState(candidate, poseRecipe)
-            : photo,
-        ),
-      );
-      return;
-    }
-
-    const response = await generateModelPoses({
-      prompt: buildReferencePosePrompt(prompt.trim(), poseRecipe.shotType),
+    const photo = await generatePoseApi({
+      prompt: prompt.trim(),
       provider,
       aspectRatio,
-      imageConfig: providerImageConfig,
-      count: 1,
-      tempSessionId: uuidv4(),
+      providerImageConfig,
       clientId: selectedClientId,
       modelId: draftModelId,
-      stage: 'pose',
-      referenceStoragePath: candidate.storagePath,
-      preserveReferenceDetails: true,
+      candidate,
+      poseId,
     });
 
-    const photo = response.photos[0];
+    if (!photo) return;
+
     setPosePhotos((prev) =>
       prev.map((prevPhoto, photoIndex) =>
-        photoIndex === poseIndex
-          ? buildGeneratedPosePhotoState(photo, poseRecipe)
-          : prevPhoto,
+        photoIndex === poseIndex ? photo : prevPhoto,
       ),
     );
   }, [

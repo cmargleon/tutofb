@@ -9,6 +9,7 @@ export interface QueueSnapshot {
 }
 
 const QUEUE_BATCH_STATUSES: BatchStatus[] = ['pending', 'processing', 'partial_failed', 'failed'];
+const QUEUE_JOBS_PER_BATCH_LIMIT = 200;
 
 export const subscribeToQueueData = (
   onData: (snapshot: QueueSnapshot) => void,
@@ -51,7 +52,7 @@ export const subscribeToQueueData = (
         }
 
         const unsubscribeJobs = onSnapshot(
-          query(collection(db, 'jobs'), where('batchId', '==', batch.id), orderBy('createdAt', 'desc')),
+          query(collection(db, 'jobs'), where('batchId', '==', batch.id), orderBy('createdAt', 'desc'), limit(QUEUE_JOBS_PER_BATCH_LIMIT)),
           (jobsSnapshot) => {
             latestJobsByBatch = {
               ...latestJobsByBatch,

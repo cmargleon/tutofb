@@ -12,6 +12,7 @@
     "test": "npm --prefix functions run build && node --import tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "@sentry/react": "^10.47.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "file-saver": "^2.0.5",

@@ -152,6 +152,34 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize }: CatalogJobsParam
     return () => { cancelled = true; };
   }, [clientId, batchId, pages.length, fetchPage]);
 
+  // Prefetch the next page silently whenever the current page has more data and the
+  // following page is not yet cached. The user sees no loading indicator for this.
+  useEffect(() => {
+    if (!clientId) return undefined;
+
+    const currentPage = pages[currentPageIndex];
+    const nextPageAlreadyCached = Boolean(pages[currentPageIndex + 1]);
+
+    if (!currentPage?.hasMore || !currentPage.lastVisible || nextPageAlreadyCached) return undefined;
+
+    let cancelled = false;
+
+    fetchPage(currentPage.lastVisible).then((nextPage) => {
+      if (cancelled) return;
+      setPages((prev) => {
+        // Only append if the slot is still empty (avoid race with goToNextPage)
+        if (prev[currentPageIndex + 1]) return prev;
+        const updated = [...prev];
+        updated[currentPageIndex + 1] = nextPage;
+        return updated;
+      });
+    }).catch(() => {
+      // Silent — user will retry naturally via goToNextPage
+    });
+
+    return () => { cancelled = true; };
+  }, [clientId, pages, currentPageIndex, fetchPage]);
+
   const goToPreviousPage = useCallback(() => {
     setCurrentPageIndex((current) => Math.max(0, current - 1));
   }, []);

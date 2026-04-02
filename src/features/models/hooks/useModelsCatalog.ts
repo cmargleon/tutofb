@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -29,6 +31,8 @@ export interface UseModelsCatalogResult {
   highlightedModelId: string | null;
   expandedId: string | null;
   setExpandedId: Dispatch<SetStateAction<string | null>>;
+  applyOptimisticModels: (updater: (prev: Model[]) => Model[]) => void;
+  getModelsSnapshot: () => Model[];
 }
 
 export const useModelsCatalog = (): UseModelsCatalogResult => {
@@ -41,6 +45,7 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
   const [modelSearch, setModelSearch] = useState('');
   const [modelsPage, setModelsPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const modelsRef = useRef<Model[]>([]);
 
   useEffect(() => {
     let modelsLoaded = false;
@@ -57,6 +62,7 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
 
     const unsubModels = subscribeToModels(
       (data) => {
+        modelsRef.current = data;
         setModels(data);
         modelsLoaded = true;
         checkLoading();
@@ -149,6 +155,12 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
     setModelsPage(1);
   };
 
+  const applyOptimisticModels = useCallback((updater: (prev: Model[]) => Model[]) => {
+    setModels(updater);
+  }, []);
+
+  const getModelsSnapshot = useCallback(() => modelsRef.current, []);
+
   return {
     models,
     clients,
@@ -166,5 +178,7 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
     highlightedModelId,
     expandedId,
     setExpandedId,
+    applyOptimisticModels,
+    getModelsSnapshot,
   };
 };

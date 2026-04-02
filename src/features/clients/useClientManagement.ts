@@ -12,7 +12,7 @@ import {
   deleteClientSpreadsheetTemplate,
   updateClientSpreadsheetTemplateCategory,
 } from './firebase';
-import { useConfirm, useToast } from '../feedback/FeedbackProvider';
+import { useConfirm, useConfirmByName, useToast } from '../feedback/FeedbackProvider';
 import { Client, SpreadsheetTemplate } from '../../../shared/src/types';
 
 export const CLIENTS_PAGE_SIZE = 20;
@@ -21,6 +21,7 @@ export const useClientManagement = () => {
   const location = useLocation();
   const toast = useToast();
   const confirm = useConfirm();
+  const confirmByName = useConfirmByName();
 
   const [clients, setClients] = useState<Client[]>([]);
   const [templates, setTemplates] = useState<SpreadsheetTemplate[]>([]);
@@ -153,40 +154,42 @@ export const useClientManagement = () => {
       tone: 'warning',
     });
     if (!accepted || !client.id) return;
+    const snapshot = clients;
+    setClients((prev) => prev.filter((c) => c.id !== client.id));
     try {
       await archiveClient(client.id);
       toast({ tone: 'success', title: 'Cliente archivado', description: `"${client.name}" salió del catálogo operativo pero su historial sigue disponible.` });
     } catch (err: any) {
+      setClients(snapshot);
       toast({ tone: 'error', title: 'No pudimos archivar el cliente', description: err.message || 'Inténtalo de nuevo en un momento.' });
     }
   };
 
   const handleRestore = async (client: Client) => {
     if (!client.id) return;
+    const snapshot = clients;
+    setClients((prev) => prev.map((c) => c.id === client.id ? { ...c, status: 'active' as const } : c));
     try {
       await restoreClient(client.id);
       toast({ tone: 'success', title: 'Cliente reactivado', description: `"${client.name}" volvió al catálogo operativo.` });
     } catch (err: any) {
+      setClients(snapshot);
       toast({ tone: 'error', title: 'No pudimos reactivar el cliente', description: err.message || 'Inténtalo de nuevo en un momento.' });
     }
   };
 
   const handlePermanentDelete = async (client: Client) => {
     if (!client.id) return;
-    const accepted = await confirm({
+    const nameConfirmed = await confirmByName({
       title: 'Borrado permanente',
-      description: `Vas a borrar definitivamente "${client.name}".`,
-      impact: 'Esto elimina todos los datos del cliente de forma permanente. No se puede deshacer.',
-      confirmLabel: 'Continuar',
-      cancelLabel: 'Cancelar',
+      description: `Vas a borrar definitivamente "${client.name}". Esta acción no se puede deshacer.`,
+      impact: 'Esto elimina todos los datos del cliente de forma permanente.',
+      entityName: client.name,
+      entityLabel: 'el nombre del cliente',
+      confirmLabel: 'Borrar definitivamente',
       tone: 'danger',
     });
-    if (!accepted) return;
-    const typedName = window.prompt(`Escribe el nombre exacto del cliente para confirmar el borrado permanente:\n${client.name}`);
-    if (typedName !== client.name) {
-      toast({ tone: 'warning', title: 'Borrado cancelado', description: 'El nombre no coincidió. No se eliminó nada.' });
-      return;
-    }
+    if (!nameConfirmed) return;
     try {
       await permanentlyDeleteClient(client.id);
       toast({ tone: 'success', title: 'Cliente eliminado definitivamente', description: `"${client.name}" se eliminó de forma permanente.` });

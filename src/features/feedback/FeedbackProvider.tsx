@@ -29,9 +29,20 @@ interface ConfirmOptions {
   tone?: ConfirmTone;
 }
 
+export interface ConfirmByNameOptions {
+  title: string;
+  description: string;
+  entityName: string;
+  entityLabel: string;
+  impact?: string;
+  confirmLabel?: string;
+  tone?: ConfirmTone;
+}
+
 interface FeedbackContextValue {
   toast: (options: ToastOptions) => void;
   confirm: (options: ConfirmOptions) => Promise<boolean>;
+  confirmByName: (options: ConfirmByNameOptions) => Promise<boolean>;
 }
 
 interface ToastItem extends Required<Pick<ToastOptions, 'title' | 'tone' | 'durationMs'>> {
@@ -41,6 +52,17 @@ interface ToastItem extends Required<Pick<ToastOptions, 'title' | 'tone' | 'dura
 
 interface DialogState extends Required<Pick<ConfirmOptions, 'title' | 'description' | 'confirmLabel' | 'cancelLabel' | 'tone'>> {
   impact?: string;
+  resolve: (result: boolean) => void;
+}
+
+interface NameInputDialogState {
+  title: string;
+  description: string;
+  entityName: string;
+  entityLabel: string;
+  impact?: string;
+  confirmLabel: string;
+  tone: ConfirmTone;
   resolve: (result: boolean) => void;
 }
 
@@ -127,6 +149,87 @@ const DIALOG_STYLES: Record<
   },
 };
 
+const NameInputDialog: React.FC<{
+  dialog: NameInputDialogState;
+  onClose: (result: boolean) => void;
+}> = ({ dialog, onClose }) => {
+  const [typedValue, setTypedValue] = useState('');
+  const matches = typedValue === dialog.entityName;
+  const style = DIALOG_STYLES[dialog.tone];
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/65 p-4 sm:items-center"
+      onClick={() => onClose(false)}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feedback-name-dialog-title"
+        className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-4 p-6">
+          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${style.iconWrap}`}>
+            {React.createElement(style.icon, { className: `h-6 w-6 ${style.iconColor}` })}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 id="feedback-name-dialog-title" className="text-lg font-semibold text-slate-900">
+              {dialog.title}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{dialog.description}</p>
+          </div>
+        </div>
+
+        {dialog.impact ? (
+          <div className="px-6 pb-2">
+            <div className={`rounded-2xl border px-4 py-3 ${style.impactBox}`}>
+              <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${style.impactLabel}`}>Impacto</p>
+              <p className={`mt-2 text-sm leading-6 ${style.impactText}`}>{dialog.impact}</p>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="px-6 pb-2">
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">
+            Escribe {dialog.entityLabel} para confirmar:
+          </label>
+          <p className="mb-2 select-all rounded-lg bg-slate-100 px-3 py-2 font-mono text-sm text-slate-900">
+            {dialog.entityName}
+          </p>
+          <input
+            type="text"
+            autoFocus
+            value={typedValue}
+            onChange={(e) => setTypedValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && matches) onClose(true); }}
+            placeholder="Escribe aquí…"
+            className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+          />
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 px-6 py-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => onClose(false)}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!matches}
+            onClick={() => onClose(true)}
+            className={`inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-40 ${style.confirmButton}`}
+          >
+            {dialog.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const buildToastId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -138,6 +241,7 @@ const buildToastId = () => {
 export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [nameDialog, setNameDialog] = useState<NameInputDialogState | null>(null);
   const timeoutIdsRef = useRef<Map<string, number>>(new Map());
 
   const dismissToast = useCallback((id: string) => {
@@ -186,6 +290,28 @@ export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
   }, []);
 
+  const confirmByName = useCallback((options: ConfirmByNameOptions) => {
+    return new Promise<boolean>((resolve) => {
+      setNameDialog({
+        title: options.title,
+        description: options.description,
+        entityName: options.entityName,
+        entityLabel: options.entityLabel,
+        impact: options.impact,
+        confirmLabel: options.confirmLabel || 'Confirmar',
+        tone: options.tone || 'danger',
+        resolve,
+      });
+    });
+  }, []);
+
+  const closeNameDialog = useCallback((result: boolean) => {
+    setNameDialog((current) => {
+      current?.resolve(result);
+      return null;
+    });
+  }, []);
+
   useEffect(() => {
     return () => {
       timeoutIdsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -194,7 +320,7 @@ export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   useEffect(() => {
-    if (!dialog) return;
+    if (!dialog && !nameDialog) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -202,7 +328,8 @@ export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        closeDialog(false);
+        if (nameDialog) closeNameDialog(false);
+        else closeDialog(false);
       }
     };
 
@@ -212,14 +339,15 @@ export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [dialog, closeDialog]);
+  }, [dialog, nameDialog, closeDialog, closeNameDialog]);
 
   const value = useMemo<FeedbackContextValue>(
     () => ({
       toast,
       confirm,
+      confirmByName,
     }),
-    [toast, confirm],
+    [toast, confirm, confirmByName],
   );
 
   return (
@@ -266,6 +394,13 @@ export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           })}
         </div>
       </div>
+
+      {nameDialog && typeof document !== 'undefined'
+        ? createPortal(
+            <NameInputDialog dialog={nameDialog} onClose={closeNameDialog} />,
+            document.body,
+          )
+        : null}
 
       {dialog && typeof document !== 'undefined'
         ? createPortal(
@@ -347,3 +482,5 @@ const useFeedbackContext = () => {
 export const useToast = () => useFeedbackContext().toast;
 
 export const useConfirm = () => useFeedbackContext().confirm;
+
+export const useConfirmByName = () => useFeedbackContext().confirmByName;

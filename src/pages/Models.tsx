@@ -9,7 +9,10 @@ import { useModelsCatalog } from '../features/models/hooks/useModelsCatalog';
 export const Models: React.FC = () => {
   const catalog = useModelsCatalog();
   const createFlow = useModelCreateFlow();
-  const library = useModelLibrary();
+  const library = useModelLibrary({
+    onOptimisticUpdate: catalog.applyOptimisticModels,
+    getModelsSnapshot: catalog.getModelsSnapshot,
+  });
 
   return (
     <div className="mx-auto max-w-6xl">

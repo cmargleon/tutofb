@@ -10,7 +10,7 @@ import {
   updateAppUser,
 } from './firebase';
 import { useAuth } from '../auth/AuthProvider';
-import { useConfirm, useToast } from '../feedback/FeedbackProvider';
+import { useConfirm, useConfirmByName, useToast } from '../feedback/FeedbackProvider';
 import {
   buildEditFormState,
   CreateFieldName,
@@ -30,6 +30,7 @@ const USERS_PAGE_SIZE = 15;
 export const useUserManagement = () => {
   const { user: currentUser } = useAuth();
   const confirm = useConfirm();
+  const confirmByName = useConfirmByName();
   const toast = useToast();
 
   const [users, setUsers] = useState<User[]>([]);
@@ -240,11 +241,16 @@ export const useUserManagement = () => {
       tone: 'danger',
     });
     if (!accepted) return;
-    const typedEmail = window.prompt(`Escribe el email exacto del usuario para confirmar el borrado permanente:\n${selectedUser.email}`);
-    if (typedEmail !== selectedUser.email) {
-      toast({ tone: 'warning', title: 'Borrado cancelado', description: 'El email no coincidió. No se eliminó nada.' });
-      return;
-    }
+    const nameConfirmed = await confirmByName({
+      title: 'Confirmar borrado permanente',
+      description: `Escribe el email exacto del usuario para confirmar que deseas eliminarlo.`,
+      impact: 'Esto elimina la cuenta y todos sus datos de forma permanente. Solo úsalo después de archivarla.',
+      entityName: selectedUser.email ?? '',
+      entityLabel: 'el email del usuario',
+      confirmLabel: 'Borrar definitivamente',
+      tone: 'danger',
+    });
+    if (!nameConfirmed) return;
     setError(null);
     try {
       await permanentlyDeleteAppUser(selectedUser.uid);

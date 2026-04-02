@@ -5,7 +5,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { Model, ModelIdentityTraits } from '../../../../shared/src/types';
-import { useConfirm, useToast } from '../../feedback/FeedbackProvider';
+import { useConfirm, useConfirmByName, useToast } from '../../feedback/FeedbackProvider';
 import { createEmptyModelIdentityTraits, normalizeModelIdentityTraits } from '../identityTraits';
 import {
   archiveModel,
@@ -39,9 +39,16 @@ export interface UseModelLibraryResult {
   handleTagPosesWithGemini: (model: Model) => Promise<void>;
 }
 
-export const useModelLibrary = (): UseModelLibraryResult => {
+interface UseModelLibraryOptions {
+  onOptimisticUpdate?: (updater: (prev: Model[]) => Model[]) => void;
+  getModelsSnapshot?: () => Model[];
+}
+
+export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelLibraryResult => {
+  const { onOptimisticUpdate, getModelsSnapshot } = options;
   const toast = useToast();
   const confirm = useConfirm();
+  const confirmByName = useConfirmByName();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editClientId, setEditClientId] = useState('');
@@ -142,6 +149,8 @@ export const useModelLibrary = (): UseModelLibraryResult => {
 
     if (!accepted || !model.id) return;
 
+    const snapshot = getModelsSnapshot?.();
+    onOptimisticUpdate?.((prev) => prev.filter((m) => m.id !== model.id));
     try {
       await archiveModel(model.id);
       toast({
@@ -150,6 +159,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
         description: `"${model.name}" salió de la biblioteca operativa.`,
       });
     } catch (err: any) {
+      if (snapshot) onOptimisticUpdate?.(() => snapshot);
       toast({
         tone: 'error',
         title: 'No pudimos archivar el modelo',
@@ -162,6 +172,8 @@ export const useModelLibrary = (): UseModelLibraryResult => {
   const handleRestore = async (model: Model) => {
     if (!model.id) return;
 
+    const snapshot = getModelsSnapshot?.();
+    onOptimisticUpdate?.((prev) => prev.map((m) => m.id === model.id ? { ...m, status: 'active' as const } : m));
     try {
       await restoreModel(model.id);
       toast({
@@ -170,6 +182,7 @@ export const useModelLibrary = (): UseModelLibraryResult => {
         description: `"${model.name}" volvió a la biblioteca operativa.`,
       });
     } catch (err: any) {
+      if (snapshot) onOptimisticUpdate?.(() => snapshot);
       toast({
         tone: 'error',
         title: 'No pudimos reactivar el modelo',
@@ -193,17 +206,16 @@ export const useModelLibrary = (): UseModelLibraryResult => {
 
     if (!accepted) return;
 
-    const typedName = window.prompt(
-      `Escribe el nombre exacto del modelo para confirmar el borrado permanente:\n${model.name}`,
-    );
-    if (typedName !== model.name) {
-      toast({
-        tone: 'warning',
-        title: 'Borrado cancelado',
-        description: 'El nombre no coincidió. No se eliminó nada.',
-      });
-      return;
-    }
+    const nameConfirmed = await confirmByName({
+      title: 'Confirmar borrado permanente',
+      description: `Escribe el nombre exacto del modelo para confirmar que deseas eliminarlo.`,
+      impact: 'Esto elimina el modelo, sus fotos y todos sus datos de forma permanente. No se puede deshacer.',
+      entityName: model.name,
+      entityLabel: 'el nombre del modelo',
+      confirmLabel: 'Borrar definitivamente',
+      tone: 'danger',
+    });
+    if (!nameConfirmed) return;
 
     try {
       await permanentlyDeleteModel(model.id);

@@ -1,5 +1,5 @@
 import { db, auth, storage } from '../../firebase';
-import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   Model,
@@ -14,7 +14,7 @@ import {
   GenerateModelPhotoResponse,
 } from '../../../shared/src/types';
 import { v4 as uuidv4 } from 'uuid';
-import { isActiveCatalogEntity, isArchivedCatalogEntity } from '../../../shared/src/domain';
+import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 
@@ -52,14 +52,11 @@ export const subscribeToModels = (
   onError: (error: Error) => void,
   options: SubscribeModelsOptions = {},
 ) => {
-  const q = query(collection(db, 'models'), orderBy('createdAt', 'desc'));
+  const q = options.includeArchived
+    ? query(collection(db, 'models'), orderBy('createdAt', 'desc'))
+    : query(collection(db, 'models'), where('status', '==', 'active'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snapshot) => {
-    const models = snapshot.docs
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Model))
-      .filter((model) => options.includeArchived ? true : isActiveCatalogEntity(model));
+    const models = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Model));
     callback(models);
   }, onError);
 };

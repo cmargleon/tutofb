@@ -28,13 +28,13 @@ export const subscribeToQueueData = (
   const unsubscribeBatches = onSnapshot(
     query(
       collection(db, 'batches'),
+      where('status', 'in', QUEUE_BATCH_STATUSES),
       orderBy('updatedAt', 'desc'),
       limit(100),
     ),
     (snapshot) => {
       const nextBatches = snapshot.docs
-        .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Batch))
-        .filter((batch) => QUEUE_BATCH_STATUSES.includes(batch.status));
+        .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Batch));
       const nextBatchIds = new Set(nextBatches.map((batch) => batch.id).filter(Boolean) as string[]);
 
       for (const [batchId, unsubscribe] of jobUnsubscribers.entries()) {

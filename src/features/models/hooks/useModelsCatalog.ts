@@ -7,7 +7,6 @@ import {
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Client, Model } from '../../../../shared/src/types';
-import { isActiveCatalogEntity } from '../../../../shared/src/domain';
 import { subscribeToClients } from '../../clients/firebase';
 import { subscribeToModels } from '../firebase';
 
@@ -73,7 +72,7 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
 
     const unsubClients = subscribeToClients(
       (data) => {
-        setClients(data.filter(isActiveCatalogEntity));
+        setClients(data);
         clientsLoaded = true;
         checkLoading();
       },

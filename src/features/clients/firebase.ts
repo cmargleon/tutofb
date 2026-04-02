@@ -1,5 +1,5 @@
 import { db, auth, storage } from '../../firebase';
-import { collection, collectionGroup, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, collectionGroup, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, where } from 'firebase/firestore';
 import { ref, uploadBytes, deleteObject } from 'firebase/storage';
 import {
   Client,
@@ -12,7 +12,6 @@ import {
   UpdateClientSpreadsheetTemplateCategoryRequest,
   UpdateClientSpreadsheetTemplateCategoryResponse,
 } from '../../../shared/src/types';
-import { isActiveCatalogEntity } from '../../../shared/src/domain';
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import { PermanentDeleteCatalogEntityRequest, PermanentDeleteCatalogEntityResponse } from '../../../shared/src/types';
@@ -31,14 +30,11 @@ export const subscribeToClients = (
   onError: (error: Error) => void,
   options: SubscribeClientsOptions = {},
 ) => {
-  const q = query(collection(db, 'clients'), orderBy('createdAt', 'desc'));
+  const q = options.includeArchived
+    ? query(collection(db, 'clients'), orderBy('createdAt', 'desc'))
+    : query(collection(db, 'clients'), where('status', '==', 'active'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snapshot) => {
-    const clients = snapshot.docs
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Client))
-      .filter((client) => options.includeArchived ? true : isActiveCatalogEntity(client));
+    const clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
     callback(clients);
   }, onError);
 };

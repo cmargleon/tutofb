@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 import { LoadingBlock } from '../components/ui';
+import { PageErrorBoundary } from '../components/PageErrorBoundary';
 
 const Layout = lazy(() => import('../components/Layout').then((module) => ({ default: module.Layout })));
 const Login = lazy(() => import('../pages/Login').then((module) => ({ default: module.Login })));
@@ -56,17 +57,17 @@ export const AppRouter: React.FC = () => {
           <Route path="/login" element={<Login />} />
 
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Dashboard />} />
-            <Route path="users" element={<ProtectedRoute roles={['admin']}><Users /></ProtectedRoute>} />
-            <Route path="clients" element={<ProtectedRoute roles={['admin']}><Clients /></ProtectedRoute>} />
-            <Route path="models" element={<ProtectedRoute roles={['admin']}><Models /></ProtectedRoute>} />
-            <Route path="generate" element={<ProtectedRoute roles={['admin', 'operador']}><Wizard /></ProtectedRoute>} />
-            <Route path="cola" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Cola /></ProtectedRoute>} />
-            <Route path="evaluacion" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Evaluacion /></ProtectedRoute>} />
-            <Route path="archivo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Archive /></ProtectedRoute>} />
-            <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><Analytics /></ProtectedRoute>} />
-            <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><Configuracion /></ProtectedRoute>} />
-            <Route path="catalogo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><Catalogo /></ProtectedRoute>} />
+            <Route index element={<PageErrorBoundary><Dashboard /></PageErrorBoundary>} />
+            <Route path="users" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Users /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="clients" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="models" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Models /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="generate" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Wizard /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="cola" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Cola /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="evaluacion" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Evaluacion /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="archivo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Archive /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><PageErrorBoundary><Analytics /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Configuracion /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="catalogo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Catalogo /></PageErrorBoundary></ProtectedRoute>} />
           </Route>
         </Routes>
       </Suspense>

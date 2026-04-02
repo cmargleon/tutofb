@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { AlertCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, RefreshCw, X } from 'lucide-react';
-import { Job, JobOutput, Provider } from '../../../shared/src/types';
+import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
 import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
@@ -8,9 +9,11 @@ import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRege
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useToast } from '../../features/feedback/FeedbackProvider';
+import { db } from '../../firebase';
 import { AttemptThumbnail } from '../evaluation/AttemptThumbnail';
 import { HoverZoomImage } from '../evaluation/HoverZoomImage';
 import { CatalogGarmentThumbnailFloat } from './CatalogGarmentThumbnailFloat';
+import { CatalogProductDraftPanel } from './CatalogProductDraftPanel';
 import FileSaver from 'file-saver';
 
 const HISTORY_LIMIT = 18;
@@ -39,6 +42,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
+  const [batch, setBatch] = useState<Batch | null>(null);
   const { outputs, loading: historyLoading } = useJobOutputHistory(job.id, HISTORY_LIMIT);
   const {
     localDrafts,
@@ -58,6 +62,30 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   useEffect(() => {
     setSelectedOutputId(null);
   }, [job.id]);
+
+  useEffect(() => {
+    if (!job.batchId) {
+      setBatch(null);
+      return undefined;
+    }
+
+    const batchRef = doc(db, 'batches', job.batchId);
+    return onSnapshot(
+      batchRef,
+      (docSnap) => {
+        if (!docSnap.exists()) {
+          setBatch(null);
+          return;
+        }
+
+        setBatch({ id: docSnap.id, ...docSnap.data() } as Batch);
+      },
+      (error) => {
+        console.error('Error loading batch for catalog lightbox layout:', error);
+        setBatch(null);
+      },
+    );
+  }, [job.batchId]);
 
   const outputsDesc = useMemo(() => {
     const merged = new Map<string, JobOutput>();
@@ -91,6 +119,8 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const regenerationError = job.id ? regenerationErrors[job.id] || null : null;
   const controlsDisabled = !role.canRegenerate || !job.id || isQueueing;
   const displayedImageValue = displayedImageUrl || displayedOutput?.resultImagePath || null;
+  const isGeneratingJob = job.status === 'pending' || job.status === 'processing';
+  const showSpreadsheetPanel = batch?.outputMode !== 'photos_only';
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -173,7 +203,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
       onClick={onClose}
     >
-      <div className="relative flex h-full max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden text-white">
+      <div className="relative flex h-full max-h-[92vh] w-full max-w-[96rem] flex-col overflow-hidden text-white">
         <div
           className="absolute right-4 top-4 z-30 flex flex-col gap-2 sm:right-5 sm:top-5"
           onClick={(e) => e.stopPropagation()}
@@ -201,8 +231,8 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.2fr)_24rem]">
-          <div className="relative flex min-h-[20rem] items-center justify-center overflow-visible p-4 pt-20 sm:p-6 sm:pt-24 lg:p-8 lg:pt-24">
+        <div className={`grid min-h-0 flex-1 ${showSpreadsheetPanel ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+          <div className="relative flex min-h-[20rem] items-center justify-center overflow-visible border-b border-white/10 p-4 pt-20 sm:p-6 sm:pt-24 lg:border-b-0 lg:border-r lg:border-white/10 lg:p-8 lg:pt-24">
             {canGoPrevious ? (
               <button
                 type="button"
@@ -249,10 +279,10 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                 />
               ) : (
                 <div className="flex h-full min-h-[22rem] w-full items-center justify-center border border-dashed border-white/15 text-slate-300">
-                  {displayedImageLoading ? (
+                  {displayedImageLoading || isGeneratingJob ? (
                     <div className="flex items-center gap-2 text-sm">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Cargando imagen...
+                      {isGeneratingJob ? 'La imagen todavía se está generando.' : 'Cargando imagen...'}
                     </div>
                   ) : (
                     <div className="text-sm">No pudimos cargar esta imagen.</div>
@@ -262,7 +292,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
             </div>
           </div>
 
-          <aside className="flex min-h-0 flex-col">
+          <aside className="flex min-h-0 flex-col border-b border-white/10 lg:border-b-0 lg:border-r lg:border-white/10">
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="px-4 py-4 sm:px-5" onClick={(e) => e.stopPropagation()}>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Historial</p>
@@ -285,7 +315,11 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-400">Este job todavía no tiene historial de fotos generado.</p>
+                  <p className="text-sm text-slate-400">
+                    {isGeneratingJob
+                      ? 'Este job todavía está generando su primera foto.'
+                      : 'Este job todavía no tiene historial de fotos generado.'}
+                  </p>
                 )}
               </div>
 
@@ -370,6 +404,8 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
               </button>
             </div>
           </aside>
+
+          {showSpreadsheetPanel ? <CatalogProductDraftPanel job={job} /> : null}
         </div>
       </div>
     </div>

@@ -80,8 +80,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, description, icon
 // ─── LoadingBlock ─────────────────────────────────────────────────────────────
 
 export const LoadingBlock: React.FC<{ message?: string }> = ({ message }) => (
-  <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
-    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600" />
+  <div className="app-loading-block">
+    <span className="app-spinner app-spinner-lg" aria-hidden="true" />
     {message ? <p className="text-sm text-gray-500">{message}</p> : null}
   </div>
 );
@@ -159,7 +159,7 @@ export const ImageThumb: React.FC<ImageThumbProps> = ({
   const { url, loading } = useStorageAssetUrl(storagePath);
 
   if (loading) {
-    return <div className="w-full h-full bg-gray-100 animate-pulse rounded-md" />;
+    return <div className="app-skeleton h-full w-full rounded-md" />;
   }
 
   if (!url) {

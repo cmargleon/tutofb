@@ -1,26 +1,36 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
 import { subscribeToClients } from '../features/clients/firebase';
-import { useCatalogJobs } from '../features/catalog/useCatalogJobs';
+import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
 import { Batch, Client, Job } from '../../shared/src/types';
-import { resolveApprovedJobOutput } from '../../shared/src/domain';
-import { formatDateTimeLong } from '../../shared/src/utils/dateUtils';
+import { formatDateTimeLong, toMillisOrZero } from '../../shared/src/utils/dateUtils';
 import { CatalogGarmentSection } from '../components/catalog/CatalogGarmentSection';
 import { CatalogLightbox } from '../components/catalog/CatalogLightbox';
+import { db } from '../firebase';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+const SORT_ORDER_OPTIONS: Array<{ value: CatalogSortOrder; label: string }> = [
+  { value: 'desc', label: 'Más nuevos primero' },
+  { value: 'asc', label: 'Más antiguos primero' },
+];
 
 export const Catalogo: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const initialClientId = searchParams.get('clientId') ?? '';
+  const initialBatchId = searchParams.get('batchId') ?? '';
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>('');
-  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
+  const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(initialBatchId);
   const [pageSize, setPageSize] = useState<number>(25);
+  const [sortOrder, setSortOrder] = useState<CatalogSortOrder>('desc');
   const [lightbox, setLightbox] = useState<{ garmentIndex: number; jobIndex: number; jobId: string } | null>(null);
+  const [generatingJobs, setGeneratingJobs] = useState<Job[]>([]);
 
   const {
     batches,
-    jobs,
     garmentGroups,
     loading,
     error,
@@ -34,22 +44,116 @@ export const Catalogo: React.FC = () => {
     clientId: selectedClientId || null,
     batchId: selectedBatchId || null,
     pageSize,
+    sortOrder,
   });
-
-  const lightboxIndexByJobId = useMemo(() => {
-    const map = new Map<string, { garmentIndex: number; jobIndex: number }>();
-    garmentGroups.forEach((group, garmentIndex) => {
-      group.jobs.forEach((job, jobIndex) => {
-        if (job.id) map.set(job.id, { garmentIndex, jobIndex });
-      });
-    });
-    return map;
-  }, [garmentGroups]);
 
   const batchOptions = useMemo(
     () => batches.filter((batch): batch is Batch & { id: string } => Boolean(batch.id)),
     [batches],
   );
+  const selectedBatch = useMemo(
+    () => (selectedBatchId ? batchOptions.find((batch) => batch.id === selectedBatchId) || null : null),
+    [batchOptions, selectedBatchId],
+  );
+  const selectedBatchIsGenerating = Boolean(
+    selectedBatch
+    && (selectedBatch.status === 'pending'
+      || selectedBatch.status === 'processing'
+      || selectedBatch.pendingJobs > 0
+      || selectedBatch.processingJobs > 0),
+  );
+
+  useEffect(() => {
+    if (!selectedBatchId || !selectedBatchIsGenerating) {
+      setGeneratingJobs([]);
+      return undefined;
+    }
+
+    const jobsQuery = query(
+      collection(db, 'jobs'),
+      where('batchId', '==', selectedBatchId),
+      orderBy('createdAt', sortOrder),
+    );
+
+    const unsubscribe = onSnapshot(
+      jobsQuery,
+      (snapshot) => {
+        setGeneratingJobs(
+          snapshot.docs
+            .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job)
+            .filter((job) => job.status === 'pending' || job.status === 'processing'),
+        );
+      },
+      () => setGeneratingJobs([]),
+    );
+
+    return () => unsubscribe();
+  }, [selectedBatchId, selectedBatchIsGenerating, sortOrder]);
+
+  const displayGarmentGroups = useMemo(() => {
+    if (generatingJobs.length === 0) {
+      return garmentGroups;
+    }
+
+    const compareJobs = (left: Job, right: Job) => (
+      sortOrder === 'asc'
+        ? toMillisOrZero(left.createdAt) - toMillisOrZero(right.createdAt)
+        : toMillisOrZero(right.createdAt) - toMillisOrZero(left.createdAt)
+    );
+
+    const grouped = new Map(
+      garmentGroups.map((group) => [
+        group.garmentId,
+        {
+          garmentId: group.garmentId,
+          garmentName: group.garmentName,
+          jobs: [...group.jobs],
+        },
+      ]),
+    );
+
+    generatingJobs.forEach((job) => {
+      if (!job.id) {
+        return;
+      }
+
+      const existingGroup = grouped.get(job.garmentId);
+      if (existingGroup) {
+        if (!existingGroup.jobs.some((existingJob) => existingJob.id === job.id)) {
+          existingGroup.jobs.push(job);
+        }
+        return;
+      }
+
+      grouped.set(job.garmentId, {
+        garmentId: job.garmentId,
+        garmentName: job.garmentName,
+        jobs: [job],
+      });
+    });
+
+    return Array.from(grouped.values())
+      .map((group) => ({
+        ...group,
+        jobs: [...group.jobs].sort(compareJobs),
+      }))
+      .sort((left, right) => compareJobs(left.jobs[0], right.jobs[0]));
+  }, [garmentGroups, generatingJobs, sortOrder]);
+
+  const visibleJobsCount = useMemo(
+    () => displayGarmentGroups.reduce((total, group) => total + group.jobs.length, 0),
+    [displayGarmentGroups],
+  );
+
+  const lightboxIndexByJobId = useMemo(() => {
+    const map = new Map<string, { garmentIndex: number; jobIndex: number }>();
+    displayGarmentGroups.forEach((group, garmentIndex) => {
+      group.jobs.forEach((job, jobIndex) => {
+        if (job.id) map.set(job.id, { garmentIndex, jobIndex });
+      });
+    });
+    return map;
+  }, [displayGarmentGroups]);
 
   const selectedBatchLabel = useMemo(() => {
     if (!selectedBatchId) return 'Todos los lotes';
@@ -62,11 +166,20 @@ export const Catalogo: React.FC = () => {
     return unsub;
   }, []);
 
-  useEffect(() => { setSelectedBatchId(''); }, [selectedClientId]);
-  useEffect(() => { setLightbox(null); }, [currentPage, pageSize, selectedBatchId, selectedClientId]);
+  useEffect(() => {
+    setSelectedBatchId((currentBatchId) => {
+      if (!selectedClientId) return '';
+      if (selectedClientId === initialClientId) return currentBatchId;
+      return '';
+    });
+  }, [initialClientId, selectedClientId]);
+
+  useEffect(() => {
+    setLightbox(null);
+  }, [currentPage, pageSize, selectedBatchId, selectedClientId, sortOrder]);
 
   const openLightboxForJob = useCallback((job: Job) => {
-    if (!job.id || !resolveApprovedJobOutput(job)?.resultImagePath) return;
+    if (!job.id) return;
     const indexes = lightboxIndexByJobId.get(job.id);
     if (!indexes) return;
     setLightbox({ jobId: job.id, ...indexes });
@@ -76,36 +189,36 @@ export const Catalogo: React.FC = () => {
 
   const previousLightboxTarget = useMemo(() => {
     if (!lightbox) return null;
-    const group = garmentGroups[lightbox.garmentIndex];
+    const group = displayGarmentGroups[lightbox.garmentIndex];
     if (!group) return null;
     const prev = group.jobs[lightbox.jobIndex - 1];
     if (prev?.id) return { garmentIndex: lightbox.garmentIndex, jobIndex: lightbox.jobIndex - 1, jobId: prev.id };
-    const prevGroup = garmentGroups[lightbox.garmentIndex - 1];
+    const prevGroup = displayGarmentGroups[lightbox.garmentIndex - 1];
     const prevGroupLast = prevGroup?.jobs[prevGroup.jobs.length - 1];
     if (prevGroupLast?.id) return { garmentIndex: lightbox.garmentIndex - 1, jobIndex: prevGroup.jobs.length - 1, jobId: prevGroupLast.id };
     return null;
-  }, [garmentGroups, lightbox]);
+  }, [displayGarmentGroups, lightbox]);
 
   const nextLightboxTarget = useMemo(() => {
     if (!lightbox) return null;
-    const group = garmentGroups[lightbox.garmentIndex];
+    const group = displayGarmentGroups[lightbox.garmentIndex];
     if (!group) return null;
     const next = group.jobs[lightbox.jobIndex + 1];
     if (next?.id) return { garmentIndex: lightbox.garmentIndex, jobIndex: lightbox.jobIndex + 1, jobId: next.id };
-    const nextGroup = garmentGroups[lightbox.garmentIndex + 1];
+    const nextGroup = displayGarmentGroups[lightbox.garmentIndex + 1];
     const nextGroupFirst = nextGroup?.jobs[0];
     if (nextGroupFirst?.id) return { garmentIndex: lightbox.garmentIndex + 1, jobIndex: 0, jobId: nextGroupFirst.id };
     return null;
-  }, [garmentGroups, lightbox]);
+  }, [displayGarmentGroups, lightbox]);
 
   const lightboxJob = useMemo(() => {
     if (!lightbox) return null;
-    const indexed = garmentGroups[lightbox.garmentIndex]?.jobs[lightbox.jobIndex];
+    const indexed = displayGarmentGroups[lightbox.garmentIndex]?.jobs[lightbox.jobIndex];
     if (indexed?.id === lightbox.jobId) return indexed;
     const fallback = lightboxIndexByJobId.get(lightbox.jobId);
     if (!fallback) return null;
-    return garmentGroups[fallback.garmentIndex]?.jobs[fallback.jobIndex] || null;
-  }, [garmentGroups, lightbox, lightboxIndexByJobId]);
+    return displayGarmentGroups[fallback.garmentIndex]?.jobs[fallback.jobIndex] || null;
+  }, [displayGarmentGroups, lightbox, lightboxIndexByJobId]);
 
   const pageLabel = totalPages ? `Página ${currentPage} de ${totalPages}` : `Página ${currentPage}`;
 
@@ -136,7 +249,7 @@ export const Catalogo: React.FC = () => {
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,22rem)_10rem]">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,22rem)_10rem_14rem]">
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-gray-600">Cliente</span>
               <select
@@ -182,6 +295,22 @@ export const Catalogo: React.FC = () => {
                 ))}
               </select>
             </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-gray-600">Orden por fecha</span>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as CatalogSortOrder)}
+                disabled={!selectedClientId}
+                className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+              >
+                {SORT_ORDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           {selectedClientId && !loading && !error && (
@@ -191,9 +320,23 @@ export const Catalogo: React.FC = () => {
                 <span className="mx-2">·</span>
                 <span>{pageLabel}</span>
                 <span className="mx-2">·</span>
-                <span>{jobs.length} job{jobs.length === 1 ? '' : 's'} visibles</span>
+                <span>{visibleJobsCount} job{visibleJobsCount === 1 ? '' : 's'} visibles</span>
               </div>
               {paginationControls}
+            </div>
+          )}
+
+          {selectedBatchIsGenerating && !error && (
+            <div className="mt-4 flex flex-col gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="app-spinner app-spinner-sm shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="font-medium">El catálogo se actualiza solo a medida que salen imágenes nuevas.</p>
+                  <p className="text-indigo-700">
+                    {selectedBatch.completedJobs} de {selectedBatch.totalJobs} jobs completados en este lote.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -215,15 +358,23 @@ export const Catalogo: React.FC = () => {
           <div className="text-center py-16 text-red-500 text-sm">{error}</div>
         )}
 
-        {selectedClientId && !loading && !error && garmentGroups.length === 0 && (
-          <div className="text-center py-16 text-gray-400">
-            <p>{selectedBatchId ? 'No hay imágenes completadas para ese lote' : 'No hay imágenes completadas para este cliente'}</p>
-          </div>
+        {selectedClientId && !loading && !error && displayGarmentGroups.length === 0 && (
+          selectedBatchIsGenerating ? (
+            <div className="rounded-2xl border border-gray-200 bg-white">
+              <LoadingBlock
+                message={`Todavía no hay fotos aprobadas para mostrar. El lote lleva ${selectedBatch?.completedJobs ?? 0} de ${selectedBatch?.totalJobs ?? 0} jobs completados.`}
+              />
+            </div>
+          ) : (
+            <div className="text-center py-16 text-gray-400">
+              <p>{selectedBatchId ? 'No hay imágenes completadas para ese lote' : 'No hay imágenes completadas para este cliente'}</p>
+            </div>
+          )
         )}
 
-        {!loading && garmentGroups.length > 0 && (
+        {!loading && displayGarmentGroups.length > 0 && (
           <div className="space-y-4">
-            {garmentGroups.map((group) => (
+            {displayGarmentGroups.map((group) => (
               <CatalogGarmentSection
                 key={group.garmentId}
                 group={group}
@@ -236,7 +387,7 @@ export const Catalogo: React.FC = () => {
                 <span className="mx-2">·</span>
                 <span>{pageLabel}</span>
                 <span className="mx-2">·</span>
-                <span>{jobs.length} job{jobs.length === 1 ? '' : 's'} visibles</span>
+                <span>{visibleJobsCount} job{visibleJobsCount === 1 ? '' : 's'} visibles</span>
               </div>
               {paginationControls}
             </div>

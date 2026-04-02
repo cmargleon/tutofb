@@ -16,8 +16,12 @@ interface CatalogGarmentSectionProps {
 export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ group, onImageClick }) => {
   const [expanded, setExpanded] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const downloadableJobs = group.jobs.filter((job) => Boolean(resolveApprovedJobOutput(job)?.resultImagePath));
 
   const handleDownloadAll = async () => {
+    if (downloadableJobs.length === 0) {
+      return;
+    }
     setDownloading(true);
     try {
       const JSZip = (await import('jszip')).default;
@@ -25,7 +29,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ gr
       const folder = zip.folder(group.garmentName.replace(/[^a-zA-Z0-9_-]/g, '_')) ?? zip;
 
       await Promise.all(
-        group.jobs.map(async (job) => {
+        downloadableJobs.map(async (job) => {
           const path = resolveApprovedJobOutput(job)?.resultImagePath;
           if (!path) return;
           try {
@@ -68,7 +72,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ gr
         <button
           type="button"
           onClick={handleDownloadAll}
-          disabled={downloading}
+          disabled={downloading || downloadableJobs.length === 0}
           className="ml-4 flex cursor-pointer items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 disabled:cursor-not-allowed disabled:opacity-50 shrink-0"
           title="Descargar todas las imágenes de esta prenda"
         >
@@ -84,7 +88,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ gr
       {expanded && (
         <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
           {group.jobs.map((job) => (
-            <CatalogThumbnail key={job.id} job={job} onClick={() => onImageClick(job)} />
+            <CatalogThumbnail key={job.id} job={job} onClick={onImageClick} />
           ))}
         </div>
       )}

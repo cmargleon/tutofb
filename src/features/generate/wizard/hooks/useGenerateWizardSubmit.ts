@@ -166,7 +166,7 @@ export const useGenerateWizardSubmit = ({
       setSubmitStage('creating-batch');
       const result = await createGenerationBatch(buildCreateGenerationBatchRequest(state, uploadedGarments));
 
-      navigate(`/evaluacion?batchId=${result.batchId}`);
+      navigate(`/catalogo?clientId=${state.selectedClientId}&batchId=${result.batchId}`);
     } catch (submitError: any) {
       console.error(submitError);
       setFlowError(

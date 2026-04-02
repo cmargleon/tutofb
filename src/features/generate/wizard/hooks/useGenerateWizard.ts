@@ -370,7 +370,11 @@ export const useGenerateWizard = () => {
     }
     setState((current) => ({
       ...current,
-      selectedPoseIds: allPosesSelected ? [] : selectedModel.poses.map((pose) => pose.id),
+      selectedPoseIds:
+        selectedModel.poses.length > 0
+        && selectedModel.poses.every((pose) => current.selectedPoseIds.includes(pose.id))
+          ? []
+          : selectedModel.poses.map((pose) => pose.id),
     }));
   };
 

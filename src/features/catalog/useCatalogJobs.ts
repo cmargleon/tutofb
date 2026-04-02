@@ -10,14 +10,17 @@ import {
   startAfter,
   QueryDocumentSnapshot,
   DocumentData,
+  QueryConstraint,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Batch, Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
+import { toMillisOrZero } from '../../../shared/src/utils/dateUtils';
 
 const BATCH_OPTIONS_LIMIT = 200;
 
 type JobDocumentSnapshot = QueryDocumentSnapshot<DocumentData>;
+export type CatalogSortOrder = 'asc' | 'desc';
 
 export interface CatalogGarmentGroup {
   garmentId: string;
@@ -29,6 +32,7 @@ interface CatalogJobsParams {
   clientId: string | null;
   batchId: string | null;
   pageSize: number;
+  sortOrder: CatalogSortOrder;
 }
 
 interface CatalogPage {
@@ -38,28 +42,51 @@ interface CatalogPage {
 }
 
 const isRenderableCatalogJob = (job: Job): boolean =>
-  job.status === 'completed' && Boolean(resolveApprovedJobOutput(job)?.resultImagePath);
+  job.status === 'failed'
+  || (job.status === 'completed' && Boolean(resolveApprovedJobOutput(job)?.resultImagePath));
 
-export const useCatalogJobs = ({ clientId, batchId, pageSize }: CatalogJobsParams) => {
+const compareJobsByCreatedAt = (left: Job, right: Job, sortOrder: CatalogSortOrder): number => (
+  sortOrder === 'asc'
+    ? toMillisOrZero(left.createdAt) - toMillisOrZero(right.createdAt)
+    : toMillisOrZero(right.createdAt) - toMillisOrZero(left.createdAt)
+);
+
+const buildCatalogQueryConstraints = ({
+  clientId,
+  batchId,
+  sortOrder,
+}: Pick<CatalogJobsParams, 'clientId' | 'batchId' | 'sortOrder'>): QueryConstraint[] => (
+      batchId
+    ? [
+        where('batchId', '==', batchId),
+        where('status', 'in', ['completed', 'failed']),
+        orderBy('createdAt', sortOrder),
+      ]
+    : [
+        where('clientId', '==', clientId),
+        where('status', 'in', ['completed', 'failed']),
+        orderBy('createdAt', sortOrder),
+      ]
+);
+
+export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: CatalogJobsParams) => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [pages, setPages] = useState<CatalogPage[]>([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const liveFirstPageSignatureRef = useRef('');
 
   const currentPage = currentPageIndex + 1;
-
-  useEffect(() => {
-    setCurrentPageIndex(0);
-  }, [pageSize]);
 
   useEffect(() => {
     setPages([]);
     setCurrentPageIndex(0);
     setLoading(false);
     setError(null);
-  }, [clientId, batchId]);
+    liveFirstPageSignatureRef.current = '';
+  }, [batchId, clientId, pageSize, sortOrder]);
 
   useEffect(() => {
     if (!clientId) {
@@ -95,20 +122,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize }: CatalogJobsParam
   const fetchPage = useCallback(
     async (cursor: JobDocumentSnapshot | null): Promise<CatalogPage> => {
       if (!clientId) return { jobs: [], lastVisible: null, hasMore: false };
-
-      const baseConstraints = batchId
-        ? [
-            where('batchId', '==', batchId),
-            where('status', '==', 'completed'),
-            orderBy('createdAt', 'desc'),
-          ]
-        : [
-            where('clientId', '==', clientId),
-            where('status', '==', 'completed'),
-            orderBy('createdAt', 'desc'),
-          ];
-
-      const constraints = [...baseConstraints, limit(pageSize + 1)];
+      const constraints = [...buildCatalogQueryConstraints({ clientId, batchId, sortOrder }), limit(pageSize + 1)];
       const catalogQuery = cursor
         ? query(collection(db, 'jobs'), ...constraints, startAfter(cursor))
         : query(collection(db, 'jobs'), ...constraints);
@@ -126,31 +140,56 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize }: CatalogJobsParam
         hasMore,
       };
     },
-    [clientId, batchId, pageSize],
+    [clientId, batchId, pageSize, sortOrder],
   );
 
   useEffect(() => {
-    if (!clientId || pages.length > 0) return undefined;
+    if (!clientId) {
+      setLoading(false);
+      return undefined;
+    }
 
-    let cancelled = false;
-    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
 
-    fetchPage(null)
-      .then((page) => {
-        if (cancelled || requestId !== requestIdRef.current) return;
-        setPages([page]);
+    const liveQuery = query(
+      collection(db, 'jobs'),
+      ...buildCatalogQueryConstraints({ clientId, batchId, sortOrder }),
+      limit(pageSize + 1),
+    );
+
+    const unsubscribe = onSnapshot(
+      liveQuery,
+      (snapshot) => {
+        const hasMore = snapshot.docs.length > pageSize;
+        const pageDocs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
+        const jobs = pageDocs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job)
+          .filter(isRenderableCatalogJob);
+        const livePage: CatalogPage = {
+          jobs,
+          lastVisible: pageDocs[pageDocs.length - 1] ?? null,
+          hasMore,
+        };
+        const nextSignature = pageDocs.map((docSnapshot) => docSnapshot.id).join('|');
+        const shouldResetCachedPages =
+          liveFirstPageSignatureRef.current !== '' && liveFirstPageSignatureRef.current !== nextSignature;
+
+        liveFirstPageSignatureRef.current = nextSignature;
+        setPages((prev) => (shouldResetCachedPages ? [livePage] : [livePage, ...prev.slice(1)]));
+        if (shouldResetCachedPages) {
+          setCurrentPageIndex(0);
+        }
         setLoading(false);
-      })
-      .catch(() => {
-        if (cancelled || requestId !== requestIdRef.current) return;
+      },
+      () => {
         setError('Error cargando imágenes del catálogo');
         setLoading(false);
-      });
+      },
+    );
 
-    return () => { cancelled = true; };
-  }, [clientId, batchId, pages.length, fetchPage]);
+    return () => unsubscribe();
+  }, [clientId, batchId, pageSize, sortOrder]);
 
   // Prefetch the next page silently whenever the current page has more data and the
   // following page is not yet cached. The user sees no loading indicator for this.
@@ -228,10 +267,13 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize }: CatalogJobsParam
         map.set(key, { garmentId: job.garmentId, garmentName: job.garmentName, jobs: [job] });
       }
     }
-    return Array.from(map.values()).sort((a, b) =>
-      a.garmentName.localeCompare(b.garmentName, 'es'),
-    );
-  }, [jobs]);
+    return Array.from(map.values())
+      .map((group) => ({
+        ...group,
+        jobs: [...group.jobs].sort((left, right) => compareJobsByCreatedAt(left, right, sortOrder)),
+      }))
+      .sort((left, right) => compareJobsByCreatedAt(left.jobs[0], right.jobs[0], sortOrder));
+  }, [jobs, sortOrder]);
 
   const hasPreviousPage = currentPageIndex > 0;
   const hasNextPage = Boolean(pages[currentPageIndex]?.hasMore || pages[currentPageIndex + 1]);

@@ -108,6 +108,77 @@ body {
   transition: background-color 200ms ease, color 200ms ease;
 }
 
+:root {
+  --loader-track: rgba(79, 107, 222, 0.18);
+  --loader-skeleton-base: rgba(148, 163, 184, 0.16);
+  --loader-skeleton-shimmer: rgba(123, 159, 255, 0.22);
+}
+
+.theme-dark {
+  --loader-skeleton-base: rgba(255, 255, 255, 0.06);
+  --loader-skeleton-shimmer: rgba(123, 159, 255, 0.16);
+}
+
+@keyframes app-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes app-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.app-spinner {
+  display: inline-block;
+  border-radius: 9999px;
+  border: 2px solid var(--loader-track);
+  border-top-color: var(--color-accent);
+  animation: app-loader-spin 0.7s linear infinite;
+}
+
+.app-spinner-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+.app-spinner-md {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.app-spinner-lg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.app-loading-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem;
+  text-align: center;
+}
+
+.app-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--loader-skeleton-base);
+}
+
+.app-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--loader-skeleton-shimmer), transparent);
+  animation: app-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
 button:not(:disabled),
 select:not(:disabled),
 summary,

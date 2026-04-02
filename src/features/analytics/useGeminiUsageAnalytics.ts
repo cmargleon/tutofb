@@ -22,7 +22,7 @@ export interface GeminiUsageFilters {
   status: GeminiUsageStatus | 'all';
 }
 
-interface GeminiUsageSummary {
+export interface GeminiUsageSummary {
   totalCalls: number;
   successCalls: number;
   failedCalls: number;
@@ -32,7 +32,7 @@ interface GeminiUsageSummary {
   totalCostUsd: number;
 }
 
-interface GeminiUsageBreakdownRow {
+export interface GeminiUsageBreakdownRow {
   key: string;
   label: string;
   calls: number;
@@ -49,7 +49,7 @@ interface GeminiUsageDailyRow {
   outputTokens: number;
 }
 
-interface GeminiUsageAnalyticsData {
+export interface GeminiUsageAnalyticsData {
   rows: GeminiUsageRecord[];
   availableModels: string[];
   summary: GeminiUsageSummary;

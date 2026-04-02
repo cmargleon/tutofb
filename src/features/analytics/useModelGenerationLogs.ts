@@ -3,7 +3,7 @@ import { collection, onSnapshot, orderBy, query, limit } from 'firebase/firestor
 import { db } from '../../firebase';
 import { ModelGenerationLog } from '../../../shared/src/types';
 
-interface ModelGenerationStats {
+export interface ModelGenerationStats {
   totalPhotos: number;
   totalCostUsd: number;
   recentLogs: ModelGenerationLog[];

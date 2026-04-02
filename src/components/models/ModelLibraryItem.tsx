@@ -12,7 +12,8 @@ import { Client, Model } from '../../../shared/src/types';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { formatPoseAutoCategoryLabel } from '../../../shared/src/utils/poseAiClassification';
 import { UseModelLibraryResult } from '../../features/models/hooks/useModelLibrary';
-import { MODEL_INPUT_BASE, formatModelTimestamp } from '../../features/models/utils';
+import { MODEL_INPUT_BASE } from '../../features/models/utils';
+import { formatDateTimeLong } from '../../../shared/src/utils/dateUtils';
 import { Button, ImageThumb } from '../ui';
 import { LocalFileThumb } from './LocalFileThumb';
 import { ModelIdentityTraitsFields } from './ModelIdentityTraitsFields';
@@ -267,7 +268,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                       {Number(model.generatedPhotoCostUsd || 0).toFixed(4)}
                     </span>
                   )}
-                  <span>Alta: {formatModelTimestamp(model.createdAt)}</span>
+                  <span>Alta: {formatDateTimeLong(model.createdAt)}</span>
                 </div>
               </div>
 

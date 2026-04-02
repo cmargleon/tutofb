@@ -155,7 +155,7 @@ test('Verify recent changes', async () => {
   await shot(page, '09-catalogo-page');
 
   // Should show client selector and empty state
-  await expect(page.getByRole('combobox')).toBeVisible({ timeout: 5000 });
+  await expect(page.getByRole('combobox').first()).toBeVisible({ timeout: 5000 });
   await expect(page.getByText(/selecciona un cliente para ver su catálogo/i)).toBeVisible({ timeout: 5000 });
   console.log('✅ Catálogo: Client selector rendered');
 

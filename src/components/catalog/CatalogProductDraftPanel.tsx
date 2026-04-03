@@ -164,13 +164,16 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
         collection(db, 'jobs'),
         where('batchId', '==', job.batchId),
         where('status', '==', 'completed'),
-        orderBy('createdAt', 'asc'),
+        orderBy('createdAt', 'desc'),
       ),
     )
       .then(async (snapshot) => {
         if (cancelled) return;
 
-        const completedJobs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Job);
+        // Reverse to get chronological (ASC) order for detalle1..N numbering
+        const completedJobs = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }) as Job)
+          .reverse();
 
         // Group completed jobs by garmentId
         const jobsByGarmentId = new Map<string, Job[]>();

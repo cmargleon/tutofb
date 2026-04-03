@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AlertCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, RefreshCw, X } from 'lucide-react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
@@ -43,6 +43,10 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const [downloading, setDownloading] = useState(false);
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
   const [batch, setBatch] = useState<Batch | null>(null);
+  const [showPendingHistoryPlaceholder, setShowPendingHistoryPlaceholder] = useState(false);
+  const [regenerationInFlight, setRegenerationInFlight] = useState(false);
+  const [regenerationSawRemoteProcessing, setRegenerationSawRemoteProcessing] = useState(false);
+  const pendingHistoryBaselineIdsRef = useRef<Set<string> | null>(null);
   const { outputs, loading: historyLoading } = useJobOutputHistory(job.id, HISTORY_LIMIT);
   const {
     localDrafts,
@@ -61,6 +65,10 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
 
   useEffect(() => {
     setSelectedOutputId(null);
+    setShowPendingHistoryPlaceholder(false);
+    setRegenerationInFlight(false);
+    setRegenerationSawRemoteProcessing(false);
+    pendingHistoryBaselineIdsRef.current = null;
   }, [job.id]);
 
   useEffect(() => {
@@ -117,10 +125,49 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
     : { provider: job.provider, prompt: job.promptBase || job.finalPrompt || '' };
   const isQueueing = job.id ? Boolean(queueingJobs[job.id]) : false;
   const regenerationError = job.id ? regenerationErrors[job.id] || null : null;
-  const controlsDisabled = !role.canRegenerate || !job.id || isQueueing;
+  const isRemoteGenerating = job.status === 'pending' || job.status === 'processing';
+  const isRegenerationActive = isQueueing || regenerationInFlight || isRemoteGenerating;
+  const controlsDisabled = !role.canRegenerate || !job.id || isRegenerationActive;
   const displayedImageValue = displayedImageUrl || displayedOutput?.resultImagePath || null;
-  const isGeneratingJob = job.status === 'pending' || job.status === 'processing';
+  const isGeneratingJob = isRemoteGenerating;
   const showSpreadsheetPanel = batch?.outputMode !== 'photos_only';
+
+  useEffect(() => {
+    if (!regenerationInFlight) {
+      return;
+    }
+
+    if (isQueueing || isRemoteGenerating) {
+      setRegenerationSawRemoteProcessing(true);
+    }
+  }, [isQueueing, isRemoteGenerating, regenerationInFlight]);
+
+  useEffect(() => {
+    if (!showPendingHistoryPlaceholder && !regenerationInFlight) {
+      return;
+    }
+
+    const baselineIds = pendingHistoryBaselineIdsRef.current;
+    const hasNewOutput = Boolean(
+      baselineIds
+      && outputsDesc.some((output) => output.id && !baselineIds.has(output.id)),
+    );
+    const generationFinished = regenerationSawRemoteProcessing && !isQueueing && !isRemoteGenerating;
+
+    if (hasNewOutput || generationFinished) {
+      setShowPendingHistoryPlaceholder(false);
+      setRegenerationInFlight(false);
+      setRegenerationSawRemoteProcessing(false);
+      pendingHistoryBaselineIdsRef.current = null;
+    }
+  }, [
+    isQueueing,
+    isRemoteGenerating,
+    outputsDesc,
+    regenerationInFlight,
+    regenerationSawRemoteProcessing,
+    showPendingHistoryPlaceholder,
+  ]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -179,6 +226,10 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
     if (!job.id) return;
     const success = await handleRegenerate(job.id);
     if (success) {
+      pendingHistoryBaselineIdsRef.current = new Set(outputsDesc.map((output) => output.id));
+      setShowPendingHistoryPlaceholder(true);
+      setRegenerationInFlight(true);
+      setRegenerationSawRemoteProcessing(false);
       toast({
         tone: 'success',
         title: 'Regeneración encolada',
@@ -296,12 +347,12 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="px-4 py-4 sm:px-5" onClick={(e) => e.stopPropagation()}>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Historial</p>
-                {historyLoading && historyOutputs.length === 0 ? (
+                {historyLoading && historyOutputs.length === 0 && !showPendingHistoryPlaceholder ? (
                   <div className="flex items-center gap-2 text-sm text-slate-300">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Cargando intentos...
                   </div>
-                ) : historyOutputs.length > 0 ? (
+                ) : historyOutputs.length > 0 || showPendingHistoryPlaceholder ? (
                   <div className="flex gap-2 overflow-x-auto pb-1">
                     {historyOutputs.map((output, outputIndex) => (
                       <AttemptThumbnail
@@ -313,6 +364,25 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                         onSelect={() => setSelectedOutputId(output.id)}
                       />
                     ))}
+                    {showPendingHistoryPlaceholder ? (
+                      <div
+                        className="shrink-0 rounded-2xl border border-dashed border-sky-400/40 bg-sky-500/10 p-1.5"
+                        aria-label="Nueva imagen en generación"
+                      >
+                        <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-slate-950/70">
+                          <div className="flex flex-col items-center gap-2 text-sky-100">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span className="text-[10px] font-medium uppercase tracking-[0.18em]">
+                              Generando
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-2 space-y-1 px-0.5">
+                          <p className="text-[11px] font-semibold text-slate-100">Nuevo intento</p>
+                          <p className="text-[11px] text-sky-200">Esperando imagen...</p>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400">
@@ -399,7 +469,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                 disabled={controlsDisabled || !draft.prompt.trim()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
-                <RefreshCw className={`h-4 w-4 ${isQueueing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${isRegenerationActive ? 'animate-spin' : ''}`} />
                 Regenerar foto
               </button>
             </div>

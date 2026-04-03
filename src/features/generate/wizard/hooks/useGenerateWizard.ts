@@ -421,6 +421,14 @@ export const useGenerateWizard = () => {
     }));
   };
 
+  const handleRetryProductDraftPreparation = () => {
+    setFlowError(null);
+    setState((current) => ({
+      ...current,
+      productDraftPreparation: createInitialProductDraftPreparationState(),
+    }));
+  };
+
   return {
     state,
     clients,
@@ -457,6 +465,7 @@ export const useGenerateWizard = () => {
     handleProviderImageConfigChange,
     handlePromptChange,
     handleRetryPoseSuggestions,
+    handleRetryProductDraftPreparation,
     handleProductDraftRowsChange,
   };
 };

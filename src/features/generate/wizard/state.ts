@@ -18,11 +18,10 @@ export const GENERATE_WIZARD_STEPS: WizardStepDefinition[] = [
   { id: 1, name: 'Cliente, modelo y salida' },
   { id: 2, name: 'Prendas' },
   { id: 3, name: 'Poses sugeridas' },
-  { id: 4, name: 'Productos o salida' },
-  { id: 5, name: 'Lote' },
+  { id: 4, name: 'Lote' },
 ];
 
-export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_STEPS.length - 1]?.id ?? 5;
+export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_STEPS.length - 1]?.id ?? 4;
 
 export const createInitialGenerateWizardState = (): WizardState => ({
   step: 1,
@@ -151,8 +150,6 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
     case 3:
       return state.selectedPoseIds.length > 0;
     case 4:
-      return state.outputMode === 'photos_only' || state.productDrafts.length > 0;
-    case 5:
       return true;
     default:
       return false;

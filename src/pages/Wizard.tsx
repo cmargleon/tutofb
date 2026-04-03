@@ -5,7 +5,6 @@ import { WizardFooter } from '../components/wizard/WizardFooter';
 import { ClientModelStep } from '../components/wizard/ClientModelStep';
 import { GarmentsStep } from '../components/wizard/GarmentsStep';
 import { PoseSelectionStep } from '../components/wizard/PoseSelectionStep';
-import { ProductDraftsStep } from '../components/wizard/ProductDraftsStep';
 import { BatchStep } from '../components/wizard/BatchStep';
 import { useToast } from '../features/feedback/FeedbackProvider';
 import { useWizard } from '../features/generate/hooks/useWizard';
@@ -49,7 +48,7 @@ export const Wizard: React.FC = () => {
     handleProviderImageConfigChange,
     handlePromptChange,
     handleRetryPoseSuggestions,
-    handleProductDraftRowsChange,
+    handleRetryProductDraftPreparation,
   } = useWizard();
   const isWizardBusy = isSubmitting || state.poseSuggestions.status === 'preparing';
 
@@ -146,17 +145,6 @@ export const Wizard: React.FC = () => {
         )}
 
         {state.step === 4 && (
-          <ProductDraftsStep
-            outputMode={state.outputMode}
-            categories={spreadsheetCategories}
-            productDrafts={state.productDrafts}
-            preparationStatus={state.productDraftPreparation.status}
-            preparationError={state.productDraftPreparation.error}
-            onChangeRows={handleProductDraftRowsChange}
-          />
-        )}
-
-        {state.step === 5 && (
           <BatchStep
             state={state}
             garments={state.garments}
@@ -166,6 +154,9 @@ export const Wizard: React.FC = () => {
             promptSourceLabel={promptSourceLabel}
             submitButtonLabel={submitButtonLabel}
             disabledProviders={disabledProviders}
+            productDraftPreparationStatus={state.productDraftPreparation.status}
+            productDraftPreparationError={state.productDraftPreparation.error}
+            onRetryProductDraftPreparation={handleRetryProductDraftPreparation}
             onProviderChange={handleProviderChange}
             onProviderImageConfigChange={handleProviderImageConfigChange}
             onPromptChange={handlePromptChange}

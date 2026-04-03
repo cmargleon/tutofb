@@ -344,7 +344,10 @@ export const useGarmentPreparation = ({
       || !state.selectedSpreadsheetTemplateId
       || state.garments.length === 0
       || state.productDraftPreparation.status === 'preparing'
-      || state.productDraftPreparation.signature === productDraftSignature
+      || (
+        state.productDraftPreparation.status === 'ready'
+        && state.productDraftPreparation.signature === productDraftSignature
+      )
     ) {
       return;
     }

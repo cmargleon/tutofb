@@ -15,7 +15,7 @@ import {
 } from '../../../shared/src/types';
 
 export type SourceType = GarmentSourceType;
-export type GenerateWizardStepId = 1 | 2 | 3 | 4 | 5;
+export type GenerateWizardStepId = 1 | 2 | 3 | 4;
 export type GenerateSubmitStage = 'idle' | 'uploading' | 'creating-batch';
 export type PoseSuggestionStatus = 'idle' | 'preparing' | 'ready' | 'failed';
 export type ProductDraftPreparationStatus = 'idle' | 'preparing' | 'ready' | 'failed';

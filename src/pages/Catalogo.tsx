@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { ChevronLeft, ChevronRight, Images } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
@@ -27,6 +27,7 @@ export const Catalogo: React.FC = () => {
   const [pageSize, setPageSize] = useState<number>(25);
   const [sortOrder, setSortOrder] = useState<CatalogSortOrder>('desc');
   const [lightbox, setLightbox] = useState<{ garmentIndex: number; jobIndex: number; jobId: string } | null>(null);
+  const [lightboxLiveJob, setLightboxLiveJob] = useState<Job | null>(null);
   const [generatingJobs, setGeneratingJobs] = useState<Job[]>([]);
 
   const {
@@ -178,6 +179,27 @@ export const Catalogo: React.FC = () => {
     setLightbox(null);
   }, [currentPage, pageSize, selectedBatchId, selectedClientId, sortOrder]);
 
+  useEffect(() => {
+    if (!lightbox?.jobId) {
+      setLightboxLiveJob(null);
+      return undefined;
+    }
+
+    const jobRef = doc(db, 'jobs', lightbox.jobId);
+    return onSnapshot(
+      jobRef,
+      (docSnapshot) => {
+        if (!docSnapshot.exists()) {
+          setLightboxLiveJob(null);
+          return;
+        }
+
+        setLightboxLiveJob({ id: docSnapshot.id, ...docSnapshot.data() } as Job);
+      },
+      () => setLightboxLiveJob(null),
+    );
+  }, [lightbox?.jobId]);
+
   const openLightboxForJob = useCallback((job: Job) => {
     if (!job.id) return;
     const indexes = lightboxIndexByJobId.get(job.id);
@@ -219,6 +241,8 @@ export const Catalogo: React.FC = () => {
     if (!fallback) return null;
     return displayGarmentGroups[fallback.garmentIndex]?.jobs[fallback.jobIndex] || null;
   }, [displayGarmentGroups, lightbox, lightboxIndexByJobId]);
+
+  const resolvedLightboxJob = lightboxJob || lightboxLiveJob;
 
   const pageLabel = totalPages ? `Página ${currentPage} de ${totalPages}` : `Página ${currentPage}`;
 
@@ -395,9 +419,9 @@ export const Catalogo: React.FC = () => {
         )}
       </div>
 
-      {lightbox && lightboxJob && (
+      {lightbox && resolvedLightboxJob && (
         <CatalogLightbox
-          job={lightboxJob}
+          job={resolvedLightboxJob}
           canGoPrevious={Boolean(previousLightboxTarget)}
           canGoNext={Boolean(nextLightboxTarget)}
           onClose={handleCloseLightbox}

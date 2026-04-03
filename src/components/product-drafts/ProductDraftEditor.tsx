@@ -222,7 +222,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
             <img
               src={displayValue}
               alt={column.label}
-              className="h-20 w-20 rounded-lg border border-slate-200 object-cover shadow-sm hover:opacity-80 transition-opacity"
+              className="h-20 w-20 rounded-lg border border-slate-200 bg-slate-50 p-1 object-contain shadow-sm transition-opacity hover:opacity-80"
             />
           </a>
         ) : null}

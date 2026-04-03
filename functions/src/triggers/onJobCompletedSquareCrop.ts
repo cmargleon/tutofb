@@ -2,7 +2,11 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { Batch, Job, ProductDraft } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
-import { generateAndStoreSquareCrop } from '../spreadsheets/squareCrop';
+import {
+  buildSquareCropStoragePath,
+  generateAndStoreSquareCrop,
+  isSquareCropValueForJob,
+} from '../spreadsheets/squareCrop';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 // Column keys that represent the "primera foto" / main square image
@@ -18,8 +22,9 @@ export const onJobCompletedSquareCrop = onDocumentUpdated('jobs/{jobId}', async 
   // Only fire when transitioning TO completed
   if (before.status === 'completed' || after.status !== 'completed') return;
 
-  const resultImagePath = resolveApprovedJobOutput(after)?.resultImagePath;
-  if (!resultImagePath) return;
+  const approvedOutput = resolveApprovedJobOutput(after);
+  const resultImagePath = approvedOutput?.resultImagePath;
+  if (!approvedOutput?.id || !resultImagePath) return;
 
   const db = getAppFirestore();
 
@@ -43,29 +48,48 @@ export const onJobCompletedSquareCrop = onDocumentUpdated('jobs/{jobId}', async 
 
   const draftDoc = draftsSnap.docs[0];
   const draft = draftDoc.data() as ProductDraft;
+  const cropLocation = {
+    clientId: after.clientId,
+    batchId: after.batchId,
+    jobId: event.params.jobId,
+  };
 
-  // Skip if any row already has a main image value set
-  const alreadySet = draft.rows.some((row) =>
-    [...MAIN_IMAGE_COLUMN_KEYS].some((key) => row.values[key]),
+  const shouldRefreshSquareCrop = draft.rows.some((row) =>
+    [...MAIN_IMAGE_COLUMN_KEYS].some((key) => {
+      const currentValue = row.values[key];
+      return !currentValue || isSquareCropValueForJob(currentValue, cropLocation);
+    }),
   );
-  if (alreadySet) return;
+
+  if (!shouldRefreshSquareCrop) return;
 
   // Generate square crop
-  const outputPath = `generated/${after.clientId}/${after.batchId}/${event.params.jobId}/square_crop.jpg`;
+  const outputPath = buildSquareCropStoragePath({
+    ...cropLocation,
+    outputId: approvedOutput.id,
+  });
   let downloadUrl: string;
   try {
-    downloadUrl = await generateAndStoreSquareCrop(resultImagePath, outputPath);
+    downloadUrl = await generateAndStoreSquareCrop(resultImagePath, outputPath, {
+      poseFraming: after.poseFraming || 'unknown',
+    });
   } catch (error) {
     console.error('Failed to generate square crop for job', event.params.jobId, error);
     return;
   }
 
-  // Update all draft rows — set main_img if empty
+  // Update all draft rows that were still empty or already pointed to this job's square crop.
   const updatedRows = draft.rows.map((row) => ({
     ...row,
     values: {
       ...row.values,
-      main_img: row.values['main_img'] || downloadUrl,
+      ...[...MAIN_IMAGE_COLUMN_KEYS].reduce<Record<string, string>>((nextValues, key) => {
+        const currentValue = row.values[key];
+        if (!currentValue || isSquareCropValueForJob(currentValue, cropLocation)) {
+          nextValues[key] = downloadUrl;
+        }
+        return nextValues;
+      }, {}),
     },
   }));
 

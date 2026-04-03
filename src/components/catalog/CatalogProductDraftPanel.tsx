@@ -16,6 +16,8 @@ interface CatalogProductDraftPanelProps {
   job: Job;
 }
 
+const MAIN_IMAGE_COLUMN_KEYS = new Set(['main_img', 'square_img']);
+
 const normalizeComparable = (value: string): string =>
   value
     .normalize('NFD')
@@ -141,9 +143,31 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
           return draft;
         }
 
+        const remoteRowsById = new Map<string, ProductDraft['rows'][number]>(
+          draft.rows.map((row) => [row.id, row]),
+        );
+
         return {
           ...draft,
-          rows: currentDraft.rows,
+          rows: currentDraft.rows.map((row) => {
+            const remoteRow = remoteRowsById.get(row.id);
+            if (!remoteRow) {
+              return row;
+            }
+
+            const nextValues = { ...row.values };
+            MAIN_IMAGE_COLUMN_KEYS.forEach((key) => {
+              const remoteValue = remoteRow.values[key];
+              if (typeof remoteValue === 'string' && remoteValue.trim()) {
+                nextValues[key] = remoteValue;
+              }
+            });
+
+            return {
+              ...row,
+              values: nextValues,
+            };
+          }),
         };
       });
     });

@@ -53,3 +53,4 @@ export * from './triggers/analyticsTriggers';
 export * from './triggers/onModelWrite';
 export * from './triggers/syncClaimsOnUserWrite';
 export * from './triggers/storageCleanupSchedule';
+export * from './triggers/onJobCompletedSquareCrop';

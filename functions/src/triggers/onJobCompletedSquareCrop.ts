@@ -1,100 +1,50 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import * as admin from 'firebase-admin';
-import { Batch, Job, ProductDraft } from '../../../shared/src/types';
-import { resolveApprovedJobOutput } from '../../../shared/src/domain';
-import {
-  buildSquareCropStoragePath,
-  generateAndStoreSquareCrop,
-  isSquareCropValueForJob,
-} from '../spreadsheets/squareCrop';
+import { Batch, Job } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { syncProductDraftImagesForGarment } from '../spreadsheets/syncProductDraftImages';
 
-// Column keys that represent the "primera foto" / main square image
-const MAIN_IMAGE_COLUMN_KEYS = new Set(['main_img', 'square_img']);
+const resolveEffectiveOutputId = (job: Job | undefined): string | null =>
+  job?.userSelectedOutput?.id
+  || job?.userSelectedOutputId
+  || job?.currentOutput?.id
+  || job?.currentOutputId
+  || null;
 
 export const onJobCompletedSquareCrop = onDocumentUpdated('jobs/{jobId}', async (event) => {
   const snapshot = event.data;
   if (!snapshot) return;
 
-  const before = snapshot.before.data();
+  const before = snapshot.before.data() as Job;
   const after = snapshot.after.data() as Job;
 
-  // Only fire when transitioning TO completed
-  if (before.status === 'completed' || after.status !== 'completed') return;
-
-  const approvedOutput = resolveApprovedJobOutput(after);
-  const resultImagePath = approvedOutput?.resultImagePath;
-  if (!approvedOutput?.id || !resultImagePath) return;
-
-  const db = getAppFirestore();
-
-  // Fetch batch to check for spreadsheet template
-  const batchSnap = await db.collection('batches').doc(after.batchId).get();
-  if (!batchSnap.exists) return;
-
-  const batch = batchSnap.data() as Batch;
-  if (!batch.spreadsheetTemplateId) return;
-
-  // Find the ProductDraft for this garment in the batch
-  const draftsSnap = await db
-    .collection('batches')
-    .doc(after.batchId)
-    .collection('productDrafts')
-    .where('garmentId', '==', after.garmentId)
-    .limit(1)
-    .get();
-
-  if (draftsSnap.empty) return;
-
-  const draftDoc = draftsSnap.docs[0];
-  const draft = draftDoc.data() as ProductDraft;
-  const cropLocation = {
-    clientId: after.clientId,
-    batchId: after.batchId,
-    jobId: event.params.jobId,
-  };
-
-  const shouldRefreshSquareCrop = draft.rows.some((row) =>
-    [...MAIN_IMAGE_COLUMN_KEYS].some((key) => {
-      const currentValue = row.values[key];
-      return !currentValue || isSquareCropValueForJob(currentValue, cropLocation);
-    }),
-  );
-
-  if (!shouldRefreshSquareCrop) return;
-
-  // Generate square crop
-  const outputPath = buildSquareCropStoragePath({
-    ...cropLocation,
-    outputId: approvedOutput.id,
-  });
-  let downloadUrl: string;
-  try {
-    downloadUrl = await generateAndStoreSquareCrop(resultImagePath, outputPath, {
-      poseFraming: after.poseFraming || 'unknown',
-    });
-  } catch (error) {
-    console.error('Failed to generate square crop for job', event.params.jobId, error);
+  if (!after.batchId || !after.garmentId || !after.productDraftId) {
     return;
   }
 
-  // Update all draft rows that were still empty or already pointed to this job's square crop.
-  const updatedRows = draft.rows.map((row) => ({
-    ...row,
-    values: {
-      ...row.values,
-      ...[...MAIN_IMAGE_COLUMN_KEYS].reduce<Record<string, string>>((nextValues, key) => {
-        const currentValue = row.values[key];
-        if (!currentValue || isSquareCropValueForJob(currentValue, cropLocation)) {
-          nextValues[key] = downloadUrl;
-        }
-        return nextValues;
-      }, {}),
-    },
-  }));
+  // Manual selections are handled inside the callable so the user waits for the sync there.
+  if ((before.userSelectedOutputId || null) !== (after.userSelectedOutputId || null)) {
+    return;
+  }
 
-  await draftDoc.ref.update({
-    rows: updatedRows,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  if (resolveEffectiveOutputId(before) === resolveEffectiveOutputId(after)) {
+    return;
+  }
+
+  const db = getAppFirestore();
+  const batchSnapshot = await db.collection('batches').doc(after.batchId).get();
+  if (!batchSnapshot.exists) {
+    return;
+  }
+
+  const batch = { id: batchSnapshot.id, ...batchSnapshot.data() } as Batch;
+  if (!batch.spreadsheetTemplateId) {
+    return;
+  }
+
+  await syncProductDraftImagesForGarment({
+    db,
+    batchId: after.batchId,
+    garmentId: after.garmentId,
+    batch,
   });
 });

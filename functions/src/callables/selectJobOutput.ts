@@ -1,10 +1,10 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { Job, JobOutput, ProductDraft, SelectJobOutputRequest, SelectJobOutputResponse } from '../../../shared/src/types';
+import { Job, JobOutput, SelectJobOutputRequest, SelectJobOutputResponse } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { ensureStorageDownloadUrl } from '../firebase/storageDownloadUrl';
 import { buildClearSelectionReviewSignalsPatch, buildSelectOutputReviewSignalsPatch } from '../review/reviewSignals';
+import { syncProductDraftImagesForGarment } from '../spreadsheets/syncProductDraftImages';
 
 export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobOutputResponse>>(async (request) => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
@@ -32,10 +32,6 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
     userSnapshot.exists && typeof userSnapshot.data()?.displayName === 'string'
       ? userSnapshot.data()!.displayName
       : null;
-  const productDraftRef = job.batchId && job.productDraftId
-    ? db.collection('batches').doc(job.batchId).collection('productDrafts').doc(job.productDraftId)
-    : null;
-
   if (!outputId) {
     await jobRef.update({
       userSelectedOutputId: null,
@@ -60,16 +56,13 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
       createdAt: now,
     });
 
-    if (productDraftRef) {
-      const draftSnapshot = await productDraftRef.get();
-      if (draftSnapshot.exists) {
-        const productDraft = { id: draftSnapshot.id, ...draftSnapshot.data() } as ProductDraft;
-        await productDraftRef.update({
-          generatedImages: (productDraft.generatedImages || []).filter((entry) => entry.jobId !== job.id),
-          updatedAt: now,
-          updatedByUid: request.auth!.uid,
-        });
-      }
+    if (job.batchId && job.garmentId && job.productDraftId) {
+      await syncProductDraftImagesForGarment({
+        db,
+        batchId: job.batchId,
+        garmentId: job.garmentId,
+        requestedByUid: request.auth!.uid,
+      });
     }
 
     return {
@@ -88,8 +81,6 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
   if (!output.resultImagePath) {
     throw new HttpsError('failed-precondition', 'La salida seleccionada todavía no tiene una imagen disponible.');
   }
-  const draftSnapshot = productDraftRef ? await productDraftRef.get() : null;
-  const downloadUrl = await ensureStorageDownloadUrl(output.resultImagePath);
 
   await jobRef.update({
     userSelectedOutputId: output.id,
@@ -109,28 +100,12 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
     updatedAt: now,
   });
 
-  if (productDraftRef && draftSnapshot?.exists) {
-    const productDraft = { id: draftSnapshot.id, ...draftSnapshot.data() } as ProductDraft;
-    const nextGeneratedImages = [
-      ...(productDraft.generatedImages || []).filter((entry) => entry.jobId !== job.id),
-      {
-        jobId: job.id!,
-        outputId: output.id,
-        poseId: job.poseImageId || null,
-        label: job.poseFileName || `Pose ${job.poseImageId}`,
-        storagePath: output.resultImagePath,
-        downloadUrl,
-        poseOrientationGroup: job.poseOrientationGroup || null,
-        poseOrientationDetail: job.poseOrientationDetail || null,
-        poseFraming: job.poseFraming || null,
-        selectedAt: now,
-      },
-    ];
-
-    await productDraftRef.update({
-      generatedImages: nextGeneratedImages,
-      updatedAt: now,
-      updatedByUid: request.auth!.uid,
+  if (job.batchId && job.garmentId && job.productDraftId) {
+    await syncProductDraftImagesForGarment({
+      db,
+      batchId: job.batchId,
+      garmentId: job.garmentId,
+      requestedByUid: request.auth!.uid,
     });
   }
 

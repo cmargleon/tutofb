@@ -5,6 +5,7 @@ import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
 import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
+import { selectJobOutput } from '../../features/evaluation/firebase';
 import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRegenerationFirebase';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { useRole } from '../../features/auth/AuthProvider';
@@ -41,7 +42,8 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const role = useRole();
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
-  const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
+  const [pendingSelectedOutputId, setPendingSelectedOutputId] = useState<string | null | undefined>(undefined);
+  const [selectionSavingOutputId, setSelectionSavingOutputId] = useState<string | null>(null);
   const [batch, setBatch] = useState<Batch | null>(null);
   const [showPendingHistoryPlaceholder, setShowPendingHistoryPlaceholder] = useState(false);
   const [regenerationInFlight, setRegenerationInFlight] = useState(false);
@@ -64,7 +66,8 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   }, [initializeDraft, job]);
 
   useEffect(() => {
-    setSelectedOutputId(null);
+    setPendingSelectedOutputId(undefined);
+    setSelectionSavingOutputId(null);
     setShowPendingHistoryPlaceholder(false);
     setRegenerationInFlight(false);
     setRegenerationSawRemoteProcessing(false);
@@ -105,11 +108,14 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
     return [...merged.values()].sort((left, right) => toMillis(right.createdAt) - toMillis(left.createdAt));
   }, [job.currentOutput, job.userSelectedOutput, outputs]);
 
-  const currentOutput = job.currentOutput || outputsDesc[0] || null;
+  const persistedSelectedOutputId = resolveApprovedJobOutput(job)?.id || null;
+  const effectiveSelectedOutputId =
+    pendingSelectedOutputId !== undefined ? pendingSelectedOutputId : persistedSelectedOutputId;
+  const currentOutput = resolveApprovedJobOutput(job) || outputsDesc[0] || null;
   const historyOutputs = useMemo(() => [...outputsDesc].reverse(), [outputsDesc]);
   const displayedOutput = useMemo(
-    () => outputsDesc.find((output) => output.id === selectedOutputId) || currentOutput,
-    [currentOutput, outputsDesc, selectedOutputId],
+    () => outputsDesc.find((output) => output.id === effectiveSelectedOutputId) || currentOutput,
+    [currentOutput, effectiveSelectedOutputId, outputsDesc],
   );
   const displayedOutputLabel = displayedOutput
     ? formatOutputLabel(
@@ -131,6 +137,17 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const displayedImageValue = displayedImageUrl || displayedOutput?.resultImagePath || null;
   const isGeneratingJob = isRemoteGenerating;
   const showSpreadsheetPanel = batch?.outputMode !== 'photos_only';
+
+  useEffect(() => {
+    if (pendingSelectedOutputId === undefined) {
+      return;
+    }
+
+    if (pendingSelectedOutputId === persistedSelectedOutputId) {
+      setPendingSelectedOutputId(undefined);
+      setSelectionSavingOutputId(null);
+    }
+  }, [pendingSelectedOutputId, persistedSelectedOutputId]);
 
   useEffect(() => {
     if (!regenerationInFlight) {
@@ -249,6 +266,33 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
     }
   };
 
+  const handleSelectHistoryOutput = async (outputId: string) => {
+    if (!job.id || selectionSavingOutputId) {
+      return;
+    }
+
+    if (effectiveSelectedOutputId === outputId && pendingSelectedOutputId === undefined) {
+      return;
+    }
+
+    const previousPending = pendingSelectedOutputId;
+    setPendingSelectedOutputId(outputId);
+    setSelectionSavingOutputId(outputId);
+
+    try {
+      await selectJobOutput(job.id, outputId);
+    } catch (error: any) {
+      console.error('Failed to persist catalog history selection:', error);
+      setPendingSelectedOutputId(previousPending);
+      setSelectionSavingOutputId(null);
+      toast({
+        tone: 'error',
+        title: 'No pudimos guardar esta selección',
+        description: error?.message || 'Inténtalo de nuevo en unos segundos.',
+      });
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
@@ -360,8 +404,10 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                         output={output}
                         label={formatOutputLabel(output, outputIndex)}
                         active={displayedOutput?.id === output.id}
-                        userApproved={job.userSelectedOutputId === output.id || job.userSelectedOutput?.id === output.id}
-                        onSelect={() => setSelectedOutputId(output.id)}
+                        effectivelySelected={effectiveSelectedOutputId === output.id}
+                        geminiApproved={output.autoReview?.verdict === 'approved'}
+                        disabled={Boolean(selectionSavingOutputId)}
+                        onSelect={() => void handleSelectHistoryOutput(output.id)}
                       />
                     ))}
                     {showPendingHistoryPlaceholder ? (

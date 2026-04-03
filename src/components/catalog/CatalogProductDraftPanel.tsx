@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, doc, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Batch, Job, ProductDraft, SpreadsheetTemplateCategory, SpreadsheetTemplateCategoryColumn } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
@@ -16,6 +16,11 @@ interface CatalogProductDraftPanelProps {
   job: Job;
 }
 
+interface DraftImageBinding {
+  mainImageUrl: string;
+  detailImageUrls: string[];
+}
+
 const MAIN_IMAGE_COLUMN_KEYS = new Set(['main_img', 'square_img']);
 
 const normalizeComparable = (value: string): string =>
@@ -30,22 +35,35 @@ const resolveDetailImageIndex = (column: SpreadsheetTemplateCategoryColumn): num
   const candidates = [column.key, column.label].map(normalizeComparable);
 
   for (const candidate of candidates) {
-    const exactMatch = candidate.match(/detail_img_(\d+)$/) || candidate.match(/detalle_img_(\d+)$/);
-    if (exactMatch) {
-      return Number(exactMatch[1]);
-    }
-
-    const compactMatch = candidate.match(/detail_(\d+)$/)
-      || candidate.match(/detalle_(\d+)$/)
-      || candidate.match(/detail(\d+)$/)
-      || candidate.match(/detalle(\d+)$/);
-    if (compactMatch) {
-      return Number(compactMatch[1]);
-    }
+    const resolved = resolveDetailImageIndexFromKey(candidate);
+    if (resolved !== null) return resolved;
   }
 
   return null;
 };
+
+const resolveDetailImageIndexFromKey = (candidate: string): number | null => {
+  const exactMatch = candidate.match(/detail_img_(\d+)$/) || candidate.match(/detalle_img_(\d+)$/);
+  if (exactMatch) {
+    return Number(exactMatch[1]);
+  }
+
+  const compactMatch = candidate.match(/detail_(\d+)$/)
+    || candidate.match(/detalle_(\d+)$/)
+    || candidate.match(/detail(\d+)$/)
+    || candidate.match(/detalle(\d+)$/);
+  if (compactMatch) {
+    return Number(compactMatch[1]);
+  }
+
+  return null;
+};
+
+const isGeneratedImageColumnKey = (key: string): boolean =>
+  MAIN_IMAGE_COLUMN_KEYS.has(key) || resolveDetailImageIndexFromKey(normalizeComparable(key)) !== null;
+
+const buildPoseOrderMap = (batch: Batch | null): Map<string, number> =>
+  new Map((batch?.poseIds || []).map((poseId, index) => [poseId, index]));
 
 const resolveJobOutputUrl = async (storagePath: string): Promise<string> => {
   try {
@@ -58,7 +76,7 @@ const resolveJobOutputUrl = async (storagePath: string): Promise<string> => {
 const hydrateDraftDetailImageRows = (
   draft: ProductDraft,
   category: SpreadsheetTemplateCategory | undefined,
-  detailImageUrls: string[],
+  binding: DraftImageBinding,
 ): ProductDraft => {
   if (!category) {
     return draft;
@@ -70,7 +88,17 @@ const hydrateDraftDetailImageRows = (
       ...row,
       values: category.columns.reduce<Record<string, string>>((accumulator, column) => {
         const detailIndex = resolveDetailImageIndex(column);
-        const fallbackValue = detailIndex ? detailImageUrls[detailIndex - 1] || '' : null;
+        if (column.key === 'main_img') {
+          accumulator[column.key] = binding.mainImageUrl || row.values[column.key] || '';
+          return accumulator;
+        }
+
+        if (column.key === 'square_img') {
+          accumulator[column.key] = row.values[column.key] || '';
+          return accumulator;
+        }
+
+        const fallbackValue = detailIndex ? binding.detailImageUrls[detailIndex - 1] || '' : null;
         accumulator[column.key] = fallbackValue || row.values[column.key] || '';
         return accumulator;
       }, { ...row.values }),
@@ -86,8 +114,11 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
   const [editableProductDrafts, setEditableProductDrafts] = useState<ProductDraft[]>([]);
   const [dirtyDraftIds, setDirtyDraftIds] = useState<string[]>([]);
   const [savingDraftId, setSavingDraftId] = useState<string | null>(null);
-  const [detailImageUrlsByDraftId, setDetailImageUrlsByDraftId] = useState<Record<string, string[]>>({});
-  const [detailImageUrlsLoading, setDetailImageUrlsLoading] = useState(false);
+  const [currentGarmentImageBinding, setCurrentGarmentImageBinding] = useState<DraftImageBinding>({
+    mainImageUrl: '',
+    detailImageUrls: [],
+  });
+  const [imageBindingLoading, setImageBindingLoading] = useState(false);
   const { productDrafts, loading: productDraftsLoading, error: productDraftsError } = useBatchProductDrafts(job.batchId);
   const {
     categories: spreadsheetCategories,
@@ -156,11 +187,12 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
             }
 
             const nextValues = { ...row.values };
-            MAIN_IMAGE_COLUMN_KEYS.forEach((key) => {
-              const remoteValue = remoteRow.values[key];
-              if (typeof remoteValue === 'string' && remoteValue.trim()) {
-                nextValues[key] = remoteValue;
+            Object.keys(remoteRow.values).forEach((key) => {
+              if (!isGeneratedImageColumnKey(key)) {
+                return;
               }
+
+              nextValues[key] = remoteRow.values[key] || '';
             });
 
             return {
@@ -174,62 +206,71 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
   }, [dirtyDraftIds, productDrafts]);
 
   useEffect(() => {
-    if (!job.batchId || productDrafts.length === 0) {
-      setDetailImageUrlsByDraftId({});
-      setDetailImageUrlsLoading(false);
+    if (!job.batchId) {
+      setCurrentGarmentImageBinding({ mainImageUrl: '', detailImageUrls: [] });
+      setImageBindingLoading(false);
       return undefined;
     }
 
     let cancelled = false;
-    setDetailImageUrlsLoading(true);
+    setImageBindingLoading(true);
+    const poseOrderMap = buildPoseOrderMap(batch);
 
-    void getDocs(
-      query(
-        collection(db, 'jobs'),
-        where('batchId', '==', job.batchId),
-        where('status', '==', 'completed'),
-        orderBy('createdAt', 'desc'),
-      ),
-    )
-      .then(async (snapshot) => {
-        if (cancelled) return;
+    const jobsQuery = query(
+      collection(db, 'jobs'),
+      where('batchId', '==', job.batchId),
+      where('garmentId', '==', job.garmentId),
+    );
 
-        // Reverse to get chronological (ASC) order for detalle1..N numbering
-        const completedJobs = snapshot.docs
-          .map((d) => ({ id: d.id, ...d.data() }) as Job)
-          .reverse();
+    const unsubscribe = onSnapshot(
+      jobsQuery,
+      async (snapshot) => {
+        const jobs = snapshot.docs
+          .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as Job)
+          .sort((left, right) => {
+            const leftPoseOrder = poseOrderMap.get(left.poseImageId) ?? Number.MAX_SAFE_INTEGER;
+            const rightPoseOrder = poseOrderMap.get(right.poseImageId) ?? Number.MAX_SAFE_INTEGER;
+            if (leftPoseOrder !== rightPoseOrder) {
+              return leftPoseOrder - rightPoseOrder;
+            }
 
-        // Group completed jobs by garmentId
-        const jobsByGarmentId = new Map<string, Job[]>();
-        for (const j of completedJobs) {
-          const existing = jobsByGarmentId.get(j.garmentId) || [];
-          jobsByGarmentId.set(j.garmentId, [...existing, j]);
+            const createdDelta = toMillisOrZero(left.createdAt) - toMillisOrZero(right.createdAt);
+            if (createdDelta !== 0) {
+              return createdDelta;
+            }
+
+            return (left.id || '').localeCompare(right.id || '');
+          });
+
+        const effectivePaths = jobs
+          .map((entry) => resolveApprovedJobOutput(entry)?.resultImagePath)
+          .filter((path): path is string => Boolean(path));
+        const urls = (await Promise.all(effectivePaths.map(resolveJobOutputUrl))).filter(Boolean);
+
+        if (cancelled) {
+          return;
         }
 
-        const entries = await Promise.all(
-          productDrafts.map(async (draft) => {
-            if (!draft.id) return null;
-            const garmentJobs = jobsByGarmentId.get(draft.garmentId) || [];
-            const paths = garmentJobs
-              .map((j) => resolveApprovedJobOutput(j)?.resultImagePath)
-              .filter((p): p is string => Boolean(p));
-            const urls = (await Promise.all(paths.map(resolveJobOutputUrl))).filter(Boolean);
-            return [draft.id, urls] as const;
-          }),
-        );
-
+        setCurrentGarmentImageBinding({
+          mainImageUrl: urls[0] || '',
+          detailImageUrls: urls.slice(1),
+        });
+        setImageBindingLoading(false);
+      },
+      (error) => {
+        console.error('Error loading live garment image bindings for catalog draft panel:', error);
         if (!cancelled) {
-          setDetailImageUrlsByDraftId(
-            Object.fromEntries(entries.filter((e): e is readonly [string, string[]] => Boolean(e))),
-          );
+          setCurrentGarmentImageBinding({ mainImageUrl: '', detailImageUrls: [] });
+          setImageBindingLoading(false);
         }
-      })
-      .finally(() => {
-        if (!cancelled) setDetailImageUrlsLoading(false);
-      });
+      },
+    );
 
-    return () => { cancelled = true; };
-  }, [job.batchId, productDrafts]);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [batch, job.batchId, job.garmentId]);
 
   const garmentDrafts = useMemo(
     () => editableProductDrafts
@@ -238,9 +279,9 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
         hydrateDraftDetailImageRows(
           draft,
           spreadsheetCategories.find((category) => category.id === draft.categoryId),
-          draft.id ? (detailImageUrlsByDraftId[draft.id] || []) : [],
+          currentGarmentImageBinding,
         )),
-    [detailImageUrlsByDraftId, editableProductDrafts, job.garmentId, spreadsheetCategories],
+    [currentGarmentImageBinding, editableProductDrafts, job.garmentId, spreadsheetCategories],
   );
 
   const handleDraftRowsChange = (draft: ProductDraft, rows: ProductDraft['rows']) => {
@@ -280,7 +321,7 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
   };
 
   const panelError = batchError || productDraftsError || spreadsheetCategoriesError;
-  const panelLoading = batchLoading || productDraftsLoading || spreadsheetCategoriesLoading || detailImageUrlsLoading;
+  const panelLoading = batchLoading || productDraftsLoading || spreadsheetCategoriesLoading || imageBindingLoading;
   const isSpreadsheetBatch = Boolean(batch?.spreadsheetTemplateId);
 
   return (
@@ -322,7 +363,7 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
             showAddRowButton={false}
             showRowActions={false}
             resolveVisibleColumns={(draft, category) => {
-              const detailImageCount = 'id' in draft && draft.id ? (detailImageUrlsByDraftId[draft.id] || []).length : 0;
+              const detailImageCount = currentGarmentImageBinding.detailImageUrls.length;
               return category.columns.filter((column) => {
                 const detailIndex = resolveDetailImageIndex(column);
                 return detailIndex === null || detailIndex <= detailImageCount;

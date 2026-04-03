@@ -115,10 +115,10 @@ export const PoseView: React.FC<PoseViewProps> = ({
   const isViewingLatest = displayedOutput?.id === currentOutput?.id;
   const isUserApproved = Boolean(displayedOutput?.id && selectedOutputId === displayedOutput.id);
   const currentOutputAutoReviewVerdict = currentOutput?.autoReview?.verdict ?? job.latestAutoReview?.verdict ?? null;
-  const approvedOutputId =
+  const effectiveSelectedOutputId =
     selectedOutputId
     || (currentOutputAutoReviewVerdict === 'approved' ? currentOutput?.id ?? null : null);
-  const showApprovedBadge = Boolean(displayedOutput?.id && displayedOutput.id === approvedOutputId);
+  const showApprovedBadge = Boolean(displayedOutput?.id && displayedOutput.id === effectiveSelectedOutputId);
 
   const { url: displayedImageUrl, loading: displayedImageUrlLoading } = useStorageAssetUrl(displayedOutput?.resultImagePath || null);
   const displayedImageUrlLabel = displayedImageUrl ? trimUrlAfterImageExtension(displayedImageUrl) : null;
@@ -367,7 +367,8 @@ export const PoseView: React.FC<PoseViewProps> = ({
                 output={output}
                 label={formatOutputLabel(output, outputIndex)}
                 active={displayedOutput?.id === output.id}
-                userApproved={selectedOutputId === output.id}
+                effectivelySelected={effectiveSelectedOutputId === output.id}
+                geminiApproved={output.autoReview?.verdict === 'approved'}
                 onSelect={() => onSelectOutput?.(output.id, output)}
               />
             ))}

@@ -109,6 +109,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const historyOutputs = useMemo(() => [...outputsDesc].reverse(), [outputsDesc]);
   const isViewingLatest = displayedOutput?.id === currentOutput?.id;
   const isUserApprovedDisplayed = Boolean(displayedOutput?.id && selectedOutputId === displayedOutput.id);
+  const effectiveSelectedOutputId = selectedOutputId || resolveApprovedJobOutput(job)?.id || null;
   const activeReview =
     displayedOutput?.autoReview || (isViewingLatest ? job.latestAutoReview || currentOutput?.autoReview || null : null);
   const activeReviewPrompt =
@@ -346,7 +347,8 @@ export const JobEvaluationCard: React.FC<Props> = ({
               output={output}
               label={formatOutputLabel(output, outputIndex)}
               active={displayedOutput?.id === output.id}
-              userApproved={selectedOutputId === output.id}
+              effectivelySelected={effectiveSelectedOutputId === output.id}
+              geminiApproved={output.autoReview?.verdict === 'approved'}
               onSelect={() => onSelectOutput?.(output.id, output)}
             />
           ))}

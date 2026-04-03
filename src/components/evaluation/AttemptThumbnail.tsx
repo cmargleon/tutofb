@@ -8,7 +8,8 @@ interface Props {
   label: string;
   onSelect: () => void;
   active: boolean;
-  userApproved: boolean;
+  effectivelySelected: boolean;
+  geminiApproved: boolean;
   disabled?: boolean;
 }
 
@@ -16,19 +17,17 @@ export const AttemptThumbnail: React.FC<Props> = ({
   output,
   label,
   active,
-  userApproved,
+  effectivelySelected,
+  geminiApproved,
   disabled = false,
   onSelect,
 }) => {
   const { url } = useStorageAssetUrl(output.resultImagePath || null);
-  const verdict = output.autoReview?.verdict || null;
-  const statusLabel = userApproved
-    ? 'Aprobada por usuario'
-    : verdict === 'approved'
-      ? 'Aprobada por Gemini'
-      : verdict === 'rejected'
-        ? 'Rechazada'
-        : 'Sin veredicto';
+  const checkIcon = geminiApproved
+    ? effectivelySelected
+      ? '✅'
+      : '☑️'
+    : null;
 
   return (
     <button
@@ -36,7 +35,7 @@ export const AttemptThumbnail: React.FC<Props> = ({
       onClick={onSelect}
       disabled={disabled}
       className={`group shrink-0 rounded-2xl border p-1.5 text-left transition ${
-        userApproved
+        effectivelySelected
           ? 'border-emerald-300 bg-emerald-50 shadow-sm'
           : active
             ? 'border-indigo-300 bg-indigo-50 shadow-sm'
@@ -52,25 +51,23 @@ export const AttemptThumbnail: React.FC<Props> = ({
             <ImageIcon className="h-4 w-4" />
           </div>
         )}
-        {userApproved ? (
-          <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-            Elegida
+        {checkIcon ? (
+          <span
+            className={`absolute bottom-1.5 left-1.5 rounded-full px-1.5 py-0.5 text-[11px] leading-none ${
+              effectivelySelected ? 'bg-emerald-600/90 text-white' : 'bg-slate-700/75 text-white'
+            }`}
+            aria-label={
+              effectivelySelected
+                ? 'Salida aprobada por Gemini y seleccionada'
+                : 'Salida aprobada por Gemini'
+            }
+          >
+            {checkIcon}
           </span>
         ) : null}
       </div>
-      <div className="mt-2 space-y-1 px-0.5">
+      <div className="mt-2 px-0.5">
         <p className="text-[11px] font-semibold text-slate-700">{label}</p>
-        <p
-          className={`text-[11px] ${
-            userApproved || verdict === 'approved'
-              ? 'text-emerald-700'
-              : verdict === 'rejected'
-                ? 'text-amber-700'
-                : 'text-slate-500'
-          }`}
-        >
-          {statusLabel}
-        </p>
       </div>
     </button>
   );

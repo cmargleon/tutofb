@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { Batch, Job, ProductDraft, SpreadsheetTemplateCategory, SpreadsheetTemplateCategoryColumn } from '../../../shared/src/types';
+import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero } from '../../../shared/src/utils/dateUtils';
 import { db } from '../../firebase';
 import { useToast } from '../../features/feedback/FeedbackProvider';
@@ -44,24 +45,12 @@ const resolveDetailImageIndex = (column: SpreadsheetTemplateCategoryColumn): num
   return null;
 };
 
-const resolveGeneratedImageUrls = async (draft: ProductDraft): Promise<string[]> => {
-  const sortedImages = [...(draft.generatedImages || [])].sort(
-    (left, right) => toMillisOrZero(left.selectedAt) - toMillisOrZero(right.selectedAt),
-  );
-  const resolved = await Promise.all(
-    sortedImages.map(async (image) => {
-      if (image.downloadUrl) return image.downloadUrl;
-      try {
-        const asset = await resolveStorageAssetUrl(image.storagePath);
-        return asset.url;
-      } catch (error) {
-        console.error('Error resolving generated pose image URL for catalog draft:', error);
-        return '';
-      }
-    }),
-  );
-
-  return resolved.filter((value): value is string => Boolean(value));
+const resolveJobOutputUrl = async (storagePath: string): Promise<string> => {
+  try {
+    return (await resolveStorageAssetUrl(storagePath)).url;
+  } catch {
+    return '';
+  }
 };
 
 const hydrateDraftDetailImageRows = (
@@ -161,44 +150,59 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
   }, [dirtyDraftIds, productDrafts]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    if (productDrafts.length === 0) {
+    if (!job.batchId || productDrafts.length === 0) {
       setDetailImageUrlsByDraftId({});
       setDetailImageUrlsLoading(false);
       return undefined;
     }
 
+    let cancelled = false;
     setDetailImageUrlsLoading(true);
-    void Promise.all(
-      productDrafts.map(async (draft) => {
-        if (!draft.id) {
-          return null;
-        }
 
-        const urls = await resolveGeneratedImageUrls(draft);
-        return [draft.id, urls] as const;
-      }),
+    void getDocs(
+      query(
+        collection(db, 'jobs'),
+        where('batchId', '==', job.batchId),
+        where('status', '==', 'completed'),
+        orderBy('createdAt', 'asc'),
+      ),
     )
-      .then((entries) => {
-        if (cancelled) {
-          return;
+      .then(async (snapshot) => {
+        if (cancelled) return;
+
+        const completedJobs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Job);
+
+        // Group completed jobs by garmentId
+        const jobsByGarmentId = new Map<string, Job[]>();
+        for (const j of completedJobs) {
+          const existing = jobsByGarmentId.get(j.garmentId) || [];
+          jobsByGarmentId.set(j.garmentId, [...existing, j]);
         }
 
-        setDetailImageUrlsByDraftId(
-          Object.fromEntries(entries.filter((entry): entry is readonly [string, string[]] => Boolean(entry))),
+        const entries = await Promise.all(
+          productDrafts.map(async (draft) => {
+            if (!draft.id) return null;
+            const garmentJobs = jobsByGarmentId.get(draft.garmentId) || [];
+            const paths = garmentJobs
+              .map((j) => resolveApprovedJobOutput(j)?.resultImagePath)
+              .filter((p): p is string => Boolean(p));
+            const urls = (await Promise.all(paths.map(resolveJobOutputUrl))).filter(Boolean);
+            return [draft.id, urls] as const;
+          }),
         );
+
+        if (!cancelled) {
+          setDetailImageUrlsByDraftId(
+            Object.fromEntries(entries.filter((e): e is readonly [string, string[]] => Boolean(e))),
+          );
+        }
       })
       .finally(() => {
-        if (!cancelled) {
-          setDetailImageUrlsLoading(false);
-        }
+        if (!cancelled) setDetailImageUrlsLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [productDrafts]);
+    return () => { cancelled = true; };
+  }, [job.batchId, productDrafts]);
 
   const garmentDrafts = useMemo(
     () => editableProductDrafts

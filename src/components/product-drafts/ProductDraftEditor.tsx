@@ -41,6 +41,15 @@ interface ProductDraftEditorProps {
 const INPUT_CLASS =
   'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100';
 
+const isImageColumn = (column: SpreadsheetTemplateCategoryColumn): boolean => {
+  const key = column.key.toLowerCase();
+  const label = column.label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return key.includes('img') || label.includes('foto') || label.includes('imagen');
+};
+
+const looksLikeUrl = (value: string): boolean =>
+  value.startsWith('https://') || value.startsWith('http://');
+
 const buildEmptyRow = (category: SpreadsheetTemplateCategory): ProductDraftRow => ({
   id: `row-${crypto.randomUUID()}`,
   values: Object.fromEntries(category.columns.map((column) => [column.key, ''])),
@@ -203,14 +212,28 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
       );
     }
 
+    const displayValue = forceResolvedValue ? resolvedValue : (row.values[column.key] || '');
+    const showImagePreview = isImageColumn(column) && looksLikeUrl(displayValue);
+
     return (
-      <input
-        type="text"
-        value={forceResolvedValue ? resolvedValue : (row.values[column.key] || '')}
-        onChange={(event) => updateValue(event.target.value)}
-        className={INPUT_CLASS}
-        placeholder={placeholder}
-      />
+      <div className="space-y-1.5">
+        {showImagePreview ? (
+          <a href={displayValue} target="_blank" rel="noopener noreferrer" className="inline-block">
+            <img
+              src={displayValue}
+              alt={column.label}
+              className="h-20 w-20 rounded-lg border border-slate-200 object-cover shadow-sm hover:opacity-80 transition-opacity"
+            />
+          </a>
+        ) : null}
+        <input
+          type="text"
+          value={displayValue}
+          onChange={(event) => updateValue(event.target.value)}
+          className={INPUT_CLASS}
+          placeholder={placeholder}
+        />
+      </div>
     );
   };
 

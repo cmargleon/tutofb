@@ -47,6 +47,12 @@ const isImageColumn = (column: SpreadsheetTemplateCategoryColumn): boolean => {
   return key.includes('img') || label.includes('foto') || label.includes('imagen');
 };
 
+const isPrimaryPhotoColumn = (column: SpreadsheetTemplateCategoryColumn): boolean => {
+  const key = column.key.toLowerCase();
+  const label = column.label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return key === 'main_img' || (label.includes('primera') && label.includes('foto'));
+};
+
 const looksLikeUrl = (value: string): boolean =>
   value.startsWith('https://') || value.startsWith('http://');
 
@@ -214,6 +220,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
 
     const displayValue = forceResolvedValue ? resolvedValue : (row.values[column.key] || '');
     const showImagePreview = isImageColumn(column) && looksLikeUrl(displayValue);
+    const isMainPhoto = isPrimaryPhotoColumn(column);
 
     return (
       <div className="space-y-1.5">
@@ -375,11 +382,10 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
                   {activeColumns.map((column) => (
                     <div key={`${row.id}-${column.key}`} className="grid items-start gap-2 lg:grid-cols-[minmax(0,10rem)_1fr]">
                       <div className="pt-2">
-                        <div className="text-xs font-semibold text-slate-700">{column.label}</div>
+                        <div className="text-xs font-semibold text-slate-700">
+                          {column.label}{column.required ? <span className="ml-0.5 text-rose-500">(*)</span> : null}
+                        </div>
                         <div className="mt-1 font-mono text-[10px] text-slate-400">{column.key}</div>
-                        {column.required ? (
-                          <div className="mt-1 text-[10px] uppercase tracking-wide text-rose-500">Requerido</div>
-                        ) : null}
                       </div>
                       <div>{renderField(row, column, true)}</div>
                     </div>
@@ -418,9 +424,8 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
               <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Fila</th>
               {activeCategory.columns.map((column) => (
                 <th key={column.key} className="min-w-[220px] px-3 py-2 text-left text-[11px] font-semibold text-slate-600">
-                  <div>{column.label}</div>
+                  <div>{column.label}{column.required ? <span className="ml-0.5 text-rose-500">(*)</span> : null}</div>
                   <div className="mt-1 font-mono text-[10px] text-slate-400">{column.key}</div>
-                  {column.required ? <div className="mt-1 text-[10px] uppercase tracking-wide text-rose-500">Requerido</div> : null}
                 </th>
               ))}
               {showRowActions ? (

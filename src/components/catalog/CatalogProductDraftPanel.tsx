@@ -44,15 +44,18 @@ const resolveDetailImageIndex = (column: SpreadsheetTemplateCategoryColumn): num
   return null;
 };
 
-const resolveOriginalImageUrls = async (draft: ProductDraft): Promise<string[]> => {
-  const sortedImages = [...(draft.originalImages || [])].sort((left, right) => left.sourceIndex - right.sourceIndex);
+const resolveGeneratedImageUrls = async (draft: ProductDraft): Promise<string[]> => {
+  const sortedImages = [...(draft.generatedImages || [])].sort(
+    (left, right) => toMillisOrZero(left.selectedAt) - toMillisOrZero(right.selectedAt),
+  );
   const resolved = await Promise.all(
     sortedImages.map(async (image) => {
+      if (image.downloadUrl) return image.downloadUrl;
       try {
         const asset = await resolveStorageAssetUrl(image.storagePath);
         return asset.url;
       } catch (error) {
-        console.error('Error resolving original garment image URL for catalog draft:', error);
+        console.error('Error resolving generated pose image URL for catalog draft:', error);
         return '';
       }
     }),
@@ -173,7 +176,7 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
           return null;
         }
 
-        const urls = await resolveOriginalImageUrls(draft);
+        const urls = await resolveGeneratedImageUrls(draft);
         return [draft.id, urls] as const;
       }),
     )

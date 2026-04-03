@@ -51,9 +51,6 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({ job, onClick
           <Ban className="h-8 w-8 text-rose-300" aria-hidden="true" />
           <p className="text-sm font-semibold text-white leading-tight">La generación falló</p>
         </div>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2">
-          <p className="text-white text-xs truncate">{job.modelNameSnapshot}</p>
-        </div>
       </button>
     );
   }
@@ -76,9 +73,6 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({ job, onClick
             </p>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-rose-900/60 to-transparent p-2">
-          <p className="text-white text-xs truncate">{job.modelNameSnapshot}</p>
-        </div>
       </button>
     );
   }
@@ -98,9 +92,6 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({ job, onClick
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
           loading="lazy"
         />
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/35 to-transparent p-2">
-          <p className="text-white text-xs truncate">{job.modelNameSnapshot}</p>
-        </div>
       </button>
     );
   }
@@ -134,10 +125,6 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({ job, onClick
             </div>
           </>
         )}
-      </div>
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/35 to-transparent p-2">
-        <p className="text-white text-xs truncate">{job.modelNameSnapshot}</p>
-        <p className="text-[11px] text-white/80">{statusLabel}</p>
       </div>
     </button>
   );

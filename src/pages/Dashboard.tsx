@@ -208,7 +208,7 @@ export const Dashboard: React.FC = () => {
                       {pagedJobs.map((job) => (
                         <tr key={job.id} className="hover:bg-slate-50/80">
                           <td className="px-6 py-4 font-mono text-xs text-slate-500">
-                            <Link to={`/evaluacion?batchId=${job.batchId}`} className="text-slate-900 hover:underline">
+                            <Link to={`/catalogo?clientId=${job.clientId}&batchId=${job.batchId}`} className="text-slate-900 hover:underline">
                               {job.id?.slice(0, 8)}
                             </Link>
                           </td>
@@ -324,7 +324,7 @@ export const Dashboard: React.FC = () => {
             {data.recentBatches.map((batch) => (
               <li key={batch.id}>
                 <Link
-                  to={`/evaluacion?batchId=${batch.id}`}
+                  to={`/catalogo?clientId=${batch.clientId}&batchId=${batch.id}`}
                   className="flex items-center justify-between gap-4 px-6 py-3 hover:bg-slate-50"
                 >
                   <div className="min-w-0 flex-1">

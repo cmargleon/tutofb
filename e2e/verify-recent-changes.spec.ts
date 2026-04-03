@@ -2,7 +2,6 @@
  * Verification test for recent UI changes:
  * - Analytics page reorganization (3 sections: Operación / Producción / Costos)
  * - Configuración page (new menu item + page)
- * - Evaluación page (PoseSingleView redesign)
  * - Sidebar navigation
  * - Catálogo page (new menu item + client selector)
  */
@@ -123,22 +122,6 @@ test('Verify recent changes', async () => {
   await expect(heading90d).toBeVisible();
   console.log('✅ Analytics: 90d selector updates headings');
 
-  // ── Evaluación page ───────────────────────────────────────────────────────
-  await page.goto(`${BASE_URL}/evaluacion`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3000);
-  await shot(page, '07-evaluacion-page');
-
-  // PoseSingleView layout elements
-  // Should NOT have the old JobBatchCarousel multi-item grid
-  const oldCarousel = page.locator('[class*="carousel"]');
-  await expect(oldCarousel).not.toBeVisible();
-
-  // Should have "Guardar todas" as a FAB (fixed button)
-  // Check for the floating action button or at least the evaluacion page loads
-  const evaluacionLoaded = await page.getByText(/lote actual|evaluaci/i).isVisible().catch(() => false);
-  console.log(`✅ Evaluación: Page loaded (has content: ${evaluacionLoaded})`);
-  await shot(page, '08-evaluacion-detail');
-
   // ── Sidebar analytics link still works ───────────────────────────────────
   const analyticsLink = page.getByRole('link', { name: /analíticas/i });
   await expect(analyticsLink).toBeVisible({ timeout: 5000 });
@@ -152,7 +135,7 @@ test('Verify recent changes', async () => {
   await catalogLink.click();
   await page.waitForURL(/catalogo/, { timeout: 10000 });
   await page.waitForTimeout(1500);
-  await shot(page, '09-catalogo-page');
+  await shot(page, '07-catalogo-page');
 
   // Should show client selector and empty state
   await expect(page.getByRole('combobox').first()).toBeVisible({ timeout: 5000 });

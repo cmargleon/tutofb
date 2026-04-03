@@ -162,7 +162,7 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
           batch.status,
           getBatchStatusLabel(batch.status),
         ],
-        href: `/evaluacion?batchId=${batch.id}`,
+        href: `/catalogo?clientId=${batch.clientId}&batchId=${batch.id}`,
         meta: `${getBatchStatusLabel(batch.status)} · ${formatRelativeDate(batch.updatedAt)}`,
       })),
     ],
@@ -216,7 +216,7 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
           batch.status,
           getBatchStatusLabel(batch.status),
         ],
-        href: `/evaluacion?batchId=${batch.id}`,
+        href: `/catalogo?clientId=${batch.clientId}&batchId=${batch.id}`,
         meta: `${getBatchStatusLabel(batch.status)} · ${formatRelativeDate(batch.updatedAt)}`,
       }))
       .filter((result) =>

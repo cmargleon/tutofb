@@ -56,7 +56,7 @@ export const Login: React.FC = () => {
           </div>
           <h1 className="mt-5 text-3xl font-semibold">Tuto Catalog</h1>
           <p className="mt-2 text-sm text-slate-300">
-            Inicia sesión con tu usuario interno para trabajar en generación, evaluación y archivo.
+            Inicia sesión con tu usuario interno para trabajar en generación, cola y catálogo.
           </p>
         </div>
 

@@ -22,7 +22,6 @@ export * from './callables/exportBatchSpreadsheet';
 export * from './callables/regenerateFailedBatchJobs';
 export * from './callables/cancelPendingBatchJobs';
 export * from './callables/regenerateJobsBulk';
-export * from './callables/searchArchive';
 export * from './callables/syncUserClaims';
 export * from './callables/createAppUser';
 export * from './callables/updateAppUser';

@@ -1,9 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Archive,
   BarChart3,
-  Eye,
   Images,
   LayoutDashboard,
   LogOut,
@@ -50,10 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: 'Dashboard',   path: '/',          icon: LayoutDashboard, visible: role.isActive           },
     { name: 'Generar',     path: '/generate',   icon: Wand2,           visible: role.canCreateBatches  },
     { name: 'Cola',        path: '/cola',       icon: Rows3,           visible: role.canEvaluate        },
-    { name: 'Evaluación',  path: '/evaluacion', icon: Eye,             visible: role.canEvaluate        },
     { name: 'Clientes',    path: '/clients',    icon: Users,           visible: role.canManageClients   },
     { name: 'Modelos',     path: '/models',     icon: UserSquare2,     visible: role.canManageModels    },
-    { name: 'Archivo',     path: '/archivo',    icon: Archive,         visible: role.canAccessArchive   },
     { name: 'Catálogo',    path: '/catalogo',   icon: Images,          visible: role.canEvaluate        },
     { name: 'Analíticas',  path: '/analytics',  icon: BarChart3,       visible: role.canAccessAnalytics },
     { name: 'Usuarios',       path: '/users',         icon: Shield,    visible: role.canManageUsers     },

@@ -28,7 +28,6 @@ export const useRole = () => {
     canCreateBatches: appUser?.role === 'admin' || appUser?.role === 'operador',
     canEvaluate: appUser?.role === 'admin' || appUser?.role === 'operador' || appUser?.role === 'revisor',
     canRegenerate: appUser?.role === 'admin' || appUser?.role === 'operador',
-    canAccessArchive: appUser?.role === 'admin' || appUser?.role === 'operador' || appUser?.role === 'revisor',
     canAccessAnalytics: appUser?.role === 'admin' || appUser?.role === 'revisor',
   };
 };

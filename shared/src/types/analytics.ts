@@ -1,24 +1,4 @@
-import type { TimestampLike, Provider, BatchStatus, JobStatus } from './common';
-import type { Batch } from './batch';
-
-export interface ArchiveClientSummary {
-  id: string;
-  name: string;
-  batchCount: number;
-  lastBatchCreatedAt: TimestampLike | null;
-}
-
-export interface ArchiveBatchSummary {
-  batchId: string;
-  clientId: string;
-  clientNameSnapshot: string;
-  modelId: string;
-  modelNameSnapshot: string;
-  totalJobs: number;
-  completedImages: number;
-  latestCreatedAt: TimestampLike | null;
-  latestJobId: string;
-}
+import type { TimestampLike, Provider } from './common';
 
 export interface AnalyticsSummary {
   totalJobs: number;
@@ -185,37 +165,4 @@ export interface GeminiUsageRecord {
   poseFileName?: string | null;
   userUid?: string | null;
   createdAt: TimestampLike;
-}
-
-export interface ArchiveSearchRequest {
-  clientId?: string | null;
-  provider?: Provider | null;
-  batchStatus?: BatchStatus | null;
-  jobStatus?: JobStatus | null;
-  modelQuery?: string | null;
-  dateFrom?: string | null;
-  dateTo?: string | null;
-  limit?: number | null;
-  batchPageSize?: number | null;
-  cursor?: ArchiveSearchCursor | null;
-}
-
-export interface ArchiveSearchCursor {
-  batchId: string;
-}
-
-export interface ArchiveSearchBatchMatch {
-  batch: Batch;
-  matchedJobCount: number;
-  matchedJobIds: string[];
-  matchedGarments: string[];
-  latestMatchedAt: TimestampLike | null;
-}
-
-export interface ArchiveSearchResponse {
-  success: boolean;
-  results: ArchiveSearchBatchMatch[];
-  scannedBatches: number;
-  hasMore: boolean;
-  nextCursor: ArchiveSearchCursor | null;
 }

@@ -60,12 +60,12 @@ export const Layout: React.FC = () => {
     { name: 'Dashboard',   path: '/'          },
     { name: 'Generar',     path: '/generate'   },
     { name: 'Cola',        path: '/cola'       },
-    { name: 'Evaluación',  path: '/evaluacion' },
     { name: 'Clientes',    path: '/clients'    },
     { name: 'Modelos',     path: '/models'     },
-    { name: 'Archivo',     path: '/archivo'    },
+    { name: 'Catálogo',    path: '/catalogo'   },
     { name: 'Analíticas',  path: '/analytics'  },
     { name: 'Usuarios',    path: '/users'      },
+    { name: 'Configuración', path: '/configuracion' },
   ];
 
   const isActiveRoute = (path: string) => {
@@ -183,7 +183,7 @@ export const Layout: React.FC = () => {
                       {notifications.map((job) => (
                         <li key={job.id}>
                           <Link
-                            to={`/archivo?batchId=${job.batchId}`}
+                            to={`/catalogo?clientId=${job.clientId}&batchId=${job.batchId}`}
                             onClick={onCloseNotif}
                             className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
                           >
@@ -204,11 +204,11 @@ export const Layout: React.FC = () => {
                   )}
                   <div className="border-t border-gray-100 px-4 py-3">
                     <Link
-                      to="/archivo"
+                      to="/catalogo"
                       onClick={onCloseNotif}
                       className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
                     >
-                      Ver archivo →
+                      Ver catálogo →
                     </Link>
                   </div>
                 </div>

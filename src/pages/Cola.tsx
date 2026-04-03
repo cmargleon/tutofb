@@ -18,7 +18,7 @@ interface QueueRow {
   ageStartedAt: number | null;
 }
 
-type KanbanStage = 'pending' | 'processing' | 'evaluation';
+type KanbanStage = 'pending' | 'processing' | 'ready';
 
 const average = (values: number[]) => {
   if (values.length === 0) {
@@ -117,10 +117,10 @@ const KANBAN_COLUMNS: Array<{
     badgeClassName: 'bg-sky-100 text-sky-800',
   },
   {
-    id: 'evaluation',
-    title: 'Evaluación',
-    description: 'Lotes con resultados o fallos listos para revisar.',
-    emptyTitle: 'Sin revisión pendiente',
+    id: 'ready',
+    title: 'Resultados',
+    description: 'Lotes con resultados o fallos listos para abrir en catálogo.',
+    emptyTitle: 'Sin resultados listos',
     emptyDescription: 'Los lotes con salidas parciales, completas o fallidas caerán aquí.',
     icon: CheckCircle2,
     accentClassName: 'from-emerald-100 via-emerald-50 to-white',
@@ -139,7 +139,7 @@ const getKanbanStage = (row: QueueRow): KanbanStage => {
     row.batch.status === 'partial_failed' ||
     row.batch.status === 'failed'
   ) {
-    return 'evaluation';
+    return 'ready';
   }
 
   return 'pending';
@@ -224,7 +224,7 @@ const BatchCard: React.FC<{
 
     <div className="mt-4 flex flex-col gap-2">
       <Link
-        to={`/evaluacion?batchId=${row.id}`}
+        to={`/catalogo?clientId=${row.batch.clientId}&batchId=${row.id}`}
         className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 font-medium text-slate-700 hover:bg-slate-50"
       >
         Abrir lote
@@ -356,7 +356,7 @@ export const Cola: React.FC = () => {
           acc[getKanbanStage(row)].push(row);
           return acc;
         },
-        { pending: [], processing: [], evaluation: [] } as Record<KanbanStage, QueueRow[]>,
+        { pending: [], processing: [], ready: [] } as Record<KanbanStage, QueueRow[]>,
       ),
     [filteredRows],
   );
@@ -720,7 +720,7 @@ export const Cola: React.FC = () => {
         {filteredRows.length > 0 ? (
           <div className="mt-5 flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-            Abrir un lote desde aquí siempre envía `batchId` explícito a Evaluación. La columna “Evaluación” agrupa lotes con resultados o fallos ya listos para revisar.
+            Abrir un lote desde aquí envía `clientId` y `batchId` al catálogo. La columna “Resultados” agrupa lotes con salidas o fallos ya visibles.
           </div>
         ) : null}
       </section>

@@ -7,6 +7,8 @@ import {
   CancelBatchProcessingResponse,
   CancelJobGenerationResponse,
   CancelPendingBatchJobsResponse,
+  ExportBatchSpreadsheetRequest,
+  ExportBatchSpreadsheetResponse,
   ProductDraft,
   Provider,
   RegenerateFailedBatchJobsResponse,
@@ -155,6 +157,19 @@ export const setJobManualFlag = async (
     manuallyFlaggedByUid: flagged ? userUid : null,
     updatedAt: serverTimestamp(),
   });
+};
+
+export const exportBatchSpreadsheet = async (
+  batchId: string,
+): Promise<ExportBatchSpreadsheetResponse> => {
+  const callable = httpsCallable<ExportBatchSpreadsheetRequest, ExportBatchSpreadsheetResponse>(
+    functions,
+    'exportBatchSpreadsheet',
+    { timeout: 300000 },
+  );
+
+  const result = await callable({ batchId });
+  return result.data;
 };
 
 export const updateBatchProductDraft = async (

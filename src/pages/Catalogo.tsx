@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { ChevronLeft, ChevronRight, Images } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Images } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
 import { subscribeToClients } from '../features/clients/firebase';
+import { exportBatchSpreadsheet } from '../features/evaluation/firebase';
 import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
 import { Batch, Client, Job } from '../../shared/src/types';
 import { formatDateTimeLong, toMillisOrZero } from '../../shared/src/utils/dateUtils';
 import { CatalogGarmentSection } from '../components/catalog/CatalogGarmentSection';
 import { CatalogLightbox } from '../components/catalog/CatalogLightbox';
+import { useToast } from '../features/feedback/FeedbackProvider';
 import { db } from '../firebase';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
@@ -21,6 +23,7 @@ export const Catalogo: React.FC = () => {
   const [searchParams] = useSearchParams();
   const initialClientId = searchParams.get('clientId') ?? '';
   const initialBatchId = searchParams.get('batchId') ?? '';
+  const toast = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(initialBatchId);
@@ -29,6 +32,8 @@ export const Catalogo: React.FC = () => {
   const [lightbox, setLightbox] = useState<{ garmentIndex: number; jobIndex: number; jobId: string } | null>(null);
   const [lightboxLiveJob, setLightboxLiveJob] = useState<Job | null>(null);
   const [generatingJobs, setGeneratingJobs] = useState<Job[]>([]);
+  const [isExportingSpreadsheet, setIsExportingSpreadsheet] = useState(false);
+  const [latestSpreadsheetDownloadUrl, setLatestSpreadsheetDownloadUrl] = useState<string | null>(null);
 
   const {
     batches,
@@ -177,6 +182,7 @@ export const Catalogo: React.FC = () => {
 
   useEffect(() => {
     setLightbox(null);
+    setLatestSpreadsheetDownloadUrl(null);
   }, [currentPage, pageSize, selectedBatchId, selectedClientId, sortOrder]);
 
   useEffect(() => {
@@ -199,6 +205,21 @@ export const Catalogo: React.FC = () => {
       () => setLightboxLiveJob(null),
     );
   }, [lightbox?.jobId]);
+
+  const handleExportSpreadsheet = async () => {
+    if (!selectedBatchId) return;
+    setIsExportingSpreadsheet(true);
+    try {
+      const result = await exportBatchSpreadsheet(selectedBatchId);
+      setLatestSpreadsheetDownloadUrl(result.downloadUrl);
+      window.open(result.downloadUrl, '_blank', 'noopener,noreferrer');
+      toast({ tone: 'success', title: 'Spreadsheet exportado', description: `${result.fileName} quedó listo para descarga.` });
+    } catch (err: any) {
+      toast({ tone: 'error', title: 'No pudimos exportar el spreadsheet', description: err.message || 'Inténtalo de nuevo.' });
+    } finally {
+      setIsExportingSpreadsheet(false);
+    }
+  };
 
   const openLightboxForJob = useCallback((job: Job) => {
     if (!job.id) return;
@@ -360,6 +381,41 @@ export const Catalogo: React.FC = () => {
                     {selectedBatch.completedJobs} de {selectedBatch.totalJobs} jobs completados en este lote.
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {selectedBatch?.spreadsheetTemplateId && !error && (
+            <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Excel del lote</p>
+                <p className="text-xs text-gray-400">
+                  Plantilla: {selectedBatch.spreadsheetTemplateNameSnapshot || 'Sin nombre'}
+                  {selectedBatch.spreadsheetCategoryNameSnapshot ? ` · ${selectedBatch.spreadsheetCategoryNameSnapshot}` : ''}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {latestSpreadsheetDownloadUrl && (
+                  <a
+                    href={latestSpreadsheetDownloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-medium text-emerald-700 underline decoration-emerald-300 underline-offset-2"
+                  >
+                    Abrir descarga
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void handleExportSpreadsheet()}
+                  disabled={isExportingSpreadsheet}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isExportingSpreadsheet
+                    ? <span className="app-spinner app-spinner-sm" aria-hidden="true" />
+                    : <Download className="h-4 w-4" />}
+                  {isExportingSpreadsheet ? 'Exportando...' : 'Exportar Excel'}
+                </button>
               </div>
             </div>
           )}

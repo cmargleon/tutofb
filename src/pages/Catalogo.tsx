@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { ChevronLeft, ChevronRight, Download, Images } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Download, Images, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
 import { subscribeToClients } from '../features/clients/firebase';
-import { exportBatchSpreadsheet } from '../features/evaluation/firebase';
+import { cancelBatchProcessing, exportBatchSpreadsheet, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
+import { useRole } from '../features/auth/AuthProvider';
 import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
 import { Batch, Client, Job } from '../../shared/src/types';
 import { formatDateTimeLong, toMillisOrZero } from '../../shared/src/utils/dateUtils';
 import { CatalogGarmentSection } from '../components/catalog/CatalogGarmentSection';
 import { CatalogLightbox } from '../components/catalog/CatalogLightbox';
-import { useToast } from '../features/feedback/FeedbackProvider';
+import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { db } from '../firebase';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
@@ -24,6 +25,8 @@ export const Catalogo: React.FC = () => {
   const initialClientId = searchParams.get('clientId') ?? '';
   const initialBatchId = searchParams.get('batchId') ?? '';
   const toast = useToast();
+  const confirm = useConfirm();
+  const role = useRole();
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(initialBatchId);
@@ -34,6 +37,9 @@ export const Catalogo: React.FC = () => {
   const [generatingJobs, setGeneratingJobs] = useState<Job[]>([]);
   const [isExportingSpreadsheet, setIsExportingSpreadsheet] = useState(false);
   const [latestSpreadsheetDownloadUrl, setLatestSpreadsheetDownloadUrl] = useState<string | null>(null);
+  const [isRegeneratingFailed, setIsRegeneratingFailed] = useState(false);
+  const [isCancellingBatch, setIsCancellingBatch] = useState(false);
+  const [batchActionMessage, setBatchActionMessage] = useState<string | null>(null);
 
   const {
     batches,
@@ -183,6 +189,7 @@ export const Catalogo: React.FC = () => {
   useEffect(() => {
     setLightbox(null);
     setLatestSpreadsheetDownloadUrl(null);
+    setBatchActionMessage(null);
   }, [currentPage, pageSize, selectedBatchId, selectedClientId, sortOrder]);
 
   useEffect(() => {
@@ -205,6 +212,64 @@ export const Catalogo: React.FC = () => {
       () => setLightboxLiveJob(null),
     );
   }, [lightbox?.jobId]);
+
+  const handleRegenerateFailedJobs = async () => {
+    if (!selectedBatchId) return;
+    setIsRegeneratingFailed(true);
+    setBatchActionMessage(null);
+    try {
+      const result = await regenerateFailedBatchJobs(selectedBatchId);
+      if (result.queuedJobs === 0) {
+        setBatchActionMessage('No había trabajos fallidos pendientes para reintentar.');
+      } else if (result.skippedJobs > 0) {
+        setBatchActionMessage(`Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'}. ${result.skippedJobs} se omitieron por datos inválidos.`);
+      } else {
+        setBatchActionMessage(`Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'} del lote.`);
+      }
+    } catch (err: any) {
+      toast({ tone: 'error', title: 'No pudimos reintentar los trabajos fallidos', description: err.message || 'Revisa el estado del lote e inténtalo nuevamente.' });
+    } finally {
+      setIsRegeneratingFailed(false);
+    }
+  };
+
+  const handleCancelBatchProcessing = async () => {
+    if (!selectedBatch?.id) return;
+    const activeJobs = selectedBatch.pendingJobs + selectedBatch.processingJobs;
+    const activeJobsLabel = `${activeJobs} trabajo${activeJobs === 1 ? '' : 's'}`;
+    const pendingLabel = selectedBatch.pendingJobs > 0 ? `${selectedBatch.pendingJobs} pendiente${selectedBatch.pendingJobs === 1 ? '' : 's'}` : null;
+    const processingLabel = selectedBatch.processingJobs > 0 ? `${selectedBatch.processingJobs} en procesamiento` : null;
+    const scopeLabel = [pendingLabel, processingLabel].filter(Boolean).join(' y ');
+
+    const accepted = await confirm({
+      title: 'Cancelar procesamiento del lote',
+      description: `Vas a detener ${activeJobsLabel}${scopeLabel ? ` (${scopeLabel})` : ''} para este lote.`,
+      impact: 'Los jobs en cola dejarán de ejecutarse y los que ya estaban procesando ignorarán cualquier resultado tardío. Si los necesitas después, tendrás que relanzarlos manualmente.',
+      confirmLabel: 'Sí, cancelar lote',
+      cancelLabel: 'Seguir procesando',
+      tone: 'warning',
+    });
+    if (!accepted) return;
+
+    setIsCancellingBatch(true);
+    setBatchActionMessage(null);
+    try {
+      const result = await cancelBatchProcessing(selectedBatch.id);
+      if (result.cancelledJobs === 0) {
+        setBatchActionMessage('No había trabajos activos para cancelar en este lote.');
+      } else {
+        const segments = [
+          result.cancelledPendingJobs > 0 ? `${result.cancelledPendingJobs} pendiente${result.cancelledPendingJobs === 1 ? '' : 's'}` : null,
+          result.cancelledProcessingJobs > 0 ? `${result.cancelledProcessingJobs} en procesamiento` : null,
+        ].filter(Boolean);
+        setBatchActionMessage(`Se cancelaron ${result.cancelledJobs} trabajo${result.cancelledJobs === 1 ? '' : 's'} del lote${segments.length > 0 ? `: ${segments.join(' y ')}.` : '.'}`);
+      }
+    } catch (err: any) {
+      toast({ tone: 'error', title: 'No pudimos cancelar el lote', description: err.message || 'Inténtalo nuevamente cuando el sistema esté disponible.' });
+    } finally {
+      setIsCancellingBatch(false);
+    }
+  };
 
   const handleExportSpreadsheet = async () => {
     if (!selectedBatchId) return;
@@ -368,6 +433,41 @@ export const Catalogo: React.FC = () => {
                 <span>{visibleJobsCount} job{visibleJobsCount === 1 ? '' : 's'} visibles</span>
               </div>
               {paginationControls}
+            </div>
+          )}
+
+          {selectedBatch && role.canRegenerate && !error && (selectedBatch.failedJobs > 0 || selectedBatch.pendingJobs > 0 || selectedBatch.processingJobs > 0) && (
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+              {(selectedBatch.pendingJobs > 0 || selectedBatch.processingJobs > 0) && (
+                <button
+                  type="button"
+                  onClick={() => void handleCancelBatchProcessing()}
+                  disabled={isCancellingBatch}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCancellingBatch
+                    ? <span className="app-spinner app-spinner-sm" aria-hidden="true" />
+                    : <AlertCircle className="h-4 w-4" />}
+                  {isCancellingBatch ? 'Cancelando...' : 'Cancelar lote'}
+                </button>
+              )}
+              {selectedBatch.failedJobs > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleRegenerateFailedJobs()}
+                  disabled={isRegeneratingFailed}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRegeneratingFailed ? 'animate-spin' : ''}`} />
+                  {isRegeneratingFailed ? 'Reintentando...' : `Reintentar fallidos (${selectedBatch.failedJobs})`}
+                </button>
+              )}
+            </div>
+          )}
+
+          {batchActionMessage && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {batchActionMessage}
             </div>
           )}
 

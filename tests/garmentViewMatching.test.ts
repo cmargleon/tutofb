@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GarmentView, PoseAiClassification } from '../shared/src/types';
+import { GarmentView, PoseAiClassification, PoseBodyFocus } from '../shared/src/types';
 import * as garmentViewMatchingNamespace from '../shared/src/utils/garmentViewMatching';
 
 const garmentViewMatchingModule =
@@ -15,11 +15,14 @@ const {
 } =
   garmentViewMatchingModule as typeof import('../shared/src/utils/garmentViewMatching');
 
-const buildAiClassification = (usableForGarmentViews: GarmentView[]): PoseAiClassification => ({
+const buildAiClassification = (
+  usableForGarmentViews: GarmentView[],
+  bodyFocus: PoseBodyFocus = 'full_body',
+): PoseAiClassification => ({
   orientationGroup: 'front',
   orientationDetail: 'front',
   framing: 'full_body',
-  bodyFocus: 'full_body',
+  bodyFocus,
   faceVisible: true,
   autoCategory: 'frente_cuerpo_completo',
   usableForGarmentViews,
@@ -104,4 +107,32 @@ test('countCompatibleGarmentsForPose deja claro cuantas prendas del lote usan un
   );
 
   assert.equal(count, 1);
+});
+
+test('getSuggestedPoseIdsForGarments restringe poses de tren inferior a prendas lower_body compatibles', () => {
+  const suggested = getSuggestedPoseIdsForGarments(
+    [
+      {
+        id: 'pose-lower-front',
+        aiClassification: buildAiClassification(['front'], 'lower_body'),
+      },
+      {
+        id: 'pose-upper-front',
+        aiClassification: buildAiClassification(['front'], 'upper_body'),
+      },
+    ],
+    [
+      { availableViews: ['front'], garmentBodyArea: 'lower_body' as const },
+      { availableViews: ['front'], garmentBodyArea: 'upper_body' as const },
+    ],
+  );
+
+  assert.deepEqual(suggested, ['pose-lower-front', 'pose-upper-front']);
+  assert.equal(
+    countCompatibleGarmentsForPose(
+      buildAiClassification(['front'], 'lower_body'),
+      [{ availableViews: ['front'], garmentBodyArea: 'upper_body' as const }],
+    ),
+    0,
+  );
 });

@@ -113,6 +113,7 @@ test('validateCreateGenerationBatchInput usa datos reales del wizard y limpia el
   assert.deepEqual(validated.poseIds, ['pose-1', 'pose-2']);
   assert.equal(validated.totalJobs, 2);
   assert.equal(validated.garments[0]?.photos?.length, 2);
+  assert.equal(validated.garments[0]?.garmentBodyArea, null);
 });
 
 test('validateCreateGenerationBatchInput conserva provider y calcula jobs por pose-prenda', () => {
@@ -360,6 +361,7 @@ test('getCompatibleGarmentPoseCombinations omite la pose de espalda para prendas
         name: 'Multicolor',
         storagePath: 'garments/drafts/user-1/draft-1/gar-front-back/front.jpg',
         isMultiAngle: true,
+        garmentBodyArea: 'upper_body',
         photos: [
           {
             id: 'gar-front-back-front',
@@ -384,6 +386,7 @@ test('getCompatibleGarmentPoseCombinations omite la pose de espalda para prendas
         name: 'Frente Solo',
         storagePath: 'garments/drafts/user-1/draft-1/gar-front-only/front.jpg',
         isMultiAngle: false,
+        garmentBodyArea: 'upper_body',
         photos: [
           {
             id: 'gar-front-only-front',
@@ -443,5 +446,105 @@ test('getCompatibleGarmentPoseCombinations omite la pose de espalda para prendas
       'gar-front-back:pose-back',
       'gar-front-only:pose-front-medium',
     ],
+  );
+});
+
+test('getCompatibleGarmentPoseCombinations no mezcla poses de tren inferior con prendas upper_body', () => {
+  const combinations = getCompatibleGarmentPoseCombinations(
+    [
+      {
+        id: 'gar-bottom',
+        name: 'Pantalón Negro',
+        storagePath: 'garments/drafts/user-1/draft-1/gar-bottom/front.jpg',
+        isMultiAngle: true,
+        garmentBodyArea: 'lower_body',
+        photos: [
+          {
+            id: 'gar-bottom-front',
+            fileName: 'front.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-bottom/front.jpg',
+            sourceIndex: 0,
+            view: 'front',
+            classifiedBy: 'gemini',
+          },
+          {
+            id: 'gar-bottom-back',
+            fileName: 'back.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-bottom/back.jpg',
+            sourceIndex: 1,
+            view: 'back',
+            classifiedBy: 'gemini',
+          },
+        ],
+      },
+      {
+        id: 'gar-top',
+        name: 'Blusa Blanca',
+        storagePath: 'garments/drafts/user-1/draft-1/gar-top/front.jpg',
+        isMultiAngle: true,
+        garmentBodyArea: 'upper_body',
+        photos: [
+          {
+            id: 'gar-top-front',
+            fileName: 'front.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-top/front.jpg',
+            sourceIndex: 0,
+            view: 'front',
+            classifiedBy: 'gemini',
+          },
+          {
+            id: 'gar-top-back',
+            fileName: 'back.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-top/back.jpg',
+            sourceIndex: 1,
+            view: 'back',
+            classifiedBy: 'gemini',
+          },
+        ],
+      },
+    ],
+    [
+      {
+        id: 'pose-lower-front',
+        fileName: 'pose-lower-front.jpg',
+        storagePath: 'models/client-1/model-1/poses/lower-front.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front',
+          framing: 'lower_body',
+          bodyFocus: 'lower_body',
+          faceVisible: false,
+          autoCategory: 'frente_tren_inferior',
+          usableForGarmentViews: ['front'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 2,
+        },
+      },
+      {
+        id: 'pose-upper-front',
+        fileName: 'pose-upper-front.jpg',
+        storagePath: 'models/client-1/model-1/poses/upper-front.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front',
+          framing: 'medium_body',
+          bodyFocus: 'upper_body',
+          faceVisible: true,
+          autoCategory: 'frente_medio_cuerpo',
+          usableForGarmentViews: ['front'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 2,
+        },
+      },
+    ],
+  );
+
+  assert.deepEqual(
+    combinations.map(({ garment, pose }) => `${garment.id}:${pose.id}`),
+    ['gar-bottom:pose-lower-front', 'gar-top:pose-upper-front'],
   );
 });

@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { AlertCircle, Loader2 } from 'lucide-react';
-import { Batch, Job, ProductDraft, SpreadsheetTemplateCategory, SpreadsheetTemplateCategoryColumn } from '../../../shared/src/types';
+import {
+  Batch,
+  Job,
+  ProductDraft,
+  SpreadsheetTemplateCategory,
+  SpreadsheetTemplateCategoryColumn,
+  SpreadsheetTemplateOriginOption,
+} from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero } from '../../../shared/src/utils/dateUtils';
 import { db } from '../../firebase';
@@ -9,6 +16,7 @@ import { useToast } from '../../features/feedback/FeedbackProvider';
 import { updateBatchProductDraft } from '../../features/evaluation/firebase';
 import { useBatchProductDrafts } from '../../features/evaluation/useBatchProductDrafts';
 import { useBatchSpreadsheetCategory } from '../../features/evaluation/useBatchSpreadsheetCategory';
+import { useBatchSpreadsheetTemplate } from '../../features/evaluation/useBatchSpreadsheetTemplate';
 import { resolveStorageAssetUrl } from '../../features/storage/assets';
 import { ProductDraftEditor } from '../product-drafts/ProductDraftEditor';
 
@@ -22,6 +30,7 @@ interface DraftImageBinding {
 }
 
 const MAIN_IMAGE_COLUMN_KEYS = new Set(['main_img', 'square_img']);
+const ORIGIN_CODE_COLUMN_KEY = 'origin_code';
 
 const normalizeComparable = (value: string): string =>
   value
@@ -61,6 +70,65 @@ const resolveDetailImageIndexFromKey = (candidate: string): number | null => {
 
 const isGeneratedImageColumnKey = (key: string): boolean =>
   MAIN_IMAGE_COLUMN_KEYS.has(key) || resolveDetailImageIndexFromKey(normalizeComparable(key)) !== null;
+
+const stripTrailingCodeFromOriginLabel = (value: string): string =>
+  value.replace(/\(([A-Z]{2})\)\s*$/, '').trim();
+
+const resolveOriginCode = (
+  rawValue: string | null | undefined,
+  originOptions: SpreadsheetTemplateOriginOption[],
+): string => {
+  if (!rawValue?.trim()) {
+    return '';
+  }
+
+  const normalizedRawValue = normalizeComparable(rawValue);
+  const matchedOption = originOptions.find((option) => {
+    const normalizedCode = normalizeComparable(option.code);
+    const normalizedLabel = normalizeComparable(stripTrailingCodeFromOriginLabel(option.label));
+    const normalizedFullLabel = normalizeComparable(option.label);
+
+    return (
+      normalizedRawValue === normalizedCode
+      || normalizedRawValue === normalizedLabel
+      || normalizedRawValue === normalizedFullLabel
+      || normalizedLabel.includes(normalizedRawValue)
+      || normalizedFullLabel.includes(normalizedRawValue)
+    );
+  });
+
+  return matchedOption?.code || rawValue;
+};
+
+const normalizeDraftOriginRows = (
+  draft: ProductDraft,
+  originOptions: SpreadsheetTemplateOriginOption[],
+): ProductDraft => {
+  if (originOptions.length === 0) {
+    return draft;
+  }
+
+  let changed = false;
+  const nextRows = draft.rows.map((row) => {
+    const currentValue = row.values[ORIGIN_CODE_COLUMN_KEY] || '';
+    const nextValue = resolveOriginCode(currentValue, originOptions);
+
+    if (nextValue === currentValue) {
+      return row;
+    }
+
+    changed = true;
+    return {
+      ...row,
+      values: {
+        ...row.values,
+        [ORIGIN_CODE_COLUMN_KEY]: nextValue,
+      },
+    };
+  });
+
+  return changed ? { ...draft, rows: nextRows } : draft;
+};
 
 const buildPoseOrderMap = (batch: Batch | null): Map<string, number> =>
   new Map((batch?.poseIds || []).map((poseId, index) => [poseId, index]));
@@ -125,6 +193,16 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
     loading: spreadsheetCategoriesLoading,
     error: spreadsheetCategoriesError,
   } = useBatchSpreadsheetCategory(batch);
+  const {
+    template: spreadsheetTemplate,
+    loading: spreadsheetTemplateLoading,
+    error: spreadsheetTemplateError,
+  } = useBatchSpreadsheetTemplate(batch);
+
+  const originOptions = useMemo(
+    () => spreadsheetTemplate?.originOptions || [],
+    [spreadsheetTemplate],
+  );
 
   useEffect(() => {
     if (!job.batchId) {
@@ -171,7 +249,7 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
       return productDrafts.map((draft) => {
         const currentDraft = draft.id ? currentById.get(draft.id) : null;
         if (!currentDraft || !draft.id || !dirtyDraftIds.includes(draft.id)) {
-          return draft;
+          return normalizeDraftOriginRows(draft, originOptions);
         }
 
         const remoteRowsById = new Map<string, ProductDraft['rows'][number]>(
@@ -203,7 +281,15 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
         };
       });
     });
-  }, [dirtyDraftIds, productDrafts]);
+  }, [dirtyDraftIds, originOptions, productDrafts]);
+
+  useEffect(() => {
+    if (originOptions.length === 0) {
+      return;
+    }
+
+    setEditableProductDrafts((current) => current.map((draft) => normalizeDraftOriginRows(draft, originOptions)));
+  }, [originOptions]);
 
   useEffect(() => {
     if (!job.batchId) {
@@ -320,8 +406,12 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
     }
   };
 
-  const panelError = batchError || productDraftsError || spreadsheetCategoriesError;
-  const panelLoading = batchLoading || productDraftsLoading || spreadsheetCategoriesLoading || imageBindingLoading;
+  const panelError = batchError || productDraftsError || spreadsheetCategoriesError || spreadsheetTemplateError;
+  const panelLoading = batchLoading
+    || productDraftsLoading
+    || spreadsheetCategoriesLoading
+    || spreadsheetTemplateLoading
+    || imageBindingLoading;
   const isSpreadsheetBatch = Boolean(batch?.spreadsheetTemplateId);
 
   return (
@@ -362,6 +452,18 @@ export const CatalogProductDraftPanel: React.FC<CatalogProductDraftPanelProps> =
             showGeneratedImagesSummary={false}
             showAddRowButton={false}
             showRowActions={false}
+            resolveDropdownChoices={(_, __, column) => {
+              if (column.key !== ORIGIN_CODE_COLUMN_KEY || originOptions.length === 0) {
+                return null;
+              }
+
+              return originOptions
+                .map((option) => ({
+                  label: stripTrailingCodeFromOriginLabel(option.label),
+                  value: option.code,
+                }))
+                .sort((left, right) => left.label.localeCompare(right.label, 'es', { sensitivity: 'base' }));
+            }}
             resolveVisibleColumns={(draft, category) => {
               const detailImageCount = currentGarmentImageBinding.detailImageUrls.length;
               return category.columns.filter((column) => {

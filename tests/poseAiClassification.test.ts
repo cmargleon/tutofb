@@ -10,6 +10,7 @@ const {
   buildPoseAiClassification,
   buildPoseAutoCategory,
   derivePoseUsableForGarmentViews,
+  formatPoseClassificationLabel,
   formatPoseAutoCategoryLabel,
 } = poseAiClassificationModule as typeof import('../shared/src/utils/poseAiClassification');
 
@@ -44,4 +45,21 @@ test('buildPoseAiClassification genera metadata lista para Firestore y UI', () =
 test('formatPoseAutoCategoryLabel vuelve legible la categoria tecnica', () => {
   assert.equal(formatPoseAutoCategoryLabel('frente_3_4_cuerpo_completo'), 'Frente 3/4 Cuerpo Completo');
   assert.equal(formatPoseAutoCategoryLabel(null), 'Sin tag IA');
+});
+
+test('formatPoseClassificationLabel prioriza la etiqueta manual cuando existe', () => {
+  assert.equal(
+    formatPoseClassificationLabel({
+      displayLabel: 'Frente completa',
+      autoCategory: 'frente_cuerpo_completo',
+    }),
+    'Frente completa',
+  );
+  assert.equal(
+    formatPoseClassificationLabel({
+      displayLabel: '',
+      autoCategory: 'frente_3_4_cuerpo_completo',
+    }),
+    'Frente 3/4 Cuerpo Completo',
+  );
 });

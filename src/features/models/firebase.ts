@@ -6,6 +6,7 @@ import {
   ModelIdentityTraits,
   ModelPoseTaggingRequest,
   ModelPoseTaggingResponse,
+  PoseAiClassification,
   Pose,
   Client,
   PermanentDeleteCatalogEntityRequest,
@@ -36,6 +37,12 @@ interface CreateGeneratedModelOptions {
 interface UploadedModelReference {
   storagePath: string;
   contentType: string;
+}
+
+interface CreateModelPoseInput {
+  storagePath: string;
+  contentType: string;
+  aiClassification?: PoseAiClassification | null;
 }
 
 const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -317,7 +324,7 @@ export const tagModelPosesWithGemini = async (
 export const createModelFromPaths = async (
   clientId: string,
   name: string,
-  poses: Array<{ storagePath: string; contentType: string }>,
+  poses: CreateModelPoseInput[],
   options: CreateGeneratedModelOptions = {},
 ): Promise<string> => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
@@ -334,10 +341,11 @@ export const createModelFromPaths = async (
   const modelId = newModelRef.id;
   const storageRootPath = getModelStorageRootPath(modelId, clientId);
 
-  const poseEntries: Pose[] = poses.map(({ storagePath, contentType: _ct }, i) => ({
+  const poseEntries: Pose[] = poses.map(({ storagePath, contentType: _ct, aiClassification }, i) => ({
     id: uuidv4(),
     storagePath,
     fileName: storagePath.split('/').pop() ?? `pose_${i}`,
+    aiClassification: aiClassification ?? null,
     createdAt: new Date().toISOString(),
   }));
 

@@ -3,12 +3,24 @@ import { PoseRecipe, PoseGroupOption } from './types';
 
 export const IDENTITY_CANDIDATE_COUNT = 4;
 
+const LOWER_BODY_PROMPT_DIRECTIVES = [
+  'Frame the image strictly from the waist to the full feet, with the waistband visible and both feet completely inside the frame.',
+  'Do not crop above the waist and do not crop any part of the feet, ankles, or hems.',
+  'The full lower garment must be fully visible from waistband to hem.',
+  'Keep both legs and the entire silhouette of the garment clearly visible.',
+  'Do not show the model face or head.',
+];
+
 export const MODEL_POSE_RECIPES: PoseRecipe[] = [
   {
     id: 'full-front',
     label: 'Frente completa',
     group: 'Cuerpo completo',
     shotType: 'full body, standing upright, facing camera directly',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'front',
+    },
     usesReferenceImage: true,
   },
   {
@@ -16,84 +28,186 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
     label: 'Diagonal de frente',
     group: 'Cuerpo completo',
     shotType: 'full body, standing, diagonal front angle, body slightly turned, looking at camera',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'front_three_quarter',
+    },
   },
   {
     id: 'full-three-quarter',
     label: '3/4 frente',
     group: 'Cuerpo completo',
     shotType: 'full body, standing, three-quarter angle, slight body turn',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'front_three_quarter',
+    },
   },
   {
     id: 'full-profile-left',
     label: 'Perfil lateral',
     group: 'Cuerpo completo',
     shotType: 'full body, side profile, facing left',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'profile_left',
+    },
   },
   {
     id: 'full-walking',
     label: 'Caminando',
     group: 'Cuerpo completo',
     shotType: 'full body, walking pose, slight movement',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'front_three_quarter',
+      modifiers: ['walking'],
+    },
   },
   {
     id: 'full-contrapposto',
     label: 'Contrapposto',
     group: 'Cuerpo completo',
     shotType: 'full body, relaxed contrapposto pose, weight on one leg, facing camera',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'front',
+      modifiers: ['contrapposto'],
+    },
   },
   {
     id: 'back-full',
     label: 'Espalda completa',
     group: 'Cuerpo completo',
     shotType: 'full body, back view, facing away from camera',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'back',
+    },
   },
   {
     id: 'back-diagonal',
     label: 'Espalda diagonal',
     group: 'Cuerpo completo',
     shotType: 'full body, three-quarter back view, body turned away, head slightly toward camera',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'back_three_quarter',
+    },
   },
   {
     id: 'back-three-quarter',
     label: '3/4 espalda',
     group: 'Cuerpo completo',
     shotType: 'full body, rear three-quarter angle, shoulders turned away from camera',
+    promptProfile: {
+      category: 'full_body',
+      orientation: 'back_three_quarter',
+    },
   },
   {
     id: 'half-front',
     label: 'Medio cuerpo frente',
     group: 'Medio cuerpo',
     shotType: 'half body, waist up, facing camera',
+    promptProfile: {
+      category: 'half_body',
+      orientation: 'front',
+    },
   },
   {
     id: 'half-front-diagonal',
     label: 'Medio cuerpo diagonal',
     group: 'Medio cuerpo',
     shotType: 'half body, waist up, diagonal front angle',
+    promptProfile: {
+      category: 'half_body',
+      orientation: 'front_three_quarter',
+    },
   },
   {
     id: 'half-three-quarter',
     label: 'Medio cuerpo 3/4',
     group: 'Medio cuerpo',
     shotType: 'half body, waist up, three-quarter angle',
+    promptProfile: {
+      category: 'half_body',
+      orientation: 'front_three_quarter',
+    },
   },
   {
     id: 'half-back',
     label: 'Medio cuerpo espalda',
     group: 'Medio cuerpo',
     shotType: 'half body, back view, waist up, facing away',
+    promptProfile: {
+      category: 'half_body',
+      orientation: 'back',
+    },
+  },
+  {
+    id: 'lower-front',
+    label: 'Tren inferior frente',
+    group: 'Tren inferior',
+    shotType: 'lower body only, waist to feet, front view, facing camera',
+    promptProfile: {
+      category: 'lower_body',
+      orientation: 'front',
+    },
+    promptDirectives: LOWER_BODY_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'lower-front-three-quarter',
+    label: 'Tren inferior 3/4 frente',
+    group: 'Tren inferior',
+    shotType: 'lower body only, waist to feet, three-quarter front angle, body slightly turned',
+    promptProfile: {
+      category: 'lower_body',
+      orientation: 'front_three_quarter',
+    },
+    promptDirectives: LOWER_BODY_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'lower-back',
+    label: 'Tren inferior espalda',
+    group: 'Tren inferior',
+    shotType: 'lower body only, waist to feet, back view, facing away from camera',
+    promptProfile: {
+      category: 'lower_body',
+      orientation: 'back',
+    },
+    promptDirectives: LOWER_BODY_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'lower-back-three-quarter',
+    label: 'Tren inferior 3/4 espalda',
+    group: 'Tren inferior',
+    shotType: 'lower body only, waist to feet, three-quarter back angle, body turned away from camera',
+    promptProfile: {
+      category: 'lower_body',
+      orientation: 'back_three_quarter',
+    },
+    promptDirectives: LOWER_BODY_PROMPT_DIRECTIVES,
   },
   {
     id: 'portrait-front',
     label: 'Retrato frente',
     group: 'Retrato',
     shotType: 'portrait, face and shoulders, facing camera',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'front',
+    },
   },
   {
     id: 'portrait-three-quarter',
     label: 'Retrato 3/4',
     group: 'Retrato',
     shotType: 'portrait, bust shot, slight angle',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'front_three_quarter',
+    },
   },
 ];
 

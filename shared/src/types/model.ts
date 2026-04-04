@@ -8,9 +8,10 @@ export interface PoseAiClassification {
   bodyFocus: PoseBodyFocus;
   faceVisible: boolean;
   autoCategory: string;
+  displayLabel?: string | null;
   usableForGarmentViews: GarmentView[];
   confidence: number | null;
-  taggedBy: 'gemini';
+  taggedBy: 'gemini' | 'manual';
   taggedAt: TimestampLike;
   version: number;
   reasoning?: string | null;

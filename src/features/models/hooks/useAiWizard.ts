@@ -5,6 +5,8 @@ import { AI_WIZARD_MAX_STEP, AI_WIZARD_STEPS, IDENTITY_CANDIDATE_COUNT } from '.
 import { isAiWizardStepComplete } from '../aiWizard';
 import { createModelFromPaths } from '../firebase';
 import { buildModelIdentityTraitsFromAiForm } from '../identityTraits';
+import { buildManualPoseClassification } from '../poseClassification';
+import { MODEL_POSE_RECIPES_BY_ID } from '../constants';
 import { AiIdentityFormState, useAiIdentityForm } from './useAiIdentityForm';
 import { useAiCandidates, UseAiCandidatesReturn } from './useAiCandidates';
 import { useAiPoses, UseAiPosesReturn } from './useAiPoses';
@@ -135,7 +137,20 @@ export const useAiWizard = ({
     const trimmedName = newModelName.trim();
     if (!trimmedName || !selectedClientId) return;
 
-    const accepted = poses.posePhotos.filter((photo) => !photo.rejected && !photo.loading);
+    const accepted = poses.posePhotos
+      .filter((photo) => !photo.rejected && !photo.loading)
+      .map((photo) => {
+        const recipe = photo.poseRecipeId
+          ? MODEL_POSE_RECIPES_BY_ID.get(photo.poseRecipeId)
+          : undefined;
+
+        return {
+          storagePath: photo.storagePath,
+          contentType: photo.contentType,
+          aiClassification: recipe ? buildManualPoseClassification(recipe) : null,
+        };
+      });
+
     if (accepted.length === 0) {
       toast({
         tone: 'warning',

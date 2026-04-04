@@ -23,6 +23,7 @@ export interface UploadedGarmentInput {
   originalFileNames?: string[];
   originalPhotoCount?: number;
   photos?: UploadedGarmentPhotoInput[];
+  garmentBodyArea?: GarmentBodyArea | null;
   matchedCategoryId?: string | null;
   matchedCategoryLabel?: string | null;
   matchedCategoryConfidence?: number | null;

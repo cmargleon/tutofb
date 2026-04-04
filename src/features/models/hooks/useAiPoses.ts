@@ -9,7 +9,7 @@ import {
   getAcceptedPoseCount,
 } from '../aiWizard';
 import { generateModelPoses } from '../firebase';
-import { buildPosePrompt } from '../prompts';
+import { buildPosePromptFromRecipe } from '../prompts';
 import { GeneratedPhotoState, PoseRecipe } from '../types';
 import type { AiIdentityFormState } from './useAiIdentityForm';
 
@@ -125,7 +125,7 @@ export const useAiPoses = ({
 
           try {
             const response = await generateModelPoses({
-              prompt: buildPosePrompt(identityForm.prompt.trim(), pose.shotType),
+              prompt: buildPosePromptFromRecipe(identityForm.prompt.trim(), pose),
               provider: identityForm.provider,
               aspectRatio: identityForm.aspectRatio,
               imageConfig: identityForm.providerImageConfig,
@@ -179,7 +179,7 @@ export const useAiPoses = ({
       setRegeneratingPoseIndex(index);
       try {
         const response = await generateModelPoses({
-          prompt: buildPosePrompt(identityForm.prompt.trim(), poseRecipe.shotType),
+          prompt: buildPosePromptFromRecipe(identityForm.prompt.trim(), poseRecipe),
           provider: identityForm.provider,
           aspectRatio: identityForm.aspectRatio,
           imageConfig: identityForm.providerImageConfig,

@@ -4,6 +4,7 @@ import {
   BatchOutputMode,
   Client,
   CreateGenerationBatchRequest,
+  GarmentBodyArea,
   Job,
   ProductDraftInput,
   ProductDraftRow,
@@ -34,6 +35,9 @@ export const requireNonEmptyString = (value: unknown, label: string): string => 
 
   return normalized;
 };
+
+const isGarmentBodyArea = (value: unknown): value is GarmentBodyArea =>
+  value === 'upper_body' || value === 'lower_body' || value === 'footwear' || value === 'full_body';
 
 const buildFallbackGarmentPhoto = (
   garment: Pick<UploadedGarmentInput, 'id' | 'name' | 'storagePath' | 'originalFileNames'>,
@@ -120,6 +124,7 @@ export const normalizeGarment = (value: unknown): UploadedGarmentInput => {
         ? Math.max(1, Math.trunc(garment.originalPhotoCount))
         : photos.length,
     photos,
+    garmentBodyArea: isGarmentBodyArea(garment.garmentBodyArea) ? garment.garmentBodyArea : null,
     matchedCategoryId: typeof garment.matchedCategoryId === 'string' ? garment.matchedCategoryId.trim() || null : null,
     matchedCategoryLabel: typeof garment.matchedCategoryLabel === 'string' ? garment.matchedCategoryLabel.trim() || null : null,
     matchedCategoryConfidence:
@@ -377,7 +382,12 @@ export const getGarmentAvailableViews = (garment: UploadedGarmentInput) =>
 export const canGeneratePoseForGarment = (
   garment: UploadedGarmentInput,
   pose: Pick<Pose, 'aiClassification'>,
-): boolean => isPoseCompatibleWithGarmentViews(pose.aiClassification, getGarmentAvailableViews(garment));
+): boolean =>
+  isPoseCompatibleWithGarmentViews(
+    pose.aiClassification,
+    getGarmentAvailableViews(garment),
+    garment.garmentBodyArea ?? null,
+  );
 
 export const getCompatibleGarmentPoseCombinations = (
   garments: UploadedGarmentInput[],

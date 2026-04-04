@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { generateModelPoses } from './firebase';
-import { buildReferenceCandidatePrompt, buildReferencePosePrompt } from './prompts';
+import { buildReferenceCandidatePrompt, buildReferencePosePromptFromRecipe } from './prompts';
 import {
   buildGeneratedPosePhotoState,
   buildReferencePosePhotoState,
@@ -72,7 +72,7 @@ export const generatePoseApi = async (
   }
 
   const response = await generateModelPoses({
-    prompt: buildReferencePosePrompt(params.prompt, poseRecipe.shotType),
+    prompt: buildReferencePosePromptFromRecipe(params.prompt, poseRecipe),
     provider: params.provider,
     aspectRatio: params.aspectRatio,
     imageConfig: params.providerImageConfig,

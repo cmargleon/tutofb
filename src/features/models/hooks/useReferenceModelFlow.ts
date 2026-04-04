@@ -14,6 +14,7 @@ import {
   DEFAULT_POSE_SELECTION_IDS,
   IDENTITY_CANDIDATE_COUNT,
   MODEL_POSE_GROUPS,
+  MODEL_POSE_RECIPES_BY_ID,
   MODEL_POSE_RECIPES,
   PROVIDER_OPTIONS,
 } from '../constants';
@@ -35,6 +36,7 @@ import {
 import {
   buildReferencePoseBasePrompt,
 } from '../prompts';
+import { buildManualPoseClassification } from '../poseClassification';
 import {
   generateCandidatesApi,
   generatePoseApi,
@@ -642,7 +644,20 @@ export const useReferenceModelFlow = ({
     const trimmedName = newModelName.trim();
     if (!trimmedName || !selectedClientId) return;
 
-    const accepted = posePhotos.filter((photo) => !photo.rejected && !photo.loading);
+    const accepted = posePhotos
+      .filter((photo) => !photo.rejected && !photo.loading)
+      .map((photo) => {
+        const recipe = photo.poseRecipeId
+          ? MODEL_POSE_RECIPES_BY_ID.get(photo.poseRecipeId)
+          : undefined;
+
+        return {
+          storagePath: photo.storagePath,
+          contentType: photo.contentType,
+          aiClassification: recipe ? buildManualPoseClassification(recipe) : null,
+        };
+      });
+
     if (accepted.length === 0) {
       toast({
         tone: 'warning',

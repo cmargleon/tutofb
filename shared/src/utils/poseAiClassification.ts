@@ -137,11 +137,23 @@ export const formatPoseAutoCategoryLabel = (autoCategory: string | null | undefi
     .replace(/\b\w/g, (match) => match.toUpperCase());
 };
 
+export const formatPoseClassificationLabel = (
+  classification: Pick<PoseAiClassification, 'displayLabel' | 'autoCategory'> | null | undefined,
+): string => {
+  if (classification?.displayLabel?.trim()) {
+    return classification.displayLabel.trim();
+  }
+
+  return formatPoseAutoCategoryLabel(classification?.autoCategory);
+};
+
 export const buildPoseAiClassification = ({
   orientationDetail,
   framing,
   faceVisible,
   confidence,
+  displayLabel = null,
+  taggedBy = 'gemini',
   taggedAt,
   reasoning = null,
 }: {
@@ -149,6 +161,8 @@ export const buildPoseAiClassification = ({
   framing: PoseFraming;
   faceVisible: boolean;
   confidence: number | null;
+  displayLabel?: string | null;
+  taggedBy?: PoseAiClassification['taggedBy'];
   taggedAt: TimestampLike;
   reasoning?: string | null;
 }): PoseAiClassification => ({
@@ -158,9 +172,10 @@ export const buildPoseAiClassification = ({
   bodyFocus: derivePoseBodyFocus(framing),
   faceVisible,
   autoCategory: buildPoseAutoCategory(orientationDetail, framing),
+  displayLabel,
   usableForGarmentViews: derivePoseUsableForGarmentViews(orientationDetail),
   confidence,
-  taggedBy: 'gemini',
+  taggedBy,
   taggedAt,
   version: POSE_AI_CLASSIFICATION_VERSION,
   reasoning,

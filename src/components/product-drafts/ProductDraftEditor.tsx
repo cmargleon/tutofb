@@ -15,6 +15,7 @@ import {
 
 type EditableDraft = ProductDraft | ProductDraftInput;
 type ProductDraftEditorLayout = 'table' | 'form';
+type ProductDraftDropdownChoice = { label: string; value: string };
 
 interface ProductDraftEditorProps {
   categories: SpreadsheetTemplateCategory[];
@@ -30,6 +31,12 @@ interface ProductDraftEditorProps {
   showGeneratedImagesSummary?: boolean;
   showAddRowButton?: boolean;
   showRowActions?: boolean;
+  resolveDropdownChoices?: (
+    draft: EditableDraft,
+    row: ProductDraftRow,
+    column: SpreadsheetTemplateCategoryColumn,
+    category: SpreadsheetTemplateCategory,
+  ) => ProductDraftDropdownChoice[] | null;
   resolveVisibleColumns?: (
     draft: EditableDraft,
     category: SpreadsheetTemplateCategory,
@@ -40,6 +47,14 @@ interface ProductDraftEditorProps {
 
 const INPUT_CLASS =
   'w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100';
+
+const normalizeComparable = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 
 const isImageColumn = (column: SpreadsheetTemplateCategoryColumn): boolean => {
   const key = column.key.toLowerCase();
@@ -77,17 +92,38 @@ const getFieldState = (
   activeDraft: EditableDraft,
   row: ProductDraftRow,
   column: SpreadsheetTemplateCategoryColumn,
+  resolveDropdownChoices?: ProductDraftEditorProps['resolveDropdownChoices'],
 ) => {
   const allowedValues = Array.from(new Set(getProductDraftColumnAllowedValues(activeCategory, column, row.values)));
   const defaultValue = getProductDraftColumnDefaultValue(activeCategory, column);
-  const resolvedValue = resolveProductDraftColumnValue({
+  const fallbackResolvedValue = resolveProductDraftColumnValue({
     category: activeCategory,
     column,
     rowValues: row.values,
     candidates: [row.values[column.key], activeDraft.inferredValues?.[column.key]?.value],
   });
-  const isDropdown = isProductDraftDropdownColumn(activeCategory, column, row.values);
-  const isFixedDropdown = Boolean(defaultValue && allowedValues.length === 1 && allowedValues[0] === defaultValue);
+  const dropdownChoices = resolveDropdownChoices?.(activeDraft, row, column, activeCategory)
+    ?.filter((choice) => choice.value.trim().length > 0)
+    || allowedValues.map((option) => ({ label: option, value: option }));
+  const resolvedChoiceValue = dropdownChoices.length > 0
+    ? dropdownChoices.find((choice) => {
+      const normalizedChoiceValue = normalizeComparable(choice.value);
+      const normalizedChoiceLabel = normalizeComparable(choice.label);
+      return [row.values[column.key], activeDraft.inferredValues?.[column.key]?.value, defaultValue, fallbackResolvedValue]
+        .filter((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0)
+        .some((candidate) => {
+          const normalizedCandidate = normalizeComparable(candidate);
+          return (
+            normalizedChoiceValue === normalizedCandidate
+            || normalizedChoiceLabel === normalizedCandidate
+            || normalizedChoiceLabel.includes(normalizedCandidate)
+            || normalizedCandidate.includes(normalizedChoiceLabel)
+          );
+        });
+    })?.value || ''
+    : fallbackResolvedValue;
+  const isDropdown = dropdownChoices.length > 0 || isProductDraftDropdownColumn(activeCategory, column, row.values);
+  const isFixedDropdown = Boolean(defaultValue && dropdownChoices.length === 1 && dropdownChoices[0]?.value === defaultValue);
   const placeholder =
     activeDraft.inferredValues?.[column.key]?.value
     || column.guidance
@@ -95,8 +131,8 @@ const getFieldState = (
     || '';
 
   return {
-    allowedValues,
-    resolvedValue,
+    dropdownChoices,
+    resolvedValue: resolvedChoiceValue,
     isDropdown,
     isFixedDropdown,
     placeholder,
@@ -117,6 +153,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
   showGeneratedImagesSummary = true,
   showAddRowButton = true,
   showRowActions = true,
+  resolveDropdownChoices,
   resolveVisibleColumns,
   onChangeRows,
   onSaveDraft,
@@ -173,12 +210,12 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
 
   const renderField = (row: ProductDraftRow, column: SpreadsheetTemplateCategoryColumn, forceResolvedValue = false) => {
     const {
-      allowedValues,
+      dropdownChoices,
       resolvedValue,
       isDropdown,
       isFixedDropdown,
       placeholder,
-    } = getFieldState(activeCategory, activeDraft, row, column);
+    } = getFieldState(activeCategory, activeDraft, row, column, resolveDropdownChoices);
 
     const updateValue = (nextValue: string) => {
       patchRows((rows) =>
@@ -209,9 +246,9 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
               {placeholder || 'Selecciona una opción'}
             </option>
           ) : null}
-          {allowedValues.map((option) => (
-            <option key={option} value={option}>
-              {option}
+          {dropdownChoices.map((option) => (
+            <option key={`${column.key}-${option.value}`} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>

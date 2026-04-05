@@ -1,3 +1,6 @@
+import {
+  DEFAULT_TRY_ON_PROMPT_CASES,
+} from '../../../shared/src/domain';
 import { SystemConfig } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { getJobMaxRetries, getJobRetryDelayMs, getBatchMaxJobs, getGeminiImageReviewModel } from '../config/runtime';
@@ -12,7 +15,13 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   geminiImageReviewModel: getGeminiImageReviewModel(),
   disabledProviders: [],
   systemPromptOverride: null,
+  systemPromptFullOutfit: DEFAULT_TRY_ON_PROMPT_CASES.full_outfit,
+  systemPromptTopOnly: DEFAULT_TRY_ON_PROMPT_CASES.top_only,
+  systemPromptBottomOnly: DEFAULT_TRY_ON_PROMPT_CASES.bottom_only,
 };
+
+const normalizePromptOverride = (value: unknown, fallback: string): string | null =>
+  typeof value === 'string' && value.trim() ? value.trim() : fallback;
 
 export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undefined): SystemConfig => ({
   jobMaxRetries: typeof input?.jobMaxRetries === 'number' && input.jobMaxRetries >= 0 ? Math.round(input.jobMaxRetries) : DEFAULT_SYSTEM_CONFIG.jobMaxRetries,
@@ -21,6 +30,9 @@ export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undef
   geminiImageReviewModel: typeof input?.geminiImageReviewModel === 'string' && input.geminiImageReviewModel.trim() ? input.geminiImageReviewModel.trim() : DEFAULT_SYSTEM_CONFIG.geminiImageReviewModel,
   disabledProviders: Array.isArray(input?.disabledProviders) ? input.disabledProviders.filter((p) => typeof p === 'string') : [],
   systemPromptOverride: typeof input?.systemPromptOverride === 'string' && input.systemPromptOverride.trim() ? input.systemPromptOverride.trim() : null,
+  systemPromptFullOutfit: normalizePromptOverride(input?.systemPromptFullOutfit, DEFAULT_SYSTEM_CONFIG.systemPromptFullOutfit!),
+  systemPromptTopOnly: normalizePromptOverride(input?.systemPromptTopOnly, DEFAULT_SYSTEM_CONFIG.systemPromptTopOnly!),
+  systemPromptBottomOnly: normalizePromptOverride(input?.systemPromptBottomOnly, DEFAULT_SYSTEM_CONFIG.systemPromptBottomOnly!),
 });
 
 export const getSystemConfigDocRef = () =>

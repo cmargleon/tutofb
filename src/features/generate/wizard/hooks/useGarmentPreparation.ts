@@ -136,13 +136,14 @@ export const useGarmentPreparation = ({
       );
       const garmentsNeedingClassification = uploadedGarments.filter((garment) => {
         const needsPhotoViews = garment.originalPhotos.some((photo) => photo.classification.status !== 'classified');
+        const needsBodyArea = !garment.garmentBodyArea;
         const needsSpreadsheetMatch = shouldClassifySpreadsheetData && (!garment.matchedCategoryId || !garment.matchedColor);
 
         if (shouldClassifySpreadsheetData) {
-          return needsPhotoViews || needsSpreadsheetMatch;
+          return needsPhotoViews || needsBodyArea || needsSpreadsheetMatch;
         }
 
-        return garment.originalPhotos.length > 1 && needsPhotoViews;
+        return needsBodyArea || (garment.originalPhotos.length > 1 && needsPhotoViews);
       });
 
       let preparedGarments = uploadedGarments;

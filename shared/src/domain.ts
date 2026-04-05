@@ -1,11 +1,13 @@
 import {
   AspectRatio,
+  CatalogEntityStatus,
+  GarmentBodyArea,
   GarmentReferenceImageType,
   Job,
   JobOutput,
   Provider,
   Role,
-  CatalogEntityStatus,
+  TryOnPromptCaseKey,
 } from './types';
 
 export const ROLE_VALUES: Role[] = ['admin', 'operador', 'revisor'];
@@ -21,38 +23,82 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 };
 
 export const DEFAULT_TRY_ON_PROMPT =
-  `Replace the clothing worn by the model with the garment from the reference image.
+  `You are generating a high-quality ecommerce fashion image for the Barbie brand.
 
-STRICT PRESERVATION (HARD CONSTRAINTS — DO NOT MODIFY):
-- Preserve 100% the model’s identity (face, body shape, skin tone, proportions)
+INPUT IMAGES:
+1) Garment image (reference of clothing or outfit)
+2) Model image (pose, body, face, lighting reference)
+
+GOAL:
+Dress the model using ONLY the garment information provided, following strict rules.
+
+STRICT PRESERVATION (HARD CONSTRAINTS - DO NOT MODIFY):
+- Preserve 100% the model's identity (face, body shape, skin tone, proportions)
 - Preserve EXACT body pose, including spine curvature, limb position, and weight distribution
 - Preserve EXACT head position and gaze direction:
-  • If the model is looking at the camera, KEEP eye contact
-  • If the head is tilted or rotated, KEEP the exact same angle
-  • DO NOT change where the model is looking
+  - If the model is looking at the camera, KEEP eye contact
+  - If the head is tilted or rotated, KEEP the exact same angle
+  - DO NOT change where the model is looking
 - Preserve EXACT body orientation relative to the camera:
-  • If front-facing, KEEP front-facing
-  • If back-facing, KEEP back-facing
-  • If side profile, KEEP the same side and angle
-  • DO NOT rotate, mirror, or reinterpret the body
+  - If front-facing, KEEP front-facing
+  - If back-facing, KEEP back-facing
+  - If side profile, KEEP the same side and angle
+  - DO NOT rotate, mirror, or reinterpret the body
 - Preserve original lighting, shadows, and highlights
 - Preserve camera angle, lens perspective, framing, and depth of field
 - Preserve the original background exactly as is
+
+AGE & STYLE CONTROL (CRITICAL):
+- The final image must reflect a CHILD-FRIENDLY, TOY-LIKE, BARBIE KIDS aesthetic
+- The model must appear youthful and child-appropriate (Barbie-style, doll-like)
+- No adult fashion styling
+- No mature or sensual appearance
 
 GARMENT FITTING REQUIREMENTS:
 - Fit the garment naturally onto the body respecting the existing pose
 - Follow the exact body orientation and head direction without correction or completion
 - Maintain correct anatomy and proportions at all times
 - Apply realistic fabric behavior:
-  • natural folds based on tension and gravity
-  • correct stretching/compression at joints
-  • accurate contact with the body
+  - natural folds based on tension and gravity
+  - correct stretching/compression at joints
+  - accurate contact with the body
+
+FACIAL EXPRESSION:
+- Soft, friendly, innocent expression
+- Natural smile or neutral playful look
+- No seductive or serious editorial expressions
+
+BODY & PRESENCE:
+- Maintain original proportions but ensure a youthful perception
+- No emphasis on curves, chest, or hips
+- No tight or body-contouring styling that suggests adult fashion
+
+STYLING:
+- Clean, simple, playful
+- Bright, friendly lighting
+- Commercial kids catalog style
+
+FORBIDDEN:
+- Sexy, sensual, or mature vibes
+- Fashion editorial look
+- Dramatic lighting
+- Glossy high-fashion styling
+
+REFERENCE STYLE:
+- Kids fashion ecommerce
+- Toy brand catalog (Barbie children line)
 
 GARMENT INTEGRITY (CRITICAL):
-- Preserve the garment’s exact color, texture, stitching, and design
+- Preserve the garment's exact color, texture, stitching, and design
 - Do NOT redesign, stylize, or enhance the garment
-- Do NOT hallucinate missing parts — only use visible reference information
+- Do NOT hallucinate missing parts - only use visible reference information
 - Ensure perspective consistency with the scene
+
+GARMENT ACCURACY:
+- Match exact color, tone, and texture
+- Preserve logos, prints, and branding only when they are explicitly visible in the garment reference
+- Fit naturally to the body with correct folds and fabric behavior
+- Match the perspective and lighting of the original model image
 
 --------------------------------
 BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
@@ -61,20 +107,20 @@ BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
 - Logos, text, or branding must ONLY be used if they are explicitly visible in the reference image AND in the corresponding visible area
 
 - If a logo is visible in the reference:
-  • Preserve its EXACT position, scale, and orientation
-  • Do NOT move, reinterpret, or enhance it
+  - Preserve its EXACT position, scale, and orientation
+  - Do NOT move, reinterpret, or enhance it
 
 - VISIBILITY RULE (CRITICAL PRIORITY):
-  • If the reference image shows ONLY the front of the garment:
+  - If the reference image shows ONLY the front of the garment:
     - DO NOT render ANY logos or branding on areas not visible (e.g., back, sides, shoulders not shown)
     - EVEN IF the garment clearly has a logo on the front, DO NOT assume or replicate branding on unseen areas
     - The model must behave as if the unseen areas contain NO branding
 
 - If the garment has a visible logo on the front but NO back view is provided:
-  • The generated image MUST NOT contain ANY visible branding on the back or other unseen areas
-  • The back must remain clean and free of logos
+  - The generated image MUST NOT contain ANY visible branding on the back or other unseen areas
+  - The back must remain clean and free of logos
 
-- Do NOT assume symmetry of branding (front ≠ back)
+- Do NOT assume symmetry of branding (front != back)
 - Do NOT reconstruct hidden branding
 - Do NOT generate additional or duplicate logos
 
@@ -82,20 +128,18 @@ BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
 UNSEEN AREA CONSTRAINTS (CRITICAL)
 --------------------------------
 
-COLOR CONSISTENCY (CRITICAL — HARD CONSTRAINT):
+COLOR CONSISTENCY (CRITICAL - HARD CONSTRAINT):
 - The garment color MUST exactly match the reference image
 - DO NOT alter hue, saturation, or brightness of the garment
-- DO NOT introduce lighting-based color shifts (no darker/lighter reds)
-- The red color must remain uniform across the entire garment
-- Avoid shadows that tint the garment toward maroon, orange, or pink
-- If lighting affects perception, correct it to maintain true color fidelity
+- DO NOT introduce lighting-based color shifts
+- Correct lighting shifts if needed to preserve true garment color fidelity
 
 - Any part of the garment that is NOT visible in the reference image must be treated as UNKNOWN
 
 - For UNKNOWN areas:
-  • Apply only neutral continuation of base fabric
-  • Continue color or pattern ONLY if clearly consistent and non-distinct
-  • Avoid adding any new visual elements
+  - Apply only neutral continuation of base fabric
+  - Continue color or pattern ONLY if clearly consistent and non-distinct
+  - Avoid adding any new visual elements
 
 STRICTLY FORBIDDEN in unseen areas:
 - Logos, brand marks, or symbols
@@ -106,11 +150,20 @@ STRICTLY FORBIDDEN in unseen areas:
 - The system must behave as if it has ZERO knowledge beyond what is visible
 
 --------------------------------
+BRAND STYLE (BARBIE)
+--------------------------------
+
+- Clean, vibrant, commercial look
+- Bright but natural colors
+- Slightly polished fashion catalog aesthetic
+- No grunge, no dark tones, no stylistic distortions
+
+--------------------------------
 STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS)
 --------------------------------
 
 - No adding logos to areas not visible in the reference
-- No “guessing” brand placement
+- No guessing brand placement
 - No front/back symmetry assumptions
 - No change in gaze direction or head orientation
 - No pose correction or symmetry fixing
@@ -120,15 +173,53 @@ STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS)
 - No artifacts or distortions
 
 --------------------------------
-OUTPUT
+OUTPUT CONSTRAINTS
 --------------------------------
 
-Generate a photorealistic, high-detail fashion catalog image with:
-- strict pose preservation
-- correct gaze direction
-- accurate garment reproduction
-- ZERO hallucinated branding
-- clean treatment of unseen areas`;
+- Photorealistic
+- High resolution
+- No artifacts
+- No extra garments
+- No duplicated limbs
+- No distortion
+
+FINAL RULE:
+If any part of the garment is missing or unclear, DO NOT guess or hallucinate.
+Use only the allowed fallback rules that are appended for the detected garment type.`;
+
+export const DEFAULT_TRY_ON_PROMPT_CASES: Record<TryOnPromptCaseKey, string> = {
+  full_outfit: `GARMENT TYPE RULE - CASE A - FULL OUTFIT:
+- Apply the complete outfit exactly as shown
+- Do not modify, replace, or invent any part`,
+  top_only: `GARMENT TYPE RULE - CASE B - TOP ONLY:
+- Apply the top exactly as shown
+- For the bottom: ALWAYS use plain black leggings
+- Leggings must be simple, with no logos, textures, or patterns
+- Never generate bottom garments outside this fallback rule`,
+  bottom_only: `GARMENT TYPE RULE - CASE C - BOTTOM ONLY:
+- Apply the bottom exactly as shown
+- For the top: ALWAYS use a plain white fitted bodysuit
+- The bodysuit must have no logos, textures, or patterns
+- Never generate top garments outside this fallback rule`,
+};
+
+export const resolveTryOnPromptCaseKey = (
+  garmentBodyArea?: GarmentBodyArea | null,
+): TryOnPromptCaseKey | null => {
+  switch (garmentBodyArea) {
+    case 'full_body':
+      return 'full_outfit';
+    case 'upper_body':
+      return 'top_only';
+    case 'lower_body':
+      return 'bottom_only';
+    default:
+      return null;
+  }
+};
+
+export const getDefaultTryOnPromptCaseText = (promptCaseKey: TryOnPromptCaseKey): string =>
+  DEFAULT_TRY_ON_PROMPT_CASES[promptCaseKey];
 
 export const isRole = (value: unknown): value is Role => ROLE_VALUES.includes(value as Role);
 export const isProvider = (value: unknown): value is Provider => PROVIDER_VALUES.includes(value as Provider);
@@ -144,8 +235,10 @@ export const resolveApprovedJobOutput = (job: Pick<Job, 'userSelectedOutput' | '
 export const buildFinalGenerationPrompt = (
   promptBase: string,
   garmentReferenceImageType: GarmentReferenceImageType | boolean = 'single_view',
+  promptCaseText?: string | null,
 ): string => {
   const basePrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
+  const normalizedPromptCaseText = typeof promptCaseText === 'string' ? promptCaseText.trim() : '';
   const sections = [basePrompt];
   const resolvedReferenceImageType =
     typeof garmentReferenceImageType === 'boolean'
@@ -153,6 +246,10 @@ export const buildFinalGenerationPrompt = (
         ? 'multi_angle_composite'
         : 'single_view'
       : garmentReferenceImageType;
+
+  if (normalizedPromptCaseText) {
+    sections.push(normalizedPromptCaseText);
+  }
 
   if (resolvedReferenceImageType === 'multi_angle_composite') {
     sections.push('La prenda de referencia esta mostrada desde multiples angulos dentro de una sola imagen.');
@@ -167,6 +264,9 @@ export default {
   ASPECT_RATIO_VALUES,
   PROVIDER_LABELS,
   DEFAULT_TRY_ON_PROMPT,
+  DEFAULT_TRY_ON_PROMPT_CASES,
+  resolveTryOnPromptCaseKey,
+  getDefaultTryOnPromptCaseText,
   isRole,
   isProvider,
   isAspectRatio,

@@ -11,6 +11,7 @@ export type CatalogEntityStatus = 'active' | 'archived';
 export type GarmentView = 'front' | 'back' | 'side';
 export type GarmentPhotoClassificationSource = 'assumed_single_front' | 'gemini';
 export type GarmentReferenceImageType = 'single_view' | 'multi_angle_composite';
+export type TryOnPromptCaseKey = 'full_outfit' | 'top_only' | 'bottom_only';
 export type PoseOrientationGroup = 'front' | 'back' | 'side' | 'ambiguous';
 export type SpreadsheetTemplateImportStatus = 'active' | 'archived';
 export type ProductDraftSuggestionSource = 'gemini' | 'wizard' | 'system' | 'user';

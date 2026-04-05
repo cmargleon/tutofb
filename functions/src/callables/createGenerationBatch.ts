@@ -19,6 +19,7 @@ import {
   assertModelOwnershipAndPoses,
   buildJobDraft,
   getCompatibleGarmentPoseCombinations,
+  resolveJobPromptCase,
   resolveGarmentPhotoForPose,
   validateCreateGenerationBatchInput,
 } from './createGenerationBatch.helpers';
@@ -184,15 +185,23 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
 
     const maxRetries = systemConfig.jobMaxRetries;
     const autoReviewMaxAttempts = getJobAutoReviewMaxAttempts();
+    const promptCases = {
+      full_outfit: systemConfig.systemPromptFullOutfit,
+      top_only: systemConfig.systemPromptTopOnly,
+      bottom_only: systemConfig.systemPromptBottomOnly,
+    } as const;
 
     for (const { garment, pose } of compatibleCombinations) {
       const selectedGarmentPhoto = resolveGarmentPhotoForPose(garment, pose);
+      const promptCase = resolveJobPromptCase(garment.garmentBodyArea ?? null, promptCases);
       const jobRef = db.collection('jobs').doc();
       const jobDraft = buildJobDraft(
         {
           garmentIsMultiAngle: garment.isMultiAngle,
           garmentReferenceImageType: 'single_view',
-        } as Pick<Job, 'garmentIsMultiAngle' | 'garmentReferenceImageType'>,
+          promptCaseKey: promptCase.promptCaseKey,
+          promptCaseText: promptCase.promptCaseText,
+        } as Pick<Job, 'garmentIsMultiAngle' | 'garmentReferenceImageType' | 'promptCaseKey' | 'promptCaseText'>,
         validated.provider,
         validated.promptBase,
         autoReviewMaxAttempts,
@@ -216,6 +225,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         garmentPhotoId: selectedGarmentPhoto.id,
         garmentPhotoFileName: selectedGarmentPhoto.fileName,
         garmentView: selectedGarmentPhoto.view,
+        garmentBodyArea: garment.garmentBodyArea ?? null,
         productDraftId: validated.outputMode === 'spreadsheet' ? garment.id : null,
         garmentSourceType: garment.sourceType,
         garmentOriginalFileNames: garment.originalFileNames || [],

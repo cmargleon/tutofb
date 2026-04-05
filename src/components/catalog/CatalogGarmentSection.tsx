@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Download, Loader2 } from 'lucide-react';
-import { getDownloadURL, ref } from 'firebase/storage';
-import { storage } from '../../firebase';
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { CatalogGarmentGroup } from '../../features/catalog/useCatalogJobs';
 import { CatalogThumbnail } from './CatalogThumbnail';
 import FileSaver from 'file-saver';
+import { resolveStorageAssetUrl } from '../../features/storage/assets';
 
 interface CatalogGarmentSectionProps {
   group: CatalogGarmentGroup;
@@ -33,7 +32,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ gr
           const path = resolveApprovedJobOutput(job)?.resultImagePath;
           if (!path) return;
           try {
-            const downloadUrl = await getDownloadURL(ref(storage, path));
+            const { url: downloadUrl } = await resolveStorageAssetUrl(path);
             const resp = await fetch(downloadUrl);
             const buf = await resp.arrayBuffer();
             const ext = path.split('?')[0].split('.').pop() || 'png';

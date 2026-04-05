@@ -11,12 +11,14 @@ const {
   assertModelOwnershipAndPoses,
   buildJobDraft,
   getCompatibleGarmentPoseCombinations,
+  resolveJobPromptCase,
   resolveGarmentPhotoForPose,
   validateCreateGenerationBatchInput,
 } = createBatchHelpers as {
   assertModelOwnershipAndPoses: typeof import('../functions/src/callables/createGenerationBatch.helpers').assertModelOwnershipAndPoses;
   buildJobDraft: typeof import('../functions/src/callables/createGenerationBatch.helpers').buildJobDraft;
   getCompatibleGarmentPoseCombinations: typeof import('../functions/src/callables/createGenerationBatch.helpers').getCompatibleGarmentPoseCombinations;
+  resolveJobPromptCase: typeof import('../functions/src/callables/createGenerationBatch.helpers').resolveJobPromptCase;
   resolveGarmentPhotoForPose: typeof import('../functions/src/callables/createGenerationBatch.helpers').resolveGarmentPhotoForPose;
   validateCreateGenerationBatchInput: typeof import('../functions/src/callables/createGenerationBatch.helpers').validateCreateGenerationBatchInput;
 };
@@ -35,6 +37,22 @@ const baseModel: Model = {
   updatedAt: new Date(),
   createdByUid: 'admin',
 };
+
+const defaultPromptCases = {
+  full_outfit: `GARMENT TYPE RULE - CASE A - FULL OUTFIT:
+- Apply the complete outfit exactly as shown
+- Do not modify, replace, or invent any part`,
+  top_only: `GARMENT TYPE RULE - CASE B - TOP ONLY:
+- Apply the top exactly as shown
+- For the bottom: ALWAYS use plain black leggings
+- Leggings must be simple, with no logos, textures, or patterns
+- Never generate bottom garments outside this fallback rule`,
+  bottom_only: `GARMENT TYPE RULE - CASE C - BOTTOM ONLY:
+- Apply the bottom exactly as shown
+- For the top: ALWAYS use a plain white fitted bodysuit
+- The bodysuit must have no logos, textures, or patterns
+- Never generate top garments outside this fallback rule`,
+} as const;
 
 const baseTemplateFields = {
   spreadsheetTemplateId: 'template-1',
@@ -328,6 +346,8 @@ test('buildJobDraft usa single_view para el matching nuevo y deja el job en pend
     {
       garmentIsMultiAngle: true,
       garmentReferenceImageType: 'single_view',
+      promptCaseKey: 'top_only',
+      promptCaseText: defaultPromptCases.top_only,
     },
     'openai-gpt-image-1.5',
     '',
@@ -335,6 +355,9 @@ test('buildJobDraft usa single_view para el matching nuevo y deja el job en pend
 
   assert.equal(draft.provider, 'openai-gpt-image-1.5');
   assert.equal(draft.status, 'pending');
+  assert.equal(draft.promptCaseKey, 'top_only');
+  assert.equal(draft.promptCaseText, defaultPromptCases.top_only);
+  assert.match(draft.finalPrompt, /plain black leggings/i);
   assert.doesNotMatch(draft.finalPrompt, /multiples angulos/i);
   assert.doesNotMatch(draft.finalPrompt, /Instrucciones de fondo/i);
   assert.doesNotMatch(draft.finalPrompt, /Evitar en el fondo/i);
@@ -351,6 +374,19 @@ test('buildJobDraft mantiene la nota de multiangulo en jobs legacy compuestos', 
   );
 
   assert.match(draft.finalPrompt, /multiples angulos/i);
+});
+
+test('resolveJobPromptCase usa el fallback por defecto cuando la configuración no trae override', () => {
+  const resolved = resolveJobPromptCase('lower_body', {
+    full_outfit: 'custom A',
+    top_only: 'custom B',
+    bottom_only: null,
+  });
+
+  assert.deepEqual(resolved, {
+    promptCaseKey: 'bottom_only',
+    promptCaseText: defaultPromptCases.bottom_only,
+  });
 });
 
 test('getCompatibleGarmentPoseCombinations omite la pose de espalda para prendas solo-front y la mantiene para prendas front-back', () => {

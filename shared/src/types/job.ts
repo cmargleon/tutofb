@@ -6,10 +6,12 @@ import type {
   GarmentSourceType,
   GarmentReferenceImageType,
   GarmentView,
+  GarmentBodyArea,
   PoseFraming,
   PoseOrientationDetail,
   PoseOrientationGroup,
   PoseBodyFocus,
+  TryOnPromptCaseKey,
 } from './common';
 import type { ProviderImageConfig } from './provider';
 
@@ -140,6 +142,7 @@ export interface Job {
   garmentPhotoId?: string | null;
   garmentPhotoFileName?: string | null;
   garmentView?: GarmentView | null;
+  garmentBodyArea?: GarmentBodyArea | null;
   productDraftId?: string | null;
   garmentSourceType?: GarmentSourceType;
   garmentOriginalFileNames?: string[];
@@ -150,6 +153,8 @@ export interface Job {
   provider: Provider;
   requestedPromptBase?: string;
   promptBase: string;
+  promptCaseKey?: TryOnPromptCaseKey | null;
+  promptCaseText?: string | null;
   finalPrompt: string;
   status: JobStatus;
   queuePriority: number;

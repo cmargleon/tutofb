@@ -7,7 +7,7 @@ import { useSystemConfig } from '../features/system/useSystemConfig';
 import { useRole } from '../features/auth/AuthProvider';
 import { useToast } from '../features/feedback/FeedbackProvider';
 import { Provider } from '../../shared/src/types';
-import { DEFAULT_TRY_ON_PROMPT } from '../../shared/src/domain';
+import { DEFAULT_TRY_ON_PROMPT, DEFAULT_TRY_ON_PROMPT_CASES } from '../../shared/src/domain';
 
 const KNOWN_PROVIDERS: Provider[] = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5', 'fal-nano-banana-2', 'fal-seedream-5'];
 const PROVIDER_DISPLAY: Record<Provider, string> = {
@@ -100,6 +100,9 @@ export const Configuracion: React.FC = () => {
   const [customGeminiModel, setCustomGeminiModel] = useState('');
   const [disabledProviders, setDisabledProviders] = useState<string[]>([]);
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [systemPromptFullOutfit, setSystemPromptFullOutfit] = useState('');
+  const [systemPromptTopOnly, setSystemPromptTopOnly] = useState('');
+  const [systemPromptBottomOnly, setSystemPromptBottomOnly] = useState('');
 
   // Sync form state when systemConfig loads
   useEffect(() => {
@@ -119,6 +122,9 @@ export const Configuracion: React.FC = () => {
     }
     setDisabledProviders(systemConfig.disabledProviders);
     setSystemPrompt(systemConfig.systemPromptOverride ?? DEFAULT_TRY_ON_PROMPT);
+    setSystemPromptFullOutfit(systemConfig.systemPromptFullOutfit ?? DEFAULT_TRY_ON_PROMPT_CASES.full_outfit);
+    setSystemPromptTopOnly(systemConfig.systemPromptTopOnly ?? DEFAULT_TRY_ON_PROMPT_CASES.top_only);
+    setSystemPromptBottomOnly(systemConfig.systemPromptBottomOnly ?? DEFAULT_TRY_ON_PROMPT_CASES.bottom_only);
   }, [systemConfigLoading, systemConfig]);
 
   const saveSystemConfigSection = async (patch: Parameters<typeof updateSystemConfig>[0]) => {
@@ -154,9 +160,24 @@ export const Configuracion: React.FC = () => {
 
   const handleSaveSystemPrompt = () => {
     const trimmedPrompt = systemPrompt.trim();
+    const trimmedFullOutfitPrompt = systemPromptFullOutfit.trim();
+    const trimmedTopOnlyPrompt = systemPromptTopOnly.trim();
+    const trimmedBottomOnlyPrompt = systemPromptBottomOnly.trim();
     void saveSystemConfigSection({
       systemPromptOverride:
         !trimmedPrompt || trimmedPrompt === DEFAULT_TRY_ON_PROMPT.trim() ? null : trimmedPrompt,
+      systemPromptFullOutfit:
+        !trimmedFullOutfitPrompt || trimmedFullOutfitPrompt === DEFAULT_TRY_ON_PROMPT_CASES.full_outfit.trim()
+          ? null
+          : trimmedFullOutfitPrompt,
+      systemPromptTopOnly:
+        !trimmedTopOnlyPrompt || trimmedTopOnlyPrompt === DEFAULT_TRY_ON_PROMPT_CASES.top_only.trim()
+          ? null
+          : trimmedTopOnlyPrompt,
+      systemPromptBottomOnly:
+        !trimmedBottomOnlyPrompt || trimmedBottomOnlyPrompt === DEFAULT_TRY_ON_PROMPT_CASES.bottom_only.trim()
+          ? null
+          : trimmedBottomOnlyPrompt,
     });
   };
 
@@ -392,23 +413,48 @@ export const Configuracion: React.FC = () => {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-1">
           <FileText className="w-5 h-5 text-slate-500" />
-          <h2 className="text-base font-semibold text-slate-900">Prompt global por defecto</h2>
+          <h2 className="text-base font-semibold text-slate-900">Prompts globales del wizard</h2>
         </div>
         <p className="text-sm text-slate-500 mb-6">
-          Se usa en el wizard solo cuando el cliente seleccionado no tiene un prompt propio. Si queda
-          igual al prompt interno por defecto, se guarda sin override.
+          El prompt base se usa en el wizard cuando el cliente seleccionado no tiene un prompt propio.
+          Los bloques A/B/C se agregan automáticamente al prompt final según el tipo de prenda detectado.
+          Si un campo queda igual al valor interno por defecto, se guarda sin override.
         </p>
         {systemConfigLoading ? (
           <LoadingBlock message="Cargando configuración..." />
         ) : (
           <div className="space-y-4">
-            <textarea
+            <PromptTextarea
+              label="Prompt base común"
               rows={12}
               value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
+              onChange={setSystemPrompt}
               disabled={!role.canManageUsers}
               placeholder="Cargando prompt base..."
-              className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-mono focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400 resize-y"
+            />
+            <PromptTextarea
+              label="Caso A: outfit completo"
+              rows={5}
+              value={systemPromptFullOutfit}
+              onChange={setSystemPromptFullOutfit}
+              disabled={!role.canManageUsers}
+              placeholder="Reglas para prendas full outfit..."
+            />
+            <PromptTextarea
+              label="Caso B: top only"
+              rows={6}
+              value={systemPromptTopOnly}
+              onChange={setSystemPromptTopOnly}
+              disabled={!role.canManageUsers}
+              placeholder="Reglas para prendas upper_body..."
+            />
+            <PromptTextarea
+              label="Caso C: bottom only"
+              rows={6}
+              value={systemPromptBottomOnly}
+              onChange={setSystemPromptBottomOnly}
+              disabled={!role.canManageUsers}
+              placeholder="Reglas para prendas lower_body..."
             />
             {role.canManageUsers ? (
               <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
@@ -426,6 +472,36 @@ export const Configuracion: React.FC = () => {
     </div>
   );
 };
+
+function PromptTextarea({
+  label,
+  rows,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  label: string;
+  rows: number;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  placeholder: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-slate-700">{label}</span>
+      <textarea
+        rows={rows}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400 resize-y"
+      />
+    </label>
+  );
+}
 
 function AlertField({
   label,

@@ -344,6 +344,7 @@ const persistGeneratedAttempt = async ({
     baseJobUpdate.finalPrompt = buildFinalGenerationPrompt(
       resolvedPromptBase,
       claimedJob.garmentReferenceImageType || (claimedJob.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
+      claimedJob.promptCaseText,
     );
   }
 

@@ -1,22 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getDownloadURL, ref } from 'firebase/storage';
-import { storage } from '../../firebase';
 import { Job } from '../../../shared/src/types';
 import { HoverZoomImage } from '../evaluation/HoverZoomImage';
+import { resolveStorageAssetUrl } from '../../features/storage/assets';
 
 export const CatalogGarmentThumbnailFloat: React.FC<{ job: Job }> = ({ job }) => {
-  const paths = useMemo(() => {
-    if (job.garmentIsMultiAngle && job.garmentOriginalFileNames && job.garmentOriginalFileNames.length > 0) {
-      return job.garmentOriginalFileNames.map((name) => `garments/${job.garmentId}/${name}`);
-    }
-    return [job.garmentFilePath];
-  }, [job]);
+  const paths = useMemo(
+    () => (job.garmentFilePath ? [job.garmentFilePath] : []),
+    [job.garmentFilePath],
+  );
 
   const [urls, setUrls] = useState<(string | null)[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(paths.map((path) => getDownloadURL(ref(storage, path)).catch(() => null))).then((results) => {
+    Promise.all(paths.map((path) => resolveStorageAssetUrl(path).then((result) => result.url).catch(() => null))).then((results) => {
       if (!cancelled) setUrls(results);
     });
     return () => { cancelled = true; };

@@ -5,6 +5,7 @@ import { resolveStorageAssetUrl } from './assets';
 export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(storagePath));
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -13,12 +14,14 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
     if (!storagePath) {
       setUrl(null);
       setLoading(false);
+      setError(null);
       return () => {
         isMounted = false;
       };
     }
 
     setLoading(true);
+    setError(null);
 
     void resolveStorageAssetUrl(storagePath)
       .then((resolvedAsset) => {
@@ -39,6 +42,7 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
 
         if (isMounted) {
           setUrl(null);
+          setError(error);
         }
       })
       .finally(() => {
@@ -53,5 +57,5 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
     };
   }, [storagePath]);
 
-  return { url, loading };
+  return { url, loading, error };
 };

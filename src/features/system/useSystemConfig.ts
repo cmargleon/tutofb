@@ -10,6 +10,9 @@ const DEFAULT_CONFIG: SystemConfig = {
   geminiImageReviewModel: 'gemini-3.1-flash-lite-preview',
   disabledProviders: [],
   systemPromptOverride: null,
+  systemPromptFullOutfit: null,
+  systemPromptTopOnly: null,
+  systemPromptBottomOnly: null,
 };
 
 export const useSystemConfig = () => {
@@ -28,6 +31,18 @@ export const useSystemConfig = () => {
           geminiImageReviewModel: typeof data.geminiImageReviewModel === 'string' && data.geminiImageReviewModel.trim() ? data.geminiImageReviewModel.trim() : DEFAULT_CONFIG.geminiImageReviewModel,
           disabledProviders: Array.isArray(data.disabledProviders) ? data.disabledProviders : [],
           systemPromptOverride: typeof data.systemPromptOverride === 'string' && data.systemPromptOverride.trim() ? data.systemPromptOverride.trim() : null,
+          systemPromptFullOutfit:
+            typeof data.systemPromptFullOutfit === 'string' && data.systemPromptFullOutfit.trim()
+              ? data.systemPromptFullOutfit.trim()
+              : DEFAULT_CONFIG.systemPromptFullOutfit,
+          systemPromptTopOnly:
+            typeof data.systemPromptTopOnly === 'string' && data.systemPromptTopOnly.trim()
+              ? data.systemPromptTopOnly.trim()
+              : DEFAULT_CONFIG.systemPromptTopOnly,
+          systemPromptBottomOnly:
+            typeof data.systemPromptBottomOnly === 'string' && data.systemPromptBottomOnly.trim()
+              ? data.systemPromptBottomOnly.trim()
+              : DEFAULT_CONFIG.systemPromptBottomOnly,
         });
       }
       setLoading(false);

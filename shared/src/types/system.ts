@@ -35,6 +35,9 @@ export interface SystemConfig {
   geminiImageReviewModel: string;
   disabledProviders: string[];
   systemPromptOverride: string | null;
+  systemPromptFullOutfit: string | null;
+  systemPromptTopOnly: string | null;
+  systemPromptBottomOnly: string | null;
   updatedAt?: TimestampLike | null;
   updatedByUid?: string | null;
   updatedByDisplayName?: string | null;

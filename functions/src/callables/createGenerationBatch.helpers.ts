@@ -11,13 +11,16 @@ import {
   Model,
   Pose,
   ProviderImageConfig,
+  TryOnPromptCaseKey,
   UploadedGarmentInput,
   UploadedGarmentPhotoInput,
 } from '../../../shared/src/types';
 import {
   buildFinalGenerationPrompt,
+  getDefaultTryOnPromptCaseText,
   isArchivedCatalogEntity,
   isProvider,
+  resolveTryOnPromptCaseKey,
 } from '../../../shared/src/domain';
 import { isProviderImageConfig, normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { EMPTY_JOB_REVIEW_SIGNALS } from '../../../shared/src/reviewMetrics';
@@ -403,7 +406,7 @@ export const getCompatibleGarmentPoseCombinations = (
   );
 
 export const buildJobDraft = (
-  job: Pick<Job, 'garmentIsMultiAngle' | 'garmentReferenceImageType'>,
+  job: Pick<Job, 'garmentIsMultiAngle' | 'garmentReferenceImageType' | 'promptCaseKey' | 'promptCaseText'>,
   provider: Job['provider'],
   promptBase: string,
   autoReviewMaxAttempts: number = 3,
@@ -411,9 +414,12 @@ export const buildJobDraft = (
   requestedPromptBase: promptBase.trim(),
   provider,
   promptBase,
+  promptCaseKey: job.promptCaseKey ?? null,
+  promptCaseText: job.promptCaseText ?? null,
   finalPrompt: buildFinalGenerationPrompt(
     promptBase,
     job.garmentReferenceImageType || (job.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
+    job.promptCaseText,
   ),
   status: 'pending' as const,
   queuePriority: 1,
@@ -432,3 +438,27 @@ export const buildJobDraft = (
   lastAttemptStartedAt: null,
   lastError: null,
 });
+
+export const resolveJobPromptCase = (
+  garmentBodyArea: UploadedGarmentInput['garmentBodyArea'],
+  promptCases: Partial<Record<TryOnPromptCaseKey, string | null | undefined>>,
+): { promptCaseKey: TryOnPromptCaseKey | null; promptCaseText: string | null } => {
+  const promptCaseKey = resolveTryOnPromptCaseKey(garmentBodyArea);
+  if (!promptCaseKey) {
+    return {
+      promptCaseKey: null,
+      promptCaseText: null,
+    };
+  }
+
+  const configuredPromptCaseText = promptCases[promptCaseKey];
+  const promptCaseText =
+    typeof configuredPromptCaseText === 'string' && configuredPromptCaseText.trim()
+      ? configuredPromptCaseText.trim()
+      : getDefaultTryOnPromptCaseText(promptCaseKey);
+
+  return {
+    promptCaseKey,
+    promptCaseText,
+  };
+};

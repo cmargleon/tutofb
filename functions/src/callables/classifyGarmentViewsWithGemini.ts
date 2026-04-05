@@ -443,32 +443,6 @@ export const classifyGarmentViewsWithGemini = onCall<ClassifyGarmentViewsRequest
     const responseGarments: ClassifyGarmentViewsResponse['garments'] = [];
 
     for (const garment of garments) {
-      if (garment.photos.length === 1 && categories.length === 0) {
-        const [photo] = garment.photos;
-        responseGarments.push({
-          garmentId: garment.garmentId,
-          garmentName: garment.garmentName,
-          photos: [{
-            ...photo,
-            view: 'front',
-            confidence: null,
-            reasoning: 'Se asumió frente porque la prenda solo tiene una foto.',
-            classifiedBy: 'assumed_single_front',
-          }],
-          availableViews: ['front'],
-          garmentBodyArea: null,
-          usedGemini: false,
-          matchedCategoryId: null,
-          matchedCategoryLabel: null,
-          matchedCategoryConfidence: null,
-          matchedCategoryReasoning: null,
-          matchedColor: null,
-          matchedColorConfidence: null,
-          matchedColorReasoning: null,
-        });
-        continue;
-      }
-
       responseGarments.push(await classifyGarmentWithGemini({
         apiKey: GEMINI_API_KEY.value(),
         model: geminiModel,

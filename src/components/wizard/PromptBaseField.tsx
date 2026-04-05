@@ -18,7 +18,8 @@ export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChang
     />
     <p className="mt-2 text-xs text-slate-500">
       Se precarga desde {sourceLabel} y puedes ajustarlo antes de crear el lote. Tambien se usa como base
-      directa del prompt final y agrega una nota extra cuando la prenda es multiangulo.
+      directa del prompt final, suma el bloque A/B/C segun el tipo de prenda y agrega una nota extra
+      cuando la prenda es multiangulo.
     </p>
   </div>
 );

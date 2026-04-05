@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Ban, Loader2 } from 'lucide-react';
-import { getDownloadURL, ref } from 'firebase/storage';
-import { storage } from '../../firebase';
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
+import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 
 interface CatalogThumbnailProps {
   job: Job;
@@ -11,23 +10,11 @@ interface CatalogThumbnailProps {
 }
 
 export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({ job, onClick }) => {
-  const [url, setUrl] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState(false);
-
   const resultPath = resolveApprovedJobOutput(job)?.resultImagePath;
   const isGenerating = job.status === 'pending' || job.status === 'processing';
   const isFailed = job.status === 'failed';
-
-  useEffect(() => {
-    setUrl(null);
-    setLoadError(false);
-    if (!resultPath) return;
-    let cancelled = false;
-    getDownloadURL(ref(storage, resultPath))
-      .then((u) => { if (!cancelled) setUrl(u); })
-      .catch(() => { if (!cancelled) setLoadError(true); });
-    return () => { cancelled = true; };
-  }, [resultPath]);
+  const { url, error } = useStorageAssetUrl(resultPath || null);
+  const loadError = Boolean(error);
 
   // Failed job with a generated photo: show photo with dark mask
   if (isFailed && url) {

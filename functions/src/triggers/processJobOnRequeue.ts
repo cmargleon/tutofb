@@ -9,7 +9,7 @@ export const processJobOnRequeue = onDocumentUpdated(
     document: 'jobs/{jobId}',
     timeoutSeconds: 540,
     memory: '1GiB',
-    maxInstances: 5,
+    maxInstances: 20,
     secrets: [FAL_KEY, OPENAI_API_KEY, GEMINI_API_KEY],
   },
   async (event) => {
@@ -33,6 +33,10 @@ export const processJobOnRequeue = onDocumentUpdated(
       }
     }
 
-    await processJob(event.params.jobId, 'requeue');
+    // skipBacklogSweep: true — when N jobs are retried simultaneously, N trigger instances
+    // fire in parallel. Without this flag, each instance would also sweep and try to process
+    // all other pending jobs, causing a stampede that corrupts claim tokens and discards results
+    // (while still spending API credits). The scheduled sweeper handles orphans every 5 min.
+    await processJob(event.params.jobId, 'requeue', { skipBacklogSweep: true });
   },
 );

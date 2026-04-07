@@ -8,7 +8,7 @@ export const processJobOnCreate = onDocumentCreated(
     document: 'jobs/{jobId}',
     timeoutSeconds: 540,
     memory: '1GiB',
-    maxInstances: 5,
+    maxInstances: 20,
     secrets: [FAL_KEY, OPENAI_API_KEY, GEMINI_API_KEY],
   },
   async (event) => {
@@ -22,6 +22,9 @@ export const processJobOnCreate = onDocumentCreated(
       return;
     }
 
-    await processJob(event.params.jobId, 'create');
+    // skipBacklogSweep: true — same reason as processJobOnRequeue: when N jobs are created
+    // simultaneously (e.g., new batch), N trigger instances fire in parallel and would each
+    // sweep all other pending jobs, causing claim token stampedes. Scheduled sweeper handles orphans.
+    await processJob(event.params.jobId, 'create', { skipBacklogSweep: true });
   },
 );

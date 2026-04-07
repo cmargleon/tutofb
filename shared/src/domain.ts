@@ -240,19 +240,9 @@ export const buildFinalGenerationPrompt = (
   const basePrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
   const normalizedPromptCaseText = typeof promptCaseText === 'string' ? promptCaseText.trim() : '';
   const sections = [basePrompt];
-  const resolvedReferenceImageType =
-    typeof garmentReferenceImageType === 'boolean'
-      ? garmentReferenceImageType
-        ? 'multi_angle_composite'
-        : 'single_view'
-      : garmentReferenceImageType;
 
   if (normalizedPromptCaseText) {
     sections.push(normalizedPromptCaseText);
-  }
-
-  if (resolvedReferenceImageType === 'multi_angle_composite') {
-    sections.push('La prenda de referencia esta mostrada desde multiples angulos dentro de una sola imagen.');
   }
 
   return sections.filter(Boolean).join('\n\n');

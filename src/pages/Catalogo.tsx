@@ -21,7 +21,7 @@ const SORT_ORDER_OPTIONS: Array<{ value: CatalogSortOrder; label: string }> = [
 ];
 
 export const Catalogo: React.FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialClientId = searchParams.get('clientId') ?? '';
   const initialBatchId = searchParams.get('batchId') ?? '';
   const toast = useToast();
@@ -67,13 +67,24 @@ export const Catalogo: React.FC = () => {
     () => (selectedBatchId ? batchOptions.find((batch) => batch.id === selectedBatchId) || null : null),
     [batchOptions, selectedBatchId],
   );
+  // Use counters only — the status field can be stale after bulk cancels due to trigger race
+  // conditions, but counters are always set correctly by the cancel callables.
   const selectedBatchIsGenerating = Boolean(
     selectedBatch
-    && (selectedBatch.status === 'pending'
-      || selectedBatch.status === 'processing'
-      || selectedBatch.pendingJobs > 0
-      || selectedBatch.processingJobs > 0),
+    && (selectedBatch.pendingJobs > 0 || selectedBatch.processingJobs > 0),
   );
+
+  // Auto-heal: if the batch status says active but counters are 0, the status field is stale.
+  // Calling cancelBatchProcessing with no active jobs recomputes and corrects the status.
+  useEffect(() => {
+    if (!selectedBatch?.id) return;
+    const statusIsStuck =
+      (selectedBatch.status === 'pending' || selectedBatch.status === 'processing')
+      && selectedBatch.pendingJobs === 0
+      && selectedBatch.processingJobs === 0;
+    if (!statusIsStuck) return;
+    void cancelBatchProcessing(selectedBatch.id).catch(() => { /* silent */ });
+  }, [selectedBatch?.id, selectedBatch?.status, selectedBatch?.pendingJobs, selectedBatch?.processingJobs]);
 
   useEffect(() => {
     if (!selectedBatchId || !selectedBatchIsGenerating) {
@@ -172,6 +183,23 @@ export const Catalogo: React.FC = () => {
     const found = batchOptions.find((b) => b.id === selectedBatchId);
     return found ? `${formatDateTimeLong(found.createdAt)} · ${found.id}` : selectedBatchId;
   }, [batchOptions, selectedBatchId]);
+
+  useEffect(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (selectedClientId) {
+        next.set('clientId', selectedClientId);
+      } else {
+        next.delete('clientId');
+      }
+      if (selectedBatchId) {
+        next.set('batchId', selectedBatchId);
+      } else {
+        next.delete('batchId');
+      }
+      return next;
+    }, { replace: true });
+  }, [selectedClientId, selectedBatchId, setSearchParams]);
 
   useEffect(() => {
     const unsub = subscribeToClients((c) => setClients(c), () => {});

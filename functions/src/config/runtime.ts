@@ -6,12 +6,12 @@ export const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 
 const BATCH_MAX_JOBS = defineInt('BATCH_MAX_JOBS', { default: 100 });
 const JOB_MAX_RETRIES = defineInt('JOB_MAX_RETRIES', { default: 3 });
-const JOB_TIMEOUT_MS = defineInt('JOB_TIMEOUT_MS', { default: 5 * 60 * 1000 });
+const JOB_TIMEOUT_MS = defineInt('JOB_TIMEOUT_MS', { default: 8 * 60 * 1000 });
 const JOB_STUCK_SWEEP_LIMIT = defineInt('JOB_STUCK_SWEEP_LIMIT', { default: 50 });
 const JOB_RETRY_DELAY_MS = defineInt('JOB_RETRY_DELAY_MS', { default: 5 * 60 * 1000 });
 const JOB_AUTO_REVIEW_MAX_ATTEMPTS = defineInt('JOB_AUTO_REVIEW_MAX_ATTEMPTS', { default: 3 });
 const FAL_POLL_INTERVAL_MS = defineInt('FAL_POLL_INTERVAL_MS', { default: 2000 });
-const FAL_POLL_TIMEOUT_MS = defineInt('FAL_POLL_TIMEOUT_MS', { default: 4 * 60 * 1000 });
+const FAL_POLL_TIMEOUT_MS = defineInt('FAL_POLL_TIMEOUT_MS', { default: 7 * 60 * 1000 });
 const OPENAI_BASE_URL = defineString('OPENAI_BASE_URL', { default: 'https://api.openai.com/v1' });
 const GEMINI_IMAGE_REVIEW_MODEL = defineString('GEMINI_IMAGE_REVIEW_MODEL', {
   default: 'gemini-3.1-flash-lite-preview',

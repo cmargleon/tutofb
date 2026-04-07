@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
+  BatchStatus,
   CancelPendingBatchJobsRequest,
   CancelPendingBatchJobsResponse,
   Job,
@@ -28,7 +29,7 @@ export const cancelPendingBatchJobs = onCall<
   const jobsSnapshot = await db.collection('jobs').where('batchId', '==', batchId).get();
   const pendingJobs = jobsSnapshot.docs
     .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Job))
-    .filter((job) => job.status === 'pending');
+    .filter((job) => job.status === 'pending' || job.status === 'processing');
 
   if (pendingJobs.length === 0) {
     return {
@@ -71,6 +72,35 @@ export const cancelPendingBatchJobs = onCall<
   });
 
   await writeBatch.commit();
+
+  // Recompute batch counters directly from Firestore to avoid race conditions
+  // with concurrent onJobStatusChange triggers that may exhaust retry limits.
+  const batchRef = db.collection('batches').doc(batchId);
+  const allJobsAfter = await db.collection('jobs').where('batchId', '==', batchId).get();
+  let newPendingJobs = 0, newProcessingJobs = 0, newCompletedJobs = 0, newFailedJobs = 0;
+  for (const doc of allJobsAfter.docs) {
+    const s = (doc.data() as Job).status;
+    if (s === 'pending') newPendingJobs++;
+    else if (s === 'processing') newProcessingJobs++;
+    else if (s === 'completed') newCompletedJobs++;
+    else if (s === 'failed') newFailedJobs++;
+  }
+  const total = allJobsAfter.size;
+  let newStatus: BatchStatus;
+  if (newCompletedJobs === total) newStatus = 'completed';
+  else if (newFailedJobs === total) newStatus = 'failed';
+  else if (newCompletedJobs + newFailedJobs === total) newStatus = 'partial_failed';
+  else if (newProcessingJobs > 0) newStatus = 'processing';
+  else newStatus = 'pending';
+
+  await batchRef.update({
+    pendingJobs: newPendingJobs,
+    processingJobs: newProcessingJobs,
+    completedJobs: newCompletedJobs,
+    failedJobs: newFailedJobs,
+    status: newStatus,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
 
   return {
     success: true,

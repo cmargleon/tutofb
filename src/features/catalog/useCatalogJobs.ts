@@ -73,6 +73,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
   const [batches, setBatches] = useState<Batch[]>([]);
   const [pages, setPages] = useState<CatalogPage[]>([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [batchJobs, setBatchJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -83,6 +84,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
   useEffect(() => {
     setPages([]);
     setCurrentPageIndex(0);
+    setBatchJobs([]);
     setLoading(false);
     setError(null);
     liveFirstPageSignatureRef.current = '';
@@ -119,6 +121,40 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
     return () => unsubscribe();
   }, [clientId]);
 
+  // ── Batch-specific mode: real-time subscription with no pagination ──
+  useEffect(() => {
+    if (!clientId || !batchId) {
+      setBatchJobs([]);
+      return undefined;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const batchJobsQuery = query(
+      collection(db, 'jobs'),
+      ...buildCatalogQueryConstraints({ clientId, batchId, sortOrder }),
+    );
+
+    const unsubscribe = onSnapshot(
+      batchJobsQuery,
+      (snapshot) => {
+        setBatchJobs(
+          snapshot.docs
+            .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job)
+            .filter(isRenderableCatalogJob),
+        );
+        setLoading(false);
+      },
+      () => {
+        setError('Error cargando imágenes del catálogo');
+        setLoading(false);
+      },
+    );
+
+    return () => unsubscribe();
+  }, [clientId, batchId, sortOrder]);
+
   const fetchPage = useCallback(
     async (cursor: JobDocumentSnapshot | null): Promise<CatalogPage> => {
       if (!clientId) return { jobs: [], lastVisible: null, hasMore: false };
@@ -143,8 +179,9 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
     [clientId, batchId, pageSize, sortOrder],
   );
 
+  // ── Client-wide paginated mode (only when no batchId selected) ──
   useEffect(() => {
-    if (!clientId) {
+    if (!clientId || batchId) {
       setLoading(false);
       return undefined;
     }
@@ -194,7 +231,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
   // Prefetch the next page silently whenever the current page has more data and the
   // following page is not yet cached. The user sees no loading indicator for this.
   useEffect(() => {
-    if (!clientId) return undefined;
+    if (!clientId || batchId) return undefined;
 
     const currentPage = pages[currentPageIndex];
     const nextPageAlreadyCached = Boolean(pages[currentPageIndex + 1]);
@@ -217,14 +254,14 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
     });
 
     return () => { cancelled = true; };
-  }, [clientId, pages, currentPageIndex, fetchPage]);
+  }, [clientId, batchId, pages, currentPageIndex, fetchPage]);
 
   const goToPreviousPage = useCallback(() => {
     setCurrentPageIndex((current) => Math.max(0, current - 1));
   }, []);
 
   const goToNextPage = useCallback(async () => {
-    if (!clientId) return;
+    if (!clientId || batchId) return;
 
     const existingNextPage = pages[currentPageIndex + 1];
     if (existingNextPage) {
@@ -252,9 +289,14 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
         setLoading(false);
       }
     }
-  }, [clientId, pages, currentPageIndex, fetchPage]);
+  }, [clientId, batchId, pages, currentPageIndex, fetchPage]);
 
-  const jobs = useMemo(() => pages[currentPageIndex]?.jobs ?? [], [pages, currentPageIndex]);
+  // When a specific batch is selected, use batchJobs directly (no pagination).
+  // When browsing all client jobs, use the paginated pages.
+  const jobs = useMemo(
+    () => (batchId ? batchJobs : (pages[currentPageIndex]?.jobs ?? [])),
+    [batchId, batchJobs, pages, currentPageIndex],
+  );
 
   const garmentGroups: CatalogGarmentGroup[] = useMemo(() => {
     const map = new Map<string, CatalogGarmentGroup>();
@@ -275,9 +317,9 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
       .sort((left, right) => compareJobsByCreatedAt(left.jobs[0], right.jobs[0], sortOrder));
   }, [jobs, sortOrder]);
 
-  const hasPreviousPage = currentPageIndex > 0;
-  const hasNextPage = Boolean(pages[currentPageIndex]?.hasMore || pages[currentPageIndex + 1]);
-  const totalPages = hasNextPage ? null : Math.max(1, pages.length);
+  const hasPreviousPage = !batchId && currentPageIndex > 0;
+  const hasNextPage = !batchId && Boolean(pages[currentPageIndex]?.hasMore || pages[currentPageIndex + 1]);
+  const totalPages = hasNextPage ? null : Math.max(1, batchId ? 1 : pages.length);
 
   return {
     batches,

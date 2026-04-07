@@ -244,10 +244,10 @@ const BatchCard: React.FC<{
           <button
             type="button"
             onClick={() => void onCancel([row.id])}
-            disabled={busyAction !== null || row.batch.pendingJobs === 0}
+            disabled={busyAction !== null || (row.batch.pendingJobs === 0 && row.batch.processingJobs === 0)}
             className="rounded-xl bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Cancelar pendientes
+            Cancelar lote
           </button>
         </>
       ) : null}
@@ -432,18 +432,18 @@ export const Cola: React.FC = () => {
   };
 
   const handleCancelPending = async (batchIds: string[]) => {
-    const eligibleRows = batchIds.map((batchId) => rowsById[batchId]).filter((row): row is QueueRow => Boolean(row) && row.batch.pendingJobs > 0);
+    const eligibleRows = batchIds.map((batchId) => rowsById[batchId]).filter((row): row is QueueRow => Boolean(row) && (row.batch.pendingJobs > 0 || row.batch.processingJobs > 0));
     if (eligibleRows.length === 0) {
-      setActionMessage('No había jobs pendientes para cancelar en los lotes seleccionados.');
+      setActionMessage('No había jobs activos para cancelar en los lotes seleccionados.');
       return;
     }
 
-    const pendingJobs = eligibleRows.reduce((sum, row) => sum + row.batch.pendingJobs, 0);
+    const activeJobs = eligibleRows.reduce((sum, row) => sum + row.batch.pendingJobs + row.batch.processingJobs, 0);
     const accepted = await confirm({
-      title: 'Cancelar jobs pendientes',
-      description: `Vas a detener ${pendingJobs} jobs pendientes distribuidos en ${eligibleRows.length} lote${eligibleRows.length === 1 ? '' : 's'}.`,
-      impact: 'La cola dejará de procesarlos y tendrás que reencolarlos manualmente si siguen siendo necesarios para la operación.',
-      confirmLabel: 'Sí, cancelar pendientes',
+      title: 'Cancelar lote',
+      description: `Vas a detener ${activeJobs} jobs activos distribuidos en ${eligibleRows.length} lote${eligibleRows.length === 1 ? '' : 's'}.`,
+      impact: 'Se cancelarán tanto los jobs pendientes como los que están en procesamiento. El lote quedará detenido por completo.',
+      confirmLabel: 'Sí, cancelar lote',
       cancelLabel: 'Mantener cola',
       tone: 'warning',
     });
@@ -460,14 +460,14 @@ export const Cola: React.FC = () => {
       const cancelledJobs = results.reduce((sum, result) => sum + result.cancelledJobs, 0);
 
       if (cancelledJobs === 0) {
-        setActionMessage('No había jobs pendientes por cancelar.');
+        setActionMessage('No había jobs activos por cancelar.');
       } else {
-        setActionMessage(`Se cancelaron ${cancelledJobs} jobs pendientes en ${eligibleRows.length} lotes.`);
+        setActionMessage(`Se cancelaron ${cancelledJobs} jobs en ${eligibleRows.length} lote${eligibleRows.length === 1 ? '' : 's'}.`);
       }
     } catch (error: any) {
       toast({
         tone: 'error',
-        title: 'No pudimos cancelar los jobs pendientes',
+        title: 'No pudimos cancelar el lote',
         description: error?.message || 'Inténtalo de nuevo en unos momentos.',
       });
     } finally {
@@ -645,7 +645,7 @@ export const Cola: React.FC = () => {
                     disabled={busyAction !== null}
                     className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Cancelar pendientes
+                    Cancelar lote
                   </button>
                 </>
               ) : null}

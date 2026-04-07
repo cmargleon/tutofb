@@ -172,6 +172,21 @@ export const exportBatchSpreadsheet = async (
   return result.data;
 };
 
+export const deleteJob = async (jobId: string): Promise<{ success: boolean; jobId: string }> => {
+  const callable = httpsCallable<{ jobId: string }, { success: boolean; jobId: string }>(
+    functions,
+    'deleteJob',
+  );
+
+  try {
+    const result = await callable({ jobId });
+    return result.data;
+  } catch (error) {
+    console.error('Error calling deleteJob:', error);
+    throw error;
+  }
+};
+
 export const updateBatchProductDraft = async (
   batchId: string,
   draftId: string,

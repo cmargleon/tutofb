@@ -56,7 +56,7 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
     },
     bodyArea: {
       type: ['string', 'null'],
-      enum: ['upper_body', 'lower_body', 'footwear', 'full_body', null],
+      enum: ['upper_body', 'lower_body', 'footwear', 'head_accessory', 'full_body', null],
     },
     matchedCategory: {
       type: ['string', 'null'],
@@ -91,7 +91,7 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
 
 const bucket = admin.storage().bucket();
 const db = getAppFirestore();
-const VALID_GARMENT_BODY_AREAS: GarmentBodyArea[] = ['upper_body', 'lower_body', 'footwear', 'full_body'];
+const VALID_GARMENT_BODY_AREAS: GarmentBodyArea[] = ['upper_body', 'lower_body', 'footwear', 'head_accessory', 'full_body'];
 
 const requireNonEmptyString = (value: unknown, label: string): string => {
   const normalized = typeof value === 'string' ? value.trim() : '';
@@ -329,7 +329,9 @@ const classifyGarmentWithGemini = async ({
 
   const prompt = [
     'Clasifica una prenda para un workflow de catálogo y spreadsheet.',
-    'Devuelve la vista principal de cada foto (front/back/side), el área del cuerpo (upper_body/lower_body/footwear/full_body), la categoría final más probable del spreadsheet y el color principal visible de la prenda.',
+    'Devuelve la vista principal de cada foto (front/back/side), el área del cuerpo (upper_body/lower_body/footwear/head_accessory/full_body), la categoría final más probable del spreadsheet y el color principal visible de la prenda.',
+    'Usa head_accessory para gorras, gorros, sombreros, lentes, gafas, diademas y accesorios cuyo foco principal sea cabeza o rostro.',
+    'Usa footwear para zapatos, tenis, botas, sandalias y productos cuyo foco principal sean pies o tobillos.',
     'Usa front si la foto muestra el frente de la prenda o si es la única foto y no hay evidencia de espalda.',
     'El color debe salir en español y, si hay categorías disponibles, conviene aproximarlo a un valor real del catálogo de color de la categoría elegida.',
     'No inventes categoría ni color si la imagen no da base suficiente; en ese caso devuelve null.',

@@ -138,7 +138,7 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
         title: client.name,
         subtitle: 'Cliente',
         keywords: [client.name, client.id!],
-        href: `/clients#client-${client.id}`,
+        href: `/clients/lista#client-${client.id}`,
         meta: `Alta ${formatRelativeDate(client.createdAt)}`,
       })),
       ...models.slice(0, 4).map((model) => ({
@@ -182,7 +182,7 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
         title: client.name,
         subtitle: 'Cliente',
         keywords: [client.name, client.id!],
-        href: `/clients#client-${client.id}`,
+        href: `/clients/lista#client-${client.id}`,
         meta: `Alta ${formatRelativeDate(client.createdAt)}`,
       }))
       .filter((result) =>

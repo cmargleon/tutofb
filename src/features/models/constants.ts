@@ -11,6 +11,14 @@ const LOWER_BODY_PROMPT_DIRECTIVES = [
   'Do not show the model face or head.',
 ];
 
+const FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES = [
+  'Frame a close-up centered on the footwear from around the lower shin or ankle down to the full soles.',
+  'Keep both shoes or feet completely inside the frame with clear commercial readability.',
+  'The footwear must be the primary subject, large enough to inspect shape, silhouette, and upper details.',
+  'Do not widen the frame into a lower-body, half-body, or full-body composition.',
+  'Do not show the model face, torso, or hands.',
+];
+
 export const MODEL_POSE_RECIPES: PoseRecipe[] = [
   {
     id: 'full-front',
@@ -190,6 +198,39 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
     promptDirectives: LOWER_BODY_PROMPT_DIRECTIVES,
   },
   {
+    id: 'footwear-front-closeup',
+    label: 'Calzado frente',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, front view, standing catalog angle',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'front',
+    },
+    promptDirectives: FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'footwear-three-quarter-closeup',
+    label: 'Calzado 3/4',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, three-quarter front angle, subtle stance rotation',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'front_three_quarter',
+    },
+    promptDirectives: FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'footwear-side-closeup',
+    label: 'Calzado lateral',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, clean side profile, catalog readability',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'profile_left',
+    },
+    promptDirectives: FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+  },
+  {
     id: 'portrait-front',
     label: 'Retrato frente',
     group: 'Retrato',
@@ -207,6 +248,36 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
     promptProfile: {
       category: 'portrait',
       orientation: 'front_three_quarter',
+    },
+  },
+  {
+    id: 'accessories-front',
+    label: 'Accesorios frente',
+    group: 'Accesorios',
+    shotType: 'portrait, face and upper shoulders, front view, clear visibility of headwear and eyewear',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'front',
+    },
+  },
+  {
+    id: 'accessories-three-quarter',
+    label: 'Accesorios 3/4',
+    group: 'Accesorios',
+    shotType: 'portrait, face and upper shoulders, three-quarter front angle, clear visibility of headwear and eyewear',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'front_three_quarter',
+    },
+  },
+  {
+    id: 'accessories-half-front',
+    label: 'Accesorios medio cuerpo',
+    group: 'Accesorios',
+    shotType: 'half body, chest up, front view, head and face clearly visible for hats, glasses, and similar accessories',
+    promptProfile: {
+      category: 'half_body',
+      orientation: 'front',
     },
   },
 ];
@@ -349,8 +420,8 @@ export const ASPECT_OPTIONS: { value: AspectRatio; label: string }[] = [
 
 export const PROVIDER_OPTIONS: { value: ModelPhotoProvider; label: string; hint: string }[] = [
   { value: 'fal-seedream-v4.5', label: 'Seedream v4.5 (fal.ai)',    hint: 'ByteDance · $0.04/foto' },
-  { value: 'fal-banana-pro',    label: 'Nano Banana Pro (fal.ai)',  hint: 'Gemini Pro · $0.15 base, $0.30 en 4K' },
-  { value: 'openai-dalle',      label: 'OpenAI gpt-image-1.5',      hint: 'Alta fidelidad · ~$0.04/foto' },
-  { value: 'fal-nano-banana-2', label: 'Nano Banana 2 (fal.ai)',    hint: 'Gemini 3.1 Flash · $0.06-$0.16 segun resolucion' },
+  { value: 'fal-banana-pro',    label: 'Nano Banana Pro (fal.ai)',  hint: 'Gemini Pro · $0.15/foto base, $0.30 en 4K' },
+  { value: 'openai-dalle',      label: 'OpenAI gpt-image-1.5',      hint: 'OpenAI · $0.02-$0.25/foto segun quality y size' },
+  { value: 'fal-nano-banana-2', label: 'Nano Banana 2 (fal.ai)',    hint: 'Gemini 3.1 Flash · $0.06-$0.16/foto segun resolucion' },
   { value: 'fal-seedream-5',    label: 'Seedream 5 Lite (fal.ai)',  hint: 'ByteDance v5 · $0.035/foto' },
 ];

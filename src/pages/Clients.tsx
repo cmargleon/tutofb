@@ -1,11 +1,21 @@
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { PageHeader, LoadingBlock, EmptyState } from '../components/ui';
 import { useClientManagement } from '../features/clients/useClientManagement';
 import { ClientCreateForm } from '../components/clients/ClientCreateForm';
 import { ClientListItem } from '../components/clients/ClientListItem';
 
-export const Clients: React.FC = () => {
+interface ClientsProps {
+  view: 'create' | 'list';
+}
+
+const CLIENT_SECTIONS = [
+  { label: 'Crear', path: '/clients/crear' },
+  { label: 'Lista de Clientes', path: '/clients/lista' },
+] as const;
+
+export const Clients: React.FC<ClientsProps> = ({ view }) => {
   const {
     loading, error,
     newClientName, setNewClientName, newClientPrompt, setNewClientPrompt,
@@ -20,14 +30,35 @@ export const Clients: React.FC = () => {
     handleArchive, handleRestore, handlePermanentDelete,
     handleTemplateUpload, handleTemplateCategoryChange, handleTemplateDelete,
   } = useClientManagement();
+  const isCreateView = view === 'create';
 
   return (
     <div className="max-w-5xl mx-auto">
       <PageHeader
         title="Clientes"
-        description="Gestiona los clientes para los que generarás imágenes de catálogo."
+        description={
+          isCreateView
+            ? 'Da de alta un cliente nuevo y deja listo su prompt base para el wizard.'
+            : 'Consulta, filtra y administra los clientes disponibles para generación.'
+        }
         icon={Users}
       />
+
+      <div className="mb-6 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        {CLIENT_SECTIONS.map((section) => (
+          <NavLink
+            key={section.path}
+            to={section.path}
+            className={({ isActive }) =>
+              `rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                isActive ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            {section.label}
+          </NavLink>
+        ))}
+      </div>
 
       {error && (
         <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -35,8 +66,8 @@ export const Clients: React.FC = () => {
         </div>
       )}
 
-      <div className="space-y-8">
-        <div>
+      {isCreateView ? (
+        <div className="max-w-2xl">
           <ClientCreateForm
             newClientName={newClientName}
             setNewClientName={setNewClientName}
@@ -47,7 +78,7 @@ export const Clients: React.FC = () => {
             onSubmit={handleCreate}
           />
         </div>
-
+      ) : (
         <div>
           <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
             <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
@@ -84,7 +115,7 @@ export const Clients: React.FC = () => {
             ) : filteredClients.length === 0 ? (
               <EmptyState
                 title="No hay clientes"
-                description="Crea tu primer cliente usando el formulario de arriba."
+                description="Todavía no hay clientes registrados. Usa la vista Crear para cargar el primero."
                 icon={<Users className="w-6 h-6" />}
               />
             ) : (
@@ -146,7 +177,7 @@ export const Clients: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

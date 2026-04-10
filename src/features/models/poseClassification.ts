@@ -27,6 +27,8 @@ const toFraming = (category: PosePromptCategory): PoseFraming => {
       return 'medium_body';
     case 'lower_body':
       return 'lower_body';
+    case 'footwear_closeup':
+      return 'feet_closeup';
     case 'portrait':
       return 'medium_body';
     default:
@@ -34,7 +36,8 @@ const toFraming = (category: PosePromptCategory): PoseFraming => {
   }
 };
 
-const recipeShowsFace = (category: PosePromptCategory): boolean => category !== 'lower_body';
+const recipeShowsFace = (category: PosePromptCategory): boolean =>
+  category !== 'lower_body' && category !== 'footwear_closeup';
 
 export const buildManualPoseClassification = (recipe: PoseRecipe): PoseAiClassification =>
   buildPoseAiClassification({

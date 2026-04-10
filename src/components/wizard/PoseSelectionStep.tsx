@@ -1,12 +1,11 @@
 import React from 'react';
 import { AlertCircle, Check, RefreshCcw, Sparkles } from 'lucide-react';
-import { GarmentBodyArea, Model } from '../../../shared/src/types';
+import { Model } from '../../../shared/src/types';
 import { formatPoseAutoCategoryLabel } from '../../../shared/src/utils/poseAiClassification';
 import { countCompatibleGarmentsForPose } from '../../../shared/src/utils/garmentViewMatching';
 import { getGarmentAvailableViews, getGarmentBodyArea } from '../../features/generate/garments';
 import { UploadedGarmentDraft } from '../../features/generate/types';
 import { EmptyState, ImageThumb } from '../ui';
-import { GarmentOriginalPhotosGrid } from './GarmentOriginalPhotosGrid';
 
 interface Props {
   selectedModel: Model | null;
@@ -21,34 +20,6 @@ interface Props {
   onToggleAllPoses: () => void;
   onRetrySuggestions: () => void;
 }
-
-const formatGarmentViewLabel = (value: string): string => {
-  switch (value) {
-    case 'front':
-      return 'Frente';
-    case 'back':
-      return 'Espalda';
-    case 'side':
-      return 'Perfil';
-    default:
-      return value;
-  }
-};
-
-const formatGarmentBodyAreaLabel = (area: GarmentBodyArea | null | undefined): string | null => {
-  switch (area) {
-    case 'upper_body':
-      return 'Parte superior';
-    case 'lower_body':
-      return 'Parte inferior';
-    case 'footwear':
-      return 'Calzado';
-    case 'full_body':
-      return 'Cuerpo completo';
-    default:
-      return null;
-  }
-};
 
 export const PoseSelectionStep: React.FC<Props> = ({
   selectedModel,
@@ -130,61 +101,6 @@ export const PoseSelectionStep: React.FC<Props> = ({
               selección manual.
             </div>
           ) : null}
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">Vistas detectadas por prenda</h3>
-            <p className="text-sm text-slate-500">
-              Cada foto se clasifica individualmente y el lote usará la que mejor matchee con cada orientación de pose.
-            </p>
-          </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-            {garments.length} prenda{garments.length === 1 ? '' : 's'}
-          </span>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {garments.map((garment) => {
-            const availableViews = getGarmentAvailableViews(garment);
-
-            const bodyAreaLabel = formatGarmentBodyAreaLabel(getGarmentBodyArea(garment));
-
-            return (
-              <div key={garment.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 rounded-2xl bg-white p-3">
-                  <GarmentOriginalPhotosGrid photos={garment.originalPhotos} showClassification />
-                </div>
-                <p className="text-sm font-semibold text-slate-900">{garment.name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {garment.originalPhotos.length} foto{garment.originalPhotos.length === 1 ? '' : 's'} original
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {bodyAreaLabel ? (
-                    <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-medium text-violet-700">
-                      {bodyAreaLabel}
-                    </span>
-                  ) : null}
-                  {availableViews.length > 0 ? (
-                    availableViews.map((view) => (
-                      <span
-                        key={view}
-                        className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 shadow-sm"
-                      >
-                        {formatGarmentViewLabel(view)}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
-                      Pendiente
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 

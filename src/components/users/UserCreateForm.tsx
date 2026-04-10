@@ -17,6 +17,7 @@ const FieldError: React.FC<FieldErrorProps> = ({ message }) =>
 interface UserCreateFormProps {
   isOpen: boolean;
   onToggle: () => void;
+  collapsible?: boolean;
   form: CreateAppUserInput;
   isCreating: boolean;
   createSuccess: string | null;
@@ -31,6 +32,7 @@ interface UserCreateFormProps {
 export const UserCreateForm: React.FC<UserCreateFormProps> = ({
   isOpen,
   onToggle,
+  collapsible = true,
   form,
   isCreating,
   createSuccess,
@@ -42,20 +44,29 @@ export const UserCreateForm: React.FC<UserCreateFormProps> = ({
   onSubmit,
 }) => (
   <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex w-full items-center justify-between p-6 text-left"
-    >
-      <div className="flex items-center gap-2">
-        <Plus className="h-5 w-5 text-indigo-600" />
-        <h2 className="text-lg font-semibold text-slate-900">Nuevo usuario</h2>
+    {collapsible ? (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between p-6 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Plus className="h-5 w-5 text-indigo-600" />
+          <h2 className="text-lg font-semibold text-slate-900">Nuevo usuario</h2>
+        </div>
+        {isOpen ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
+      </button>
+    ) : (
+      <div className="p-6 pb-4">
+        <div className="flex items-center gap-2">
+          <Plus className="h-5 w-5 text-indigo-600" />
+          <h2 className="text-lg font-semibold text-slate-900">Nuevo usuario</h2>
+        </div>
       </div>
-      {isOpen ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
-    </button>
+    )}
 
     {isOpen && (
-      <div className="border-t border-slate-100 px-6 pb-6 pt-4">
+      <div className={collapsible ? 'border-t border-slate-100 px-6 pb-6 pt-4' : 'px-6 pb-6 pt-0'}>
         <p className="mb-4 text-sm text-slate-500">
           Crea accesos sin salir de la app. El usuario podrá iniciar sesión de inmediato con la contraseña temporal.
         </p>

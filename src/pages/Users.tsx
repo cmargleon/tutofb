@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Users as UsersIcon } from 'lucide-react';
 import { Role } from '../../shared/src/types';
 import { EmptyState, LoadingBlock, PageHeader } from '../components/ui';
@@ -7,14 +8,22 @@ import { UserCreateForm } from '../components/users/UserCreateForm';
 import { UserListItem } from '../components/users/UserListItem';
 import { useAuth } from '../features/auth/AuthProvider';
 
-export const Users: React.FC = () => {
+interface UsersProps {
+  view: 'create' | 'list';
+}
+
+const USER_SECTIONS = [
+  { label: 'Crear', path: '/users/crear' },
+  { label: 'Lista de Usuarios', path: '/users/lista' },
+] as const;
+
+export const Users: React.FC<UsersProps> = ({ view }) => {
   const { user: currentUser } = useAuth();
   const {
     loading, error,
     form, createTouched, setCreateTouched, isCreating, createSuccess,
     createFormIsValid, shouldShowCreateError,
     expandedId, setExpandedId, editingUserId,
-    isCreateFormOpen, setIsCreateFormOpen,
     editForm, setEditForm, editTouched, setEditTouched,
     isSavingEdit, editFormIsValid, shouldShowEditError,
     searchQuery, setSearchQuery,
@@ -25,23 +34,46 @@ export const Users: React.FC = () => {
     handleCreateFieldChange, handleCreate, handleStartEdit, handleCancelEdit,
     handleSaveEdit, handleQuickToggle, handleArchive, handleRestore, handlePermanentDelete,
   } = useUserManagement();
+  const isCreateView = view === 'create';
 
   return (
     <div className="max-w-6xl mx-auto">
       <PageHeader
         title="Usuarios"
-        description="Alta, edición y control de acceso para el equipo interno. Solo los administradores pueden ver y usar este panel."
+        description={
+          isCreateView
+            ? 'Crea accesos internos y define rol, contraseña inicial y estado de activación.'
+            : 'Administra roles, estado, archivo y mantenimiento de los accesos internos.'
+        }
+        icon={UsersIcon}
       />
+
+      <div className="mb-6 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        {USER_SECTIONS.map((section) => (
+          <NavLink
+            key={section.path}
+            to={section.path}
+            className={({ isActive }) =>
+              `rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                isActive ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            {section.label}
+          </NavLink>
+        ))}
+      </div>
 
       {error ? (
         <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[360px,1fr]">
-        <section>
+      {isCreateView ? (
+        <section className="max-w-xl">
           <UserCreateForm
-            isOpen={isCreateFormOpen}
-            onToggle={() => setIsCreateFormOpen((open) => !open)}
+            isOpen
+            onToggle={() => undefined}
+            collapsible={false}
             form={form}
             isCreating={isCreating}
             createSuccess={createSuccess}
@@ -53,7 +85,7 @@ export const Users: React.FC = () => {
             onSubmit={handleCreate}
           />
         </section>
-
+      ) : (
         <section className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-slate-100 bg-slate-50 px-6 py-5">
@@ -105,7 +137,7 @@ export const Users: React.FC = () => {
               <div className="p-6">
                 <EmptyState
                   title="Todavía no hay usuarios"
-                  description="Crea el primer acceso interno desde el panel lateral."
+                  description="Todavía no hay usuarios cargados. Usa la vista Crear para dar de alta el primero."
                   icon={<UsersIcon className="h-6 w-6" />}
                 />
               </div>
@@ -165,7 +197,7 @@ export const Users: React.FC = () => {
             )}
           </div>
         </section>
-      </div>
+      )}
     </div>
   );
 };

@@ -3,7 +3,7 @@ export type GeneratedPhotoSource = 'candidate' | 'pose' | 'reference';
 export type ReferenceIdentityMode = 'exact' | 'similar';
 export type ReferenceBackgroundMode = 'preserve' | 'custom';
 export type ReferenceClothingMode = 'preserve' | 'custom';
-export type PosePromptCategory = 'full_body' | 'half_body' | 'lower_body' | 'portrait';
+export type PosePromptCategory = 'full_body' | 'half_body' | 'lower_body' | 'footwear_closeup' | 'portrait';
 export type PosePromptOrientation =
   | 'front'
   | 'front_three_quarter'

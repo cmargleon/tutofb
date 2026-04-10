@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DEFAULT_TRY_ON_PROMPT } from '../../../../../shared/src/domain';
 import { useSystemConfig } from '../../../system/useSystemConfig';
 import { buildGarmentSuggestionSignature, getGarmentAvailableViews, handleGarmentFiles, revokeGarmentUrls } from '../../garments';
@@ -26,6 +27,7 @@ import {
   createInitialGenerateWizardState,
   GENERATE_WIZARD_MAX_STEP,
   getGenerateWizardCanAdvance,
+  getGenerateWizardLastAccessibleStep,
   getGenerateWizardTotalJobs,
   isGenerateWizardStepComplete,
 } from '../state';
@@ -84,7 +86,18 @@ const getErrorMessage = (error: unknown, fallback: string): string =>
     ? error.message
     : fallback;
 
+const getStepFromSearchParams = (searchParams: URLSearchParams): GenerateWizardStepId => {
+  const rawStep = Number(searchParams.get('step'));
+
+  if (!Number.isInteger(rawStep)) {
+    return 1;
+  }
+
+  return clampWizardStep(rawStep, 1, GENERATE_WIZARD_MAX_STEP) as GenerateWizardStepId;
+};
+
 export const useGenerateWizard = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const garmentUrlsRef = useRef<UploadedGarmentDraft[]>([]);
   const stepperRef = useRef<HTMLDivElement | null>(null);
   const previousStepRef = useRef<GenerateWizardStepId>(1);
@@ -225,6 +238,7 @@ export const useGenerateWizard = () => {
     [selectedModel, state.selectedPoseIds],
   );
   const canAdvance = useMemo(() => getGenerateWizardCanAdvance(state), [state]);
+  const lastAccessibleStep = useMemo(() => getGenerateWizardLastAccessibleStep(state), [state]);
   const suggestionSignature = useMemo(
     () => buildGarmentSuggestionSignature(state.selectedModelId, state.garments),
     [state.selectedModelId, state.garments],
@@ -263,25 +277,72 @@ export const useGenerateWizard = () => {
       isStepComplete: (stepId) => isGenerateWizardStepComplete(state, stepId),
     });
 
-  const goToStep = (targetStep: number) => {
+  const syncStepToUrl = (targetStep: GenerateWizardStepId, replace = false) => {
+    const currentUrlStep = searchParams.get('step');
+    if (currentUrlStep === String(targetStep)) {
+      return;
+    }
+
+    setSearchParams((currentSearchParams) => {
+      const nextSearchParams = new URLSearchParams(currentSearchParams);
+      nextSearchParams.set('step', String(targetStep));
+      return nextSearchParams;
+    }, { replace });
+  };
+
+  const updateStep = (targetStep: number, replaceHistory = false) => {
+    const nextStep = clampWizardStep(targetStep, 1, GENERATE_WIZARD_MAX_STEP) as GenerateWizardStepId;
+
     setState((current) => {
-      const nextStep = clampWizardStep(targetStep, 1, GENERATE_WIZARD_MAX_STEP) as GenerateWizardStepId;
       if (nextStep === current.step) {
         return current;
       }
+
       return { ...current, step: nextStep };
     });
+
+    syncStepToUrl(nextStep, replaceHistory);
   };
 
   const handleStepSelect = (targetStep: number) => {
     if (!canSelectStep(targetStep)) {
       return;
     }
-    setState((current) => ({
-      ...current,
-      step: clampWizardStep(targetStep, 1, GENERATE_WIZARD_MAX_STEP) as GenerateWizardStepId,
-    }));
+    updateStep(targetStep);
   };
+
+  const goToStep = (targetStep: number) => {
+    updateStep(targetStep);
+  };
+
+  useEffect(() => {
+    if (!searchParams.has('step')) {
+      syncStepToUrl(state.step, true);
+      return;
+    }
+
+    const requestedStep = getStepFromSearchParams(searchParams);
+    const normalizedStep = canSelectStep(requestedStep) ? requestedStep : lastAccessibleStep;
+    const currentUrlStep = searchParams.get('step');
+
+    if (currentUrlStep !== String(normalizedStep)) {
+      syncStepToUrl(normalizedStep, true);
+    }
+
+    if (normalizedStep !== state.step) {
+      setState((current) => (
+        current.step === normalizedStep
+          ? current
+          : { ...current, step: normalizedStep }
+      ));
+    }
+  }, [canSelectStep, lastAccessibleStep, searchParams, state.step]);
+
+  useEffect(() => {
+    if (state.step > lastAccessibleStep) {
+      updateStep(lastAccessibleStep, true);
+    }
+  }, [lastAccessibleStep, state.step]);
 
   const handleFiles = async (files: File[]) => {
     try {

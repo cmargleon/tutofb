@@ -20,7 +20,7 @@ export const PROVIDER_COSTS: Record<Provider, number> = {
 export const PROVIDER_PRICE_LABELS: Record<Provider, string> = {
   'fal-seedream': '$0.04/img',
   'fal-banana-pro': '$0.15/img base, $0.30 en 4K',
-  'openai-gpt-image-1.5': '$0.04/img',
+  'openai-gpt-image-1.5': '$0.02-$0.25/img segun quality y size',
   'fal-nano-banana-2': '$0.06-$0.16/img segun resolucion',
   'fal-seedream-5': '$0.035/img',
 };
@@ -36,7 +36,7 @@ export const MODEL_PHOTO_PROVIDER_COSTS: Record<ModelPhotoProvider, number> = {
 export const MODEL_PHOTO_PROVIDER_PRICE_LABELS: Record<ModelPhotoProvider, string> = {
   'fal-seedream-v4.5': '$0.04/foto',
   'fal-banana-pro': '$0.15/foto base, $0.30 en 4K',
-  'openai-dalle': '$0.04/foto',
+  'openai-dalle': '$0.02-$0.25/foto segun quality y size',
   'fal-nano-banana-2': '$0.06-$0.16/foto segun resolucion',
   'fal-seedream-5': '$0.035/foto',
 };

@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 import { LoadingBlock } from '../components/ui';
 import { PageErrorBoundary } from '../components/PageErrorBoundary';
@@ -23,6 +23,19 @@ const RouteLoadingFallback: React.FC = () => (
     <LoadingBlock />
   </div>
 );
+
+const ClientsRedirect: React.FC = () => {
+  const location = useLocation();
+  const targetPath = location.hash.startsWith('#client-') ? '/clients/lista' : '/clients/crear';
+
+  return <Navigate replace to={`${targetPath}${location.search}${location.hash}`} />;
+};
+
+const UsersRedirect: React.FC = () => {
+  const location = useLocation();
+
+  return <Navigate replace to={`/users/crear${location.search}${location.hash}`} />;
+};
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode, roles?: string[] }> = ({ children, roles }) => {
   const { user, appUser, loading } = useAuth();
@@ -58,8 +71,12 @@ export const AppRouter: React.FC = () => {
 
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<PageErrorBoundary><Dashboard /></PageErrorBoundary>} />
-            <Route path="users" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Users /></PageErrorBoundary></ProtectedRoute>} />
-            <Route path="clients" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="users" element={<ProtectedRoute roles={['admin']}><UsersRedirect /></ProtectedRoute>} />
+            <Route path="users/crear" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Users view="create" /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="users/lista" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Users view="list" /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="clients" element={<ProtectedRoute roles={['admin']}><ClientsRedirect /></ProtectedRoute>} />
+            <Route path="clients/crear" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients view="create" /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="clients/lista" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients view="list" /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Models /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/generar" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsGenerate /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/catalogo" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsCatalog /></PageErrorBoundary></ProtectedRoute>} />

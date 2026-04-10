@@ -123,6 +123,13 @@ const CATEGORY_PROMPT_RULES: Record<PosePromptCategory, string[]> = {
     'Keep both legs and the entire silhouette of the garment clearly visible.',
     'Do not show the model face or head.',
   ],
+  footwear_closeup: [
+    'Frame a close-up centered on the footwear from around the lower shin or ankle down to the full soles.',
+    'Keep both shoes or feet completely inside the frame with clear commercial readability.',
+    'The footwear must be the primary subject, large enough to inspect shape, silhouette, and upper details.',
+    'Do not widen the frame into a lower-body, half-body, or full-body composition.',
+    'Do not show the model face, torso, or hands.',
+  ],
   portrait: [
     'Frame a tight portrait from roughly chest or shoulders upward, keeping the face as the primary subject.',
     'Keep facial features, eyes, and expression clear and commercially polished.',

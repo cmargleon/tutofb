@@ -18,12 +18,13 @@ const {
 const buildAiClassification = (
   usableForGarmentViews: GarmentView[],
   bodyFocus: PoseBodyFocus = 'full_body',
+  faceVisible = true,
 ): PoseAiClassification => ({
   orientationGroup: 'front',
   orientationDetail: 'front',
   framing: 'full_body',
   bodyFocus,
-  faceVisible: true,
+  faceVisible,
   autoCategory: 'frente_cuerpo_completo',
   usableForGarmentViews,
   confidence: 0.9,
@@ -135,4 +136,49 @@ test('getSuggestedPoseIdsForGarments restringe poses de tren inferior a prendas 
     ),
     0,
   );
+});
+
+test('getSuggestedPoseIdsForGarments restringe accesorios de cabeza a poses con rostro visible', () => {
+  const suggested = getSuggestedPoseIdsForGarments(
+    [
+      {
+        id: 'pose-portrait-front',
+        aiClassification: buildAiClassification(['front'], 'upper_body', true),
+      },
+      {
+        id: 'pose-full-back',
+        aiClassification: buildAiClassification(['back'], 'full_body', false),
+      },
+      {
+        id: 'pose-lower-front',
+        aiClassification: buildAiClassification(['front'], 'lower_body', false),
+      },
+    ],
+    [
+      { availableViews: ['front'], garmentBodyArea: 'head_accessory' as const },
+      { availableViews: ['back'], garmentBodyArea: 'head_accessory' as const },
+    ],
+  );
+
+  assert.deepEqual(suggested, ['pose-portrait-front']);
+  assert.equal(
+    countCompatibleGarmentsForPose(
+      buildAiClassification(['front'], 'full_body', false),
+      [{ availableViews: ['front'], garmentBodyArea: 'head_accessory' as const }],
+    ),
+    0,
+  );
+});
+
+test('countCompatibleGarmentsForPose permite close-ups de pies para calzado', () => {
+  const count = countCompatibleGarmentsForPose(
+    buildAiClassification(['front', 'side'], 'feet', false),
+    [
+      { availableViews: ['front'], garmentBodyArea: 'footwear' as const },
+      { availableViews: ['side'], garmentBodyArea: 'footwear' as const },
+      { availableViews: ['front'], garmentBodyArea: 'upper_body' as const },
+    ],
+  );
+
+  assert.equal(count, 2);
 });

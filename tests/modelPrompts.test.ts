@@ -50,6 +50,31 @@ test('las poses de retrato fuerzan primer plano facial y evitan abrir a medio cu
   assert.match(prompt, /face looking clearly toward the camera/i);
 });
 
+test('las poses de calzado fuerzan close-up de zapatos sin abrir a cuerpo completo', () => {
+  const footwearRecipe = MODEL_POSE_RECIPES.find((recipe) => recipe.id === 'footwear-front-closeup');
+
+  assert.ok(footwearRecipe);
+
+  const prompt = buildPosePromptFromRecipe('Base prompt.', footwearRecipe);
+
+  assert.match(prompt, /close-up centered on the footwear/i);
+  assert.match(prompt, /both shoes or feet completely inside the frame/i);
+  assert.match(prompt, /footwear must be the primary subject/i);
+  assert.match(prompt, /do not widen the frame into a lower-body, half-body, or full-body composition/i);
+  assert.match(prompt, /do not show the model face, torso, or hands/i);
+});
+
+test('el menú de poses incluye variantes específicas para calzado y accesorios', () => {
+  const recipeIds = new Set(MODEL_POSE_RECIPES.map((recipe) => recipe.id));
+
+  assert.ok(recipeIds.has('footwear-front-closeup'));
+  assert.ok(recipeIds.has('footwear-three-quarter-closeup'));
+  assert.ok(recipeIds.has('footwear-side-closeup'));
+  assert.ok(recipeIds.has('accessories-front'));
+  assert.ok(recipeIds.has('accessories-three-quarter'));
+  assert.ok(recipeIds.has('accessories-half-front'));
+});
+
 test('las poses con modificadores añaden instrucciones específicas de composición', () => {
   const walkingRecipe = MODEL_POSE_RECIPES.find((recipe) => recipe.id === 'full-walking');
   const contrappostoRecipe = MODEL_POSE_RECIPES.find((recipe) => recipe.id === 'full-contrapposto');

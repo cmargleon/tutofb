@@ -1,16 +1,13 @@
 import React from 'react';
-import { UploadedGarmentDraft, UploadSummary, WizardProviderImageConfig, WizardState } from '../../features/generate/types';
-import { BatchUploadSummary } from './BatchUploadSummary';
+import { WizardProviderImageConfig, WizardState } from '../../features/generate/types';
 import { PromptBaseField } from './PromptBaseField';
 import { ProviderImageConfigSelection } from './ProviderImageConfigSelection';
 import { ProviderSelection } from './ProviderSelection';
 
 interface Props {
   state: WizardState;
-  garments: UploadedGarmentDraft[];
   isSubmitting: boolean;
   totalJobs: number;
-  uploadSummary: UploadSummary;
   submitButtonLabel: string;
   promptSourceLabel: string;
   disabledProviders?: string[];
@@ -25,10 +22,8 @@ interface Props {
 
 export const BatchStep: React.FC<Props> = ({
   state,
-  garments,
   isSubmitting,
   totalJobs,
-  uploadSummary,
   submitButtonLabel,
   promptSourceLabel,
   disabledProviders,
@@ -60,7 +55,6 @@ export const BatchStep: React.FC<Props> = ({
 
   return (
     <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <BatchUploadSummary garments={garments} uploadSummary={uploadSummary} />
       <ProviderSelection provider={state.provider} onChange={onProviderChange} disabledProviders={disabledProviders} />
 
       {state.outputMode === 'spreadsheet' ? (

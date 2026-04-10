@@ -5,6 +5,7 @@ import {
   Rows3,
   Settings,
   Shield,
+  SlidersHorizontal,
   UserSquare2,
   Users,
   Wand2,
@@ -51,9 +52,9 @@ const isPathActive = (pathname: string, path: string) => {
 export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
   const entries: NavigationEntry[] = [
     { type: 'item', name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: role.isActive },
-    { type: 'item', name: 'Generar', path: '/generate', icon: Wand2, visible: role.canCreateBatches },
+    { type: 'item', name: 'Generar Fotos', path: '/generate', icon: Wand2, visible: role.canCreateBatches },
+    { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate },
     { type: 'item', name: 'Cola', path: '/cola', icon: Rows3, visible: role.canEvaluate },
-    { type: 'item', name: 'Clientes', path: '/clients', icon: Users, visible: role.canManageClients },
     {
       type: 'group',
       name: 'Modelos',
@@ -65,10 +66,39 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
         { type: 'item', name: 'Catálogo', path: '/models/catalogo', icon: Images, visible: role.canManageModels },
       ],
     },
-    { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate },
-    { type: 'item', name: 'Analíticas', path: '/analytics', icon: BarChart3, visible: role.canAccessAnalytics },
-    { type: 'item', name: 'Usuarios', path: '/users', icon: Shield, visible: role.canManageUsers },
-    { type: 'item', name: 'Configuración', path: '/configuracion', icon: Settings, visible: role.canManageUsers },
+    {
+      type: 'group',
+      name: 'Clientes',
+      icon: Users,
+      defaultPath: '/clients/crear',
+      visible: role.canManageClients,
+      children: [
+        { type: 'item', name: 'Crear', path: '/clients/crear', icon: Users, visible: role.canManageClients },
+        { type: 'item', name: 'Lista de Clientes', path: '/clients/lista', icon: Users, visible: role.canManageClients },
+      ],
+    },
+    {
+      type: 'group',
+      name: 'Usuarios',
+      icon: Shield,
+      defaultPath: '/users/crear',
+      visible: role.canManageUsers,
+      children: [
+        { type: 'item', name: 'Crear', path: '/users/crear', icon: Shield, visible: role.canManageUsers },
+        { type: 'item', name: 'Lista de Usuarios', path: '/users/lista', icon: Shield, visible: role.canManageUsers },
+      ],
+    },
+    {
+      type: 'group',
+      name: 'Sistema',
+      icon: SlidersHorizontal,
+      defaultPath: '/analytics',
+      visible: role.canAccessAnalytics || role.canManageUsers,
+      children: [
+        { type: 'item', name: 'Analíticas', path: '/analytics', icon: BarChart3, visible: role.canAccessAnalytics },
+        { type: 'item', name: 'Configuración', path: '/configuracion', icon: Settings, visible: role.canManageUsers },
+      ],
+    },
   ];
 
   return entries.reduce<NavigationEntry[]>((accumulator, entry) => {

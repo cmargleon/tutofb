@@ -13,8 +13,22 @@ export const isPoseBodyFocusCompatibleWithGarmentBodyArea = (
       return poseBodyFocus === 'full_body' || poseBodyFocus === 'lower_body';
     case 'footwear':
       return poseBodyFocus === 'full_body' || poseBodyFocus === 'lower_body' || poseBodyFocus === 'feet';
+    case 'head_accessory':
+      return poseBodyFocus === 'full_body' || poseBodyFocus === 'upper_body';
     case 'full_body':
       return poseBodyFocus === 'full_body';
+    default:
+      return true;
+  }
+};
+
+export const isPoseFaceVisibilityCompatibleWithGarmentBodyArea = (
+  faceVisible: boolean | null | undefined,
+  garmentBodyArea: GarmentBodyArea,
+): boolean => {
+  switch (garmentBodyArea) {
+    case 'head_accessory':
+      return faceVisible === true;
     default:
       return true;
   }
@@ -46,7 +60,7 @@ export const canMatchPoseToGarmentViews = (
 };
 
 export const isPoseSuggestedForGarmentViews = (
-  aiClassification: Pick<PoseAiClassification, 'usableForGarmentViews' | 'bodyFocus'> | null | undefined,
+  aiClassification: Pick<PoseAiClassification, 'usableForGarmentViews' | 'bodyFocus' | 'faceVisible'> | null | undefined,
   availableViews: readonly GarmentView[],
   garmentBodyArea?: GarmentBodyArea | null,
 ): boolean => {
@@ -54,7 +68,15 @@ export const isPoseSuggestedForGarmentViews = (
     return false;
   }
 
-  if (!garmentBodyArea || !aiClassification?.bodyFocus) {
+  if (!garmentBodyArea) {
+    return true;
+  }
+
+  if (!isPoseFaceVisibilityCompatibleWithGarmentBodyArea(aiClassification?.faceVisible, garmentBodyArea)) {
+    return false;
+  }
+
+  if (!aiClassification?.bodyFocus) {
     return true;
   }
 
@@ -62,7 +84,7 @@ export const isPoseSuggestedForGarmentViews = (
 };
 
 export const isPoseCompatibleWithGarmentViews = (
-  aiClassification: Pick<PoseAiClassification, 'usableForGarmentViews' | 'bodyFocus'> | null | undefined,
+  aiClassification: Pick<PoseAiClassification, 'usableForGarmentViews' | 'bodyFocus' | 'faceVisible'> | null | undefined,
   availableViews: readonly GarmentView[],
   garmentBodyArea?: GarmentBodyArea | null,
 ): boolean => {
@@ -96,7 +118,7 @@ export const getSuggestedPoseIdsForGarments = <
 export const countCompatibleGarmentsForPose = <
   TGarment extends { availableViews: readonly GarmentView[]; garmentBodyArea?: GarmentBodyArea | null },
 >(
-  aiClassification: Pick<PoseAiClassification, 'usableForGarmentViews' | 'bodyFocus'> | null | undefined,
+  aiClassification: Pick<PoseAiClassification, 'usableForGarmentViews' | 'bodyFocus' | 'faceVisible'> | null | undefined,
   garments: readonly TGarment[],
 ): number =>
   garments.filter((garment) =>

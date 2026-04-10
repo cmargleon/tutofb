@@ -40,7 +40,11 @@ export const requireNonEmptyString = (value: unknown, label: string): string => 
 };
 
 const isGarmentBodyArea = (value: unknown): value is GarmentBodyArea =>
-  value === 'upper_body' || value === 'lower_body' || value === 'footwear' || value === 'full_body';
+  value === 'upper_body'
+  || value === 'lower_body'
+  || value === 'footwear'
+  || value === 'head_accessory'
+  || value === 'full_body';
 
 const buildFallbackGarmentPhoto = (
   garment: Pick<UploadedGarmentInput, 'id' | 'name' | 'storagePath' | 'originalFileNames'>,

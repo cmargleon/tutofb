@@ -161,6 +161,22 @@ export const getGenerateWizardCanAdvance = (state: WizardState): boolean =>
   && !(state.step === 3 && state.poseSuggestions.status === 'preparing')
   && !(state.step === 4 && state.productDraftPreparation.status === 'preparing');
 
+export const getGenerateWizardLastAccessibleStep = (
+  state: WizardState,
+): WizardState['step'] => {
+  let lastAccessibleStep: WizardState['step'] = 1;
+
+  for (let stepId = 2; stepId <= GENERATE_WIZARD_MAX_STEP; stepId += 1) {
+    if (!isGenerateWizardStepComplete(state, stepId - 1)) {
+      break;
+    }
+
+    lastAccessibleStep = stepId as WizardState['step'];
+  }
+
+  return lastAccessibleStep;
+};
+
 interface SubmitButtonLabelParams {
   isSubmitting: boolean;
   submitStage: GenerateSubmitStage;

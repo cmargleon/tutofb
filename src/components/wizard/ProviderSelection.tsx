@@ -1,15 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 import { Provider } from '../../../shared/src/types';
-import { PROVIDER_LABELS } from '../../../shared/src/domain';
-
-const PROVIDER_DESCRIPTIONS: Record<Provider, string> = {
-  'fal-seedream': 'Ruta equilibrada para lotes de catálogo consistentes.',
-  'fal-banana-pro': 'Mayor fidelidad en edición cuando la prenda necesita ajuste fino.',
-  'openai-gpt-image-1.5': 'Edición con OpenAI usando ambas referencias de imagen.',
-  'fal-nano-banana-2': 'Gemini 3.1 Flash Image · edición precisa con control de aspecto y resolución.',
-  'fal-seedream-5': 'Seedream 5 Lite · ByteDance v5 con soporte de dimensiones custom.',
-};
+import { PROVIDER_LABELS, PROVIDER_VALUES } from '../../../shared/src/domain';
+import { PROVIDER_COSTS, PROVIDER_PRICE_LABELS } from '../../../shared/src/constants/providerCosts';
 
 interface ProviderSelectionProps {
   provider: Provider;
@@ -17,33 +10,107 @@ interface ProviderSelectionProps {
   disabledProviders?: string[];
 }
 
+const PROVIDER_LOGOS: Record<Provider, { src: string; fallback: string; alt: string }> = {
+  'fal-seedream': {
+    src: 'https://fal.ai/favicon.ico',
+    fallback: 'FA',
+    alt: 'Logo oficial de fal.ai',
+  },
+  'fal-banana-pro': {
+    src: 'https://deepmind.google/favicon.ico',
+    fallback: 'GM',
+    alt: 'Logo oficial de Google DeepMind',
+  },
+  'openai-gpt-image-1.5': {
+    src: 'https://openai.com/favicon.ico',
+    fallback: 'OA',
+    alt: 'Logo oficial de OpenAI',
+  },
+  'fal-nano-banana-2': {
+    src: 'https://deepmind.google/favicon.ico',
+    fallback: 'GM',
+    alt: 'Logo oficial de Google DeepMind',
+  },
+  'fal-seedream-5': {
+    src: 'https://fal.ai/favicon.ico',
+    fallback: 'FA',
+    alt: 'Logo oficial de fal.ai',
+  },
+};
+
+const VISIBLE_PROVIDERS = [...PROVIDER_VALUES].sort((left, right) => {
+  const costDifference = PROVIDER_COSTS[left] - PROVIDER_COSTS[right];
+  if (costDifference !== 0) {
+    return costDifference;
+  }
+
+  return PROVIDER_LABELS[left].localeCompare(PROVIDER_LABELS[right]);
+});
+
+const ProviderLogo: React.FC<{ provider: Provider; selected: boolean }> = ({ provider, selected }) => {
+  const [hasError, setHasError] = useState(false);
+  const logo = PROVIDER_LOGOS[provider];
+
+  return (
+    <div
+      className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border ${
+        selected ? 'border-emerald-300/50 bg-emerald-500/15' : 'border-slate-200 bg-slate-50'
+      }`}
+      aria-hidden="true"
+    >
+      {hasError ? (
+        <span className={`text-xs font-semibold tracking-[0.2em] ${selected ? 'text-white' : 'text-slate-600'}`}>
+          {logo.fallback}
+        </span>
+      ) : (
+        <img
+          src={logo.src}
+          alt={logo.alt}
+          className="h-8 w-8 rounded-xl object-contain"
+          loading="lazy"
+          onError={() => setHasError(true)}
+        />
+      )}
+    </div>
+  );
+};
+
 export const ProviderSelection: React.FC<ProviderSelectionProps> = ({ provider, onChange, disabledProviders }) => (
   <div>
-    <label className="mb-2 block text-sm font-medium text-slate-700">Proveedor</label>
+    <label className="mb-2 block text-sm font-medium text-slate-700">Modelo</label>
     <div className="grid gap-3">
-      {(Object.keys(PROVIDER_LABELS) as Provider[]).filter((option) => !disabledProviders?.includes(option)).map((option) => {
-        const selected = provider === option;
-        return (
-          <button
-            type="button"
-            key={option}
-            onClick={() => onChange(option)}
-            className={`rounded-3xl border px-5 py-4 text-left transition ${
-              selected
-                ? 'border-emerald-700 bg-emerald-600 text-white shadow-lg shadow-emerald-900/10'
-                : 'border-slate-200 bg-white hover:border-slate-300'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-semibold">{PROVIDER_LABELS[option]}</span>
-              {selected ? <Check className="h-4 w-4" /> : null}
-            </div>
-            <p className={`mt-2 text-sm ${selected ? 'text-emerald-100' : 'text-slate-500'}`}>
-              {PROVIDER_DESCRIPTIONS[option]}
-            </p>
-          </button>
-        );
-      })}
+      {VISIBLE_PROVIDERS
+        .filter((option) => !disabledProviders?.includes(option))
+        .map((option) => {
+          const selected = provider === option;
+
+          return (
+            <button
+              type="button"
+              key={option}
+              onClick={() => onChange(option)}
+              className={`rounded-3xl border px-5 py-4 text-left transition ${
+                selected
+                  ? 'border-emerald-700 bg-emerald-600 text-white shadow-lg shadow-emerald-900/10'
+                  : 'border-slate-200 bg-white hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-4">
+                  <ProviderLogo provider={option} selected={selected} />
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-semibold">{PROVIDER_LABELS[option]}</p>
+                    <p className={`mt-1 text-sm font-medium ${selected ? 'text-emerald-100' : 'text-slate-500'}`}>
+                      {PROVIDER_PRICE_LABELS[option]}
+                    </p>
+                  </div>
+                </div>
+
+                {selected ? <Check className="h-4 w-4 shrink-0" /> : null}
+              </div>
+            </button>
+          );
+        })}
     </div>
   </div>
 );

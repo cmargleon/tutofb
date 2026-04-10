@@ -31,5 +31,5 @@ export type PoseFraming =
   | 'feet_closeup'
   | 'unknown';
 export type PoseBodyFocus = 'full_body' | 'upper_body' | 'lower_body' | 'feet';
-export type GarmentBodyArea = 'upper_body' | 'lower_body' | 'footwear' | 'full_body';
+export type GarmentBodyArea = 'upper_body' | 'lower_body' | 'footwear' | 'head_accessory' | 'full_body';
 export type HealthStatus = 'healthy' | 'degraded' | 'down';

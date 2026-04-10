@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import { BatchStatus, Job } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
 
-export const onJobStatusChange = onDocumentUpdated('jobs/{jobId}', async (event) => {
+export const onJobStatusChange = onDocumentUpdated({ document: 'jobs/{jobId}', memory: '512MiB' }, async (event) => {
   const snapshot = event.data;
   if (!snapshot) return;
 

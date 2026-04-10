@@ -44,6 +44,7 @@ export * from './http/downloadSelectedJobsZip';
 
 // Export triggers
 export * from './triggers/onJobStatusChange';
+export * from './triggers/processJobOnActivation';
 export * from './triggers/onClientDelete';
 export * from './triggers/onModelDelete';
 export * from './triggers/processJobOnCreate';

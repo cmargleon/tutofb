@@ -596,7 +596,9 @@ export const requeueExpiredJobs = async (): Promise<number> => {
     await writeBatch.commit();
   }
 
-  // 2. Pick up deferred retry jobs whose wait time has elapsed
+  // 2. Activate deferred retry jobs whose wait time has elapsed.
+  // Only clear retryNotBefore — the processJobOnActivation trigger picks up the job
+  // in its own isolated Cloud Function instance (no API calls here).
   const deferredSnapshot = await db
     .collection('jobs')
     .where('status', '==', 'pending')
@@ -605,26 +607,42 @@ export const requeueExpiredJobs = async (): Promise<number> => {
     .get();
 
   if (!deferredSnapshot.empty) {
-    await Promise.all(
-      deferredSnapshot.docs.map((docSnapshot) => processJob(docSnapshot.id, 'requeue', { skipBacklogSweep: true })),
-    );
+    const deferredBatch = db.batch();
+    deferredSnapshot.docs.forEach((docSnapshot) => {
+      deferredBatch.update(docSnapshot.ref, {
+        retryNotBefore: null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    await deferredBatch.commit();
   }
 
-  // 3. Backstop orphan pending jobs that were never claimed
+  // 3. Backstop orphan pending jobs that were never claimed.
+  // Exclude jobs just activated in step 2 to avoid double-triggering.
+  // Set schedulerPickupAt — the processJobOnActivation trigger fires per job in isolation.
+  const deferredIds = new Set(deferredSnapshot.docs.map((d) => d.id));
+
   const pendingSnapshot = await db
     .collection('jobs')
     .where('status', '==', 'pending')
     .limit(sweepLimit)
     .get();
 
-  const orphanPendingDocs = pendingSnapshot.docs.filter((docSnapshot) =>
-    shouldBackstopPendingJob({ id: docSnapshot.id, ...docSnapshot.data() } as Job),
+  const orphanPendingDocs = pendingSnapshot.docs.filter(
+    (docSnapshot) =>
+      !deferredIds.has(docSnapshot.id) &&
+      shouldBackstopPendingJob({ id: docSnapshot.id, ...docSnapshot.data() } as Job),
   );
 
   if (orphanPendingDocs.length > 0) {
-    await Promise.all(
-      orphanPendingDocs.map((docSnapshot) => processJob(docSnapshot.id, 'requeue', { skipBacklogSweep: true })),
-    );
+    const orphanBatch = db.batch();
+    orphanPendingDocs.forEach((docSnapshot) => {
+      orphanBatch.update(docSnapshot.ref, {
+        schedulerPickupAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+    await orphanBatch.commit();
   }
 
   return stuckSnapshot.size + deferredSnapshot.size + orphanPendingDocs.length;

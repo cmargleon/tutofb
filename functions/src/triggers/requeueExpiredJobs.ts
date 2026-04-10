@@ -6,7 +6,7 @@ export const requeueExpiredJobsOnSchedule = onSchedule(
   {
     schedule: 'every 5 minutes',
     timeoutSeconds: 300,
-    memory: '1GiB',
+    memory: '2GiB',
     secrets: [FAL_KEY, OPENAI_API_KEY, GEMINI_API_KEY],
   },
   async () => {

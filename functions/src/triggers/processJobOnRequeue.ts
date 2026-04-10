@@ -8,7 +8,7 @@ export const processJobOnRequeue = onDocumentUpdated(
   {
     document: 'jobs/{jobId}',
     timeoutSeconds: 540,
-    memory: '1GiB',
+    memory: '2GiB',
     maxInstances: 20,
     secrets: [FAL_KEY, OPENAI_API_KEY, GEMINI_API_KEY],
   },

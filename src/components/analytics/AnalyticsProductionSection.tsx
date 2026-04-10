@@ -26,6 +26,17 @@ export function AnalyticsProductionSection({
   daysBack,
   geminiImageReviewCostUsd,
 }: AnalyticsProductionSectionProps) {
+  const formatPct = (numerator: number, denominator: number): string =>
+    denominator > 0 ? `${Number(((numerator / denominator) * 100).toFixed(1))}%` : '0%';
+
+  const autoReviewedJobs = summary.autoReviewedJobs;
+  const geminiAgreementJobs = summary.geminiAgreedJobs;
+  const geminiDisagreementJobs = summary.geminiDisagreementJobs;
+  const manualInterventionsWithoutDisagreement = Math.max(
+    summary.jobsWithHumanIntervention - geminiDisagreementJobs,
+    0,
+  );
+
   const pieData = [
     { name: 'Completados', value: summary.completedJobs },
     { name: 'Fallidos', value: summary.failedJobs },
@@ -49,34 +60,34 @@ export function AnalyticsProductionSection({
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <AnalyticsReviewMetric
-            label="Sin corrección humana"
-            value={`${summary.humanReviewAvoidedJobs.toLocaleString()} · ${summary.humanReviewAvoidedRatePct}%`}
-            detail="Aprobados por Gemini y cerrados sin intervención."
+            label="Jobs con auto review"
+            value={`${autoReviewedJobs.toLocaleString()} · ${formatPct(autoReviewedJobs, summary.totalJobs)}`}
+            detail={`Cobertura del auto review sobre ${summary.totalJobs.toLocaleString()} jobs totales.`}
           />
           <AnalyticsReviewMetric
-            label="Con corrección humana"
-            value={`${summary.jobsWithHumanIntervention.toLocaleString()} · ${summary.humanInterventionRatePct}%`}
-            detail={`${summary.humanInterventionCount.toLocaleString()} acciones · ${summary.manualSelectionCount.toLocaleString()} selecciones manuales`}
+            label="Acuerdo de Gemini"
+            value={`${geminiAgreementJobs.toLocaleString()} · ${formatPct(geminiAgreementJobs, autoReviewedJobs)}`}
+            detail={`${summary.geminiTruePositiveJobs.toLocaleString()} aprobaciones y ${summary.geminiTrueNegativeJobs.toLocaleString()} rechazos coincidieron con el resultado final.`}
           />
           <AnalyticsReviewMetric
-            label="Precisión de Gemini"
-            value={`${summary.geminiPrecisionPct}%`}
-            detail="Porcentaje de decisiones de Gemini que coincidieron con la revisión humana."
+            label="Correcciones humanas"
+            value={`${geminiDisagreementJobs.toLocaleString()} · ${formatPct(geminiDisagreementJobs, autoReviewedJobs)}`}
+            detail={`${summary.jobsWithHumanIntervention.toLocaleString()} jobs tuvieron intervención humana; ${summary.humanInterventionCount.toLocaleString()} acciones manuales en total. ${manualInterventionsWithoutDisagreement.toLocaleString()} no cambiaron el criterio de Gemini.`}
           />
           <AnalyticsReviewMetric
-            label="Gemini aprobó pero se corrigió"
-            value={`${summary.geminiFalsePositiveJobs.toLocaleString()} · ${summary.geminiFalsePositiveRatePct}%`}
-            detail="Gemini dio el visto bueno, pero alguien lo regeneró o seleccionó otra versión."
+            label="Aprobaciones de Gemini"
+            value={`${summary.geminiApprovedJobs.toLocaleString()} · ${formatPct(summary.geminiApprovedJobs, autoReviewedJobs)}`}
+            detail={`${summary.humanReviewAvoidedJobs.toLocaleString()} cerraron sin intervención y ${summary.geminiFalsePositiveJobs.toLocaleString()} terminaron corregidos.`}
           />
           <AnalyticsReviewMetric
-            label="Gemini rechazó pero se aprobó"
-            value={`${summary.geminiFalseNegativeJobs.toLocaleString()} · ${summary.geminiFalseNegativeRatePct}%`}
-            detail="Gemini lo rechazó, pero la revisión humana terminó aprobándolo."
+            label="Aprobó y hubo corrección"
+            value={`${summary.geminiFalsePositiveJobs.toLocaleString()} · ${formatPct(summary.geminiFalsePositiveJobs, summary.geminiApprovedJobs)}`}
+            detail="Tasa de desacuerdo dentro de los jobs que Gemini aprobó alguna vez."
           />
           <AnalyticsReviewMetric
-            label="Aprobados por Gemini"
-            value={summary.geminiApprovedJobs.toLocaleString()}
-            detail={`${summary.geminiTruePositiveJobs.toLocaleString()} cerraron sin necesitar corrección humana.`}
+            label="Rechazó y terminó aprobado"
+            value={`${summary.geminiFalseNegativeJobs.toLocaleString()} · ${formatPct(summary.geminiFalseNegativeJobs, summary.geminiRejectedJobs)}`}
+            detail="Tasa de desacuerdo dentro de los jobs que Gemini rechazó alguna vez."
           />
         </div>
       </div>
@@ -89,7 +100,7 @@ export function AnalyticsProductionSection({
           </h3>
           {dailyVolume.length > 0 ? (
             <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={288}>
                 <AreaChart data={dailyVolume} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
@@ -120,7 +131,7 @@ export function AnalyticsProductionSection({
           <h3 className="text-lg font-semibold text-gray-900 mb-6">Estados</h3>
           {summary.completedJobs > 0 || summary.failedJobs > 0 ? (
             <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={288}>
                 <PieChart>
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                     {pieData.map((_, index) => (
@@ -144,7 +155,7 @@ export function AnalyticsProductionSection({
           <h3 className="text-lg font-semibold text-gray-900 mb-6">Por proveedor</h3>
           {byProvider.length > 0 ? (
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
                 <BarChart data={byProvider} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="provider" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
@@ -165,7 +176,7 @@ export function AnalyticsProductionSection({
           <h3 className="text-lg font-semibold text-gray-900 mb-6">Top clientes</h3>
           {topClients.length > 0 ? (
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={320}>
                 <BarChart data={topClients} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                   <XAxis type="number" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
@@ -196,8 +207,8 @@ export function AnalyticsProductionSection({
               <p className="mt-1 text-xl font-semibold text-gray-900">{summary.firstPassApprovedJobs.toLocaleString()}</p>
             </div>
             <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-              <p className="text-xs text-gray-500">Con corrección humana</p>
-              <p className="mt-1 text-xl font-semibold text-gray-900">{summary.humanInterventionRatePct}%</p>
+              <p className="text-xs text-gray-500">Acuerdo de Gemini</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{formatPct(geminiAgreementJobs, autoReviewedJobs)}</p>
             </div>
           </div>
         </div>

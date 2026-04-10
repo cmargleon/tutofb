@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { AnalyticsStatCard } from './AnalyticsStatCard';
 import { formatUsd } from './analyticsUtils';
-import { PROVIDER_COSTS } from '../../../shared/src/constants/providerCosts';
+import { PROVIDER_PRICE_LABELS } from '../../../shared/src/constants/providerCosts';
 import type { AnalyticsSummary, AnalyticsDailyVolume, AnalyticsProviderStats, AnalyticsClientProviderStats } from '../../../shared/src/types';
 
 interface AnalyticsCostsSectionProps {
@@ -42,9 +42,9 @@ export function AnalyticsCostsSection({
           <div className="text-sm text-gray-500 mt-2 md:mt-0">
             Precios actuales:
             <ul className="flex gap-3 mt-1">
-              {Object.entries(PROVIDER_COSTS).map(([provider, cost]) => (
+              {Object.entries(PROVIDER_PRICE_LABELS).map(([provider, label]) => (
                 <li key={provider} className="bg-gray-50 px-2 py-1 rounded border border-gray-200 text-xs">
-                  <span className="font-medium text-gray-700">{provider}:</span> ${cost.toFixed(2)}
+                  <span className="font-medium text-gray-700">{provider}:</span> {label}
                 </li>
               ))}
             </ul>
@@ -56,7 +56,7 @@ export function AnalyticsCostsSection({
             <h4 className="text-sm font-medium text-gray-700 mb-4">Gasto diario (últimos {daysBack} días)</h4>
             {dailyVolume.length > 0 ? (
               <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={256}>
                   <AreaChart data={dailyVolume} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">

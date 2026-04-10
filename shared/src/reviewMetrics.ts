@@ -1,6 +1,9 @@
 import { Job, JobAutoReviewVerdict, JobReviewSignals } from './types';
 
 export interface JobReviewOutcomeCounts {
+  autoReviewedJobs: number;
+  geminiAgreedJobs: number;
+  geminiDisagreementJobs: number;
   jobsWithHumanIntervention: number;
   humanInterventionCount: number;
   manualSelectionCount: number;
@@ -59,6 +62,9 @@ export const getJobReviewSignals = (
 export const getJobReviewOutcomeCounts = (job: Job | undefined): JobReviewOutcomeCounts => {
   if (!job) {
     return {
+      autoReviewedJobs: 0,
+      geminiAgreedJobs: 0,
+      geminiDisagreementJobs: 0,
       jobsWithHumanIntervention: 0,
       humanInterventionCount: 0,
       manualSelectionCount: 0,
@@ -75,17 +81,24 @@ export const getJobReviewOutcomeCounts = (job: Job | undefined): JobReviewOutcom
   const signals = getJobReviewSignals(job);
   const firstVerdict = signals.firstAutoReviewVerdict;
   const latestVerdict = signals.latestAutoReviewVerdict;
+  const hasAutoReview = firstVerdict !== null || latestVerdict !== null;
+  const hasApprovedVerdict = firstVerdict === 'approved' || latestVerdict === 'approved';
+  const hasRejectedVerdict = firstVerdict === 'rejected' || latestVerdict === 'rejected';
+  const hasGeminiDisagreement = signals.hasGeminiFalsePositive || signals.hasGeminiFalseNegative;
   const effectiveApprovedVerdict = firstVerdict === 'approved' || latestVerdict === 'approved';
   const effectiveRejectedVerdict = firstVerdict === 'rejected' || latestVerdict === 'rejected';
 
   return {
+    autoReviewedJobs: hasAutoReview ? 1 : 0,
+    geminiAgreedJobs: hasAutoReview && !hasGeminiDisagreement ? 1 : 0,
+    geminiDisagreementJobs: hasGeminiDisagreement ? 1 : 0,
     jobsWithHumanIntervention: signals.hasHumanIntervention ? 1 : 0,
     humanInterventionCount: signals.humanInterventionCount,
     manualSelectionCount: signals.manualSelectionCount,
-    geminiApprovedJobs: effectiveApprovedVerdict ? 1 : 0,
-    geminiRejectedJobs: effectiveRejectedVerdict ? 1 : 0,
+    geminiApprovedJobs: hasApprovedVerdict ? 1 : 0,
+    geminiRejectedJobs: hasRejectedVerdict ? 1 : 0,
     geminiTruePositiveJobs:
-      effectiveApprovedVerdict && !signals.hasGeminiFalsePositive && !signals.hasHumanIntervention ? 1 : 0,
+      effectiveApprovedVerdict && !signals.hasGeminiFalsePositive ? 1 : 0,
     geminiTrueNegativeJobs: effectiveRejectedVerdict && !signals.hasGeminiFalseNegative ? 1 : 0,
     geminiFalsePositiveJobs: signals.hasGeminiFalsePositive ? 1 : 0,
     geminiFalseNegativeJobs: signals.hasGeminiFalseNegative ? 1 : 0,

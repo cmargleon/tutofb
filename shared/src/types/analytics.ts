@@ -6,6 +6,9 @@ export interface AnalyticsSummary {
   failedJobs: number;
   pendingJobs: number;
   processingJobs: number;
+  autoReviewedJobs: number;
+  geminiAgreedJobs: number;
+  geminiDisagreementJobs: number;
   firstPassApprovedJobs: number;
   firstPassApprovalRatePct: number;
   jobsWithHumanIntervention: number;
@@ -63,6 +66,9 @@ export interface AnalyticsClientStats {
   failedJobs: number;
   pendingJobs: number;
   processingJobs: number;
+  autoReviewedJobs: number;
+  geminiAgreedJobs: number;
+  geminiDisagreementJobs: number;
   firstPassApprovedJobs: number;
   regeneratedCompletedJobs: number;
   jobsWithHumanIntervention: number;
@@ -102,6 +108,9 @@ export interface AnalyticsClientModelStats {
   failedJobs: number;
   pendingJobs: number;
   processingJobs: number;
+  autoReviewedJobs: number;
+  geminiAgreedJobs: number;
+  geminiDisagreementJobs: number;
   firstPassApprovedJobs: number;
   regeneratedCompletedJobs: number;
   jobsWithHumanIntervention: number;

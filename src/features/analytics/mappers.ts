@@ -13,6 +13,9 @@ export const mapSummary = (data: any): AnalyticsSummary => {
   const totalDuration = data.totalDurationSeconds || 0;
   const totalCompletedOutputs = data.totalCompletedOutputs || completed; // fallback
   const firstPassApprovedJobs = data.firstPassApprovedJobs || 0;
+  const autoReviewedJobs = data.autoReviewedJobs || 0;
+  const geminiAgreedJobs = data.geminiAgreedJobs || 0;
+  const geminiDisagreementJobs = data.geminiDisagreementJobs || 0;
   const geminiTruePositiveJobs = data.geminiTruePositiveJobs || 0;
   const geminiFalsePositiveJobs = data.geminiFalsePositiveJobs || 0;
   const geminiRejectedJobs = data.geminiRejectedJobs || 0;
@@ -24,6 +27,9 @@ export const mapSummary = (data: any): AnalyticsSummary => {
     failedJobs: failed,
     pendingJobs: data.pendingJobs || 0,
     processingJobs: data.processingJobs || 0,
+    autoReviewedJobs,
+    geminiAgreedJobs,
+    geminiDisagreementJobs,
     firstPassApprovedJobs,
     firstPassApprovalRatePct: completed > 0 ? Math.round((firstPassApprovedJobs / completed) * 100) : 0,
     jobsWithHumanIntervention: data.jobsWithHumanIntervention || 0,
@@ -41,8 +47,8 @@ export const mapSummary = (data: any): AnalyticsSummary => {
     humanReviewAvoidedRatePct:
       data.humanReviewAvoidedRatePct || ((data.totalJobs || 0) > 0 ? Math.round(((data.humanReviewAvoidedJobs || 0) / data.totalJobs) * 100) : 0),
     geminiPrecisionPct:
-      data.geminiPrecisionPct || (geminiTruePositiveJobs + geminiFalsePositiveJobs > 0
-        ? Math.round((geminiTruePositiveJobs / (geminiTruePositiveJobs + geminiFalsePositiveJobs)) * 100)
+      data.geminiPrecisionPct || (autoReviewedJobs > 0
+        ? Math.round((geminiAgreedJobs / autoReviewedJobs) * 100)
         : 0),
     geminiFalsePositiveRatePct:
       data.geminiFalsePositiveRatePct || ((data.geminiApprovedJobs || 0) > 0 ? Math.round((geminiFalsePositiveJobs / data.geminiApprovedJobs) * 100) : 0),
@@ -94,6 +100,9 @@ export const mapClientStats = (data: any): AnalyticsClientStats => {
     failedJobs: data.failedJobs || 0,
     pendingJobs: data.pendingJobs || 0,
     processingJobs: data.processingJobs || 0,
+    autoReviewedJobs: data.autoReviewedJobs || 0,
+    geminiAgreedJobs: data.geminiAgreedJobs || 0,
+    geminiDisagreementJobs: data.geminiDisagreementJobs || 0,
     firstPassApprovedJobs: data.firstPassApprovedJobs || 0,
     regeneratedCompletedJobs: data.regeneratedCompletedJobs || 0,
     jobsWithHumanIntervention: data.jobsWithHumanIntervention || 0,
@@ -137,6 +146,9 @@ export const mapClientModelStats = (id: string, data: any): AnalyticsClientModel
     failedJobs: data.failedJobs || 0,
     pendingJobs: data.pendingJobs || 0,
     processingJobs: data.processingJobs || 0,
+    autoReviewedJobs: data.autoReviewedJobs || 0,
+    geminiAgreedJobs: data.geminiAgreedJobs || 0,
+    geminiDisagreementJobs: data.geminiDisagreementJobs || 0,
     firstPassApprovedJobs: data.firstPassApprovedJobs || 0,
     regeneratedCompletedJobs: data.regeneratedCompletedJobs || 0,
     jobsWithHumanIntervention: data.jobsWithHumanIntervention || 0,

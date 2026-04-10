@@ -25,6 +25,8 @@ interface UseGenerateWizardCatalogResult {
   selectedModel: Model | null;
   selectedSpreadsheetTemplate: SpreadsheetTemplate | null;
   selectedSpreadsheetCategory: SpreadsheetTemplateCategory | null;
+  selectedClientHasSpreadsheetTemplates: boolean;
+  loadingSpreadsheetTemplates: boolean;
   loadingData: boolean;
   error: string | null;
 }
@@ -40,6 +42,7 @@ export const useGenerateWizardCatalog = ({
   const [models, setModels] = useState<Model[]>([]);
   const [spreadsheetTemplates, setSpreadsheetTemplates] = useState<SpreadsheetTemplate[]>([]);
   const [spreadsheetCategories, setSpreadsheetCategories] = useState<SpreadsheetTemplateCategory[]>([]);
+  const [loadingSpreadsheetTemplates, setLoadingSpreadsheetTemplates] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,24 +83,28 @@ export const useGenerateWizardCatalog = ({
   }, [selectedClientId]);
 
   useEffect(() => {
-    if (!selectedClientId || outputMode !== 'spreadsheet') {
+    if (!selectedClientId) {
       setSpreadsheetTemplates([]);
+      setLoadingSpreadsheetTemplates(false);
       return;
     }
 
+    setLoadingSpreadsheetTemplates(true);
     const unsubscribe = subscribeToClientSpreadsheetTemplates(
       selectedClientId,
       (nextTemplates) => {
         setSpreadsheetTemplates(nextTemplates.filter((template) => template.status !== 'archived'));
+        setLoadingSpreadsheetTemplates(false);
       },
       (loadError) => {
         console.error(loadError);
         setError('No se pudieron cargar los spreadsheets del cliente.');
+        setLoadingSpreadsheetTemplates(false);
       },
     );
 
     return () => unsubscribe();
-  }, [outputMode, selectedClientId]);
+  }, [selectedClientId]);
 
   useEffect(() => {
     if (!selectedClientId || outputMode !== 'spreadsheet' || !selectedSpreadsheetTemplateId) {
@@ -136,6 +143,10 @@ export const useGenerateWizardCatalog = ({
     () => spreadsheetCategories.find((category) => category.id === selectedSpreadsheetCategoryId) ?? null,
     [selectedSpreadsheetCategoryId, spreadsheetCategories],
   );
+  const selectedClientHasSpreadsheetTemplates = useMemo(
+    () => spreadsheetTemplates.length > 0,
+    [spreadsheetTemplates],
+  );
 
   return {
     clients,
@@ -146,6 +157,8 @@ export const useGenerateWizardCatalog = ({
     selectedModel,
     selectedSpreadsheetTemplate,
     selectedSpreadsheetCategory,
+    selectedClientHasSpreadsheetTemplates,
+    loadingSpreadsheetTemplates,
     loadingData,
     error,
   };

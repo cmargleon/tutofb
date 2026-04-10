@@ -8,7 +8,6 @@ import {
   UploadedGarmentDraft,
   WizardProviderImageConfig,
   WizardState,
-  createInitialProductDraftPreparationState,
   createInitialPoseSuggestionState,
 } from '../../types';
 import { canSelectWizardStep, clampWizardStep } from '../../../wizard/navigation';
@@ -17,6 +16,12 @@ import { useGenerateWizardSubmit } from './useGenerateWizardSubmit';
 import { useGarmentPreparation } from './useGarmentPreparation';
 import { countCompatiblePoseMatchesForGarments } from './garmentClassification';
 import {
+  replaceWizardProductDraftRows,
+  resetWizardGeneratedOutputs,
+  resetWizardProductDraftPreparation,
+  resetWizardProductDrafts,
+} from '../stateTransitions';
+import {
   buildGarmentUploadSummary,
   createInitialGenerateWizardState,
   GENERATE_WIZARD_MAX_STEP,
@@ -24,6 +29,60 @@ import {
   getGenerateWizardTotalJobs,
   isGenerateWizardStepComplete,
 } from '../state';
+
+const resolvePromptBase = (
+  clientPromptBase: string | null | undefined,
+  systemPromptOverride: string | null | undefined,
+): string => {
+  const clientPrompt = clientPromptBase?.trim();
+  if (clientPrompt) {
+    return clientPrompt;
+  }
+
+  const globalPrompt = systemPromptOverride?.trim();
+  if (globalPrompt) {
+    return globalPrompt;
+  }
+
+  return DEFAULT_TRY_ON_PROMPT;
+};
+
+const resolvePromptSourceLabel = (
+  clientName: string | undefined,
+  clientPromptBase: string | null | undefined,
+  systemPromptOverride: string | null | undefined,
+): string => {
+  if (clientPromptBase?.trim() && clientName) {
+    return `el cliente ${clientName}`;
+  }
+
+  if (systemPromptOverride?.trim()) {
+    return 'la configuración global';
+  }
+
+  return 'el prompt interno por defecto';
+};
+
+const buildProductDraftSignature = (state: WizardState): string =>
+  JSON.stringify({
+    outputMode: state.outputMode,
+    clientId: state.selectedClientId,
+    modelId: state.selectedModelId,
+    templateId: state.selectedSpreadsheetTemplateId,
+    categoryId: state.selectedSpreadsheetCategoryId,
+    garments: state.garments.map((garment) => ({
+      id: garment.id,
+      photos: garment.originalPhotos.map((photo) => ({
+        id: photo.id,
+        storagePath: photo.upload.storagePath,
+      })),
+    })),
+  });
+
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message
+    ? error.message
+    : fallback;
 
 export const useGenerateWizard = () => {
   const garmentUrlsRef = useRef<UploadedGarmentDraft[]>([]);
@@ -44,6 +103,8 @@ export const useGenerateWizard = () => {
     selectedClient,
     selectedModel,
     selectedSpreadsheetCategory,
+    selectedClientHasSpreadsheetTemplates,
+    loadingSpreadsheetTemplates,
     loadingData,
     error: catalogError,
   } = useGenerateWizardCatalog({
@@ -55,29 +116,15 @@ export const useGenerateWizard = () => {
   });
 
   const resolvedPromptBase = useMemo(() => {
-    const clientPrompt = selectedClient?.generationPromptBase?.trim();
-    if (clientPrompt) {
-      return clientPrompt;
-    }
-
-    const globalPrompt = systemConfig.systemPromptOverride?.trim();
-    if (globalPrompt) {
-      return globalPrompt;
-    }
-
-    return DEFAULT_TRY_ON_PROMPT;
+    return resolvePromptBase(selectedClient?.generationPromptBase, systemConfig.systemPromptOverride);
   }, [selectedClient?.generationPromptBase, systemConfig.systemPromptOverride]);
 
   const promptSourceLabel = useMemo(() => {
-    if (selectedClient?.generationPromptBase?.trim()) {
-      return `el cliente ${selectedClient.name}`;
-    }
-
-    if (systemConfig.systemPromptOverride?.trim()) {
-      return 'la configuración global';
-    }
-
-    return 'el prompt interno por defecto';
+    return resolvePromptSourceLabel(
+      selectedClient?.name,
+      selectedClient?.generationPromptBase,
+      systemConfig.systemPromptOverride,
+    );
   }, [selectedClient?.generationPromptBase, selectedClient?.name, systemConfig.systemPromptOverride]);
 
   useEffect(() => {
@@ -91,6 +138,25 @@ export const useGenerateWizard = () => {
         : { ...current, prompt: resolvedPromptBase }
     ));
   }, [isPromptDirty, resolvedPromptBase]);
+
+  useEffect(() => {
+    if (!state.selectedClientId || loadingSpreadsheetTemplates || selectedClientHasSpreadsheetTemplates) {
+      return;
+    }
+
+    setState((current) => {
+      if (current.outputMode === 'photos_only') {
+        return current;
+      }
+
+      return resetWizardProductDrafts({
+        ...current,
+        outputMode: 'photos_only',
+        selectedSpreadsheetTemplateId: null,
+        selectedSpreadsheetCategoryId: null,
+      });
+    });
+  }, [loadingSpreadsheetTemplates, selectedClientHasSpreadsheetTemplates, state.selectedClientId]);
 
   const error = useMemo(() => {
     if (flowError) {
@@ -163,31 +229,7 @@ export const useGenerateWizard = () => {
     () => buildGarmentSuggestionSignature(state.selectedModelId, state.garments),
     [state.selectedModelId, state.garments],
   );
-  const productDraftSignature = useMemo(
-    () =>
-      JSON.stringify({
-        outputMode: state.outputMode,
-        clientId: state.selectedClientId,
-        modelId: state.selectedModelId,
-        templateId: state.selectedSpreadsheetTemplateId,
-        categoryId: state.selectedSpreadsheetCategoryId,
-        garments: state.garments.map((garment) => ({
-          id: garment.id,
-          photos: garment.originalPhotos.map((photo) => ({
-            id: photo.id,
-            storagePath: photo.upload.storagePath,
-          })),
-        })),
-      }),
-    [
-      state.garments,
-      state.outputMode,
-      state.selectedClientId,
-      state.selectedModelId,
-      state.selectedSpreadsheetCategoryId,
-      state.selectedSpreadsheetTemplateId,
-    ],
-  );
+  const productDraftSignature = useMemo(() => buildProductDraftSignature(state), [state]);
 
   const submit = useGenerateWizardSubmit({
     state,
@@ -244,18 +286,14 @@ export const useGenerateWizard = () => {
   const handleFiles = async (files: File[]) => {
     try {
       const nextGarments = await handleGarmentFiles(files, state.garments);
-      setState((current) => ({
+      setState((current) => resetWizardGeneratedOutputs({
         ...current,
         garments: nextGarments,
-        selectedPoseIds: [],
-        poseSuggestions: createInitialPoseSuggestionState(),
-        productDrafts: [],
-        productDraftPreparation: createInitialProductDraftPreparationState(),
       }));
       setFlowError(null);
-    } catch (uploadError: any) {
+    } catch (uploadError) {
       console.error(uploadError);
-      setFlowError(uploadError.message || 'No se pudieron preparar las prendas.');
+      setFlowError(getErrorMessage(uploadError, 'No se pudieron preparar las prendas.'));
     }
   };
 
@@ -280,78 +318,61 @@ export const useGenerateWizard = () => {
       if (garment) {
         revokeGarmentUrls([garment]);
       }
-      return {
+      return resetWizardGeneratedOutputs({
         ...current,
         garments: current.garments.filter((item) => item.id !== garmentId),
-        selectedPoseIds: [],
-        poseSuggestions: createInitialPoseSuggestionState(),
-        productDrafts: [],
-        productDraftPreparation: createInitialProductDraftPreparationState(),
-      };
+      });
     });
   };
 
   const handleClientChange = (clientId: string | null) => {
     const nextClient = clients.find((client) => client.id === clientId) ?? null;
-    const nextPrompt =
-      nextClient?.generationPromptBase?.trim()
-      || systemConfig.systemPromptOverride?.trim()
-      || DEFAULT_TRY_ON_PROMPT;
+    const nextPrompt = resolvePromptBase(nextClient?.generationPromptBase, systemConfig.systemPromptOverride);
 
     setIsPromptDirty(false);
-    setState((current) => ({
+    setState((current) => resetWizardGeneratedOutputs({
       ...current,
       selectedClientId: clientId,
       selectedModelId: null,
       selectedSpreadsheetTemplateId: null,
       selectedSpreadsheetCategoryId: null,
-      selectedPoseIds: [],
-      poseSuggestions: createInitialPoseSuggestionState(),
-      productDrafts: [],
-      productDraftPreparation: createInitialProductDraftPreparationState(),
       prompt: nextPrompt,
     }));
   };
 
   const handleModelSelect = (modelId: string | null) => {
-    setState((current) => ({
+    setState((current) => resetWizardGeneratedOutputs({
       ...current,
       selectedModelId: modelId,
-      selectedPoseIds: [],
-      poseSuggestions: createInitialPoseSuggestionState(),
-      productDrafts: [],
-      productDraftPreparation: createInitialProductDraftPreparationState(),
     }));
   };
 
   const handleOutputModeChange = (outputMode: WizardState['outputMode']) => {
-    setState((current) => ({
+    if (outputMode === 'spreadsheet' && !selectedClientHasSpreadsheetTemplates) {
+      return;
+    }
+
+    setState((current) => resetWizardProductDrafts({
       ...current,
       outputMode,
       selectedSpreadsheetTemplateId: outputMode === 'spreadsheet' ? current.selectedSpreadsheetTemplateId : null,
       selectedSpreadsheetCategoryId: outputMode === 'spreadsheet' ? current.selectedSpreadsheetCategoryId : null,
-      productDrafts: [],
-      productDraftPreparation: createInitialProductDraftPreparationState(),
     }));
   };
 
   const handleSpreadsheetTemplateChange = (templateId: string | null) => {
     const nextTemplate = spreadsheetTemplates.find((template) => template.id === templateId) ?? null;
-    setState((current) => ({
+    setState((current) => resetWizardProductDrafts({
       ...current,
       selectedSpreadsheetTemplateId: templateId,
       selectedSpreadsheetCategoryId: nextTemplate?.defaultCategoryId ?? null,
-      productDrafts: [],
-      productDraftPreparation: createInitialProductDraftPreparationState(),
     }));
   };
 
   const handleSpreadsheetCategoryChange = (categoryId: string | null) => {
-    setState((current) => ({
+    setState((current) => resetWizardProductDrafts({
       ...current,
       selectedSpreadsheetCategoryId: categoryId,
-      productDrafts: [],
-      productDraftPreparation: createInitialProductDraftPreparationState(),
     }));
   };
 
@@ -411,22 +432,12 @@ export const useGenerateWizard = () => {
     draft: WizardState['productDrafts'][number],
     rows: WizardState['productDrafts'][number]['rows'],
   ) => {
-    setState((current) => ({
-      ...current,
-      productDrafts: current.productDrafts.map((entry) =>
-        entry.garmentId === draft.garmentId
-          ? { ...entry, rows }
-          : entry,
-      ),
-    }));
+    setState((current) => replaceWizardProductDraftRows(current, draft.garmentId, rows));
   };
 
   const handleRetryProductDraftPreparation = () => {
     setFlowError(null);
-    setState((current) => ({
-      ...current,
-      productDraftPreparation: createInitialProductDraftPreparationState(),
-    }));
+    setState((current) => resetWizardProductDraftPreparation(current));
   };
 
   return {
@@ -435,6 +446,8 @@ export const useGenerateWizard = () => {
     models,
     spreadsheetTemplates,
     spreadsheetCategories,
+    selectedClientHasSpreadsheetTemplates,
+    loadingSpreadsheetTemplates,
     loadingData,
     isSubmitting: submit.isSubmitting,
     error,

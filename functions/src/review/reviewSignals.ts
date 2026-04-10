@@ -103,12 +103,13 @@ export const buildRegenerationReviewSignalsPatch = ({
   const currentSignals = getJobReviewSignals(job);
   const currentVerdict = normalizeVerdict(job.currentOutput?.autoReview?.verdict) || normalizeVerdict(job.latestAutoReview?.verdict);
   const falsePositive = currentVerdict === 'approved';
+  const falseNegative = currentVerdict === 'rejected';
 
   return {
     'reviewSignals.hasHumanIntervention': true,
     'reviewSignals.humanInterventionCount': FieldValue.increment(1),
     'reviewSignals.hasGeminiFalsePositive': currentSignals.hasGeminiFalsePositive || falsePositive,
-    'reviewSignals.hasGeminiFalseNegative': currentSignals.hasGeminiFalseNegative,
+    'reviewSignals.hasGeminiFalseNegative': currentSignals.hasGeminiFalseNegative || falseNegative,
     'reviewSignals.lastHumanDecision':
       currentVerdict === 'approved'
         ? 'regenerated_after_auto_approved'

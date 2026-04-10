@@ -17,6 +17,9 @@ type JobContribution = {
   failedJobs: number;
   pendingJobs: number;
   processingJobs: number;
+  autoReviewedJobs: number;
+  geminiAgreedJobs: number;
+  geminiDisagreementJobs: number;
   firstPassApprovedJobs: number;
   regeneratedCompletedJobs: number;
   jobsWithHumanIntervention: number;
@@ -40,6 +43,9 @@ const getJobContribution = (job: Job | undefined): JobContribution => {
       failedJobs: 0,
       pendingJobs: 0,
       processingJobs: 0,
+      autoReviewedJobs: 0,
+      geminiAgreedJobs: 0,
+      geminiDisagreementJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
       jobsWithHumanIntervention: 0,
@@ -64,6 +70,9 @@ const getJobContribution = (job: Job | undefined): JobContribution => {
     failedJobs: job.status === 'failed' ? 1 : 0,
     pendingJobs: job.status === 'pending' ? 1 : 0,
     processingJobs: job.status === 'processing' ? 1 : 0,
+    autoReviewedJobs: reviewCounts.autoReviewedJobs,
+    geminiAgreedJobs: reviewCounts.geminiAgreedJobs,
+    geminiDisagreementJobs: reviewCounts.geminiDisagreementJobs,
     firstPassApprovedJobs:
       job.status === 'completed' && manualRegenerationCount === 0 && reviewCounts.jobsWithHumanIntervention === 0 ? 1 : 0,
     regeneratedCompletedJobs: job.status === 'completed' && manualRegenerationCount > 0 ? 1 : 0,
@@ -91,6 +100,9 @@ const diffJobContribution = (before: Job | undefined, after: Job | undefined): J
     failedJobs: next.failedJobs - previous.failedJobs,
     pendingJobs: next.pendingJobs - previous.pendingJobs,
     processingJobs: next.processingJobs - previous.processingJobs,
+    autoReviewedJobs: next.autoReviewedJobs - previous.autoReviewedJobs,
+    geminiAgreedJobs: next.geminiAgreedJobs - previous.geminiAgreedJobs,
+    geminiDisagreementJobs: next.geminiDisagreementJobs - previous.geminiDisagreementJobs,
     firstPassApprovedJobs: next.firstPassApprovedJobs - previous.firstPassApprovedJobs,
     regeneratedCompletedJobs: next.regeneratedCompletedJobs - previous.regeneratedCompletedJobs,
     jobsWithHumanIntervention: next.jobsWithHumanIntervention - previous.jobsWithHumanIntervention,
@@ -135,6 +147,9 @@ const updateJobAggregationDoc = (
   setIncrementIfNeeded(payload, 'failedJobs', delta.failedJobs);
   setIncrementIfNeeded(payload, 'pendingJobs', delta.pendingJobs);
   setIncrementIfNeeded(payload, 'processingJobs', delta.processingJobs);
+  setIncrementIfNeeded(payload, 'autoReviewedJobs', delta.autoReviewedJobs);
+  setIncrementIfNeeded(payload, 'geminiAgreedJobs', delta.geminiAgreedJobs);
+  setIncrementIfNeeded(payload, 'geminiDisagreementJobs', delta.geminiDisagreementJobs);
   setIncrementIfNeeded(payload, 'firstPassApprovedJobs', delta.firstPassApprovedJobs);
   setIncrementIfNeeded(payload, 'regeneratedCompletedJobs', delta.regeneratedCompletedJobs);
   setIncrementIfNeeded(payload, 'jobsWithHumanIntervention', delta.jobsWithHumanIntervention);
@@ -208,6 +223,15 @@ export const onJobAnalyticsUpdate = onDocumentWritten('jobs/{jobId}', async (eve
       ...(delta.summary.pendingJobs ? { pendingJobs: admin.firestore.FieldValue.increment(delta.summary.pendingJobs) } : {}),
       ...(delta.summary.processingJobs
         ? { processingJobs: admin.firestore.FieldValue.increment(delta.summary.processingJobs) }
+        : {}),
+      ...(jobContributionDelta.autoReviewedJobs
+        ? { autoReviewedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.autoReviewedJobs) }
+        : {}),
+      ...(jobContributionDelta.geminiAgreedJobs
+        ? { geminiAgreedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiAgreedJobs) }
+        : {}),
+      ...(jobContributionDelta.geminiDisagreementJobs
+        ? { geminiDisagreementJobs: admin.firestore.FieldValue.increment(jobContributionDelta.geminiDisagreementJobs) }
         : {}),
       ...(jobContributionDelta.firstPassApprovedJobs
         ? { firstPassApprovedJobs: admin.firestore.FieldValue.increment(jobContributionDelta.firstPassApprovedJobs) }

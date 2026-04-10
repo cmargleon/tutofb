@@ -34,6 +34,9 @@ const emptyStateSummary = (): AnalyticsSummary => ({
   failedJobs: 0,
   pendingJobs: 0,
   processingJobs: 0,
+  autoReviewedJobs: 0,
+  geminiAgreedJobs: 0,
+  geminiDisagreementJobs: 0,
   firstPassApprovedJobs: 0,
   firstPassApprovalRatePct: 0,
   jobsWithHumanIntervention: 0,
@@ -216,6 +219,9 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       failedJobs: 0,
       pendingJobs: 0,
       processingJobs: 0,
+      autoReviewedJobs: 0,
+      geminiAgreedJobs: 0,
+      geminiDisagreementJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
       jobsWithHumanIntervention: 0,
@@ -257,6 +263,9 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       failedJobs: 0,
       pendingJobs: 0,
       processingJobs: 0,
+      autoReviewedJobs: 0,
+      geminiAgreedJobs: 0,
+      geminiDisagreementJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
       jobsWithHumanIntervention: 0,
@@ -316,6 +325,9 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       failedJobs: 0,
       pendingJobs: 0,
       processingJobs: 0,
+      autoReviewedJobs: 0,
+      geminiAgreedJobs: 0,
+      geminiDisagreementJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
       jobsWithHumanIntervention: 0,
@@ -366,6 +378,9 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
       failedJobs: 0,
       pendingJobs: 0,
       processingJobs: 0,
+      autoReviewedJobs: 0,
+      geminiAgreedJobs: 0,
+      geminiDisagreementJobs: 0,
       firstPassApprovedJobs: 0,
       regeneratedCompletedJobs: 0,
       jobsWithHumanIntervention: 0,
@@ -413,10 +428,7 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     summary.completedJobs > 0 ? Math.round((summary.firstPassApprovedJobs / summary.completedJobs) * 100) : 0;
   summary.humanInterventionRatePct = getRatePct(summary.jobsWithHumanIntervention, summary.totalJobs);
   summary.humanReviewAvoidedRatePct = getRatePct(summary.humanReviewAvoidedJobs, summary.totalJobs);
-  summary.geminiPrecisionPct = getRatePct(
-    summary.geminiTruePositiveJobs,
-    summary.geminiTruePositiveJobs + summary.geminiFalsePositiveJobs,
-  );
+  summary.geminiPrecisionPct = getRatePct(summary.geminiAgreedJobs, summary.autoReviewedJobs);
   summary.geminiFalsePositiveRatePct = getRatePct(summary.geminiFalsePositiveJobs, summary.geminiApprovedJobs);
   summary.geminiFalseNegativeRatePct = getRatePct(summary.geminiFalseNegativeJobs, summary.geminiRejectedJobs);
   summary.avgDurationSeconds =

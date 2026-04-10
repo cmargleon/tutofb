@@ -23,14 +23,7 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 };
 
 export const DEFAULT_TRY_ON_PROMPT =
-  `You are generating a high-quality ecommerce fashion image for the Barbie brand.
-
-INPUT IMAGES:
-1) Garment image (reference of clothing or outfit)
-2) Model image (pose, body, face, lighting reference)
-
-GOAL:
-Dress the model using ONLY the garment information provided, following strict rules.
+  `Replace the clothing worn by the model with the garment from the reference image.
 
 STRICT PRESERVATION (HARD CONSTRAINTS - DO NOT MODIFY):
 - Preserve 100% the model's identity (face, body shape, skin tone, proportions)
@@ -48,12 +41,6 @@ STRICT PRESERVATION (HARD CONSTRAINTS - DO NOT MODIFY):
 - Preserve camera angle, lens perspective, framing, and depth of field
 - Preserve the original background exactly as is
 
-AGE & STYLE CONTROL (CRITICAL):
-- The final image must reflect a CHILD-FRIENDLY, TOY-LIKE, BARBIE KIDS aesthetic
-- The model must appear youthful and child-appropriate (Barbie-style, doll-like)
-- No adult fashion styling
-- No mature or sensual appearance
-
 GARMENT FITTING REQUIREMENTS:
 - Fit the garment naturally onto the body respecting the existing pose
 - Follow the exact body orientation and head direction without correction or completion
@@ -63,42 +50,11 @@ GARMENT FITTING REQUIREMENTS:
   - correct stretching/compression at joints
   - accurate contact with the body
 
-FACIAL EXPRESSION:
-- Soft, friendly, innocent expression
-- Natural smile or neutral playful look
-- No seductive or serious editorial expressions
-
-BODY & PRESENCE:
-- Maintain original proportions but ensure a youthful perception
-- No emphasis on curves, chest, or hips
-- No tight or body-contouring styling that suggests adult fashion
-
-STYLING:
-- Clean, simple, playful
-- Bright, friendly lighting
-- Commercial kids catalog style
-
-FORBIDDEN:
-- Sexy, sensual, or mature vibes
-- Fashion editorial look
-- Dramatic lighting
-- Glossy high-fashion styling
-
-REFERENCE STYLE:
-- Kids fashion ecommerce
-- Toy brand catalog (Barbie children line)
-
 GARMENT INTEGRITY (CRITICAL):
 - Preserve the garment's exact color, texture, stitching, and design
 - Do NOT redesign, stylize, or enhance the garment
 - Do NOT hallucinate missing parts - only use visible reference information
 - Ensure perspective consistency with the scene
-
-GARMENT ACCURACY:
-- Match exact color, tone, and texture
-- Preserve logos, prints, and branding only when they are explicitly visible in the garment reference
-- Fit naturally to the body with correct folds and fabric behavior
-- Match the perspective and lighting of the original model image
 
 --------------------------------
 BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
@@ -131,8 +87,10 @@ UNSEEN AREA CONSTRAINTS (CRITICAL)
 COLOR CONSISTENCY (CRITICAL - HARD CONSTRAINT):
 - The garment color MUST exactly match the reference image
 - DO NOT alter hue, saturation, or brightness of the garment
-- DO NOT introduce lighting-based color shifts
-- Correct lighting shifts if needed to preserve true garment color fidelity
+- DO NOT introduce lighting-based color shifts (no darker/lighter reds)
+- The red color must remain uniform across the entire garment
+- Avoid shadows that tint the garment toward maroon, orange, or pink
+- If lighting affects perception, correct it to maintain true color fidelity
 
 - Any part of the garment that is NOT visible in the reference image must be treated as UNKNOWN
 
@@ -150,15 +108,6 @@ STRICTLY FORBIDDEN in unseen areas:
 - The system must behave as if it has ZERO knowledge beyond what is visible
 
 --------------------------------
-BRAND STYLE (BARBIE)
---------------------------------
-
-- Clean, vibrant, commercial look
-- Bright but natural colors
-- Slightly polished fashion catalog aesthetic
-- No grunge, no dark tones, no stylistic distortions
-
---------------------------------
 STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS)
 --------------------------------
 
@@ -173,19 +122,15 @@ STRICT NEGATIVE CONSTRAINTS (AVOID AT ALL COSTS)
 - No artifacts or distortions
 
 --------------------------------
-OUTPUT CONSTRAINTS
+OUTPUT
 --------------------------------
 
-- Photorealistic
-- High resolution
-- No artifacts
-- No extra garments
-- No duplicated limbs
-- No distortion
-
-FINAL RULE:
-If any part of the garment is missing or unclear, DO NOT guess or hallucinate.
-Use only the allowed fallback rules that are appended for the detected garment type.`;
+Generate a photorealistic, high-detail fashion catalog image with:
+- strict pose preservation
+- correct gaze direction
+- accurate garment reproduction
+- ZERO hallucinated branding
+- clean treatment of unseen areas`;
 
 export const DEFAULT_TRY_ON_PROMPT_CASES: Record<TryOnPromptCaseKey, string> = {
   full_outfit: `GARMENT TYPE RULE - CASE A - FULL OUTFIT:

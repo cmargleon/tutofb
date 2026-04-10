@@ -19,6 +19,8 @@ export const Wizard: React.FC = () => {
     models,
     spreadsheetTemplates,
     spreadsheetCategories,
+    selectedClientHasSpreadsheetTemplates,
+    loadingSpreadsheetTemplates,
     loadingData,
     isSubmitting,
     error,
@@ -109,6 +111,8 @@ export const Wizard: React.FC = () => {
             selectedClientId={state.selectedClientId}
             selectedModelId={state.selectedModelId}
             outputMode={state.outputMode}
+            selectedClientHasSpreadsheetTemplates={selectedClientHasSpreadsheetTemplates}
+            loadingSpreadsheetTemplates={loadingSpreadsheetTemplates}
             selectedSpreadsheetTemplateId={state.selectedSpreadsheetTemplateId}
             selectedSpreadsheetCategoryId={state.selectedSpreadsheetCategoryId}
             onClientChange={handleClientChange}

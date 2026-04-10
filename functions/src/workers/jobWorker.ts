@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import sharp from 'sharp';
 import { buildFinalGenerationPrompt } from '../../../shared/src/domain';
+import { getProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { Job, JobAutoReview, JobLog, JobOutput, Provider } from '../../../shared/src/types';
 import { normalizeProviderImageConfig, summarizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { toMillis } from '../../../shared/src/utils/dateUtils';
@@ -260,12 +261,7 @@ const persistGeneratedAttempt = async ({
     },
   });
 
-  const costUsd =
-    claimedJob.provider === 'fal-seedream'
-      ? 0.03
-      : claimedJob.provider === 'fal-banana-pro'
-        ? 0.15
-        : 0.04;
+  const costUsd = getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig);
 
   const currentOutput: JobOutput = {
     id: outputId,

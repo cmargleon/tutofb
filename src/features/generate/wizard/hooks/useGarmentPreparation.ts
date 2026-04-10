@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Client, Model } from '../../../../../shared/src/types';
 import { classifyGarmentViewsWithGemini, previewProductDrafts } from '../../firebase';
 import { getGarmentAvailableViews, getGarmentBodyArea } from '../../garments';
@@ -6,7 +6,6 @@ import { uploadGarmentDrafts } from '../../storage';
 import {
   UploadedGarmentDraft,
   WizardState,
-  createInitialPoseSuggestionState,
 } from '../../types';
 import {
   getUploadFailureMessage,
@@ -21,9 +20,66 @@ import {
   mergeGarmentClassificationResults,
 } from './garmentClassification';
 
+const getErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message
+    ? error.message
+    : fallback;
+
+const shouldClassifyGarmentSpreadsheetData = (
+  outputMode: WizardState['outputMode'],
+  clientId: string | null | undefined,
+  spreadsheetTemplateId: string | null,
+): boolean => outputMode === 'spreadsheet' && Boolean(clientId) && Boolean(spreadsheetTemplateId);
+
+const getGarmentsNeedingClassification = (
+  garments: UploadedGarmentDraft[],
+  shouldClassifySpreadsheetData: boolean,
+): UploadedGarmentDraft[] =>
+  garments.filter((garment) => {
+    const needsPhotoViews = garment.originalPhotos.some((photo) => photo.classification.status !== 'classified');
+    const needsBodyArea = !garment.garmentBodyArea;
+    const needsSpreadsheetMatch = shouldClassifySpreadsheetData && (!garment.matchedCategoryId || !garment.matchedColor);
+
+    if (shouldClassifySpreadsheetData) {
+      return needsPhotoViews || needsBodyArea || needsSpreadsheetMatch;
+    }
+
+    return needsBodyArea || (garment.originalPhotos.length > 1 && needsPhotoViews);
+  });
+
+const buildProductDraftPreviewGarments = (garments: UploadedGarmentDraft[]) =>
+  garments.map((garment) => ({
+    id: garment.id,
+    name: garment.name,
+    storagePath: garment.originalPhotos[0]?.upload.storagePath || garment.upload.storagePath || '',
+    isMultiAngle: garment.isMultiAngle,
+    sourceType: garment.sourceType,
+    originalFileNames: garment.originalFileNames,
+    originalPhotoCount: garment.originalPhotos.length,
+    matchedCategoryId: garment.matchedCategoryId || null,
+    matchedCategoryLabel: garment.matchedCategoryLabel || null,
+    matchedCategoryConfidence: garment.matchedCategoryConfidence ?? null,
+    matchedCategoryReasoning: garment.matchedCategoryReasoning || null,
+    matchedColor: garment.matchedColor || null,
+    matchedColorConfidence: garment.matchedColorConfidence ?? null,
+    matchedColorReasoning: garment.matchedColorReasoning || null,
+    photos: garment.originalPhotos
+      .filter((photo) => photo.upload.storagePath)
+      .map((photo) => ({
+        id: photo.id,
+        fileName: photo.fileName,
+        storagePath: photo.upload.storagePath!,
+        sourceIndex: photo.sourceIndex,
+        view: photo.classification.view || 'front',
+        confidence: photo.classification.confidence,
+        reasoning: photo.classification.reasoning,
+        classifiedBy: photo.classification.classifiedBy || 'assumed_single_front',
+      })),
+  }));
+
 interface GarmentPreparationParams {
   state: WizardState;
-  setState: React.Dispatch<React.SetStateAction<WizardState>>;
+  setState: Dispatch<SetStateAction<WizardState>>;
   draftBatchId: string | null;
   setDraftBatchId: (id: string | null) => void;
   setFlowError: (error: string | null) => void;
@@ -46,7 +102,16 @@ export const useGarmentPreparation = ({
   suggestionSignature,
   productDraftSignature,
 }: GarmentPreparationParams) => {
-  const patchGarmentUpload = (garmentId: string, patch: Parameters<typeof patchGarmentUploadState>[2]) => {
+  const stateRef = useRef(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  const patchGarmentUpload = (
+    garmentId: string,
+    patch: Parameters<typeof patchGarmentUploadState>[2],
+  ) => {
     setState((current) => ({
       ...current,
       garments: patchGarmentUploadState(current.garments, garmentId, patch),
@@ -56,12 +121,14 @@ export const useGarmentPreparation = ({
   const ensureGarmentsUploadedForSuggestions = async (
     signature: string,
   ): Promise<{ activeDraftBatchId: string; garments: UploadedGarmentDraft[] }> => {
+    const currentState = stateRef.current;
     const activeDraftBatchId = draftBatchId ?? crypto.randomUUID();
+
     if (!draftBatchId) {
       setDraftBatchId(activeDraftBatchId);
     }
 
-    const garmentsToUpload = state.garments.filter(
+    const garmentsToUpload = currentState.garments.filter(
       (garment) => !isGarmentUploadedForBatch(garment, activeDraftBatchId),
     );
 
@@ -83,7 +150,11 @@ export const useGarmentPreparation = ({
           })
         : { uploaded: [], failed: [] };
 
-    const nextGarments = mergeGarmentUploadResults(state.garments, uploadResult, activeDraftBatchId);
+    const nextGarments = mergeGarmentUploadResults(
+      stateRef.current.garments,
+      uploadResult,
+      activeDraftBatchId,
+    );
 
     if (uploadResult.uploaded.length > 0 || uploadResult.failed.length > 0) {
       setState((current) => ({
@@ -112,7 +183,9 @@ export const useGarmentPreparation = ({
   };
 
   const preparePoseSuggestions = async (signature: string) => {
-    if (!selectedModel || state.garments.length === 0) {
+    const currentState = stateRef.current;
+
+    if (!selectedModel || currentState.garments.length === 0) {
       return;
     }
 
@@ -129,22 +202,16 @@ export const useGarmentPreparation = ({
 
     try {
       const { garments: uploadedGarments } = await ensureGarmentsUploadedForSuggestions(signature);
-      const shouldClassifySpreadsheetData = (
-        state.outputMode === 'spreadsheet'
-        && Boolean(selectedClient?.id)
-        && Boolean(state.selectedSpreadsheetTemplateId)
+      const latestState = stateRef.current;
+      const shouldClassifySpreadsheetData = shouldClassifyGarmentSpreadsheetData(
+        latestState.outputMode,
+        selectedClient?.id,
+        latestState.selectedSpreadsheetTemplateId,
       );
-      const garmentsNeedingClassification = uploadedGarments.filter((garment) => {
-        const needsPhotoViews = garment.originalPhotos.some((photo) => photo.classification.status !== 'classified');
-        const needsBodyArea = !garment.garmentBodyArea;
-        const needsSpreadsheetMatch = shouldClassifySpreadsheetData && (!garment.matchedCategoryId || !garment.matchedColor);
-
-        if (shouldClassifySpreadsheetData) {
-          return needsPhotoViews || needsBodyArea || needsSpreadsheetMatch;
-        }
-
-        return needsBodyArea || (garment.originalPhotos.length > 1 && needsPhotoViews);
-      });
+      const garmentsNeedingClassification = getGarmentsNeedingClassification(
+        uploadedGarments,
+        shouldClassifySpreadsheetData,
+      );
 
       let preparedGarments = uploadedGarments;
 
@@ -157,8 +224,8 @@ export const useGarmentPreparation = ({
 
         const classificationResult = await classifyGarmentViewsWithGemini({
           clientId: selectedClient?.id || null,
-          spreadsheetTemplateId: state.selectedSpreadsheetTemplateId || null,
-          fallbackCategoryId: state.selectedSpreadsheetCategoryId || null,
+          spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId || null,
+          fallbackCategoryId: latestState.selectedSpreadsheetCategoryId || null,
           garments: garmentsNeedingClassification.map((garment) => ({
             garmentId: garment.id,
             garmentName: garment.name,
@@ -205,10 +272,12 @@ export const useGarmentPreparation = ({
         },
       }));
       setFlowError(null);
-    } catch (prepareError: any) {
-      const message =
-        prepareError?.message
-        || 'No se pudieron sugerir las poses automáticamente. Puedes seguir con selección manual.';
+    } catch (prepareError) {
+      const message = getErrorMessage(
+        prepareError,
+        'No se pudieron sugerir las poses automáticamente. Puedes seguir con selección manual.',
+      );
+
       setState((current) => {
         const garmentIds = new Set<string>(
           current.garments
@@ -234,12 +303,14 @@ export const useGarmentPreparation = ({
   };
 
   const prepareProductDrafts = async (signature: string) => {
+    const currentState = stateRef.current;
+
     if (
-      state.outputMode !== 'spreadsheet'
+      currentState.outputMode !== 'spreadsheet'
       || !selectedClient
       || !selectedModel
-      || !state.selectedSpreadsheetTemplateId
-      || state.garments.length === 0
+      || !currentState.selectedSpreadsheetTemplateId
+      || currentState.garments.length === 0
     ) {
       return;
     }
@@ -256,39 +327,13 @@ export const useGarmentPreparation = ({
 
     try {
       const { garments: uploadedGarments } = await ensureGarmentsUploadedForSuggestions(signature);
+      const latestState = stateRef.current;
       const result = await previewProductDrafts({
         clientId: selectedClient.id!,
         modelId: selectedModel.id!,
-        spreadsheetTemplateId: state.selectedSpreadsheetTemplateId,
-        fallbackCategoryId: state.selectedSpreadsheetCategoryId || null,
-        garments: uploadedGarments.map((garment) => ({
-          id: garment.id,
-          name: garment.name,
-          storagePath: garment.originalPhotos[0]?.upload.storagePath || garment.upload.storagePath || '',
-          isMultiAngle: garment.isMultiAngle,
-          sourceType: garment.sourceType,
-          originalFileNames: garment.originalFileNames,
-          originalPhotoCount: garment.originalPhotos.length,
-          matchedCategoryId: garment.matchedCategoryId || null,
-          matchedCategoryLabel: garment.matchedCategoryLabel || null,
-          matchedCategoryConfidence: garment.matchedCategoryConfidence ?? null,
-          matchedCategoryReasoning: garment.matchedCategoryReasoning || null,
-          matchedColor: garment.matchedColor || null,
-          matchedColorConfidence: garment.matchedColorConfidence ?? null,
-          matchedColorReasoning: garment.matchedColorReasoning || null,
-          photos: garment.originalPhotos
-            .filter((photo) => photo.upload.storagePath)
-            .map((photo) => ({
-              id: photo.id,
-              fileName: photo.fileName,
-              storagePath: photo.upload.storagePath!,
-              sourceIndex: photo.sourceIndex,
-              view: photo.classification.view || 'front',
-              confidence: photo.classification.confidence,
-              reasoning: photo.classification.reasoning,
-              classifiedBy: photo.classification.classifiedBy || 'assumed_single_front',
-            })),
-        })),
+        spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId,
+        fallbackCategoryId: latestState.selectedSpreadsheetCategoryId || null,
+        garments: buildProductDraftPreviewGarments(uploadedGarments),
       });
 
       setState((current) => ({
@@ -300,10 +345,12 @@ export const useGarmentPreparation = ({
           signature,
         },
       }));
-    } catch (prepareError: any) {
-      const message =
-        prepareError?.message
-        || 'No se pudieron preparar los drafts del producto. Puedes reintentar desde este paso.';
+    } catch (prepareError) {
+      const message = getErrorMessage(
+        prepareError,
+        'No se pudieron preparar los drafts del producto. Puedes reintentar desde este paso.',
+      );
+
       setState((current) => ({
         ...current,
         productDraftPreparation: {

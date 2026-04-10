@@ -13,7 +13,7 @@ import {
   Provider,
   ProviderImageConfig,
 } from '../../../shared/src/types';
-import { MODEL_PHOTO_PROVIDER_COSTS } from '../../../shared/src/constants/providerCosts';
+import { getModelPhotoProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import {
   generateModelPhotoWithSeedreamV45,
@@ -230,7 +230,7 @@ export const generateModelPose = onCall(
     }
 
     // Write cost log
-    const costPerPhoto = MODEL_PHOTO_PROVIDER_COSTS[provider] ?? 0;
+    const costPerPhoto = getModelPhotoProviderCostUsd(provider, normalizedImageConfig);
     const estimatedCostUsd = costPerPhoto * photos.length;
     await admin.firestore().collection('model_generation_logs').add({
       provider,

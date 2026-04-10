@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -53,8 +54,16 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
     ) : catalog.filteredModelsCount === 0 ? (
       <EmptyState
         title="No hay modelos"
-        description="Registra tu primer modelo usando el formulario de arriba."
+        description="Todavía no hay modelos registrados. Crea el primero desde la vista Generar."
         icon={<UserSquare2 className="h-6 w-6" />}
+        action={(
+          <Link
+            to="/models/generar"
+            className="inline-flex items-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
+          >
+            Ir a Generar
+          </Link>
+        )}
       />
     ) : (
       <ul className="divide-y divide-gray-200">

@@ -147,7 +147,7 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
         title: model.name,
         subtitle: model.clientNameSnapshot,
         keywords: [model.name, model.clientNameSnapshot, model.id!],
-        href: `/models#model-${model.id}`,
+        href: `/models/catalogo#model-${model.id}`,
         meta: `${model.poseCount || 0} poses`,
       })),
       ...batches.slice(0, 6).map((batch) => ({
@@ -196,7 +196,7 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
         title: model.name,
         subtitle: model.clientNameSnapshot,
         keywords: [model.name, model.clientNameSnapshot, model.id!],
-        href: `/models#model-${model.id}`,
+        href: `/models/catalogo#model-${model.id}`,
         meta: `${model.poseCount || 0} poses`,
       }))
       .filter((result) =>

@@ -1,20 +1,13 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  BarChart3,
-  Images,
-  LayoutDashboard,
+  ChevronDown,
+  ChevronRight,
   LogOut,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  Rows3,
-  Settings,
-  Shield,
   Sun,
-  UserSquare2,
-  Users,
-  Wand2,
   X,
 } from 'lucide-react';
 import { useAuth, useRole } from '../../features/auth/AuthProvider';
@@ -22,6 +15,7 @@ import { useTheme } from '../../features/theme/ThemeProvider';
 import { auth } from '../../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
+import { buildNavigation, isNavigationEntryActive, type NavigationGroup } from './navigation';
 
 interface SidebarProps {
   isDesktop: boolean;
@@ -43,25 +37,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
-
-  const navItems = [
-    { name: 'Dashboard',   path: '/',          icon: LayoutDashboard, visible: role.isActive           },
-    { name: 'Generar',     path: '/generate',   icon: Wand2,           visible: role.canCreateBatches  },
-    { name: 'Cola',        path: '/cola',       icon: Rows3,           visible: role.canEvaluate        },
-    { name: 'Clientes',    path: '/clients',    icon: Users,           visible: role.canManageClients   },
-    { name: 'Modelos',     path: '/models',     icon: UserSquare2,     visible: role.canManageModels    },
-    { name: 'Catálogo',    path: '/catalogo',   icon: Images,          visible: role.canEvaluate        },
-    { name: 'Analíticas',  path: '/analytics',  icon: BarChart3,       visible: role.canAccessAnalytics },
-    { name: 'Usuarios',       path: '/users',         icon: Shield,    visible: role.canManageUsers     },
-    { name: 'Configuración',  path: '/configuracion', icon: Settings,  visible: role.canManageUsers     },
-  ];
-
-  const filteredNav = navItems.filter((item) => item.visible);
+  const navigation = buildNavigation(role);
   const collapsed = isDesktop && isSidebarCollapsed;
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  const isActiveRoute = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
+  useEffect(() => {
+    setOpenGroups((current) => {
+      let didChange = false;
+      const next = { ...current };
+
+      navigation.forEach((entry) => {
+        if (entry.type === 'group' && isNavigationEntryActive(location.pathname, entry) && !next[entry.name]) {
+          next[entry.name] = true;
+          didChange = true;
+        }
+      });
+
+      return didChange ? next : current;
+    });
+  }, [location.pathname, navigation]);
+
+  const toggleGroup = (group: NavigationGroup) => {
+    if (collapsed) {
+      onToggleSidebar();
+      setOpenGroups((current) => ({ ...current, [group.name]: true }));
+      return;
+    }
+
+    setOpenGroups((current) => ({
+      ...current,
+      [group.name]: !(current[group.name] ?? isNavigationEntryActive(location.pathname, group)),
+    }));
   };
 
   const handleLogout = async () => {
@@ -107,13 +113,74 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        {filteredNav.map((item) => {
-          const active = isActiveRoute(item.path);
+        {navigation.map((entry) => {
+          const active = isNavigationEntryActive(location.pathname, entry);
+
+          if (entry.type === 'group') {
+            const isOpen = !collapsed && (openGroups[entry.name] ?? active);
+
+            return (
+              <div key={entry.name} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(entry)}
+                  title={collapsed ? entry.name : undefined}
+                  className={`flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    collapsed ? 'justify-center' : 'gap-3'
+                  } ${
+                    active
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                  aria-expanded={isOpen}
+                >
+                  <entry.icon className={`w-5 h-5 shrink-0 ${active ? 'text-indigo-600' : ''}`} />
+                  {!collapsed ? <span>{entry.name}</span> : null}
+                  {!collapsed ? (
+                    isOpen ? (
+                      <ChevronDown className="ml-auto h-4 w-4 shrink-0" />
+                    ) : (
+                      <ChevronRight className="ml-auto h-4 w-4 shrink-0" />
+                    )
+                  ) : null}
+                </button>
+
+                {isOpen ? (
+                  <div className="space-y-1 pl-11">
+                    {entry.children.map((child) => {
+                      const childActive = isNavigationEntryActive(location.pathname, child);
+
+                      return (
+                        <Link
+                          key={child.path}
+                          to={child.path}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                            childActive
+                              ? 'bg-indigo-50 text-indigo-700'
+                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              childActive ? 'bg-indigo-600' : 'bg-gray-300'
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <span>{child.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            );
+          }
+
           return (
             <Link
-              key={item.name}
-              to={item.path}
-              title={collapsed ? item.name : undefined}
+              key={entry.path}
+              to={entry.path}
+              title={collapsed ? entry.name : undefined}
               className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 collapsed ? 'justify-center' : 'gap-3'
               } ${
@@ -122,8 +189,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               }`}
             >
-              <item.icon className={`w-5 h-5 shrink-0 ${active ? 'text-indigo-600' : ''}`} />
-              {!collapsed ? <span>{item.name}</span> : null}
+              <entry.icon className={`w-5 h-5 shrink-0 ${active ? 'text-indigo-600' : ''}`} />
+              {!collapsed ? <span>{entry.name}</span> : null}
               {active && !collapsed ? (
                 <span className="ml-auto h-1.5 w-1.5 rounded-full bg-indigo-600" aria-hidden="true" />
               ) : null}

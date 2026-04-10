@@ -6,6 +6,7 @@ import { useNotifications } from '../features/notifications/useNotifications';
 import { ImageThumb, StatusBadge } from './ui';
 import { Sidebar } from './layout/Sidebar';
 import { GlobalSearch } from './layout/GlobalSearch';
+import { buildNavigation, getCurrentPageTitle } from './layout/navigation';
 
 export const Layout: React.FC = () => {
   const role = useRole();
@@ -17,6 +18,7 @@ export const Layout: React.FC = () => {
 
   const { queueCount, notifications, unreadCount, isNotifOpen, notifRef, onBellClick, onCloseNotif } =
     useNotifications();
+  const navigation = buildNavigation(role);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 1280px)');
@@ -56,24 +58,7 @@ export const Layout: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isSearchOpen, onCloseNotif]);
 
-  const navItems = [
-    { name: 'Dashboard',   path: '/'          },
-    { name: 'Generar',     path: '/generate'   },
-    { name: 'Cola',        path: '/cola'       },
-    { name: 'Clientes',    path: '/clients'    },
-    { name: 'Modelos',     path: '/models'     },
-    { name: 'Catálogo',    path: '/catalogo'   },
-    { name: 'Analíticas',  path: '/analytics'  },
-    { name: 'Usuarios',    path: '/users'      },
-    { name: 'Configuración', path: '/configuracion' },
-  ];
-
-  const isActiveRoute = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
-  };
-
-  const currentPageTitle = navItems.find((item) => isActiveRoute(item.path))?.name ?? '';
+  const currentPageTitle = getCurrentPageTitle(location.pathname, navigation);
 
   const shellStyle = {
     ['--app-sidebar-width' as const]: isDesktop ? (isSidebarCollapsed ? '5rem' : '16rem') : '0rem',

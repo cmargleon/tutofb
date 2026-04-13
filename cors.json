@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://tutofb-260320-1003.web.app", "https://tutofb-260320-1003.firebaseapp.com"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Content-Length", "Content-Disposition", "Cache-Control"],
+    "maxAgeSeconds": 3600
+  }
+]

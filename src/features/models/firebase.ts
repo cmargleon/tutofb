@@ -1,6 +1,6 @@
 import { db, auth, storage } from '../../firebase';
 import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc, where } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject, getBytes } from 'firebase/storage';
 import {
   Model,
   ModelIdentityTraits,
@@ -303,14 +303,9 @@ export const replaceModelPoseWithGeneratedPhoto = async (
 
   const modelRef = doc(db, 'models', model.id);
   const storageRootPath = getModelStorageRootPath(model.id, model.clientId, model.storageRootPath);
-  const downloadUrl = await getDownloadURL(ref(storage, generatedPhoto.storagePath));
-  const response = await fetch(downloadUrl);
-
-  if (!response.ok) {
-    throw new Error('No se pudo descargar la imagen regenerada.');
-  }
-
-  const imageBlob = await response.blob();
+  const sourceRef = ref(storage, generatedPhoto.storagePath);
+  const imageBytes = await getBytes(sourceRef);
+  const imageBlob = new Blob([imageBytes], { type: generatedPhoto.contentType || 'image/png' });
   const extension = generatedPhoto.contentType.includes('jpeg') || generatedPhoto.contentType.includes('jpg')
     ? 'jpg'
     : 'png';

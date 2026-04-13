@@ -10,7 +10,9 @@ import { useConfirm, useConfirmByName, useToast } from '../../feedback/FeedbackP
 import { createEmptyModelIdentityTraits, normalizeModelIdentityTraits } from '../identityTraits';
 import {
   archiveModel,
+  downloadModelBundle,
   generateModelPoses,
+  importModelBundle,
   permanentlyDeleteModel,
   replaceModelPoseWithGeneratedPhoto,
   restoreModel,
@@ -37,8 +39,10 @@ export interface UseModelLibraryResult {
   editFilesToAdd: File[];
   editPoseIdsToRemove: string[];
   isSavingEdit: boolean;
+  isImportingBundle: boolean;
   taggingModelId: string | null;
-  regeneratingPoseId: string | null;
+  exportingModelId: string | null;
+  regeneratingPoseIds: Set<string>;
   handleStartEdit: (model: Model) => void;
   handleCancelEdit: () => void;
   handleEditFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -54,6 +58,8 @@ export interface UseModelLibraryResult {
   handleRestore: (model: Model) => Promise<void>;
   handlePermanentDelete: (model: Model) => Promise<void>;
   handleTagPosesWithGemini: (model: Model) => Promise<void>;
+  handleExportModelBundle: (model: Model) => Promise<void>;
+  handleImportModelBundle: (clientId: string, file: File) => Promise<boolean>;
 }
 
 interface UseModelLibraryOptions {
@@ -171,8 +177,10 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
   const [editFilesToAdd, setEditFilesToAdd] = useState<File[]>([]);
   const [editPoseIdsToRemove, setEditPoseIdsToRemove] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isImportingBundle, setIsImportingBundle] = useState(false);
   const [taggingModelId, setTaggingModelId] = useState<string | null>(null);
-  const [regeneratingPoseId, setRegeneratingPoseId] = useState<string | null>(null);
+  const [exportingModelId, setExportingModelId] = useState<string | null>(null);
+  const [regeneratingPoseIds, setRegeneratingPoseIds] = useState<Set<string>>(new Set());
 
   const handleStartEdit = (model: Model) => {
     setEditingId(model.id ?? null);
@@ -267,7 +275,7 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     const referencePose = findFrontFullBodyReferencePose(model);
     if (!recipe || !referencePose) return;
 
-    setRegeneratingPoseId(pose.id);
+    setRegeneratingPoseIds((prev) => new Set(prev).add(pose.id));
     try {
       const response = await generateModelPoses({
         prompt: buildReferencePosePromptFromRecipe(CATALOG_REGEN_PROMPT, recipe),
@@ -308,7 +316,11 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
         description: err.message || 'Inténtalo nuevamente en un momento.',
       });
     } finally {
-      setRegeneratingPoseId(null);
+      setRegeneratingPoseIds((prev) => {
+        const next = new Set(prev);
+        next.delete(pose.id);
+        return next;
+      });
     }
   };
 
@@ -471,6 +483,55 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     }
   };
 
+  const handleExportModelBundle = async (model: Model) => {
+    if (!model.id) return;
+
+    setExportingModelId(model.id);
+    try {
+      await downloadModelBundle(model);
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos exportar el modelo',
+        description: err.message || 'Vuelve a intentarlo en un momento.',
+      });
+    } finally {
+      setExportingModelId(null);
+    }
+  };
+
+  const handleImportModelBundle = async (clientId: string, file: File): Promise<boolean> => {
+    const trimmedClientId = clientId.trim();
+    if (!trimmedClientId || !file) {
+      toast({
+        tone: 'warning',
+        title: 'Faltan datos para importar',
+        description: 'Selecciona un cliente de destino y un ZIP válido antes de continuar.',
+      });
+      return false;
+    }
+
+    setIsImportingBundle(true);
+    try {
+      const result = await importModelBundle(trimmedClientId, file);
+      toast({
+        tone: 'success',
+        title: 'Modelo importado',
+        description: `"${result.modelName}" quedó disponible con ${result.importedPoseCount} pose${result.importedPoseCount === 1 ? '' : 's'}.`,
+      });
+      return true;
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos importar el modelo',
+        description: err.message || 'Revisa el ZIP y vuelve a intentarlo.',
+      });
+      return false;
+    } finally {
+      setIsImportingBundle(false);
+    }
+  };
+
   return {
     editingId,
     editName,
@@ -482,8 +543,10 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     editFilesToAdd,
     editPoseIdsToRemove,
     isSavingEdit,
+    isImportingBundle,
     taggingModelId,
-    regeneratingPoseId,
+    exportingModelId,
+    regeneratingPoseIds,
     handleStartEdit,
     handleCancelEdit,
     handleEditFileChange,
@@ -496,5 +559,7 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     handleRestore,
     handlePermanentDelete,
     handleTagPosesWithGemini,
+    handleExportModelBundle,
+    handleImportModelBundle,
   };
 };

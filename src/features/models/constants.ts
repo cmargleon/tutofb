@@ -61,7 +61,7 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
     id: 'full-profile-left',
     label: 'Perfil lateral',
     group: 'Cuerpo completo',
-    shotType: 'full body, side profile, facing left',
+    shotType: 'full body, strict left side profile, left side of body toward camera, subject facing right',
     promptProfile: {
       category: 'full_body',
       orientation: 'profile_left',
@@ -360,7 +360,7 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
     id: 'portrait-profile-left',
     label: 'Retrato perfil izquierdo',
     group: 'Retrato',
-    shotType: 'portrait, full left side profile, looking completely to the left',
+    shotType: 'portrait, strict left side profile, left cheek and left ear facing camera, subject facing right',
     promptProfile: {
       category: 'portrait',
       orientation: 'profile_left',
@@ -370,7 +370,7 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
     id: 'portrait-profile-right',
     label: 'Retrato perfil derecho',
     group: 'Retrato',
-    shotType: 'portrait, full right side profile, looking completely to the right',
+    shotType: 'portrait, strict right side profile, right cheek and right ear facing camera, subject facing left',
     promptProfile: {
       category: 'portrait',
       orientation: 'profile_right',

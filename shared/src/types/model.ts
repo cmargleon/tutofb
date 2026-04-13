@@ -58,6 +58,44 @@ export interface Model {
   createdByUid: string;
 }
 
+export interface ModelBundlePoseManifestEntry {
+  id: string;
+  archivePath: string;
+  fileName: string;
+  contentType: string;
+  width?: number | null;
+  height?: number | null;
+  aiClassification?: PoseAiClassification | null;
+  createdAt: TimestampLike;
+}
+
+export interface ModelBundleManifest {
+  schemaVersion: 1;
+  exportedAt: string;
+  sourceModelId: string;
+  sourceClientId: string;
+  sourceClientName: string;
+  name: string;
+  identityTraits?: ModelIdentityTraits | null;
+  status?: CatalogEntityStatus;
+  generatedPhotoCount?: number;
+  generatedPhotoCostUsd?: number;
+  poses: ModelBundlePoseManifestEntry[];
+}
+
+export interface ImportModelBundleRequest {
+  clientId: string;
+  storagePath: string;
+  originalFileName: string;
+}
+
+export interface ImportModelBundleResponse {
+  success: boolean;
+  modelId: string;
+  modelName: string;
+  importedPoseCount: number;
+}
+
 export type ModelPhotoProvider =
   | 'fal-seedream-v4.5'
   | 'fal-banana-pro'

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   ChevronDown,
   ChevronUp,
+  Download,
   Edit2,
   Image as ImageIcon,
   Sparkles,
@@ -202,6 +203,19 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                     >
                       Editar
                     </Button>
+                    {hasPoses && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={Download}
+                        loading={library.exportingModelId === model.id}
+                        disabled={library.exportingModelId !== null}
+                        onClick={() => void library.handleExportModelBundle(model)}
+                        title="Exportar fotos y metadata del modelo"
+                      >
+                        Exportar
+                      </Button>
+                    )}
                     {hasPoses && (
                       <Button
                         variant="ghost"

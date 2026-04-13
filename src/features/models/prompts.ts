@@ -157,13 +157,15 @@ const getOrientationPromptRules = (
       ];
     case 'profile_left':
       return [
-        'Use a clean left side profile with the body orientation unmistakably lateral.',
-        'Avoid drifting back toward a front three-quarter angle.',
+        'Turn the subject to a strict left side profile: the left cheek, left ear, and left side of the body are the only visible features facing the camera.',
+        'The subject is clearly facing to the right side of the frame.',
+        'Avoid any drift back toward a three-quarter or front angle.',
       ];
     case 'profile_right':
       return [
-        'Use a clean right side profile with the body orientation unmistakably lateral.',
-        'Avoid drifting back toward a front three-quarter angle.',
+        'Turn the subject to a strict right side profile: the right cheek, right ear, and right side of the body are the only visible features facing the camera.',
+        'The subject is clearly facing to the left side of the frame.',
+        'Avoid any drift back toward a three-quarter or front angle.',
       ];
     case 'back':
       return [

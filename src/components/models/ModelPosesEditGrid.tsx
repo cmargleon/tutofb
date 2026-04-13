@@ -18,7 +18,7 @@ export const ModelPosesEditGrid: React.FC<ModelPosesEditGridProps> = ({ model, l
     <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
       {model.poses.map((pose) => {
         const poseMarked = library.editPoseIdsToRemove.includes(pose.id);
-        const isRegenerating = library.regeneratingPoseId === pose.id;
+        const isRegenerating = library.regeneratingPoseIds.has(pose.id);
         const regeneration = library.getPoseRegenerationAvailability(model, pose);
         return (
           <div

@@ -1,8 +1,11 @@
+import FileSaver from 'file-saver';
 import { db, auth, storage } from '../../firebase';
 import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject, getBytes } from 'firebase/storage';
 import {
   Model,
+  ImportModelBundleRequest,
+  ImportModelBundleResponse,
   ModelIdentityTraits,
   ModelPoseTaggingRequest,
   ModelPoseTaggingResponse,
@@ -19,6 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
+import firebaseConfig from '../../../firebase-applet-config.json';
 
 interface UpdateModelInput {
   name: string;
@@ -47,9 +51,30 @@ interface CreateModelPoseInput {
 }
 
 const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+const { saveAs } = FileSaver;
 
 const getModelStorageRootPath = (modelId: string, clientId: string, existingRootPath?: string) =>
   existingRootPath || `models/${clientId}/${modelId}`;
+
+const buildModelBundleFilename = (model: Model) =>
+  [
+    sanitizeFileName(model.clientNameSnapshot || 'cliente'),
+    sanitizeFileName(model.name || 'modelo'),
+    sanitizeFileName(model.id || 'model'),
+  ].join('_');
+
+const getModelBundleDownloadUrl = (): string => {
+  const projectId = firebaseConfig.projectId;
+  if (!projectId) {
+    throw new Error('No se encontró el projectId de Firebase para exportar el modelo.');
+  }
+
+  if (import.meta.env?.VITE_USE_FIREBASE_EMULATORS === 'true') {
+    return `http://127.0.0.1:5001/${projectId}/us-central1/downloadModelBundle`;
+  }
+
+  return `https://us-central1-${projectId}.cloudfunctions.net/downloadModelBundle`;
+};
 
 interface SubscribeModelsOptions {
   includeArchived?: boolean;
@@ -273,6 +298,96 @@ export const permanentlyDeleteModel = async (id: string) => {
     'permanentlyDeleteModel',
   );
   await callable({ id });
+};
+
+export const downloadModelBundle = async (model: Model): Promise<void> => {
+  if (!auth.currentUser) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  if (!model.id) {
+    throw new Error('Modelo no encontrado.');
+  }
+
+  const idToken = await auth.currentUser.getIdToken();
+  let response: globalThis.Response;
+
+  try {
+    response = await fetch(getModelBundleDownloadUrl(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ modelId: model.id }),
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        'No se pudo conectar con la función de exportación. Si estás en localhost, reinicia o despliega Functions para aplicar el cambio.',
+      );
+    }
+
+    throw error;
+  }
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type') || '';
+    let message = `No se pudo exportar el modelo (${response.status}).`;
+
+    try {
+      if (contentType.includes('application/json')) {
+        const payload = (await response.json()) as { message?: string };
+        if (payload.message) {
+          message = payload.message;
+        }
+      } else {
+        const text = (await response.text()).trim();
+        if (text) {
+          message = text;
+        }
+      }
+    } catch {
+      // Conservamos el mensaje por defecto si la respuesta no se puede parsear.
+    }
+
+    throw new Error(message);
+  }
+
+  const payload = (await response.json()) as { downloadUrl: string; filename: string };
+  saveAs(payload.downloadUrl, payload.filename);
+};
+
+export const importModelBundle = async (
+  clientId: string,
+  file: File,
+): Promise<ImportModelBundleResponse> => {
+  if (!auth.currentUser) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  const storagePath = `model_imports/${auth.currentUser.uid}/${crypto.randomUUID()}/${sanitizeFileName(file.name)}`;
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, file, { contentType: file.type || 'application/zip' });
+
+  const callable = httpsCallable<ImportModelBundleRequest, ImportModelBundleResponse>(
+    functions,
+    'importModelBundle',
+    { timeout: 300000 },
+  );
+
+  try {
+    const result = await callable({
+      clientId,
+      storagePath,
+      originalFileName: file.name,
+    });
+
+    return result.data;
+  } catch (error) {
+    await deleteObject(storageRef).catch(() => undefined);
+    throw error;
+  }
 };
 
 export const generateModelPoses = async (

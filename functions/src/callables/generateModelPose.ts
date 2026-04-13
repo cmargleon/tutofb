@@ -2,111 +2,15 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { FAL_KEY, OPENAI_API_KEY } from '../config/runtime';
 import {
-  FalBananaProImageConfig,
-  FalNanoBanana2ImageConfig,
-  FalSeedream5ImageConfig,
-  FalSeedreamImageConfig,
   GenerateModelPhotoRequest,
   GenerateModelPhotoResponse,
-  ModelPhotoProvider,
-  OpenAIImageConfig,
-  Provider,
-  ProviderImageConfig,
 } from '../../../shared/src/types';
 import { getModelPhotoProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import {
-  generateModelPhotoWithSeedreamV45,
-  generateModelPhotoWithBananaPro,
-  generateModelPhotoWithNanoBanana2,
-  generateModelPhotoWithSeedream5,
-  generateModelPhotoWithOpenAI,
-  editModelPhotoWithBananaPro,
-  editModelPhotoWithNanoBanana2,
-  editModelPhotoWithSeedream5,
-  editModelPhotoWithOpenAI,
-  editModelPhotoWithSeedreamV45,
-  TextToImageResult,
-} from '../providers/textToImage';
-
-const OPENAI_RATE_LIMIT_MAX_RETRIES = 5;
-const DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS = 15_000;
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-const isOpenAIRateLimitError = (error: unknown): boolean => {
-  const message = String((error as { message?: string } | null)?.message ?? error ?? '');
-  return message.includes('rate_limit_exceeded') || /rate limit/i.test(message);
-};
-
-const getOpenAIRetryDelayMs = (error: unknown): number => {
-  const message = String((error as { message?: string } | null)?.message ?? error ?? '');
-  const match = message.match(/try again in\s+(\d+(?:\.\d+)?)s/i);
-  if (!match) return DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS;
-
-  const seconds = Number(match[1]);
-  if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS;
-  return Math.ceil(seconds * 1000);
-};
-
-const mapModelPhotoProviderToProvider = (provider: ModelPhotoProvider): Provider => {
-  switch (provider) {
-    case 'fal-seedream-v4.5':
-      return 'fal-seedream';
-    case 'fal-banana-pro':
-      return 'fal-banana-pro';
-    case 'openai-dalle':
-      return 'openai-gpt-image-1.5';
-    case 'fal-nano-banana-2':
-      return 'fal-nano-banana-2';
-    case 'fal-seedream-5':
-      return 'fal-seedream-5';
-    default:
-      throw new Error(`Proveedor de foto de modelo no reconocido: ${provider satisfies never}`);
-  }
-};
-
-const runProvider = (
-  provider: ModelPhotoProvider,
-  prompt: string,
-  imageConfig: ProviderImageConfig,
-  falKey: string,
-  openaiKey: string,
-  referenceImageUrl?: string | null,
-  preserveReferenceDetails = true,
-): Promise<TextToImageResult> => {
-  if (referenceImageUrl) {
-    switch (provider) {
-      case 'fal-seedream-v4.5':
-        return editModelPhotoWithSeedreamV45(prompt, imageConfig as FalSeedreamImageConfig, referenceImageUrl, falKey);
-      case 'fal-banana-pro':
-        return editModelPhotoWithBananaPro(prompt, imageConfig as FalBananaProImageConfig, referenceImageUrl, falKey);
-      case 'openai-dalle':
-        return editModelPhotoWithOpenAI(
-          prompt,
-          imageConfig as OpenAIImageConfig,
-          referenceImageUrl,
-          openaiKey,
-          preserveReferenceDetails,
-        );
-      case 'fal-nano-banana-2':
-        return editModelPhotoWithNanoBanana2(prompt, imageConfig as FalNanoBanana2ImageConfig, referenceImageUrl, falKey);
-      case 'fal-seedream-5':
-        return editModelPhotoWithSeedream5(prompt, imageConfig as FalSeedream5ImageConfig, referenceImageUrl, falKey);
-      default:
-        throw new Error(`El proveedor ${provider} no soporta generación de poses desde referencia.`);
-    }
-  }
-
-  switch (provider) {
-    case 'fal-seedream-v4.5':   return generateModelPhotoWithSeedreamV45(prompt, imageConfig as FalSeedreamImageConfig, falKey);
-    case 'fal-banana-pro':      return generateModelPhotoWithBananaPro(prompt, imageConfig as FalBananaProImageConfig, falKey);
-    case 'openai-dalle':        return generateModelPhotoWithOpenAI(prompt, imageConfig as OpenAIImageConfig, openaiKey);
-    case 'fal-nano-banana-2':   return generateModelPhotoWithNanoBanana2(prompt, imageConfig as FalNanoBanana2ImageConfig, falKey);
-    case 'fal-seedream-5':      return generateModelPhotoWithSeedream5(prompt, imageConfig as FalSeedream5ImageConfig, falKey);
-    default:                    throw new Error(`Proveedor de foto de modelo no reconocido: ${provider}`);
-  }
-};
+  generateSingleModelPhoto,
+  mapModelPhotoProviderToProvider,
+} from '../utils/modelPhotoGeneration';
 
 export const generateModelPose = onCall(
   { secrets: [FAL_KEY, OPENAI_API_KEY], timeoutSeconds: 300 },
@@ -154,15 +58,15 @@ export const generateModelPose = onCall(
       : null;
 
     const generatePhoto = async (index: number) => {
-        const result = await runProvider(
+        const result = await generateSingleModelPhoto({
           provider,
           prompt,
-          normalizedImageConfig,
+          imageConfig: normalizedImageConfig,
           falKey,
           openaiKey,
           referenceImageUrl,
           preserveReferenceDetails,
-        );
+        });
 
         const ext = result.contentType.includes('jpeg') || result.contentType.includes('jpg') ? 'jpg' : 'png';
         const storageBasePath = modelId
@@ -177,22 +81,7 @@ export const generateModelPose = onCall(
         return { index, storagePath, contentType: result.contentType };
     };
 
-    const generateAndStorePhoto = async (index: number) => {
-      let attempt = 0;
-
-      while (true) {
-        try {
-          return await generatePhoto(index);
-        } catch (error) {
-          if (provider !== 'openai-dalle' || !isOpenAIRateLimitError(error) || attempt >= OPENAI_RATE_LIMIT_MAX_RETRIES) {
-            throw error;
-          }
-
-          await sleep(getOpenAIRetryDelayMs(error));
-          attempt += 1;
-        }
-      }
-    };
+    const generateAndStorePhoto = async (index: number) => generatePhoto(index);
 
     const results: PromiseSettledResult<{ index: number; storagePath: string; contentType: string }>[] = [];
     if (provider === 'openai-dalle') {

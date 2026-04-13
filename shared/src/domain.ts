@@ -185,9 +185,17 @@ export const buildFinalGenerationPrompt = (
   const basePrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
   const normalizedPromptCaseText = typeof promptCaseText === 'string' ? promptCaseText.trim() : '';
   const sections = [basePrompt];
+  const usesMultiAngleReference =
+    garmentReferenceImageType === true || garmentReferenceImageType === 'multi_angle_composite';
 
   if (normalizedPromptCaseText) {
     sections.push(normalizedPromptCaseText);
+  }
+
+  if (usesMultiAngleReference) {
+    sections.push(
+      'La referencia de la prenda incluye multiples angulos. Usa esas vistas solo para reconstruir con precision la misma prenda, sin inventar detalles no visibles.',
+    );
   }
 
   return sections.filter(Boolean).join('\n\n');

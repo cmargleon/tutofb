@@ -12,9 +12,9 @@ export const isPoseBodyFocusCompatibleWithGarmentBodyArea = (
     case 'lower_body':
       return poseBodyFocus === 'full_body' || poseBodyFocus === 'lower_body';
     case 'footwear':
-      return poseBodyFocus === 'full_body' || poseBodyFocus === 'lower_body' || poseBodyFocus === 'feet';
+      return poseBodyFocus === 'lower_body' || poseBodyFocus === 'feet';
     case 'head_accessory':
-      return poseBodyFocus === 'full_body' || poseBodyFocus === 'upper_body';
+      return poseBodyFocus === 'upper_body';
     case 'full_body':
       return poseBodyFocus === 'full_body';
     default:
@@ -89,7 +89,7 @@ export const isPoseCompatibleWithGarmentViews = (
   garmentBodyArea?: GarmentBodyArea | null,
 ): boolean => {
   if (!hasExplicitPoseGarmentViewMapping(aiClassification)) {
-    return true;
+    return false;
   }
 
   return isPoseSuggestedForGarmentViews(aiClassification, availableViews, garmentBodyArea);

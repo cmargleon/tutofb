@@ -1,6 +1,7 @@
 import { FirebaseError } from 'firebase/app';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { storage } from '../../firebase';
+import firebaseConfig from '../../../firebase-applet-config.json';
 
 export const isRemoteAssetUrl = (value: string): boolean =>
   value.startsWith('http://') || value.startsWith('https://');
@@ -9,6 +10,29 @@ export interface ResolvedStorageAsset {
   url: string;
   revoke?: () => void;
 }
+
+const appConfig = firebaseConfig as typeof firebaseConfig & { projectId?: string };
+const isGeneratedStoragePath = (storagePath: string): boolean => storagePath.startsWith('generated/');
+const encodeStoragePathForUrl = (storagePath: string): string =>
+  storagePath
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
+
+const buildPublicGeneratedImageUrl = (storagePath: string): string => {
+  const projectId = appConfig.projectId;
+  if (!projectId) {
+    throw new Error('No se pudo resolver el projectId para construir la URL pública de la imagen.');
+  }
+
+  const encodedPath = encodeStoragePathForUrl(storagePath);
+
+  if (import.meta.env?.VITE_USE_FIREBASE_EMULATORS === 'true') {
+    return `http://127.0.0.1:5001/${projectId}/us-central1/publicGeneratedImage/${encodedPath}`;
+  }
+
+  return `https://us-central1-${projectId}.cloudfunctions.net/publicGeneratedImage/${encodedPath}`;
+};
 
 const MAX_CONCURRENT_STORAGE_URL_REQUESTS = 4;
 const STORAGE_URL_RETRY_DELAYS_MS = [250, 750];
@@ -59,6 +83,10 @@ const wait = async (delayMs: number): Promise<void> =>
   });
 
 const fetchStorageAssetUrl = async (storagePath: string): Promise<ResolvedStorageAsset> => {
+  if (isGeneratedStoragePath(storagePath)) {
+    return { url: buildPublicGeneratedImageUrl(storagePath) };
+  }
+
   let attempt = 0;
 
   while (true) {

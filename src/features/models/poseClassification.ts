@@ -10,6 +10,8 @@ const toOrientationDetail = (orientation: PosePromptOrientation): PoseOrientatio
       return 'front_three_quarter';
     case 'profile_left':
       return 'left_profile';
+    case 'profile_right':
+      return 'right_profile';
     case 'back':
       return 'back';
     case 'back_three_quarter':
@@ -43,7 +45,7 @@ export const buildManualPoseClassification = (recipe: PoseRecipe): PoseAiClassif
   buildPoseAiClassification({
     orientationDetail: toOrientationDetail(recipe.promptProfile.orientation),
     framing: toFraming(recipe.promptProfile.category),
-    faceVisible: recipeShowsFace(recipe.promptProfile.category),
+    faceVisible: recipe.manualFaceVisible ?? recipeShowsFace(recipe.promptProfile.category),
     confidence: null,
     displayLabel: recipe.label,
     taggedBy: 'manual',

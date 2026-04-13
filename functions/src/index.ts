@@ -41,6 +41,7 @@ export * from './callables/getSystemConfig';
 export * from './http/downloadBatchZip';
 export * from './http/downloadJobImage';
 export * from './http/downloadSelectedJobsZip';
+export * from './http/publicGeneratedImage';
 
 // Export triggers
 export * from './triggers/onJobStatusChange';

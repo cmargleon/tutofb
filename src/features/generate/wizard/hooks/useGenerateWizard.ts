@@ -15,7 +15,7 @@ import { canSelectWizardStep, clampWizardStep } from '../../../wizard/navigation
 import { useGenerateWizardCatalog } from './useGenerateWizardCatalog';
 import { useGenerateWizardSubmit } from './useGenerateWizardSubmit';
 import { useGarmentPreparation } from './useGarmentPreparation';
-import { countCompatiblePoseMatchesForGarments } from './garmentClassification';
+import { countCompatiblePoseMatchesForGarments, getSuggestedPoseIdsForGarments } from './garmentClassification';
 import {
   replaceWizardProductDraftRows,
   resetWizardGeneratedOutputs,
@@ -216,26 +216,41 @@ export const useGenerateWizard = () => {
   );
 
   const totalJobs = useMemo(() => {
+    const garmentsForMatching = state.garments.map((garment) => ({
+      availableViews: getGarmentAvailableViews(garment),
+      garmentBodyArea: garment.garmentBodyArea ?? null,
+    }));
     const compatiblePairCount = countCompatiblePoseMatchesForGarments(
       selectedModel?.poses || [],
-      state.garments.map((garment) => ({
-        availableViews: getGarmentAvailableViews(garment),
-      })),
+      garmentsForMatching,
       state.selectedPoseIds,
     );
 
     return getGenerateWizardTotalJobs(state, compatiblePairCount);
   }, [selectedModel?.poses, state]);
 
+  const compatiblePoseIds = useMemo(
+    () =>
+      getSuggestedPoseIdsForGarments(
+        selectedModel?.poses || [],
+        state.garments.map((garment) => ({
+          availableViews: getGarmentAvailableViews(garment),
+          garmentBodyArea: garment.garmentBodyArea ?? null,
+        })),
+      ),
+    [selectedModel?.poses, state.garments],
+  );
+
+  const compatiblePoseIdSet = useMemo(() => new Set(compatiblePoseIds), [compatiblePoseIds]);
+
   const uploadSummary = useMemo(() => buildGarmentUploadSummary(state.garments), [state.garments]);
   const allPosesSelected = useMemo(
     () =>
       Boolean(
-        selectedModel &&
-          selectedModel.poses.length > 0 &&
-          selectedModel.poses.every((pose) => state.selectedPoseIds.includes(pose.id)),
+        compatiblePoseIds.length > 0 &&
+          compatiblePoseIds.every((poseId) => state.selectedPoseIds.includes(poseId)),
       ),
-    [selectedModel, state.selectedPoseIds],
+    [compatiblePoseIds, state.selectedPoseIds],
   );
   const canAdvance = useMemo(() => getGenerateWizardCanAdvance(state), [state]);
   const lastAccessibleStep = useMemo(() => getGenerateWizardLastAccessibleStep(state), [state]);
@@ -438,6 +453,10 @@ export const useGenerateWizard = () => {
   };
 
   const handlePoseToggle = (poseId: string) => {
+    if (!compatiblePoseIdSet.has(poseId)) {
+      return;
+    }
+
     setState((current) => ({
       ...current,
       selectedPoseIds: current.selectedPoseIds.includes(poseId)
@@ -447,16 +466,15 @@ export const useGenerateWizard = () => {
   };
 
   const handleToggleAllPoses = () => {
-    if (!selectedModel) {
+    if (compatiblePoseIds.length === 0) {
       return;
     }
+
     setState((current) => ({
       ...current,
-      selectedPoseIds:
-        selectedModel.poses.length > 0
-        && selectedModel.poses.every((pose) => current.selectedPoseIds.includes(pose.id))
-          ? []
-          : selectedModel.poses.map((pose) => pose.id),
+      selectedPoseIds: compatiblePoseIds.every((poseId) => current.selectedPoseIds.includes(poseId))
+        ? current.selectedPoseIds.filter((poseId) => !compatiblePoseIdSet.has(poseId))
+        : [...new Set([...current.selectedPoseIds, ...compatiblePoseIds])],
     }));
   };
 
@@ -519,6 +537,7 @@ export const useGenerateWizard = () => {
     canAdvance,
     totalJobs,
     uploadSummary,
+    compatiblePoseIds,
     promptSourceLabel,
     submitButtonLabel: submit.submitButtonLabel,
     disabledProviders: systemConfig.disabledProviders,

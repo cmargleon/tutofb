@@ -1,6 +1,6 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
-import { BatchStatus, Job } from '../../../shared/src/types';
+import { Batch, BatchStatus, Job } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 export const onJobStatusChange = onDocumentUpdated({ document: 'jobs/{jobId}', memory: '512MiB' }, async (event) => {
@@ -42,12 +42,25 @@ export const onJobStatusChange = onDocumentUpdated({ document: 'jobs/{jobId}', m
   else if (processingJobs > 0) status = 'processing';
   else status = 'pending';
 
+  const batchSnapshot = await batchRef.get();
+  const batch = batchSnapshot.exists ? ({ id: batchSnapshot.id, ...batchSnapshot.data() } as Batch) : null;
+  const notificationUpdate =
+    batch?.notification?.retryState === 'queued' && (status === 'completed' || status === 'partial_failed' || status === 'failed')
+      ? {
+          notification: {
+            ...batch.notification,
+            retryState: failedJobs > 0 ? 'failed_after_retry' : 'succeeded_after_retry',
+          },
+        }
+      : {};
+
   await batchRef.update({
     pendingJobs,
     processingJobs,
     completedJobs,
     failedJobs,
     status,
+    ...notificationUpdate,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 });

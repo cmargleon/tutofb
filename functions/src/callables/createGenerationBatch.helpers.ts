@@ -253,7 +253,7 @@ const normalizeProductDraft = (value: unknown): ProductDraftInput => {
 export const validateCreateGenerationBatchInput = (
   data: Partial<CreateGenerationBatchRequest> | null | undefined,
   authUid: string,
-  maxJobs: number,
+  _maxJobs: number,
 ): ValidatedCreateGenerationBatchInput => {
   const clientId = requireNonEmptyString(data?.clientId, 'El cliente');
   const modelId = requireNonEmptyString(data?.modelId, 'El modelo');
@@ -313,12 +313,6 @@ export const validateCreateGenerationBatchInput = (
   }
 
   const totalJobs = poseIds.length * garments.length;
-  if (totalJobs > maxJobs) {
-    throw new HttpsError(
-      'out-of-range',
-      `El lote excede el límite configurado de ${maxJobs} trabajos (${totalJobs} solicitados).`,
-    );
-  }
 
   return {
     clientId,

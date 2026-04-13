@@ -14,6 +14,11 @@ import { CatalogLightbox } from '../components/catalog/CatalogLightbox';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { db } from '../firebase';
 
+interface PendingCatalogRegeneration {
+  job: Job;
+  leftCatalog: boolean;
+}
+
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 const SORT_ORDER_OPTIONS: Array<{ value: CatalogSortOrder; label: string }> = [
   { value: 'desc', label: 'Más nuevos primero' },
@@ -35,6 +40,7 @@ export const Catalogo: React.FC = () => {
   const [lightbox, setLightbox] = useState<{ garmentIndex: number; jobIndex: number; jobId: string } | null>(null);
   const [lightboxLiveJob, setLightboxLiveJob] = useState<Job | null>(null);
   const [generatingJobs, setGeneratingJobs] = useState<Job[]>([]);
+  const [pendingRegenerations, setPendingRegenerations] = useState<Record<string, PendingCatalogRegeneration>>({});
   const [isExportingSpreadsheet, setIsExportingSpreadsheet] = useState(false);
   const [latestSpreadsheetDownloadUrl, setLatestSpreadsheetDownloadUrl] = useState<string | null>(null);
   const [isRegeneratingFailed, setIsRegeneratingFailed] = useState(false);
@@ -114,7 +120,7 @@ export const Catalogo: React.FC = () => {
   }, [selectedBatchId, selectedBatchIsGenerating, sortOrder]);
 
   const displayGarmentGroups = useMemo(() => {
-    if (generatingJobs.length === 0) {
+    if (generatingJobs.length === 0 && Object.keys(pendingRegenerations).length === 0) {
       return garmentGroups;
     }
 
@@ -135,8 +141,33 @@ export const Catalogo: React.FC = () => {
       ]),
     );
 
-    generatingJobs.forEach((job) => {
+    Object.values(pendingRegenerations).forEach(({ job }) => {
       if (!job.id) {
+        return;
+      }
+
+      const existingGroup = grouped.get(job.garmentId);
+      if (existingGroup) {
+        const existingJobIndex = existingGroup.jobs.findIndex((existingJob) => existingJob.id === job.id);
+        if (existingJobIndex >= 0) {
+          existingGroup.jobs[existingJobIndex] = job;
+        } else {
+          existingGroup.jobs.push(job);
+        }
+        return;
+      }
+
+      grouped.set(job.garmentId, {
+        garmentId: job.garmentId,
+        garmentName: job.garmentName,
+        jobs: [job],
+      });
+    });
+
+    const pendingRegenerationJobIds = new Set(Object.keys(pendingRegenerations));
+
+    generatingJobs.forEach((job) => {
+      if (!job.id || pendingRegenerationJobIds.has(job.id)) {
         return;
       }
 
@@ -161,7 +192,15 @@ export const Catalogo: React.FC = () => {
         jobs: [...group.jobs].sort(compareJobs),
       }))
       .sort((left, right) => compareJobs(left.jobs[0], right.jobs[0]));
-  }, [garmentGroups, generatingJobs, sortOrder]);
+  }, [garmentGroups, generatingJobs, pendingRegenerations, sortOrder]);
+
+  const pendingRegenerationJobIds = useMemo(
+    () => Object.keys(pendingRegenerations).reduce<Record<string, true>>((acc, jobId) => {
+      acc[jobId] = true;
+      return acc;
+    }, {}),
+    [pendingRegenerations],
+  );
 
   const visibleJobsCount = useMemo(
     () => displayGarmentGroups.reduce((total, group) => total + group.jobs.length, 0),
@@ -218,7 +257,54 @@ export const Catalogo: React.FC = () => {
     setLightbox(null);
     setLatestSpreadsheetDownloadUrl(null);
     setBatchActionMessage(null);
+    setPendingRegenerations({});
   }, [currentPage, pageSize, selectedBatchId, selectedClientId, sortOrder]);
+
+  useEffect(() => {
+    const visibleCatalogJobIds = new Set(
+      garmentGroups.flatMap((group) => group.jobs.map((job) => job.id).filter((jobId): jobId is string => Boolean(jobId))),
+    );
+    const remotelyGeneratingJobIds = new Set(
+      generatingJobs.map((job) => job.id).filter((jobId): jobId is string => Boolean(jobId)),
+    );
+
+    setPendingRegenerations((prev) => {
+      let changed = false;
+      const next: Record<string, PendingCatalogRegeneration> = {};
+
+      (Object.entries(prev) as Array<[string, PendingCatalogRegeneration]>).forEach(([jobId, entry]) => {
+        const returnedToCatalog = entry.leftCatalog && visibleCatalogJobIds.has(jobId);
+        if (returnedToCatalog) {
+          changed = true;
+          return;
+        }
+
+        const leftCatalog = entry.leftCatalog || remotelyGeneratingJobIds.has(jobId) || !visibleCatalogJobIds.has(jobId);
+        if (leftCatalog !== entry.leftCatalog) {
+          changed = true;
+        }
+
+        next[jobId] = {
+          ...entry,
+          leftCatalog,
+        };
+      });
+
+      return changed ? next : prev;
+    });
+  }, [garmentGroups, generatingJobs]);
+
+  const handleRegenerationQueued = useCallback((job: Job) => {
+    if (!job.id) return;
+
+    setPendingRegenerations((prev) => ({
+      ...prev,
+      [job.id!]: {
+        job,
+        leftCatalog: false,
+      },
+    }));
+  }, []);
 
   useEffect(() => {
     if (!lightbox?.jobId) {
@@ -587,6 +673,8 @@ export const Catalogo: React.FC = () => {
                 key={group.garmentId}
                 group={group}
                 onImageClick={openLightboxForJob}
+                onRegenerationQueued={handleRegenerationQueued}
+                pendingRegenerationJobIds={pendingRegenerationJobIds}
               />
             ))}
             <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">

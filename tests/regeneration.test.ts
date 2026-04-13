@@ -51,6 +51,7 @@ test('buildRegenerateJobPatch reinicia el job y recompone el prompt final', () =
   const patch = buildRegenerateJobPatch(job, 'fal-banana-pro', 'nuevo prompt');
 
   assert.equal(patch.provider, 'fal-banana-pro');
+  assert.equal(patch.imageConfig.provider, 'fal-banana-pro');
   assert.equal(patch.promptBase, 'nuevo prompt');
   assert.equal(patch.status, 'pending');
   assert.equal(patch.retryCount, 0);

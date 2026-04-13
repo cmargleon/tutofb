@@ -8,6 +8,7 @@ export type PosePromptOrientation =
   | 'front'
   | 'front_three_quarter'
   | 'profile_left'
+  | 'profile_right'
   | 'back'
   | 'back_three_quarter';
 export type PosePromptModifier = 'walking' | 'contrapposto';
@@ -26,6 +27,7 @@ export type PoseRecipe = {
   promptProfile: PosePromptProfile;
   promptDirectives?: string[];
   usesReferenceImage?: boolean;
+  manualFaceVisible?: boolean;
 };
 
 export type PoseGroupOption = {

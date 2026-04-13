@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
+  Batch,
   Job,
   RegenerateFailedBatchJobsRequest,
   RegenerateFailedBatchJobsResponse,
@@ -9,6 +10,7 @@ import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
 import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
+import { resolveNotificationRetryProvider } from './regenerateFailedBatchJobs.helpers';
 
 export const regenerateFailedBatchJobs = onCall<
   RegenerateFailedBatchJobsRequest,
@@ -17,6 +19,7 @@ export const regenerateFailedBatchJobs = onCall<
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
 
   const batchId = typeof request.data?.batchId === 'string' ? request.data.batchId.trim() : '';
+  const source = request.data?.source === 'notification' ? 'notification' : 'catalog';
   if (!batchId) {
     throw new HttpsError('invalid-argument', 'Debes indicar un lote válido.');
   }
@@ -26,6 +29,7 @@ export const regenerateFailedBatchJobs = onCall<
   if (!batchSnapshot.exists) {
     throw new HttpsError('not-found', 'Lote no encontrado.');
   }
+  const batch = { id: batchSnapshot.id, ...batchSnapshot.data() } as Batch;
 
   const userSnapshot = await db.collection('users').doc(request.auth!.uid).get();
   const requestedByDisplayName =
@@ -45,6 +49,7 @@ export const regenerateFailedBatchJobs = onCall<
       queuedJobs: 0,
       skippedJobs: 0,
       skippedJobIds: [],
+      retryProvider: null,
     };
   }
 
@@ -52,12 +57,29 @@ export const regenerateFailedBatchJobs = onCall<
   const now = admin.firestore.FieldValue.serverTimestamp();
   const skippedJobIds: string[] = [];
   let queuedJobs = 0;
+  const retryProvider = source === 'notification'
+    ? resolveNotificationRetryProvider(batch.provider)
+    : null;
+
+  if (source === 'notification') {
+    writeBatch.update(batchSnapshot.ref, {
+      notification: {
+        retryState: 'queued',
+        retryRequestedAt: now,
+        retryRequestedByUid: request.auth!.uid,
+        retryRequestedByDisplayName: requestedByDisplayName,
+        retryProvider,
+      },
+      updatedAt: now,
+    });
+  }
 
   failedJobs.forEach((job) => {
     const prompt = (job.promptBase || job.finalPrompt || '').trim();
+    const targetProvider = retryProvider ?? job.provider;
 
     try {
-      const patch = buildRegenerateJobPatch(job, job.provider, prompt);
+      const patch = buildRegenerateJobPatch(job, targetProvider, prompt);
       const jobRef = db.collection('jobs').doc(job.id!);
 
       writeBatch.update(jobRef, {
@@ -81,9 +103,9 @@ export const regenerateFailedBatchJobs = onCall<
         payload: {
           requestedByUid: request.auth!.uid,
           requestedByDisplayName,
-          source: 'batch_failed_retry',
+          source: source === 'notification' ? 'batch_failed_retry_notification' : 'batch_failed_retry',
           batchId,
-          provider: job.provider,
+          provider: targetProvider,
           prompt,
           currentOutputId: job.currentOutput?.id || null,
           currentOutputGeminiVerdict: job.currentOutput?.autoReview?.verdict || job.latestAutoReview?.verdict || null,
@@ -107,5 +129,6 @@ export const regenerateFailedBatchJobs = onCall<
     queuedJobs,
     skippedJobs: skippedJobIds.length,
     skippedJobIds,
+    retryProvider,
   };
 });

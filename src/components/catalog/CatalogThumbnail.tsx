@@ -10,6 +10,7 @@ interface CatalogThumbnailProps {
   onRegenerate?: (job: Job) => void;
   onDownload?: (job: Job) => void;
   onDelete?: (job: Job) => void;
+  regenerationPending?: boolean;
 }
 
 export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
@@ -18,14 +19,16 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   onRegenerate,
   onDownload,
   onDelete,
+  regenerationPending = false,
 }) => {
   const resultPath = resolveApprovedJobOutput(job)?.resultImagePath;
   const isGenerating = job.status === 'pending' || job.status === 'processing';
   const isFailed = job.status === 'failed';
   const { url, error } = useStorageAssetUrl(resultPath || null);
   const loadError = Boolean(error);
+  const showRegenerationOverlay = regenerationPending && Boolean(url);
 
-  const actionButtons = (onRegenerate || onDownload || onDelete) ? (
+  const actionButtons = !regenerationPending && (onRegenerate || onDownload || onDelete) ? (
     <div className="absolute bottom-0 inset-x-0 flex justify-center gap-1 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
       {onRegenerate && (
         <button
@@ -77,13 +80,20 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
           className="w-full h-full object-cover"
           loading="lazy"
         />
-        {/* Dark mask overlay */}
-        <div className="absolute inset-0 bg-black/55" />
-        {/* Failure badge */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
-          <Ban className="h-8 w-8 text-rose-300" aria-hidden="true" />
-          <p className="text-sm font-semibold text-white leading-tight">La generación falló</p>
-        </div>
+        {showRegenerationOverlay ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55 px-3 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-white" aria-hidden="true" />
+            <p className="text-sm font-semibold text-white leading-tight">Regenerando foto...</p>
+          </div>
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-black/55" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
+              <Ban className="h-8 w-8 text-rose-300" aria-hidden="true" />
+              <p className="text-sm font-semibold text-white leading-tight">La generación falló</p>
+            </div>
+          </>
+        )}
         {actionButtons}
       </div>
     );
@@ -131,6 +141,12 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
           loading="lazy"
         />
+        {showRegenerationOverlay ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55 px-3 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-white" aria-hidden="true" />
+            <p className="text-sm font-semibold text-white leading-tight">Regenerando foto...</p>
+          </div>
+        ) : null}
         {actionButtons}
       </div>
     );
@@ -139,7 +155,7 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   // Generating / loading URL placeholder (spinner)
   const statusLabel = isGenerating
     ? job.status === 'processing' ? 'Generando' : 'En cola'
-    : loadError ? 'Sin vista previa' : 'Cargando';
+    : regenerationPending ? 'Regenerando' : loadError ? 'Sin vista previa' : 'Cargando';
 
   return (
     <button
@@ -160,7 +176,9 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
             <div className="space-y-1">
               <p className="text-sm font-medium text-slate-700">{statusLabel}</p>
               <p className="text-xs text-slate-500">
-                {isGenerating ? 'Puedes abrirla mientras termina de salir.' : 'La miniatura todavía se está cargando.'}
+                {isGenerating || regenerationPending
+                  ? 'Puedes abrirla mientras termina de salir.'
+                  : 'La miniatura todavía se está cargando.'}
               </p>
             </div>
           </>

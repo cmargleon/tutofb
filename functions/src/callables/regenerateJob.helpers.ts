@@ -1,4 +1,5 @@
 import { buildFinalGenerationPrompt, isProvider } from '../../../shared/src/domain';
+import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { Job } from '../../../shared/src/types';
 
 export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: string) => {
@@ -11,8 +12,12 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     throw new Error('El prompt no puede quedar vacío para regenerar.');
   }
 
+  const { imageConfig, aspectRatio } = normalizeProviderImageConfig(provider, job.imageConfig, job.aspectRatio);
+
   return {
     provider,
+    imageConfig,
+    aspectRatio,
     requestedPromptBase: trimmedPrompt,
     promptBase: trimmedPrompt,
     promptCaseKey: job.promptCaseKey ?? null,

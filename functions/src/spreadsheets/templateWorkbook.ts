@@ -636,6 +636,14 @@ const clearCategorySheetData = (
 const sortGeneratedImages = (draft: ProductDraft): ProductDraft['generatedImages'] =>
   [...(draft.generatedImages || [])].sort((left, right) => toMillisOrZero(left.selectedAt) - toMillisOrZero(right.selectedAt));
 
+const buildGeneratedImagesWithUrls = async (draft: ProductDraft): Promise<ProductDraft['generatedImages']> =>
+  Promise.all(
+    sortGeneratedImages(draft).map(async (image) => ({
+      ...image,
+      downloadUrl: await ensureStorageDownloadUrl(image.storagePath),
+    })),
+  );
+
 const normalizeComparable = (value: string): string =>
   value
     .normalize('NFD')
@@ -654,6 +662,21 @@ const isColorColumn = (column: Pick<SpreadsheetTemplateCategoryColumn, 'key' | '
   const normalizedKey = normalizeComparable(column.key);
   const normalizedLabel = normalizeComparable(column.label);
   return normalizedKey === 'attr 27' || normalizedKey === 'attr_27' || normalizedLabel.includes('color');
+};
+
+const selectPreferredMainImageFromGeneratedImages = (generatedImages: ProductDraft['generatedImages']): string | null => {
+  const imagesWithUrls = generatedImages.filter((entry) => entry.downloadUrl);
+  const frontThreeQuarter = imagesWithUrls.find((entry) => entry.poseOrientationDetail === 'front_three_quarter');
+  if (frontThreeQuarter?.downloadUrl) {
+    return frontThreeQuarter.downloadUrl;
+  }
+
+  const frontImage = imagesWithUrls.find((entry) => entry.poseOrientationGroup === 'front');
+  if (frontImage?.downloadUrl) {
+    return frontImage.downloadUrl;
+  }
+
+  return imagesWithUrls[0]?.downloadUrl || null;
 };
 
 const selectPreferredMainImage = (draft: ProductDraft): string | null => {
@@ -697,7 +720,7 @@ const buildDraftImageAvailability = (draft: ProductDraft): Record<string, boolea
 };
 
 const buildDraftImageFallbacks = async (draft: ProductDraft): Promise<Record<string, string>> => {
-  const generatedImages = sortGeneratedImages(draft).filter((entry) => entry.downloadUrl);
+  const generatedImages = (await buildGeneratedImagesWithUrls(draft)).filter((entry) => entry.downloadUrl);
   const originalImages = [...(draft.originalImages || [])].sort((left, right) => left.sourceIndex - right.sourceIndex);
   const originalImagesWithUrls = await Promise.all(
     originalImages.map(async (image) => ({
@@ -706,7 +729,7 @@ const buildDraftImageFallbacks = async (draft: ProductDraft): Promise<Record<str
     })),
   );
 
-  const mainGeneratedUrl = selectPreferredMainImage(draft);
+  const mainGeneratedUrl = selectPreferredMainImageFromGeneratedImages(generatedImages);
   const firstFrontOriginal = originalImagesWithUrls.find((image) => image.view === 'front');
   const firstBackOriginal = originalImagesWithUrls.find((image) => image.view === 'back');
   const firstOriginal = originalImagesWithUrls[0];

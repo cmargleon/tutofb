@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { AnalyticsSummary, Batch, Job } from '../../../shared/src/types';
+import { AnalyticsSummary, Batch, BatchNotificationRetryState, BatchStatus } from '../../../shared/src/types';
 import { useToast } from '../feedback/FeedbackProvider';
+import { BatchNotificationItem, buildBatchNotificationDescription, buildBatchNotificationItem, isFinalBatchStatus, resolveBatchNotificationOutcome } from './batchNotifications';
 
 export interface UseNotificationsReturn {
   queueCount: number;
-  notifications: Job[];
+  notifications: BatchNotificationItem[];
   unreadCount: number;
   isNotifOpen: boolean;
   notifRef: React.RefObject<HTMLDivElement>;
@@ -17,7 +18,7 @@ export interface UseNotificationsReturn {
 export const useNotifications = (): UseNotificationsReturn => {
   const toast = useToast();
   const [queueCount, setQueueCount] = useState(0);
-  const [notifications, setNotifications] = useState<Job[]>([]);
+  const [notifications, setNotifications] = useState<BatchNotificationItem[]>([]);
   const [notifSeenAt, setNotifSeenAt] = useState(() => {
     const stored = localStorage.getItem('notifSeenAt');
     return stored ? parseInt(stored, 10) : 0;
@@ -26,6 +27,10 @@ export const useNotifications = (): UseNotificationsReturn => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const isFirstBatchSnapshotRef = useRef(true);
+  const batchStateRef = useRef<Record<string, {
+    status: BatchStatus;
+    retryState: BatchNotificationRetryState | null;
+  }>>({});
 
   useEffect(() => {
     const unsubQueue = onSnapshot(doc(db, 'analytics_summary', 'global'), (snap) => {
@@ -37,55 +42,59 @@ export const useNotifications = (): UseNotificationsReturn => {
       }
     });
 
-    const unsubNotif = onSnapshot(
-      query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(30)),
-      (snap) => {
-        const jobs = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() } as Job))
-          .filter((j) => j.status === 'completed' || j.status === 'failed');
-        setNotifications(jobs.slice(0, 8));
-      },
-    );
-
     const unsubBatches = onSnapshot(
-      query(collection(db, 'batches'), orderBy('updatedAt', 'desc'), limit(20)),
+      query(collection(db, 'batches'), orderBy('updatedAt', 'desc'), limit(60)),
       (snap) => {
+        const nextState: typeof batchStateRef.current = {};
+        const nextNotifications = snap.docs
+          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Batch & { id: string }))
+          .filter((batch) => isFinalBatchStatus(batch.status))
+          .map((batch) => buildBatchNotificationItem(batch))
+          .slice(0, 8);
+
+        snap.docs.forEach((docSnapshot) => {
+          const batch = { id: docSnapshot.id, ...docSnapshot.data() } as Batch & { id: string };
+          nextState[batch.id] = {
+            status: batch.status,
+            retryState: batch.notification?.retryState ?? null,
+          };
+        });
+
         if (isFirstBatchSnapshotRef.current) {
           isFirstBatchSnapshotRef.current = false;
+          batchStateRef.current = nextState;
+          setNotifications(nextNotifications);
           return;
         }
-        snap.docChanges().forEach((change) => {
-          if (change.type !== 'modified') return;
-          const batch = { id: change.doc.id, ...change.doc.data() } as Batch;
-          const client = batch.clientNameSnapshot;
-          const model = batch.modelNameSnapshot;
-          if (batch.status === 'completed') {
-            toast({
-              title: 'Lote completado',
-              description: `${client} · ${model} · ${batch.completedJobs} imágenes`,
-              tone: 'success',
-              durationMs: 6000,
-            });
-          } else if (batch.status === 'partial_failed') {
-            toast({
-              title: 'Lote parcialmente completado',
-              description: `${client} · ${model} · ${batch.failedJobs} jobs fallaron`,
-              tone: 'warning',
-              durationMs: 6000,
-            });
-          } else if (batch.status === 'failed') {
-            toast({
-              title: 'Lote fallido',
-              description: `${client} · ${model}`,
-              tone: 'error',
-              durationMs: 6000,
-            });
-          }
+        snap.docs.forEach((docSnapshot) => {
+          const batch = { id: docSnapshot.id, ...docSnapshot.data() } as Batch & { id: string };
+          const previous = batchStateRef.current[batch.id];
+          if (!previous) return;
+
+          const nowIsFinal = isFinalBatchStatus(batch.status);
+          const reachedFinal =
+            nowIsFinal
+            && (
+              !isFinalBatchStatus(previous.status)
+              || (previous.retryState === 'queued' && batch.notification?.retryState !== 'queued')
+            );
+
+          if (!reachedFinal) return;
+
+          const outcome = resolveBatchNotificationOutcome(batch);
+          toast({
+            title: outcome === 'completed' ? 'Lote completado' : 'Lote fallido',
+            description: `${batch.clientNameSnapshot} · ${batch.modelNameSnapshot} · ${buildBatchNotificationDescription(batch)}`,
+            tone: outcome === 'completed' ? 'success' : 'error',
+            durationMs: 6000,
+          });
         });
+        batchStateRef.current = nextState;
+        setNotifications(nextNotifications);
       },
     );
 
-    return () => { unsubQueue(); unsubNotif(); unsubBatches(); };
+    return () => { unsubQueue(); unsubBatches(); };
   }, [toast]);
 
   useEffect(() => {
@@ -99,12 +108,8 @@ export const useNotifications = (): UseNotificationsReturn => {
     return () => document.removeEventListener('mousedown', handler);
   }, [isNotifOpen]);
 
-  const unreadCount = notifications.filter((j) => {
-    const ms = j.createdAt && typeof (j.createdAt as any).toMillis === 'function'
-      ? (j.createdAt as any).toMillis()
-      : 0;
-    return ms > Math.max(sessionStartRef.current, notifSeenAt);
-  }).length;
+  const unreadCount = notifications.filter((notification) =>
+    notification.updatedAtMs > Math.max(sessionStartRef.current, notifSeenAt)).length;
 
   const onBellClick = () => {
     setIsNotifOpen((open) => !open);

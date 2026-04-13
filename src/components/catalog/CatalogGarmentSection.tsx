@@ -13,11 +13,19 @@ import { useConfirm, useToast } from '../../features/feedback/FeedbackProvider';
 interface CatalogGarmentSectionProps {
   group: CatalogGarmentGroup;
   onImageClick: (job: Job) => void;
+  onRegenerationQueued?: (job: Job) => void;
+  pendingRegenerationJobIds?: Record<string, true>;
 }
 
-export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ group, onImageClick }) => {
+export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
+  group,
+  onImageClick,
+  onRegenerationQueued,
+  pendingRegenerationJobIds = {},
+}) => {
   const [expanded, setExpanded] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [queueingJobIds, setQueueingJobIds] = useState<Record<string, boolean>>({});
   const role = useRole();
   const toast = useToast();
   const confirm = useConfirm();
@@ -60,11 +68,22 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ gr
 
   const handleRegenerate = async (job: Job) => {
     if (!job.id) return;
+    if (queueingJobIds[job.id] || pendingRegenerationJobIds[job.id]) return;
+
+    setQueueingJobIds((prev) => ({ ...prev, [job.id!]: true }));
     try {
       await regenerateJob(job.id, job.provider, job.promptBase);
+      onRegenerationQueued?.(job);
       toast({ tone: 'success', title: 'Regeneración encolada', description: 'El trabajo volvió a la cola.' });
     } catch (err: any) {
       toast({ tone: 'error', title: 'No se pudo regenerar', description: err.message || 'Inténtalo nuevamente.' });
+    } finally {
+      setQueueingJobIds((prev) => {
+        if (!prev[job.id!]) return prev;
+        const next = { ...prev };
+        delete next[job.id!];
+        return next;
+      });
     }
   };
 
@@ -136,16 +155,23 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({ gr
 
       {expanded && (
         <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-          {group.jobs.map((job) => (
-            <CatalogThumbnail
-              key={job.id}
-              job={job}
-              onClick={onImageClick}
-              onRegenerate={role.canRegenerate ? handleRegenerate : undefined}
-              onDownload={handleDownloadSingle}
-              onDelete={role.canRegenerate ? handleDelete : undefined}
-            />
-          ))}
+          {group.jobs.map((job) => {
+            const isRegenerationPending = Boolean(
+              job.id && (queueingJobIds[job.id] || pendingRegenerationJobIds[job.id]),
+            );
+
+            return (
+              <CatalogThumbnail
+                key={job.id}
+                job={job}
+                onClick={onImageClick}
+                onRegenerate={role.canRegenerate && !isRegenerationPending ? handleRegenerate : undefined}
+                onDownload={handleDownloadSingle}
+                onDelete={role.canRegenerate ? handleDelete : undefined}
+                regenerationPending={isRegenerationPending}
+              />
+            );
+          })}
         </div>
       )}
     </div>

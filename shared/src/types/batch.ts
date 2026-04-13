@@ -4,6 +4,16 @@ import type { ModelIdentityTraits } from './model';
 import type { UploadedGarmentInput } from './garment';
 import type { ProductDraftInput, ProductDraftRow } from './spreadsheet';
 
+export type BatchNotificationRetryState = 'queued' | 'failed_after_retry' | 'succeeded_after_retry';
+
+export interface BatchNotificationState {
+  retryState?: BatchNotificationRetryState | null;
+  retryRequestedAt?: TimestampLike | null;
+  retryRequestedByUid?: string | null;
+  retryRequestedByDisplayName?: string | null;
+  retryProvider?: Provider | null;
+}
+
 export interface BatchClientSnapshot {
   id: string;
   name: string;
@@ -51,6 +61,7 @@ export interface Batch {
   updatedAt: TimestampLike;
   createdByUid: string;
   createdByDisplayName?: string | null;
+  notification?: BatchNotificationState | null;
 }
 
 export interface CreateGenerationBatchRequest {
@@ -75,6 +86,7 @@ export interface CreateGenerationBatchResponse {
 
 export interface RegenerateFailedBatchJobsRequest {
   batchId: string;
+  source?: 'catalog' | 'notification';
 }
 
 export interface RegenerateFailedBatchJobsResponse {
@@ -83,6 +95,7 @@ export interface RegenerateFailedBatchJobsResponse {
   queuedJobs: number;
   skippedJobs: number;
   skippedJobIds: string[];
+  retryProvider?: Provider | null;
 }
 
 export interface CancelPendingBatchJobsRequest {

@@ -30,6 +30,7 @@ export const Wizard: React.FC = () => {
     canAdvance,
     totalJobs,
     uploadSummary,
+    compatiblePoseIds,
     promptSourceLabel,
     submitButtonLabel,
     disabledProviders,
@@ -128,6 +129,7 @@ export const Wizard: React.FC = () => {
           garments={state.garments}
           selectedPoseIds={state.selectedPoseIds}
           suggestedPoseIds={state.poseSuggestions.suggestedPoseIds}
+          compatiblePoseIds={compatiblePoseIds}
           allPosesSelected={allPosesSelected}
           isPreparing={state.poseSuggestions.status === 'preparing'}
           suggestionError={state.poseSuggestions.error}

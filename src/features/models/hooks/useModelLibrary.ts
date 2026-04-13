@@ -4,16 +4,27 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import { Model, ModelIdentityTraits } from '../../../../shared/src/types';
+import { v4 as uuidv4 } from 'uuid';
+import { Model, ModelIdentityTraits, ModelPhotoProvider, Pose } from '../../../../shared/src/types';
 import { useConfirm, useConfirmByName, useToast } from '../../feedback/FeedbackProvider';
 import { createEmptyModelIdentityTraits, normalizeModelIdentityTraits } from '../identityTraits';
 import {
   archiveModel,
+  generateModelPoses,
   permanentlyDeleteModel,
+  replaceModelPoseWithGeneratedPhoto,
   restoreModel,
   tagModelPosesWithGemini,
   updateModel,
 } from '../firebase';
+import { MODEL_POSE_RECIPES_BY_ID } from '../constants';
+import { buildManualPoseClassification } from '../poseClassification';
+import {
+  createDefaultModelProviderImageConfigs,
+  mapModelPhotoProviderToProvider,
+  resolveModelAspectRatioForImageConfig,
+} from '../providerImageConfig';
+import { buildReferencePosePromptFromRecipe } from '../prompts';
 
 export interface UseModelLibraryResult {
   editingId: string | null;
@@ -27,11 +38,17 @@ export interface UseModelLibraryResult {
   editPoseIdsToRemove: string[];
   isSavingEdit: boolean;
   taggingModelId: string | null;
+  regeneratingPoseId: string | null;
   handleStartEdit: (model: Model) => void;
   handleCancelEdit: () => void;
   handleEditFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   handleRemovePendingEditFile: (indexToRemove: number) => void;
   handleTogglePoseRemoval: (poseId: string) => void;
+  handleRegeneratePoseFromReference: (model: Model, pose: Pose) => Promise<void>;
+  getPoseRegenerationAvailability: (
+    model: Model,
+    pose: Pose,
+  ) => { canRegenerate: boolean; reason: string };
   handleSaveEdit: (model: Model) => Promise<void>;
   handleArchive: (model: Model) => Promise<void>;
   handleRestore: (model: Model) => Promise<void>;
@@ -43,6 +60,104 @@ interface UseModelLibraryOptions {
   onOptimisticUpdate?: (updater: (prev: Model[]) => Model[]) => void;
   getModelsSnapshot?: () => Model[];
 }
+
+const CATALOG_REGEN_PROVIDER: ModelPhotoProvider = 'openai-dalle';
+const CATALOG_REGEN_PROMPT = 'Return a polished catalog-ready fashion image.';
+const CATALOG_REGEN_PROVIDER_CONFIG =
+  createDefaultModelProviderImageConfigs()[mapModelPhotoProviderToProvider(CATALOG_REGEN_PROVIDER)];
+const CATALOG_REGEN_ASPECT_RATIO = resolveModelAspectRatioForImageConfig(CATALOG_REGEN_PROVIDER_CONFIG);
+
+const normalizeLabel = (value: string | null | undefined): string =>
+  (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const findFrontFullBodyReferencePose = (model: Model): Pose | null =>
+  model.poses.find((pose) => {
+    const classification = pose.aiClassification;
+    return (
+      normalizeLabel(classification?.displayLabel) === 'frente completa'
+      || (
+        classification?.orientationDetail === 'front'
+        && classification?.framing === 'full_body'
+      )
+    );
+  }) || null;
+
+const resolvePoseRecipeId = (pose: Pose): string | null => {
+  const displayLabel = normalizeLabel(pose.aiClassification?.displayLabel);
+  if (displayLabel) {
+    for (const [recipeId, recipe] of MODEL_POSE_RECIPES_BY_ID.entries()) {
+      if (normalizeLabel(recipe.label) === displayLabel) {
+        return recipeId;
+      }
+    }
+  }
+
+  const orientation = pose.aiClassification?.orientationDetail;
+  const framing = pose.aiClassification?.framing;
+  if (!orientation || !framing) return null;
+
+  switch (framing) {
+    case 'full_body':
+      switch (orientation) {
+        case 'front':
+          return 'full-front';
+        case 'front_three_quarter':
+          return 'full-three-quarter';
+        case 'left_profile':
+        case 'right_profile':
+          return 'full-profile-left';
+        case 'back':
+          return 'back-full';
+        case 'back_three_quarter':
+          return 'back-three-quarter';
+        default:
+          return null;
+      }
+    case 'medium_body':
+      switch (orientation) {
+        case 'front':
+          return 'half-front';
+        case 'front_three_quarter':
+          return 'half-three-quarter';
+        case 'back':
+          return 'half-back';
+        default:
+          return null;
+      }
+    case 'lower_body':
+      switch (orientation) {
+        case 'front':
+          return 'lower-front';
+        case 'front_three_quarter':
+          return 'lower-front-three-quarter';
+        case 'back':
+          return 'lower-back';
+        case 'back_three_quarter':
+          return 'lower-back-three-quarter';
+        default:
+          return null;
+      }
+    case 'feet_closeup':
+      switch (orientation) {
+        case 'front':
+          return 'footwear-front-closeup';
+        case 'front_three_quarter':
+          return 'footwear-three-quarter-closeup';
+        case 'left_profile':
+        case 'right_profile':
+          return 'footwear-side-closeup';
+        default:
+          return null;
+      }
+    default:
+      return null;
+  }
+};
 
 export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelLibraryResult => {
   const { onOptimisticUpdate, getModelsSnapshot } = options;
@@ -57,6 +172,7 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
   const [editPoseIdsToRemove, setEditPoseIdsToRemove] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [taggingModelId, setTaggingModelId] = useState<string | null>(null);
+  const [regeneratingPoseId, setRegeneratingPoseId] = useState<string | null>(null);
 
   const handleStartEdit = (model: Model) => {
     setEditingId(model.id ?? null);
@@ -94,6 +210,106 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
         ? current.filter((currentPoseId) => currentPoseId !== poseId)
         : [...current, poseId],
     );
+  };
+
+  const getPoseRegenerationAvailability = (model: Model, pose: Pose) => {
+    const referencePose = findFrontFullBodyReferencePose(model);
+    if (!referencePose) {
+      return {
+        canRegenerate: false,
+        reason: 'Necesitas una pose "Frente completa" para usarla como referencia.',
+      };
+    }
+
+    if (referencePose.id === pose.id) {
+      return {
+        canRegenerate: false,
+        reason: 'La pose de frente completa ya es la referencia base.',
+      };
+    }
+
+    if (editPoseIdsToRemove.includes(pose.id)) {
+      return {
+        canRegenerate: false,
+        reason: 'Quita la marca de borrado antes de regenerar esta pose.',
+      };
+    }
+
+    const recipeId = resolvePoseRecipeId(pose);
+    if (!recipeId || !MODEL_POSE_RECIPES_BY_ID.get(recipeId)) {
+      return {
+        canRegenerate: false,
+        reason: 'Esta pose no tiene una clasificación compatible para regenerarse.',
+      };
+    }
+
+    return {
+      canRegenerate: true,
+      reason: `Regenerar usando "${referencePose.fileName}" como referencia.`,
+    };
+  };
+
+  const handleRegeneratePoseFromReference = async (model: Model, pose: Pose) => {
+    if (!model.id) return;
+
+    const availability = getPoseRegenerationAvailability(model, pose);
+    if (!availability.canRegenerate) {
+      toast({
+        tone: 'warning',
+        title: 'No se puede regenerar esta pose',
+        description: availability.reason,
+      });
+      return;
+    }
+
+    const recipeId = resolvePoseRecipeId(pose);
+    const recipe = recipeId ? MODEL_POSE_RECIPES_BY_ID.get(recipeId) : null;
+    const referencePose = findFrontFullBodyReferencePose(model);
+    if (!recipe || !referencePose) return;
+
+    setRegeneratingPoseId(pose.id);
+    try {
+      const response = await generateModelPoses({
+        prompt: buildReferencePosePromptFromRecipe(CATALOG_REGEN_PROMPT, recipe),
+        provider: CATALOG_REGEN_PROVIDER,
+        aspectRatio: CATALOG_REGEN_ASPECT_RATIO,
+        imageConfig: CATALOG_REGEN_PROVIDER_CONFIG,
+        count: 1,
+        tempSessionId: uuidv4(),
+        clientId: model.clientId,
+        modelId: model.id,
+        stage: 'pose',
+        referenceStoragePath: referencePose.storagePath,
+        preserveReferenceDetails: true,
+      });
+
+      const photo = response.photos[0];
+      if (!photo) {
+        throw new Error('La generación no devolvió ninguna imagen.');
+      }
+
+      await replaceModelPoseWithGeneratedPhoto(
+        model,
+        pose.id,
+        photo,
+        buildManualPoseClassification(recipe),
+        response.estimatedCostUsd,
+      );
+
+      toast({
+        tone: 'success',
+        title: 'Pose regenerada',
+        description: `Se regeneró "${recipe.label}" usando la referencia de frente completa.`,
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'Error al regenerar la pose',
+        description: err.message || 'Inténtalo nuevamente en un momento.',
+      });
+    } finally {
+      setRegeneratingPoseId(null);
+    }
   };
 
   const handleSaveEdit = async (model: Model) => {
@@ -267,11 +483,14 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     editPoseIdsToRemove,
     isSavingEdit,
     taggingModelId,
+    regeneratingPoseId,
     handleStartEdit,
     handleCancelEdit,
     handleEditFileChange,
     handleRemovePendingEditFile,
     handleTogglePoseRemoval,
+    handleRegeneratePoseFromReference,
+    getPoseRegenerationAvailability,
     handleSaveEdit,
     handleArchive,
     handleRestore,

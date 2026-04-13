@@ -160,6 +160,11 @@ const getOrientationPromptRules = (
         'Use a clean left side profile with the body orientation unmistakably lateral.',
         'Avoid drifting back toward a front three-quarter angle.',
       ];
+    case 'profile_right':
+      return [
+        'Use a clean right side profile with the body orientation unmistakably lateral.',
+        'Avoid drifting back toward a front three-quarter angle.',
+      ];
     case 'back':
       return [
         'The body must read as a true back view with no ambiguous twist back toward the camera.',

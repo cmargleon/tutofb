@@ -19,6 +19,12 @@ const FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES = [
   'Do not show the model face, torso, or hands.',
 ];
 
+const PORTRAIT_BACK_NAPE_PROMPT_DIRECTIVES = [
+  'Frame a rear portrait where the camera sees only the back of the head, nape, and upper shoulders.',
+  'Do not show the eyes, nose, lips, or a readable cheek line.',
+  'The image must read as a clean back portrait, not a side profile or a three-quarter turn.',
+];
+
 export const MODEL_POSE_RECIPES: PoseRecipe[] = [
   {
     id: 'full-front',
@@ -220,6 +226,34 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
     promptDirectives: FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
   },
   {
+    id: 'footwear-three-quarter-left-closeup',
+    label: 'Calzado 3/4 izquierdo',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, three-quarter front angle, left side dominant',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'front_three_quarter',
+    },
+    promptDirectives: [
+      ...FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+      'Rotate the stance so the left side of the footwear is the dominant visible side.',
+    ],
+  },
+  {
+    id: 'footwear-three-quarter-right-closeup',
+    label: 'Calzado 3/4 derecho',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, three-quarter front angle, right side dominant',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'front_three_quarter',
+    },
+    promptDirectives: [
+      ...FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+      'Rotate the stance so the right side of the footwear is the dominant visible side.',
+    ],
+  },
+  {
     id: 'footwear-side-closeup',
     label: 'Calzado lateral',
     group: 'Calzado',
@@ -229,6 +263,56 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
       orientation: 'profile_left',
     },
     promptDirectives: FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'footwear-side-right-closeup',
+    label: 'Calzado lateral derecho',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, clean right side profile, catalog readability',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'profile_right',
+    },
+    promptDirectives: FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'footwear-back-closeup',
+    label: 'Calzado espalda',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, back view, heels facing camera',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'back',
+    },
+    promptDirectives: FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+  },
+  {
+    id: 'footwear-back-three-quarter-left-closeup',
+    label: 'Calzado 3/4 espalda izquierdo',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, three-quarter back angle, left rear side dominant',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'back_three_quarter',
+    },
+    promptDirectives: [
+      ...FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+      'Rotate the stance so the left rear side of the footwear is the dominant visible side.',
+    ],
+  },
+  {
+    id: 'footwear-back-three-quarter-right-closeup',
+    label: 'Calzado 3/4 espalda derecho',
+    group: 'Calzado',
+    shotType: 'footwear close-up, both feet visible, three-quarter back angle, right rear side dominant',
+    promptProfile: {
+      category: 'footwear_closeup',
+      orientation: 'back_three_quarter',
+    },
+    promptDirectives: [
+      ...FOOTWEAR_CLOSEUP_PROMPT_DIRECTIVES,
+      'Rotate the stance so the right rear side of the footwear is the dominant visible side.',
+    ],
   },
   {
     id: 'portrait-front',
@@ -249,6 +333,82 @@ export const MODEL_POSE_RECIPES: PoseRecipe[] = [
       category: 'portrait',
       orientation: 'front_three_quarter',
     },
+  },
+  {
+    id: 'portrait-three-quarter-left',
+    label: 'Retrato 3/4 izquierdo',
+    group: 'Retrato',
+    shotType: 'portrait, bust shot, three-quarter angle, left side dominant',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'front_three_quarter',
+    },
+    promptDirectives: ['Rotate so the left cheek and left side of the face are the dominant visible side.'],
+  },
+  {
+    id: 'portrait-three-quarter-right',
+    label: 'Retrato 3/4 derecho',
+    group: 'Retrato',
+    shotType: 'portrait, bust shot, three-quarter angle, right side dominant',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'front_three_quarter',
+    },
+    promptDirectives: ['Rotate so the right cheek and right side of the face are the dominant visible side.'],
+  },
+  {
+    id: 'portrait-profile-left',
+    label: 'Retrato perfil izquierdo',
+    group: 'Retrato',
+    shotType: 'portrait, full left side profile, looking completely to the left',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'profile_left',
+    },
+  },
+  {
+    id: 'portrait-profile-right',
+    label: 'Retrato perfil derecho',
+    group: 'Retrato',
+    shotType: 'portrait, full right side profile, looking completely to the right',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'profile_right',
+    },
+  },
+  {
+    id: 'portrait-back-nape',
+    label: 'Retrato nuca',
+    group: 'Retrato',
+    shotType: 'portrait, complete back view, only the nape and back of head visible',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'back',
+    },
+    promptDirectives: PORTRAIT_BACK_NAPE_PROMPT_DIRECTIVES,
+    manualFaceVisible: false,
+  },
+  {
+    id: 'portrait-back-three-quarter-left',
+    label: 'Retrato 3/4 espalda izquierdo',
+    group: 'Retrato',
+    shotType: 'portrait, three-quarter back angle, left rear side dominant',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'back_three_quarter',
+    },
+    promptDirectives: ['Rotate so the left rear side of the head and face contour are the dominant visible side.'],
+  },
+  {
+    id: 'portrait-back-three-quarter-right',
+    label: 'Retrato 3/4 espalda derecho',
+    group: 'Retrato',
+    shotType: 'portrait, three-quarter back angle, right rear side dominant',
+    promptProfile: {
+      category: 'portrait',
+      orientation: 'back_three_quarter',
+    },
+    promptDirectives: ['Rotate so the right rear side of the head and face contour are the dominant visible side.'],
   },
   {
     id: 'accessories-front',

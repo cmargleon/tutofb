@@ -13,6 +13,7 @@ import {
   PermanentDeleteCatalogEntityResponse,
   GenerateModelPhotoRequest,
   GenerateModelPhotoResponse,
+  GeneratedModelPhoto,
 } from '../../../shared/src/types';
 import { v4 as uuidv4 } from 'uuid';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
@@ -284,6 +285,78 @@ export const generateModelPoses = async (
   );
   const result = await callable(data);
   return result.data;
+};
+
+export const replaceModelPoseWithGeneratedPhoto = async (
+  model: Model,
+  poseId: string,
+  generatedPhoto: GeneratedModelPhoto,
+  nextAiClassification?: PoseAiClassification | null,
+  estimatedCostUsd = 0,
+): Promise<void> => {
+  if (!model.id) throw new Error('Modelo no encontrado.');
+
+  const targetPose = (model.poses || []).find((pose) => pose.id === poseId);
+  if (!targetPose) {
+    throw new Error('La pose a regenerar ya no existe en el modelo.');
+  }
+
+  const modelRef = doc(db, 'models', model.id);
+  const storageRootPath = getModelStorageRootPath(model.id, model.clientId, model.storageRootPath);
+  const downloadUrl = await getDownloadURL(ref(storage, generatedPhoto.storagePath));
+  const response = await fetch(downloadUrl);
+
+  if (!response.ok) {
+    throw new Error('No se pudo descargar la imagen regenerada.');
+  }
+
+  const imageBlob = await response.blob();
+  const extension = generatedPhoto.contentType.includes('jpeg') || generatedPhoto.contentType.includes('jpg')
+    ? 'jpg'
+    : 'png';
+  const replacementStoragePath = `${storageRootPath}/poses/${poseId}-regen-${Date.now()}.${extension}`;
+  const replacementRef = ref(storage, replacementStoragePath);
+
+  try {
+    await uploadBytes(replacementRef, imageBlob, {
+      contentType: generatedPhoto.contentType || imageBlob.type || 'image/png',
+    });
+
+    const nextPoses = (model.poses || []).map((pose) =>
+      pose.id === poseId
+        ? {
+            ...pose,
+            storagePath: replacementStoragePath,
+            fileName: replacementStoragePath.split('/').pop() ?? pose.fileName,
+            previewStoragePath: null,
+            aiClassification: nextAiClassification ?? pose.aiClassification ?? null,
+          }
+        : pose,
+    );
+
+    await updateDoc(modelRef, {
+      poses: nextPoses,
+      coverPosePath:
+        model.coverPoseId === poseId
+          ? replacementStoragePath
+          : model.coverPosePath || nextPoses[0]?.storagePath || null,
+      generatedPhotoCount: (model.generatedPhotoCount || 0) + 1,
+      generatedPhotoCostUsd: Number(model.generatedPhotoCostUsd || 0) + Number(estimatedCostUsd || 0),
+      updatedAt: serverTimestamp(),
+    });
+
+    await Promise.allSettled(
+      [targetPose.storagePath, targetPose.previewStoragePath, generatedPhoto.storagePath]
+        .filter((value): value is string => Boolean(value))
+        .map((storagePath) => deleteObject(ref(storage, storagePath))),
+    );
+  } catch (error) {
+    await Promise.allSettled([
+      deleteObject(replacementRef),
+      deleteObject(ref(storage, generatedPhoto.storagePath)),
+    ]);
+    throw error;
+  }
 };
 
 export const uploadModelReferenceFile = async (

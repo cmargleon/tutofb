@@ -11,6 +11,7 @@ import {
   ExportBatchSpreadsheetResponse,
   ProductDraft,
   Provider,
+  RegenerateFailedBatchJobsRequest,
   RegenerateFailedBatchJobsResponse,
   RegenerateJobsBulkRequest,
   RegenerateJobsBulkResponse,
@@ -80,7 +81,7 @@ export const cancelBatchProcessing = async (
 };
 
 export const regenerateFailedBatchJobs = async (batchId: string): Promise<RegenerateFailedBatchJobsResponse> => {
-  const callable = httpsCallable<{ batchId: string }, RegenerateFailedBatchJobsResponse>(
+  const callable = httpsCallable<RegenerateFailedBatchJobsRequest, RegenerateFailedBatchJobsResponse>(
     functions,
     'regenerateFailedBatchJobs',
   );
@@ -90,6 +91,23 @@ export const regenerateFailedBatchJobs = async (batchId: string): Promise<Regene
     return result.data;
   } catch (error) {
     console.error('Error calling regenerateFailedBatchJobs:', error);
+    throw error;
+  }
+};
+
+export const regenerateFailedBatchJobsFromNotification = async (
+  batchId: string,
+): Promise<RegenerateFailedBatchJobsResponse> => {
+  const callable = httpsCallable<RegenerateFailedBatchJobsRequest, RegenerateFailedBatchJobsResponse>(
+    functions,
+    'regenerateFailedBatchJobs',
+  );
+
+  try {
+    const result = await callable({ batchId, source: 'notification' });
+    return result.data;
+  } catch (error) {
+    console.error('Error calling regenerateFailedBatchJobsFromNotification:', error);
     throw error;
   }
 };

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Bell, Menu, Rows3, Search, Wand2 } from 'lucide-react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Bell, Images, Menu, RefreshCw, Rows3, Search, Wand2 } from 'lucide-react';
 import { useRole } from '../features/auth/AuthProvider';
 import { useNotifications } from '../features/notifications/useNotifications';
-import { ImageThumb, StatusBadge } from './ui';
+import { regenerateFailedBatchJobsFromNotification } from '../features/evaluation/firebase';
+import { useToast } from '../features/feedback/FeedbackProvider';
+import { buildBatchNotificationDescription } from '../features/notifications/batchNotifications';
 import { Sidebar } from './layout/Sidebar';
 import { GlobalSearch } from './layout/GlobalSearch';
 import { buildNavigation, getCurrentPageTitle } from './layout/navigation';
@@ -15,6 +17,9 @@ export const Layout: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => window.innerWidth < 1280);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [retryingBatchIds, setRetryingBatchIds] = useState<Record<string, boolean>>({});
+  const navigate = useNavigate();
+  const toast = useToast();
 
   const { queueCount, notifications, unreadCount, isNotifOpen, notifRef, onBellClick, onCloseNotif } =
     useNotifications();
@@ -72,6 +77,39 @@ export const Layout: React.FC = () => {
   const handleBellClick = () => {
     setIsSearchOpen(false);
     onBellClick();
+  };
+
+  const handleOpenBatchNotification = (batchId: string, clientId: string) => {
+    onCloseNotif();
+    navigate(`/catalogo?clientId=${clientId}&batchId=${batchId}`);
+  };
+
+  const handleRetryFailedBatch = async (batchId: string) => {
+    setRetryingBatchIds((current) => ({ ...current, [batchId]: true }));
+
+    try {
+      const result = await regenerateFailedBatchJobsFromNotification(batchId);
+      toast({
+        title: 'Reintento encolado',
+        description: result.queuedJobs > 0
+          ? `${result.queuedJobs} jobs fallidos volverán a procesarse.`
+          : 'No había jobs fallidos para reintentar.',
+        tone: result.queuedJobs > 0 ? 'success' : 'info',
+      });
+    } catch (error) {
+      console.error('Error retrying failed batch from notification:', error);
+      toast({
+        title: 'No se pudo reintentar el lote',
+        description: error instanceof Error ? error.message : 'Intenta nuevamente.',
+        tone: 'error',
+      });
+    } finally {
+      setRetryingBatchIds((current) => {
+        const next = { ...current };
+        delete next[batchId];
+        return next;
+      });
+    }
   };
 
   return (
@@ -165,24 +203,58 @@ export const Layout: React.FC = () => {
                     <div className="px-4 py-6 text-center text-sm text-slate-400">Sin notificaciones recientes</div>
                   ) : (
                     <ul className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
-                      {notifications.map((job) => (
-                        <li key={job.id}>
-                          <Link
-                            to={`/catalogo?clientId=${job.clientId}&batchId=${job.batchId}`}
-                            onClick={onCloseNotif}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
+                      {notifications.map(({ batch, outcome, canRetry, showReviewIcon }) => (
+                        <li key={batch.id}>
+                          <div
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => handleOpenBatchNotification(batch.id, batch.clientId)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                handleOpenBatchNotification(batch.id, batch.clientId);
+                              }
+                            }}
+                            className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-gray-50 transition"
                           >
-                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-100">
-                              {job.garmentFilePath
-                                ? <ImageThumb storagePath={job.garmentFilePath} alt="" fit="contain" />
-                                : null}
+                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${
+                              outcome === 'completed'
+                                ? 'border-emerald-100 bg-emerald-50 text-emerald-600'
+                                : 'border-rose-100 bg-rose-50 text-rose-600'
+                            }`}>
+                              <Images className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-slate-900">{job.clientNameSnapshot}</p>
-                              <p className="truncate text-xs text-slate-500">{job.modelNameSnapshot} · {job.id?.slice(0, 8)}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-sm font-medium text-slate-900">{batch.clientNameSnapshot}</p>
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                  outcome === 'completed'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-rose-100 text-rose-700'
+                                }`}>
+                                  {outcome === 'completed' ? 'Exitoso' : 'Fallido'}
+                                </span>
+                              </div>
+                              <p className="truncate text-xs text-slate-500">{batch.modelNameSnapshot}</p>
+                              <p className="truncate text-xs text-slate-400">{buildBatchNotificationDescription(batch)}</p>
                             </div>
-                            <StatusBadge status={job.status} />
-                          </Link>
+                            {canRetry ? (
+                              <button
+                                type="button"
+                                aria-label="Reintentar jobs fallidos"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleRetryFailedBatch(batch.id);
+                                }}
+                                disabled={Boolean(retryingBatchIds[batch.id])}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-white hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <RefreshCw className={`h-4 w-4 ${retryingBatchIds[batch.id] ? 'animate-spin' : ''}`} />
+                              </button>
+                            ) : showReviewIcon ? (
+                              <Search className="h-4 w-4 shrink-0 text-rose-500" aria-label="Revisar lote fallido" />
+                            ) : null}
+                          </div>
                         </li>
                       ))}
                     </ul>

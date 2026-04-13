@@ -12,6 +12,7 @@ interface Props {
   garments: UploadedGarmentDraft[];
   selectedPoseIds: string[];
   suggestedPoseIds: string[];
+  compatiblePoseIds: string[];
   allPosesSelected: boolean | null | undefined;
   isPreparing: boolean;
   suggestionError: string | null;
@@ -26,6 +27,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
   garments,
   selectedPoseIds,
   suggestedPoseIds,
+  compatiblePoseIds,
   allPosesSelected,
   isPreparing,
   suggestionError,
@@ -43,6 +45,8 @@ export const PoseSelectionStep: React.FC<Props> = ({
       />
     );
   }
+
+  const compatiblePoseIdSet = new Set(compatiblePoseIds);
 
   return (
     <div className="space-y-6">
@@ -88,7 +92,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
               <Check className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
                 {suggestedPoseIds.length > 0
-                  ? `Se sugirieron ${suggestedPoseIds.length} pose${suggestedPoseIds.length === 1 ? '' : 's'} útiles para al menos una prenda del lote.`
+                  ? `Se sugirieron ${suggestedPoseIds.length} pose${suggestedPoseIds.length === 1 ? '' : 's'} compatibles con al menos una prenda del lote.`
                   : 'No hubo una sugerencia automática útil para el lote; puedes elegir las poses manualmente.'}
               </span>
             </div>
@@ -97,8 +101,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
           {missingPoseClassificationCount > 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               {missingPoseClassificationCount} pose{missingPoseClassificationCount === 1 ? '' : 's'} del modelo no
-              tienen `aiClassification`, así que no entraron a la sugerencia automática pero siguen disponibles para
-              selección manual.
+              tienen `aiClassification`, así que quedan fuera del matching estricto hasta que se clasifiquen.
             </div>
           ) : null}
         </div>
@@ -115,6 +118,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
           <button
             type="button"
             onClick={onToggleAllPoses}
+            disabled={compatiblePoseIds.length === 0}
             className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
           >
             {allPosesSelected ? 'Deseleccionar todas' : 'Seleccionar todas'}
@@ -132,14 +136,18 @@ export const PoseSelectionStep: React.FC<Props> = ({
                 garmentBodyArea: getGarmentBodyArea(garment),
               })),
             );
+            const isCompatible = compatiblePoseIdSet.has(pose.id);
 
             return (
               <button
                 type="button"
                 key={pose.id}
                 onClick={() => onPoseToggle(pose.id)}
+                disabled={!isCompatible}
                 className={`relative overflow-hidden rounded-3xl border transition ${
                   selected ? 'border-emerald-600 ring-2 ring-emerald-600/20' : 'border-slate-200 hover:border-slate-300'
+                } ${
+                  isCompatible ? '' : 'cursor-not-allowed opacity-55'
                 }`}
               >
                 <div className="aspect-[3/4] bg-slate-100">
@@ -170,6 +178,11 @@ export const PoseSelectionStep: React.FC<Props> = ({
                     <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                       {compatibleGarmentCount} prenda{compatibleGarmentCount === 1 ? '' : 's'}
                     </span>
+                    {!isCompatible ? (
+                      <span className="inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium text-rose-700">
+                        Sin match
+                      </span>
+                    ) : null}
                     {suggested ? (
                       <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
                         Sugerida

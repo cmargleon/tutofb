@@ -163,7 +163,7 @@ test('getSuggestedPoseIdsForGarments restringe accesorios de cabeza a poses con 
   assert.deepEqual(suggested, ['pose-portrait-front']);
   assert.equal(
     countCompatibleGarmentsForPose(
-      buildAiClassification(['front'], 'full_body', false),
+      buildAiClassification(['front'], 'full_body', true),
       [{ availableViews: ['front'], garmentBodyArea: 'head_accessory' as const }],
     ),
     0,
@@ -181,4 +181,24 @@ test('countCompatibleGarmentsForPose permite close-ups de pies para calzado', ()
   );
 
   assert.equal(count, 2);
+});
+
+test('countCompatibleGarmentsForPose deja fuera poses full body para calzado en matching estricto', () => {
+  assert.equal(
+    countCompatibleGarmentsForPose(
+      buildAiClassification(['front'], 'full_body', true),
+      [{ availableViews: ['front'], garmentBodyArea: 'footwear' as const }],
+    ),
+    0,
+  );
+});
+
+test('countCompatibleGarmentsForPose deja fuera poses sin aiClassification en matching estricto', () => {
+  assert.equal(
+    countCompatibleGarmentsForPose(
+      null,
+      [{ availableViews: ['front'], garmentBodyArea: 'upper_body' as const }],
+    ),
+    0,
+  );
 });

@@ -584,3 +584,111 @@ test('getCompatibleGarmentPoseCombinations no mezcla poses de tren inferior con 
     ['gar-bottom:pose-lower-front', 'gar-top:pose-upper-front'],
   );
 });
+
+test('getCompatibleGarmentPoseCombinations aplica matching estricto para calzado y accesorios de rostro', () => {
+  const combinations = getCompatibleGarmentPoseCombinations(
+    [
+      {
+        id: 'gar-shoes',
+        name: 'Tenis Blanco',
+        storagePath: 'garments/drafts/user-1/draft-1/gar-shoes/front.jpg',
+        isMultiAngle: true,
+        garmentBodyArea: 'footwear',
+        photos: [
+          {
+            id: 'gar-shoes-front',
+            fileName: 'front.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-shoes/front.jpg',
+            sourceIndex: 0,
+            view: 'front',
+            classifiedBy: 'gemini',
+          },
+        ],
+      },
+      {
+        id: 'gar-glasses',
+        name: 'Lentes',
+        storagePath: 'garments/drafts/user-1/draft-1/gar-glasses/front.jpg',
+        isMultiAngle: true,
+        garmentBodyArea: 'head_accessory',
+        photos: [
+          {
+            id: 'gar-glasses-front',
+            fileName: 'front.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-glasses/front.jpg',
+            sourceIndex: 0,
+            view: 'front',
+            classifiedBy: 'gemini',
+          },
+        ],
+      },
+    ],
+    [
+      {
+        id: 'pose-feet-front',
+        fileName: 'pose-feet-front.jpg',
+        storagePath: 'models/client-1/model-1/poses/feet-front.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front',
+          framing: 'feet_closeup',
+          bodyFocus: 'feet',
+          faceVisible: false,
+          autoCategory: 'frente_primer_plano_pies',
+          usableForGarmentViews: ['front'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 2,
+        },
+      },
+      {
+        id: 'pose-full-front',
+        fileName: 'pose-full-front.jpg',
+        storagePath: 'models/client-1/model-1/poses/full-front.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front',
+          framing: 'full_body',
+          bodyFocus: 'full_body',
+          faceVisible: true,
+          autoCategory: 'frente_cuerpo_completo',
+          usableForGarmentViews: ['front'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 2,
+        },
+      },
+      {
+        id: 'pose-portrait-front',
+        fileName: 'pose-portrait-front.jpg',
+        storagePath: 'models/client-1/model-1/poses/portrait-front.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front',
+          framing: 'medium_body',
+          bodyFocus: 'upper_body',
+          faceVisible: true,
+          autoCategory: 'frente_medio_cuerpo',
+          usableForGarmentViews: ['front'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 2,
+        },
+      },
+      {
+        id: 'pose-untagged',
+        fileName: 'pose-untagged.jpg',
+        storagePath: 'models/client-1/model-1/poses/untagged.jpg',
+        aiClassification: null,
+      },
+    ],
+  );
+
+  assert.deepEqual(
+    combinations.map(({ garment, pose }) => `${garment.id}:${pose.id}`),
+    ['gar-shoes:pose-feet-front', 'gar-glasses:pose-portrait-front'],
+  );
+});

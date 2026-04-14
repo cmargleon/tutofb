@@ -47,8 +47,8 @@ export const mapSummary = (data: any): AnalyticsSummary => {
     humanReviewAvoidedRatePct:
       data.humanReviewAvoidedRatePct || ((data.totalJobs || 0) > 0 ? Math.round(((data.humanReviewAvoidedJobs || 0) / data.totalJobs) * 100) : 0),
     geminiPrecisionPct:
-      data.geminiPrecisionPct || (autoReviewedJobs > 0
-        ? Math.round((geminiAgreedJobs / autoReviewedJobs) * 100)
+      data.geminiPrecisionPct || ((data.geminiApprovedJobs || 0) > 0
+        ? Math.round((geminiTruePositiveJobs / data.geminiApprovedJobs) * 100)
         : 0),
     geminiFalsePositiveRatePct:
       data.geminiFalsePositiveRatePct || ((data.geminiApprovedJobs || 0) > 0 ? Math.round((geminiFalsePositiveJobs / data.geminiApprovedJobs) * 100) : 0),

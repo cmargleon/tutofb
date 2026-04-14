@@ -1,5 +1,5 @@
 import { auth, storage } from '../../firebase';
-import { deleteObject, ref, uploadBytesResumable } from 'firebase/storage';
+import { deleteObject, ref, uploadBytes, uploadBytesResumable } from 'firebase/storage';
 import { GarmentOriginalPhotoDraft, GarmentUploadStatus, UploadedGarmentDraft } from './types';
 
 const DEFAULT_UPLOAD_CONCURRENCY = 4;
@@ -65,12 +65,25 @@ export interface UploadGarmentDraftsResult {
   }>;
 }
 
+export interface UploadWizardSourceSpreadsheetResult {
+  storagePath: string;
+  originalFileName: string;
+}
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     globalThis.setTimeout(resolve, ms);
   });
 
 const sanitizeFileName = (fileName: string): string => fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+
+const getSourceSpreadsheetStoragePath = (file: File): string => {
+  if (!auth.currentUser) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  return `wizard_source_spreadsheets/${auth.currentUser.uid}/${crypto.randomUUID()}/${sanitizeFileName(file.name)}`;
+};
 
 const replaceFileExtension = (fileName: string, nextExtension: string): string => {
   const sanitizedExtension = nextExtension.replace(/^\.+/, '') || 'jpg';
@@ -505,6 +518,26 @@ export const deleteGarmentDraftByStoragePath = async (storagePath: string | null
   } catch (error) {
     console.error('Failed to delete draft garment', error);
   }
+};
+
+export const uploadWizardSourceSpreadsheet = async (
+  file: File,
+): Promise<UploadWizardSourceSpreadsheetResult> => {
+  if (!auth.currentUser) {
+    throw new Error('Usuario no autenticado');
+  }
+
+  const storagePath = getSourceSpreadsheetStoragePath(file);
+  await uploadBytes(
+    ref(storage, storagePath),
+    file,
+    { contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+  );
+
+  return {
+    storagePath,
+    originalFileName: file.name,
+  };
 };
 
 export const deleteGarmentDrafts = async (

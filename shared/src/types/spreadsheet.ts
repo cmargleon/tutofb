@@ -144,17 +144,34 @@ export interface ProductDraftInput {
   inferredValues?: Record<string, ProductDraftValueSuggestion>;
 }
 
+export interface WizardSourceSpreadsheetInput {
+  storagePath: string;
+  originalFileName: string;
+}
+
+export interface SourceSpreadsheetMatchSummary {
+  totalRows: number;
+  rowsWithPhotos: number;
+  ignoredRows: number;
+  reusedSpuPhotoRows: number;
+  matchedRows: number;
+  matchedGarments: number;
+  unmatchedGarments: number;
+}
+
 export interface PreviewProductDraftsRequest {
   clientId: string;
   modelId: string;
   spreadsheetTemplateId: string;
   fallbackCategoryId?: string | null;
   garments: UploadedGarmentInput[];
+  sourceSpreadsheet?: WizardSourceSpreadsheetInput | null;
 }
 
 export interface PreviewProductDraftsResponse {
   success: boolean;
   productDrafts: ProductDraftInput[];
+  sourceSpreadsheetSummary?: SourceSpreadsheetMatchSummary | null;
 }
 
 export interface ImportClientSpreadsheetTemplateRequest {

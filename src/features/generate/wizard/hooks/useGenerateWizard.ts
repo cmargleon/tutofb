@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { DEFAULT_TRY_ON_PROMPT } from '../../../../../shared/src/domain';
 import { useSystemConfig } from '../../../system/useSystemConfig';
 import { buildGarmentSuggestionSignature, getGarmentAvailableViews, handleGarmentFiles, revokeGarmentUrls } from '../../garments';
-import { deleteGarmentDraftByStoragePath } from '../../storage';
+import { deleteGarmentDraftByStoragePath, uploadWizardSourceSpreadsheet } from '../../storage';
 import {
   GenerateWizardStepId,
   UploadedGarmentDraft,
@@ -72,6 +72,7 @@ const buildProductDraftSignature = (state: WizardState): string =>
     modelId: state.selectedModelId,
     templateId: state.selectedSpreadsheetTemplateId,
     categoryId: state.selectedSpreadsheetCategoryId,
+    sourceSpreadsheetStoragePath: state.sourceSpreadsheet?.storagePath || null,
     garments: state.garments.map((garment) => ({
       id: garment.id,
       photos: garment.originalPhotos.map((photo) => ({
@@ -404,6 +405,11 @@ export const useGenerateWizard = () => {
   const handleClientChange = (clientId: string | null) => {
     const nextClient = clients.find((client) => client.id === clientId) ?? null;
     const nextPrompt = resolvePromptBase(nextClient?.generationPromptBase, systemConfig.systemPromptOverride);
+    const previousSourceSpreadsheetPath = state.sourceSpreadsheet?.storagePath || null;
+
+    if (previousSourceSpreadsheetPath) {
+      void deleteGarmentDraftByStoragePath(previousSourceSpreadsheetPath);
+    }
 
     setIsPromptDirty(false);
     setState((current) => resetWizardGeneratedOutputs({
@@ -412,6 +418,7 @@ export const useGenerateWizard = () => {
       selectedModelId: null,
       selectedSpreadsheetTemplateId: null,
       selectedSpreadsheetCategoryId: null,
+      sourceSpreadsheet: null,
       prompt: nextPrompt,
     }));
   };
@@ -450,6 +457,63 @@ export const useGenerateWizard = () => {
       ...current,
       selectedSpreadsheetCategoryId: categoryId,
     }));
+  };
+
+  const handleSourceSpreadsheetFile = async (file: File | null) => {
+    const previousStoragePath = state.sourceSpreadsheet?.storagePath || null;
+
+    if (!file) {
+      if (previousStoragePath) {
+        void deleteGarmentDraftByStoragePath(previousStoragePath);
+      }
+      setState((current) => resetWizardProductDrafts({
+        ...current,
+        sourceSpreadsheet: null,
+      }));
+      setFlowError(null);
+      return;
+    }
+
+    setFlowError(null);
+    setState((current) => resetWizardProductDrafts({
+      ...current,
+      sourceSpreadsheet: {
+        originalFileName: file.name,
+        storagePath: null,
+        status: 'uploading',
+        error: null,
+      },
+    }));
+
+    try {
+      const uploaded = await uploadWizardSourceSpreadsheet(file);
+
+      if (previousStoragePath) {
+        void deleteGarmentDraftByStoragePath(previousStoragePath);
+      }
+
+      setState((current) => resetWizardProductDrafts({
+        ...current,
+        sourceSpreadsheet: {
+          originalFileName: uploaded.originalFileName,
+          storagePath: uploaded.storagePath,
+          status: 'uploaded',
+          error: null,
+        },
+      }));
+    } catch (uploadError) {
+      const message = getErrorMessage(uploadError, 'No se pudo subir el spreadsheet fuente.');
+      setState((current) => resetWizardProductDrafts({
+        ...current,
+        sourceSpreadsheet: {
+          originalFileName: file.name,
+          storagePath: null,
+          status: 'failed',
+          error: message,
+        },
+      }));
+      setFlowError(message);
+    }
   };
 
   const handlePoseToggle = (poseId: string) => {
@@ -551,6 +615,7 @@ export const useGenerateWizard = () => {
     handleOutputModeChange,
     handleSpreadsheetTemplateChange,
     handleSpreadsheetCategoryChange,
+    handleSourceSpreadsheetFile,
     handleModelSelect,
     handlePoseToggle,
     handleToggleAllPoses,

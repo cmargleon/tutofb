@@ -30,6 +30,8 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   outputMode: 'spreadsheet',
   selectedSpreadsheetTemplateId: null,
   selectedSpreadsheetCategoryId: null,
+  sourceSpreadsheet: null,
+  sourceSpreadsheetSummary: null,
   selectedPoseIds: [],
   garments: [],
   poseSuggestions: createInitialPoseSuggestionState(),

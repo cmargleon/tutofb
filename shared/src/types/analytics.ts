@@ -145,7 +145,8 @@ export type GeminiUsageFeature =
   | 'garment_view_classification'
   | 'garment_view_category_color_classification'
   | 'pose_classification'
-  | 'product_draft_enrichment';
+  | 'product_draft_enrichment'
+  | 'spreadsheet_source_matching';
 export type GeminiUsageStatus = 'success' | 'error';
 
 export interface GeminiUsageRecord {

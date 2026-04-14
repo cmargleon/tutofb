@@ -93,6 +93,16 @@ export const useGenerateWizardSubmit = ({
       return;
     }
 
+    if (state.outputMode === 'spreadsheet' && state.sourceSpreadsheet?.status === 'uploading') {
+      setFlowError('Espera a que termine la subida del spreadsheet fuente antes de crear el lote.');
+      return;
+    }
+
+    if (state.outputMode === 'spreadsheet' && state.sourceSpreadsheet?.status === 'failed') {
+      setFlowError('El spreadsheet fuente falló al subir. Vuelve a cargarlo o quítalo antes de crear el lote.');
+      return;
+    }
+
     const selectedProviderImageConfig = getSelectedProviderImageConfig(state);
     if (
       selectedProviderImageConfig.provider === 'fal-seedream'

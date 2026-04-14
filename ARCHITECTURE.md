@@ -47,13 +47,17 @@ Scripts observados:
 | --- | --- | --- |
 | `/login` | `src/pages/Login.tsx` | publica |
 | `/` | `src/pages/Dashboard.tsx` | autenticado y activo |
-| `/users` | `src/pages/Users.tsx` | `admin` |
-| `/clients` | `src/pages/Clients.tsx` | `admin` |
-| `/models` | `src/pages/Models.tsx` | `admin` |
+| `/users` | redirect a `/users/crear` | `admin` |
+| `/users/crear` | `src/pages/Users.tsx` (`view="create"`) | `admin` |
+| `/users/lista` | `src/pages/Users.tsx` (`view="list"`) | `admin` |
+| `/clients` | redirect a `/clients/crear` o `/clients/lista` | `admin` |
+| `/clients/crear` | `src/pages/Clients.tsx` (`view="create"`) | `admin` |
+| `/clients/lista` | `src/pages/Clients.tsx` (`view="list"`) | `admin` |
+| `/models` | redirect a `/models/catalogo` | `admin` |
+| `/models/generar` | `src/pages/ModelsGenerate.tsx` | `admin` |
+| `/models/catalogo` | `src/pages/ModelsCatalog.tsx` | `admin` |
 | `/generate` | `src/pages/Wizard.tsx` | `admin`, `operador` |
 | `/cola` | `src/pages/Cola.tsx` | `admin`, `operador`, `revisor` |
-| `/evaluacion` | `src/pages/Evaluacion.tsx` | `admin`, `operador`, `revisor` |
-| `/archivo` | `src/pages/Archive.tsx` | `admin`, `operador`, `revisor` |
 | `/catalogo` | `src/pages/Catalogo.tsx` | `admin`, `operador`, `revisor` |
 | `/analytics` | `src/pages/Analytics.tsx` | `admin`, `revisor` |
 | `/configuracion` | `src/pages/Configuracion.tsx` | `admin` |
@@ -62,13 +66,13 @@ Scripts observados:
 
 Dominios visibles por carpeta:
 - `src/features/auth/`: sesion, lectura de `users/{uid}` y capacidades por rol
+- `src/features/users/`: CRUD y filtros operativos de usuarios internos
 - `src/features/clients/`: CRUD de clientes y gestion de spreadsheet templates
 - `src/features/models/`: catalogo de modelos, poses, wizard IA y carga de referencias
 - `src/features/generate/` y `src/features/wizard/`: wizard, uploads draft, clasificacion de vistas y envio de batches
-- `src/features/evaluation/`: evaluacion, traceabilidad, output history, product drafts, regeneracion y descargas
+- `src/features/evaluation/`: seleccion manual de outputs, traceabilidad, output history, product drafts, regeneracion y descargas
 - `src/features/queue/`: vista operativa de batches activos
-- `src/features/archive/`: busqueda historica y apertura de batches archivados
-- `src/features/catalog/`: catalogo visual de jobs completados agrupados por prenda
+- `src/features/catalog/`: catalogo visual de jobs completados agrupados por prenda y batch, con acciones operativas
 - `src/features/dashboard/`: snapshot operativo para la home
 - `src/features/analytics/`: analytics agregados y uso de Gemini
 - `src/features/system/`: salud del sistema, alertas y config operativa compartida
@@ -84,8 +88,9 @@ Dominios visibles por carpeta:
   - `createGenerationBatch`
   - `classifyGarmentViewsWithGemini`
   - `previewProductDrafts`
-- Callables de evaluacion y archivo:
+- Callables operativas de cola y catalogo:
   - `regenerateJob`
+  - `deleteJob`
   - `retryJobAutoReview`
   - `cancelJobGeneration`
   - `cancelBatchProcessing`
@@ -95,8 +100,7 @@ Dominios visibles por carpeta:
   - `regenerateFailedBatchJobs`
   - `cancelPendingBatchJobs`
   - `regenerateJobsBulk`
-  - `searchArchive`
-- Callables de administracion y catalogo:
+- Callables de administracion, clientes y modelos:
   - `syncUserClaims`
   - `createAppUser`
   - `updateAppUser`
@@ -107,29 +111,36 @@ Dominios visibles por carpeta:
   - `permanentlyDeleteModel`
   - `generateModelPose`
   - `importClientSpreadsheetTemplate`
+  - `deleteClientSpreadsheetTemplate`
   - `updateClientSpreadsheetTemplateCategory`
+  - `importModelBundle`
 - Admin:
   - `rebuildAnalytics`
   - `getSystemHealth`
   - `updateSystemAlertSettings`
   - `tagModelPosesWithGemini`
+  - `backfillModelPoses`
   - `updateSystemConfig`
   - `getSystemConfig`
 - HTTP:
   - `downloadBatchZip`
   - `downloadJobImage`
+  - `downloadModelBundle`
   - `downloadSelectedJobsZip`
+  - `publicGeneratedImage`
 - Triggers:
   - `onJobStatusChange`
+  - `processJobOnActivation`
   - `onClientDelete`
   - `onModelDelete`
   - `processJobOnCreate`
   - `processJobOnRequeue`
-  - `requeueExpiredJobs`
+  - `requeueExpiredJobsOnSchedule`
   - `analyticsTriggers`
   - `onModelWrite`
   - `syncClaimsOnUserWrite`
   - `storageCleanupOnSchedule`
+  - `onJobCompletedSquareCrop`
 
 Notas operativas visibles:
 - `admin.initializeApp()` se ejecuta en `functions/src/index.ts`
@@ -139,6 +150,7 @@ Notas operativas visibles:
 
 - `functions/src/callables/`: acciones invocadas desde frontend
 - `functions/src/http/`: descargas de imagenes y ZIPs
+- `functions/src/http/publicGeneratedImage.ts`: proxy publico restringido para servir solo assets bajo `generated/`
 - `functions/src/workers/`: worker de jobs y documentacion del flujo
 - `functions/src/triggers/`: procesamiento, analytics, borrados, sync de claims y cleanup
 - `functions/src/providers/`: integraciones con providers de imagen
@@ -190,6 +202,7 @@ Colecciones y documentos que aparecen en el codigo:
 - `system_alert_settings/global`
 - `system_config/main`
 - `model_generation_logs`
+- `adminOperations`
 
 Entidades principales visibles en `shared/src/types/`:
 - `User`
@@ -220,9 +233,10 @@ Semantica confirmada por tipos y worker:
 Paths que aparecen en el codigo:
 
 - poses de modelo: `models/{clientId}/{modelId}/poses/{fileName}`
-- drafts de prendas: `garments/drafts/{uid}/{draftBatchId}/{garmentId}.jpg`
 - drafts multi-archivo: `garments/drafts/{uid}/{draftBatchId}/{garmentId}/{fileName}`
+- source spreadsheets del wizard: `wizard_source_spreadsheets/{uid}/{uuid}/{fileName}`
 - outputs generados: `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`
+- square crops de outputs: `generated/{clientId}/{batchId}/{jobId}/square_crops/{outputId}.jpg`
 - templates de cliente: `client_spreadsheets/{clientId}/{templateId}/{fileName}`
 - exports de spreadsheet: `client_spreadsheet_exports/{clientId}/{batchId}/{fileName}`
 - fotos IA de modelos: `model_generations/{clientId}/{sessionId}/{fileName}`
@@ -260,19 +274,22 @@ Paths que aparecen en el codigo:
 ### Pipeline de jobs
 
 - `processJobOnCreate` y `processJobOnRequeue` disparan el worker
+- `processJobOnActivation` retoma retries diferidos o jobs reactivados por scheduler sin cambiar de estado
 - `functions/src/workers/jobWorker.ts` reclama el job, llama al provider, guarda output en Storage y persiste `jobs/{jobId}/outputs/{outputId}`
 - el worker registra logs operativos y ejecuta auto review con Gemini
 - `retryJobAutoReview` permite reprocesar manualmente la revision del output vigente
-- `requeueExpiredJobs` recupera jobs atascados por timeout o claim vencido
+- `requeueExpiredJobsOnSchedule` recupera jobs atascados por timeout o claim vencido
 - `onJobStatusChange` actualiza agregados del batch
+- `onJobCompletedSquareCrop` sincroniza square crops hacia `productDrafts` cuando cambia el output efectivo de un job con spreadsheet
 - `storageCleanupOnSchedule` ejecuta limpieza periodica de outputs viejos en Storage
 
-### Evaluacion, archivo y catalogo
+### Cola y catalogo operativo
 
-- cola, evaluacion y archivo leen `batches`, `jobs`, `outputs` y `logs`
-- evaluacion soporta seleccion manual de output, requeue, cancelacion, edicion de `productDrafts` y export XLSX del batch
-- archivo expone busqueda filtrada por cliente, provider, estado y rango temporal
-- catalogo agrupa jobs completados por prenda para exploracion visual y descarga puntual
+- no hay rutas separadas `/evaluacion` ni `/archivo` en el router actual; esa operativa vive hoy entre `/cola` y `/catalogo`
+- `Cola` muestra batches vivos, ETA, estados, retries y cancelaciones/regeneraciones masivas
+- `Catalogo` concentra seleccion manual de output, requeue, cancelacion, edicion de `productDrafts` y export XLSX del batch
+- el catalogo agrupa jobs completados por prenda para exploracion visual y descarga puntual
+- `deleteJob` borra trabajos terminales y recompone los contadores del batch
 - las descargas salen por endpoints HTTP que devuelven imagenes individuales o ZIPs
 
 ### Analytics, salud y config operativa
@@ -289,8 +306,10 @@ Paths que aparecen en el codigo:
 - `generateModelPose` genera imagenes temporales para modelos
 - esas imagenes se guardan en Storage bajo `model_generations/...`
 - el callable registra costo estimado en `model_generation_logs`
+- `downloadModelBundle` exporta poses + manifest de un modelo en ZIP y `importModelBundle` rehidrata ese bundle en otro cliente
 - `onModelWrite` clasifica automaticamente poses nuevas con Gemini y completa `pose.aiClassification`
 - `tagModelPosesWithGemini` permite reprocesar o sanear tagging de poses desde backend
+- `backfillModelPoses` encola operaciones administrativas para completar poses faltantes en modelos existentes
 
 ## 8. Zonas sensibles
 

@@ -49,6 +49,18 @@ export const previewProductDrafts = onCall<PreviewProductDraftsRequest, Promise<
     const fallbackCategoryId = typeof request.data?.fallbackCategoryId === 'string' && request.data.fallbackCategoryId.trim()
       ? request.data.fallbackCategoryId.trim()
       : null;
+    const sourceSpreadsheet =
+      request.data?.sourceSpreadsheet
+      && typeof request.data.sourceSpreadsheet === 'object'
+      && typeof request.data.sourceSpreadsheet.storagePath === 'string'
+      && request.data.sourceSpreadsheet.storagePath.trim()
+      && typeof request.data.sourceSpreadsheet.originalFileName === 'string'
+      && request.data.sourceSpreadsheet.originalFileName.trim()
+        ? {
+            storagePath: request.data.sourceSpreadsheet.storagePath.trim(),
+            originalFileName: request.data.sourceSpreadsheet.originalFileName.trim(),
+          }
+        : null;
 
     const garments = Array.isArray(request.data?.garments) ? request.data.garments.map(normalizeGarment) : [];
     if (garments.length === 0) {
@@ -56,6 +68,9 @@ export const previewProductDrafts = onCall<PreviewProductDraftsRequest, Promise<
     }
 
     garments.forEach((garment) => ensureDraftOwnership(request.auth!.uid, garment));
+    if (sourceSpreadsheet && !sourceSpreadsheet.storagePath.startsWith(`wizard_source_spreadsheets/${request.auth!.uid}/`)) {
+      throw new HttpsError('permission-denied', 'El spreadsheet fuente no pertenece al usuario autenticado.');
+    }
 
     const db = getAppFirestore();
     const clientRef = db.collection('clients').doc(clientId);
@@ -149,7 +164,7 @@ export const previewProductDrafts = onCall<PreviewProductDraftsRequest, Promise<
       throw new HttpsError('invalid-argument', 'El modelo seleccionado no pertenece al cliente elegido.');
     }
 
-    const productDrafts = await buildPreviewProductDrafts({
+    const preview = await buildPreviewProductDrafts({
       client,
       model,
       template,
@@ -157,11 +172,13 @@ export const previewProductDrafts = onCall<PreviewProductDraftsRequest, Promise<
       garments,
       userUid: request.auth!.uid,
       fallbackCategoryId,
+      sourceSpreadsheet,
     });
 
     return {
       success: true,
-      productDrafts,
+      productDrafts: preview.productDrafts,
+      sourceSpreadsheetSummary: preview.sourceSpreadsheetSummary,
     };
   },
 );

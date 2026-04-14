@@ -124,19 +124,26 @@ Nombre: `models-agent`
 Responsabilidad:
 - alta y edicion de modelos
 - biblioteca de modelos
+- import/export de bundles de modelos
 - carga y mantenimiento de poses
 - wizard IA para candidatos y poses derivadas
 - generacion de fotos temporales para modelos
 - tagging IA de poses y clasificacion de orientacion/framing
+- backfills administrativos ligados a poses de modelo
 
 Scope principal:
 - `src/pages/Models.tsx`
+- `src/pages/ModelsGenerate.tsx`
+- `src/pages/ModelsCatalog.tsx`
 - `src/components/models/`
 - `src/features/models/`
 - `functions/src/callables/generateModelPose.ts`
+- `functions/src/callables/importModelBundle.ts`
 - `functions/src/admin/tagModelPosesWithGemini.ts`
+- `functions/src/admin/backfillModelPoses.ts`
 - `functions/src/triggers/onModelWrite.ts`
 - `functions/src/providers/textToImage.ts`
+- `functions/src/http/downloadModelBundle.ts`
 - `functions/src/utils/classifyPose.ts`
 
 No deberia tocar:
@@ -148,38 +155,36 @@ No deberia tocar:
 Nombre: `evaluation-agent`
 
 Responsabilidad:
-- revision de batches y jobs
+- operacion diaria de batches y jobs desde cola y catalogo
 - seleccion manual de outputs
 - reintentos y re-revision manual
 - regeneraciones individuales o masivas
 - cancelaciones operativas
 - descargas
 - cola
-- archivo operativo e historial
 - catalogo visual de salidas aprobadas
 - edicion y export de `productDrafts` por batch
 
 Scope principal:
-- `src/pages/Evaluacion.tsx`
 - `src/pages/Cola.tsx`
-- `src/pages/Archive.tsx`
 - `src/pages/Catalogo.tsx`
+- `src/components/catalog/`
 - `src/components/evaluation/`
 - `src/components/product-drafts/`
 - `src/features/evaluation/`
 - `src/features/queue/`
-- `src/features/archive/`
 - `src/features/catalog/`
 - `functions/src/callables/regenerateJob.ts`
 - `functions/src/callables/regenerateJob.helpers.ts`
 - `functions/src/callables/retryJobAutoReview.ts`
+- `functions/src/callables/deleteJob.ts`
 - `functions/src/callables/regenerateFailedBatchJobs.ts`
+- `functions/src/callables/regenerateFailedBatchJobs.helpers.ts`
 - `functions/src/callables/regenerateJobsBulk.ts`
 - `functions/src/callables/cancelJobGeneration.ts`
 - `functions/src/callables/cancelPendingBatchJobs.ts`
 - `functions/src/callables/cancelBatchProcessing.ts`
 - `functions/src/callables/selectJobOutput.ts`
-- `functions/src/callables/searchArchive.ts`
 - `functions/src/callables/updateBatchProductDraft.ts`
 - `functions/src/callables/exportBatchSpreadsheet.ts`
 - `functions/src/http/downloadBatchZip.ts`
@@ -209,9 +214,11 @@ Scope principal:
 - `functions/src/workers/`
 - `functions/src/workers/PROCESSING_FLOW.md`
 - `functions/src/triggers/processJobOnCreate.ts`
+- `functions/src/triggers/processJobOnActivation.ts`
 - `functions/src/triggers/processJobOnRequeue.ts`
 - `functions/src/triggers/requeueExpiredJobs.ts`
 - `functions/src/triggers/onJobStatusChange.ts`
+- `functions/src/triggers/onJobCompletedSquareCrop.ts`
 - `functions/src/triggers/storageCleanupSchedule.ts`
 - `functions/src/providers/index.ts`
 - `functions/src/providers/fal.ts`
@@ -297,6 +304,7 @@ Scope principal:
 - `functions/src/callables/syncUserClaims.ts`
 - `functions/src/callables/userManagement.helpers.ts`
 - `functions/src/callables/importClientSpreadsheetTemplate.ts`
+- `functions/src/callables/deleteClientSpreadsheetTemplate.ts`
 - `functions/src/callables/updateClientSpreadsheetTemplateCategory.ts`
 - `functions/src/spreadsheets/templateWorkbook.ts`
 - `functions/src/triggers/deletePlans.ts`
@@ -330,7 +338,7 @@ Usa este criterio rapido:
 - si el cambio empieza en login, usuarios, clientes, claims o templates de spreadsheet: `admin-agent`
 - si el cambio empieza en modelos, poses, tagging IA o generacion IA de modelos: `models-agent`
 - si el cambio empieza en wizard, prendas draft, clasificacion de vistas, `productDrafts` o creacion de batches/jobs: `generation-agent`
-- si el cambio empieza en cola, evaluacion, archivo, catalogo, descargas, export de spreadsheet o regeneraciones: `evaluation-agent`
+- si el cambio empieza en cola, catalogo, seleccion manual de outputs, descargas, export de spreadsheet o regeneraciones: `evaluation-agent`
 - si el cambio empieza en worker, trigger, provider, runtime, auto review o cleanup de storage: `backend-core-agent`
 - si el cambio empieza en dashboard, analytics, Gemini usage, salud, alertas o `system_config`: `analytics-health-agent`
 - si toca varios dominios o `shared/`: `planner-orchestrator`

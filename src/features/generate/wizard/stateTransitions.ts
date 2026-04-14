@@ -6,17 +6,20 @@ export const resetWizardGeneratedOutputs = (state: WizardState): WizardState => 
   poseSuggestions: createInitialPoseSuggestionState(),
   productDrafts: [],
   productDraftPreparation: createInitialProductDraftPreparationState(),
+  sourceSpreadsheetSummary: null,
 });
 
 export const resetWizardProductDrafts = (state: WizardState): WizardState => ({
   ...state,
   productDrafts: [],
   productDraftPreparation: createInitialProductDraftPreparationState(),
+  sourceSpreadsheetSummary: null,
 });
 
 export const resetWizardProductDraftPreparation = (state: WizardState): WizardState => ({
   ...state,
   productDraftPreparation: createInitialProductDraftPreparationState(),
+  sourceSpreadsheetSummary: null,
 });
 
 export const replaceWizardProductDraftRows = (

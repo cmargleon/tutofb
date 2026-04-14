@@ -1,4 +1,5 @@
 import React from 'react';
+import { SourceSpreadsheetMatchSummary } from '../../../shared/src/types';
 import { WizardProviderImageConfig, WizardState } from '../../features/generate/types';
 import { PromptBaseField } from './PromptBaseField';
 import { ProviderImageConfigSelection } from './ProviderImageConfigSelection';
@@ -13,6 +14,8 @@ interface Props {
   disabledProviders?: string[];
   productDraftPreparationStatus: WizardState['productDraftPreparation']['status'];
   productDraftPreparationError: string | null;
+  sourceSpreadsheet: WizardState['sourceSpreadsheet'];
+  sourceSpreadsheetSummary: SourceSpreadsheetMatchSummary | null;
   onRetryProductDraftPreparation: () => void;
   onProviderChange: (provider: WizardState['provider']) => void;
   onProviderImageConfigChange: (config: WizardProviderImageConfig) => void;
@@ -29,6 +32,8 @@ export const BatchStep: React.FC<Props> = ({
   disabledProviders,
   productDraftPreparationStatus,
   productDraftPreparationError,
+  sourceSpreadsheet,
+  sourceSpreadsheetSummary,
   onRetryProductDraftPreparation,
   onProviderChange,
   onProviderImageConfigChange,
@@ -46,11 +51,15 @@ export const BatchStep: React.FC<Props> = ({
     state.outputMode === 'spreadsheet'
     && productDraftPreparationStatus === 'failed'
   );
+  const sourceSpreadsheetPending = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'uploading';
+  const sourceSpreadsheetFailed = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'failed';
   const isSubmitDisabled = (
     isSubmitting
     || totalJobs === 0
     || spreadsheetPreparationPending
     || spreadsheetPreparationFailed
+    || sourceSpreadsheetPending
+    || sourceSpreadsheetFailed
   );
 
   return (
@@ -60,6 +69,15 @@ export const BatchStep: React.FC<Props> = ({
       {state.outputMode === 'spreadsheet' ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <h3 className="text-sm font-semibold text-slate-900">Preparación del spreadsheet</h3>
+          {sourceSpreadsheet ? (
+            <p className="mt-2 text-sm text-slate-600">
+              {sourceSpreadsheet.status === 'uploading'
+                ? `Subiendo ${sourceSpreadsheet.originalFileName} para preparar el matching.`
+                : sourceSpreadsheet.status === 'failed'
+                  ? sourceSpreadsheet.error || 'Falló la subida del spreadsheet fuente.'
+                  : `Usaremos ${sourceSpreadsheet.originalFileName} como fuente adicional para completar el lote.`}
+            </p>
+          ) : null}
           {productDraftPreparationStatus === 'failed' ? (
             <div className="mt-2 space-y-3">
               <p className="text-sm text-rose-700">
@@ -80,6 +98,16 @@ export const BatchStep: React.FC<Props> = ({
                 : 'Los product drafts quedaron listos y se van a incluir en el lote.'}
             </p>
           )}
+          {sourceSpreadsheetSummary ? (
+            <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 md:grid-cols-3">
+              <div>Total filas útiles: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.totalRows}</span></div>
+              <div>Filas matcheadas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.matchedRows}</span></div>
+              <div>Prendas sin match: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.unmatchedGarments}</span></div>
+              <div>Filas ignoradas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.ignoredRows}</span></div>
+              <div>Filas que heredaron foto por SPU: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.reusedSpuPhotoRows}</span></div>
+              <div>Filas con foto: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.rowsWithPhotos}</span></div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

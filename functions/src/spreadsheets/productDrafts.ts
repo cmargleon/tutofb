@@ -6,9 +6,11 @@ import {
   ProductDraftInput,
   ProductDraftRow,
   ProductDraftValueSuggestion,
+  SourceSpreadsheetMatchSummary,
   SpreadsheetTemplate,
   SpreadsheetTemplateCategory,
   UploadedGarmentInput,
+  WizardSourceSpreadsheetInput,
 } from '../../../shared/src/types';
 import {
   getProductDraftSpecificationAttributeName,
@@ -16,6 +18,11 @@ import {
 } from '../../../shared/src/utils/spreadsheetDraftColumns';
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 import { GEMINI_API_KEY, getGeminiImageReviewModel } from '../config/runtime';
+import {
+  buildSourceSpreadsheetSuggestions,
+  matchSourceSpreadsheetRowsToGarments,
+  resolveSourceSpreadsheetRowColor,
+} from './sourceSpreadsheetMatching';
 
 const bucket = admin.storage().bucket();
 const PRODUCT_DRAFT_PREVIEW_CONCURRENCY = 2;
@@ -583,6 +590,7 @@ export const buildPreviewProductDrafts = async ({
   garments,
   userUid,
   fallbackCategoryId,
+  sourceSpreadsheet,
 }: {
   client: Client;
   model: Model;
@@ -591,8 +599,17 @@ export const buildPreviewProductDrafts = async ({
   garments: UploadedGarmentInput[];
   userUid: string;
   fallbackCategoryId?: string | null;
-}): Promise<ProductDraftInput[]> =>
-  mapWithConcurrencyLimit(
+  sourceSpreadsheet?: WizardSourceSpreadsheetInput | null;
+}): Promise<{ productDrafts: ProductDraftInput[]; sourceSpreadsheetSummary: SourceSpreadsheetMatchSummary | null }> => {
+  const sourceSpreadsheetMatch = sourceSpreadsheet
+    ? await matchSourceSpreadsheetRowsToGarments({
+        sourceSpreadsheet,
+        garments,
+        userUid,
+      })
+    : null;
+
+  const productDrafts = await mapWithConcurrencyLimit(
     garments,
     PRODUCT_DRAFT_PREVIEW_CONCURRENCY,
     async (garment) => {
@@ -615,18 +632,31 @@ export const buildPreviewProductDrafts = async ({
         garment,
         payload: geminiPayload,
       });
+      const matchedSourceRow = sourceSpreadsheetMatch?.matchedRowByGarmentId.get(garment.id) || null;
+      const sourceValues = buildSourceSpreadsheetSuggestions(category, matchedSourceRow);
+      const mergedInferredValues = {
+        ...inferredValues,
+        ...sourceValues,
+      };
+      const sourceMatchedColor = resolveSourceSpreadsheetRowColor(matchedSourceRow, category);
 
       return {
         garmentId: garment.id,
         garmentName: garment.name,
         categoryId: category.id!,
         categoryName: category.label,
-        matchedColor: garment.matchedColor || null,
-        inferredValues,
-        rows: [buildSeedRow(category, inferredValues)],
+        matchedColor: sourceMatchedColor || garment.matchedColor || null,
+        inferredValues: mergedInferredValues,
+        rows: [buildSeedRow(category, mergedInferredValues)],
       };
     },
   );
+  
+  return {
+    productDrafts,
+    sourceSpreadsheetSummary: sourceSpreadsheetMatch?.summary || null,
+  };
+};
 
 export const buildStoredProductDraft = ({
   batchId,

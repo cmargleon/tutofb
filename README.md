@@ -5,9 +5,10 @@ App interna de catalogo sobre Firebase para operar un flujo completo de virtual 
 Hoy el sistema cubre:
 - login interno con roles `admin`, `operador`, `revisor`
 - alta de clientes y modelos
+- importacion y exportacion de bundles de modelos
 - wizard de generacion con clasificacion de prendas, sugerencia de poses y batches reales
 - dos modos de salida: `photos_only` y `spreadsheet`
-- evaluacion, reintentos, cancelaciones, descargas, archivo y catalogo visual
+- cola operativa, seleccion manual de outputs, reintentos, cancelaciones, descargas y catalogo visual
 - analytics operativos, uso/costo de Gemini, salud del sistema y configuracion compartida
 
 ## Stack
@@ -40,17 +41,21 @@ Providers de imagen activos en codigo:
 
 Frontend:
 - `Dashboard`, `Analytics` y `Configuracion` para operacion, salud y config global
-- `Clients` y `Models` para catalogo base
+- `Clients` y `Users` con vistas separadas de crear/lista
+- `ModelsGenerate` y `ModelsCatalog` para alta, biblioteca y mantenimiento de poses
 - `Wizard` para crear batches
-- `Cola`, `Evaluacion`, `Archivo` y `Catalogo` para el ciclo operativo posterior
+- `Cola` y `Catalogo` para el ciclo operativo posterior
 
 Backend:
 - `createGenerationBatch` crea `batches` + `jobs`
 - `classifyGarmentViewsWithGemini` clasifica fotos multiangulo de prendas
 - `previewProductDrafts` arma drafts de spreadsheet antes de crear el batch
 - `processJobOnCreate` / `processJobOnRequeue` disparan el worker real
+- `processJobOnActivation` retoma retries diferidos y activaciones por scheduler
 - `retryJobAutoReview` permite reejecutar review Gemini sobre la salida vigente
 - `exportBatchSpreadsheet` exporta el batch a XLSX desde los `productDrafts`
+- `downloadModelBundle` / `importModelBundle` mueven modelos completos con manifest + poses
+- `publicGeneratedImage` sirve solo assets generados bajo `generated/`
 - `getSystemHealth`, `updateSystemAlertSettings`, `getSystemConfig`, `updateSystemConfig` exponen salud y config compartida
 
 Modelo operativo:
@@ -149,6 +154,9 @@ Hoy ahi viven:
 - `geminiImageReviewModel`
 - `disabledProviders`
 - `systemPromptOverride`
+- `systemPromptFullOutfit`
+- `systemPromptTopOnly`
+- `systemPromptBottomOnly`
 
 Lectura/escritura:
 - frontend la lee por snapshot con `src/features/system/useSystemConfig.ts`
@@ -170,15 +178,16 @@ Reglas principales:
 Permisos principales:
 - `admin`: usuarios, clientes, modelos, configuracion y borrados permanentes
 - `operador`: generar, evaluar, regenerar y exportar
-- `revisor`: evaluar, archivo, catalogo y analytics
+- `revisor`: cola, catalogo y analytics
 
 ## Storage y datos
 
 Rutas activas de Storage:
 - poses: `models/{clientId}/{modelId}/poses/{fileName}`
-- drafts de wizard: `garments/drafts/{uid}/{draftBatchId}/{garmentId}.jpg`
 - drafts multiarchivo: `garments/drafts/{uid}/{draftBatchId}/{garmentId}/{fileName}`
+- source spreadsheets del wizard: `wizard_source_spreadsheets/{uid}/{uuid}/{fileName}`
 - outputs generados: `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`
+- square crops: `generated/{clientId}/{batchId}/{jobId}/square_crops/{outputId}.jpg`
 - templates de cliente: `client_spreadsheets/{clientId}/{templateId}/{fileName}`
 - exports de spreadsheet: `client_spreadsheet_exports/{clientId}/{batchId}/{fileName}`
 - fotos IA de modelos: `model_generations/...`

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Layers3 } from 'lucide-react';
 import { BatchOutputMode, Client, Model, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../../../shared/src/types';
+import { WizardSourceSpreadsheetState } from '../../features/generate/types';
 import { EmptyState, ImageThumb } from '../ui';
 
 interface Props {
@@ -15,10 +16,12 @@ interface Props {
   loadingSpreadsheetTemplates: boolean;
   selectedSpreadsheetTemplateId: string | null;
   selectedSpreadsheetCategoryId: string | null;
+  sourceSpreadsheet: WizardSourceSpreadsheetState | null;
   onClientChange: (clientId: string | null) => void;
   onOutputModeChange: (outputMode: BatchOutputMode) => void;
   onSpreadsheetTemplateChange: (templateId: string | null) => void;
   onSpreadsheetCategoryChange: (categoryId: string | null) => void;
+  onSourceSpreadsheetFile: (file: File | null) => void | Promise<void>;
   onModelSelect: (modelId: string | null) => void;
 }
 
@@ -34,12 +37,15 @@ export const ClientModelStep: React.FC<Props> = ({
   loadingSpreadsheetTemplates,
   selectedSpreadsheetTemplateId,
   selectedSpreadsheetCategoryId,
+  sourceSpreadsheet,
   onClientChange,
   onOutputModeChange,
   onSpreadsheetTemplateChange,
   onSpreadsheetCategoryChange,
+  onSourceSpreadsheetFile,
   onModelSelect,
 }) => {
+  const sourceSpreadsheetInputRef = useRef<HTMLInputElement | null>(null);
   const hideSpreadsheetControls = Boolean(
     selectedClientId && !loadingSpreadsheetTemplates && !selectedClientHasSpreadsheetTemplates,
   );
@@ -141,6 +147,61 @@ export const ClientModelStep: React.FC<Props> = ({
               <p className="mt-2 text-[11px] text-slate-500">
                 Gemini intentará detectar la categoría correcta de cada prenda. Este valor solo se usa como fallback.
               </p>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">Excel fuente opcional</label>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Si lo adjuntas, intentaremos matchear sus fotos con las prendas del wizard para rellenar el spreadsheet final.
+                    </p>
+                  </div>
+                  <input
+                    ref={sourceSpreadsheetInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      void onSourceSpreadsheetFile(file);
+                      event.currentTarget.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => sourceSpreadsheetInputRef.current?.click()}
+                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 transition hover:border-slate-400 hover:bg-slate-100"
+                  >
+                    {sourceSpreadsheet ? 'Reemplazar' : 'Adjuntar Excel'}
+                  </button>
+                </div>
+
+                {sourceSpreadsheet ? (
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">
+                          {sourceSpreadsheet.originalFileName}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {sourceSpreadsheet.status === 'uploading'
+                            ? 'Subiendo archivo...'
+                            : sourceSpreadsheet.status === 'uploaded'
+                              ? 'Listo para usar en el matching.'
+                              : sourceSpreadsheet.error || 'No se pudo subir el archivo.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void onSourceSpreadsheetFile(null)}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : !hideSpreadsheetControls ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">

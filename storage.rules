@@ -69,6 +69,12 @@ service firebase.storage {
       allow delete: if isAdmin();
     }
 
+    match /wizard_source_spreadsheets/{uid}/{uploadId}/{fileName} {
+      allow read: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
+      allow write: if canGenerate() && request.auth.uid == uid && isSpreadsheetUpload();
+      allow delete: if isAdmin() || (isActiveUser() && request.auth.uid == uid);
+    }
+
     match /client_spreadsheet_exports/{clientId}/{batchId}/{fileName} {
       allow read: if isActiveUser();
       allow write: if false;

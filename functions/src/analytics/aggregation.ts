@@ -428,7 +428,7 @@ export const buildAnalyticsSnapshot = (jobs: Job[], outputs: JobOutput[]): Analy
     summary.completedJobs > 0 ? Math.round((summary.firstPassApprovedJobs / summary.completedJobs) * 100) : 0;
   summary.humanInterventionRatePct = getRatePct(summary.jobsWithHumanIntervention, summary.totalJobs);
   summary.humanReviewAvoidedRatePct = getRatePct(summary.humanReviewAvoidedJobs, summary.totalJobs);
-  summary.geminiPrecisionPct = getRatePct(summary.geminiAgreedJobs, summary.autoReviewedJobs);
+  summary.geminiPrecisionPct = getRatePct(summary.geminiTruePositiveJobs, summary.geminiApprovedJobs);
   summary.geminiFalsePositiveRatePct = getRatePct(summary.geminiFalsePositiveJobs, summary.geminiApprovedJobs);
   summary.geminiFalseNegativeRatePct = getRatePct(summary.geminiFalseNegativeJobs, summary.geminiRejectedJobs);
   summary.avgDurationSeconds =

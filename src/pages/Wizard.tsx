@@ -44,6 +44,7 @@ export const Wizard: React.FC = () => {
     handleOutputModeChange,
     handleSpreadsheetTemplateChange,
     handleSpreadsheetCategoryChange,
+    handleSourceSpreadsheetFile,
     handleModelSelect,
     handlePoseToggle,
     handleToggleAllPoses,
@@ -106,10 +107,12 @@ export const Wizard: React.FC = () => {
           loadingSpreadsheetTemplates={loadingSpreadsheetTemplates}
           selectedSpreadsheetTemplateId={state.selectedSpreadsheetTemplateId}
           selectedSpreadsheetCategoryId={state.selectedSpreadsheetCategoryId}
+          sourceSpreadsheet={state.sourceSpreadsheet}
           onClientChange={handleClientChange}
           onOutputModeChange={handleOutputModeChange}
           onSpreadsheetTemplateChange={handleSpreadsheetTemplateChange}
           onSpreadsheetCategoryChange={handleSpreadsheetCategoryChange}
+          onSourceSpreadsheetFile={handleSourceSpreadsheetFile}
           onModelSelect={handleModelSelect}
         />
       )}
@@ -150,6 +153,8 @@ export const Wizard: React.FC = () => {
           disabledProviders={disabledProviders}
           productDraftPreparationStatus={state.productDraftPreparation.status}
           productDraftPreparationError={state.productDraftPreparation.error}
+          sourceSpreadsheet={state.sourceSpreadsheet}
+          sourceSpreadsheetSummary={state.sourceSpreadsheetSummary}
           onRetryProductDraftPreparation={handleRetryProductDraftPreparation}
           onProviderChange={handleProviderChange}
           onProviderImageConfigChange={handleProviderImageConfigChange}

@@ -18,6 +18,7 @@ export const GEMINI_FEATURE_LABELS: Record<GeminiUsageFeature, string> = {
   garment_view_category_color_classification: 'Clasif. prendas + categoría/color',
   pose_classification: 'Tagging de poses',
   product_draft_enrichment: 'Drafts de producto',
+  spreadsheet_source_matching: 'Matching spreadsheet fuente',
 };
 
 export const GEMINI_STATUS_LABELS: Record<GeminiUsageStatus, string> = {

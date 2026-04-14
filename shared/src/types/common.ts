@@ -14,7 +14,7 @@ export type GarmentReferenceImageType = 'single_view' | 'multi_angle_composite';
 export type TryOnPromptCaseKey = 'full_outfit' | 'top_only' | 'bottom_only';
 export type PoseOrientationGroup = 'front' | 'back' | 'side' | 'ambiguous';
 export type SpreadsheetTemplateImportStatus = 'active' | 'archived';
-export type ProductDraftSuggestionSource = 'gemini' | 'wizard' | 'system' | 'user';
+export type ProductDraftSuggestionSource = 'gemini' | 'wizard' | 'system' | 'user' | 'spreadsheet_source';
 export type PoseOrientationDetail =
   | 'front'
   | 'front_three_quarter'

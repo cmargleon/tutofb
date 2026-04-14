@@ -12,13 +12,15 @@ import {
   ProductDraftInput,
   ProviderImageConfig,
   Provider,
-} from '../../../shared/src/types';
+  SourceSpreadsheetMatchSummary,
+  } from '../../../shared/src/types';
 
 export type SourceType = GarmentSourceType;
 export type GenerateWizardStepId = 1 | 2 | 3 | 4;
 export type GenerateSubmitStage = 'idle' | 'uploading' | 'creating-batch';
 export type PoseSuggestionStatus = 'idle' | 'preparing' | 'ready' | 'failed';
 export type ProductDraftPreparationStatus = 'idle' | 'preparing' | 'ready' | 'failed';
+export type SourceSpreadsheetUploadStatus = 'uploading' | 'uploaded' | 'failed';
 
 export type GarmentUploadStatus = 'idle' | 'queued' | 'uploading' | 'retrying' | 'uploaded' | 'failed';
 
@@ -120,6 +122,13 @@ export const createInitialProductDraftPreparationState = (): ProductDraftPrepara
   signature: null,
 });
 
+export interface WizardSourceSpreadsheetState {
+  originalFileName: string;
+  storagePath: string | null;
+  status: SourceSpreadsheetUploadStatus;
+  error: string | null;
+}
+
 export interface UploadSummary {
   total: number;
   uploaded: number;
@@ -137,6 +146,8 @@ export interface WizardState {
   outputMode: BatchOutputMode;
   selectedSpreadsheetTemplateId: string | null;
   selectedSpreadsheetCategoryId: string | null;
+  sourceSpreadsheet: WizardSourceSpreadsheetState | null;
+  sourceSpreadsheetSummary: SourceSpreadsheetMatchSummary | null;
   selectedPoseIds: string[];
   garments: UploadedGarmentDraft[];
   poseSuggestions: PoseSuggestionState;

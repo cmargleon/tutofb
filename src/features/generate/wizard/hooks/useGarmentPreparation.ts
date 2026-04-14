@@ -310,6 +310,7 @@ export const useGarmentPreparation = ({
       || !selectedClient
       || !selectedModel
       || !currentState.selectedSpreadsheetTemplateId
+      || (currentState.sourceSpreadsheet !== null && currentState.sourceSpreadsheet.status !== 'uploaded')
       || currentState.garments.length === 0
     ) {
       return;
@@ -334,11 +335,19 @@ export const useGarmentPreparation = ({
         spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId,
         fallbackCategoryId: latestState.selectedSpreadsheetCategoryId || null,
         garments: buildProductDraftPreviewGarments(uploadedGarments),
+        sourceSpreadsheet:
+          latestState.sourceSpreadsheet?.status === 'uploaded' && latestState.sourceSpreadsheet.storagePath
+            ? {
+                storagePath: latestState.sourceSpreadsheet.storagePath,
+                originalFileName: latestState.sourceSpreadsheet.originalFileName,
+              }
+            : null,
       });
 
       setState((current) => ({
         ...current,
         productDrafts: result.productDrafts,
+        sourceSpreadsheetSummary: result.sourceSpreadsheetSummary || null,
         productDraftPreparation: {
           status: 'ready',
           error: null,

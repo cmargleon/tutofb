@@ -28,6 +28,7 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   selectedClientId: null,
   selectedModelId: null,
   outputMode: 'spreadsheet',
+  outputModeChosen: false,
   selectedSpreadsheetTemplateId: null,
   selectedSpreadsheetCategoryId: null,
   sourceSpreadsheet: null,

@@ -144,6 +144,7 @@ export interface WizardState {
   selectedClientId: string | null;
   selectedModelId: string | null;
   outputMode: BatchOutputMode;
+  outputModeChosen: boolean;
   selectedSpreadsheetTemplateId: string | null;
   selectedSpreadsheetCategoryId: string | null;
   sourceSpreadsheet: WizardSourceSpreadsheetState | null;

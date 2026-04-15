@@ -103,6 +103,7 @@ export const Wizard: React.FC = () => {
           selectedClientId={state.selectedClientId}
           selectedModelId={state.selectedModelId}
           outputMode={state.outputMode}
+          outputModeChosen={state.outputModeChosen}
           selectedClientHasSpreadsheetTemplates={selectedClientHasSpreadsheetTemplates}
           loadingSpreadsheetTemplates={loadingSpreadsheetTemplates}
           selectedSpreadsheetTemplateId={state.selectedSpreadsheetTemplateId}

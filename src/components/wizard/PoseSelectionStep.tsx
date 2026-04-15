@@ -107,7 +107,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      {!isPreparing && <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Poses del modelo</h2>
@@ -194,7 +194,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
             );
           })}
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

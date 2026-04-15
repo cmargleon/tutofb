@@ -416,6 +416,7 @@ export const useGenerateWizard = () => {
       ...current,
       selectedClientId: clientId,
       selectedModelId: null,
+      outputModeChosen: false,
       selectedSpreadsheetTemplateId: null,
       selectedSpreadsheetCategoryId: null,
       sourceSpreadsheet: null,
@@ -438,6 +439,7 @@ export const useGenerateWizard = () => {
     setState((current) => resetWizardProductDrafts({
       ...current,
       outputMode,
+      outputModeChosen: true,
       selectedSpreadsheetTemplateId: outputMode === 'spreadsheet' ? current.selectedSpreadsheetTemplateId : null,
       selectedSpreadsheetCategoryId: outputMode === 'spreadsheet' ? current.selectedSpreadsheetCategoryId : null,
     }));

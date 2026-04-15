@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SourceSpreadsheetMatchSummary } from '../../../shared/src/types';
 import { WizardProviderImageConfig, WizardState } from '../../features/generate/types';
 import { PromptBaseField } from './PromptBaseField';
@@ -40,6 +40,13 @@ export const BatchStep: React.FC<Props> = ({
   onPromptChange,
   onSubmit,
 }) => {
+  const [providerChosen, setProviderChosen] = useState(false);
+
+  const handleProviderSelect = (provider: WizardState['provider']) => {
+    setProviderChosen(true);
+    onProviderChange(provider);
+  };
+
   const spreadsheetPreparationPending = (
     state.outputMode === 'spreadsheet'
     && (
@@ -64,68 +71,72 @@ export const BatchStep: React.FC<Props> = ({
 
   return (
     <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <ProviderSelection provider={state.provider} onChange={onProviderChange} disabledProviders={disabledProviders} />
+      <ProviderSelection provider={providerChosen ? state.provider : null} onChange={handleProviderSelect} disabledProviders={disabledProviders} />
 
-      {state.outputMode === 'spreadsheet' ? (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-semibold text-slate-900">Preparación del spreadsheet</h3>
-          {sourceSpreadsheet ? (
-            <p className="mt-2 text-sm text-slate-600">
-              {sourceSpreadsheet.status === 'uploading'
-                ? `Subiendo ${sourceSpreadsheet.originalFileName} para preparar el matching.`
-                : sourceSpreadsheet.status === 'failed'
-                  ? sourceSpreadsheet.error || 'Falló la subida del spreadsheet fuente.'
-                  : `Usaremos ${sourceSpreadsheet.originalFileName} como fuente adicional para completar el lote.`}
-            </p>
-          ) : null}
-          {productDraftPreparationStatus === 'failed' ? (
-            <div className="mt-2 space-y-3">
-              <p className="text-sm text-rose-700">
-                {productDraftPreparationError || 'No se pudieron preparar los product drafts para este lote.'}
-              </p>
-              <button
-                type="button"
-                onClick={onRetryProductDraftPreparation}
-                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 transition hover:border-slate-400 hover:bg-slate-100"
-              >
-                Reintentar preparación
-              </button>
+      {providerChosen && (
+        <>
+          {state.outputMode === 'spreadsheet' ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-semibold text-slate-900">Preparación del spreadsheet</h3>
+              {sourceSpreadsheet ? (
+                <p className="mt-2 text-sm text-slate-600">
+                  {sourceSpreadsheet.status === 'uploading'
+                    ? `Subiendo ${sourceSpreadsheet.originalFileName} para preparar el matching.`
+                    : sourceSpreadsheet.status === 'failed'
+                      ? sourceSpreadsheet.error || 'Falló la subida del spreadsheet fuente.'
+                      : `Usaremos ${sourceSpreadsheet.originalFileName} como fuente adicional para completar el lote.`}
+                </p>
+              ) : null}
+              {productDraftPreparationStatus === 'failed' ? (
+                <div className="mt-2 space-y-3">
+                  <p className="text-sm text-rose-700">
+                    {productDraftPreparationError || 'No se pudieron preparar los product drafts para este lote.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onRetryProductDraftPreparation}
+                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 transition hover:border-slate-400 hover:bg-slate-100"
+                  >
+                    Reintentar preparación
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-slate-600">
+                  {spreadsheetPreparationPending
+                    ? 'Estamos preparando los product drafts automáticamente antes de crear el lote.'
+                    : 'Los product drafts quedaron listos y se van a incluir en el lote.'}
+                </p>
+              )}
+              {sourceSpreadsheetSummary ? (
+                <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 md:grid-cols-3">
+                  <div>Total filas útiles: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.totalRows}</span></div>
+                  <div>Filas matcheadas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.matchedRows}</span></div>
+                  <div>Prendas sin match: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.unmatchedGarments}</span></div>
+                  <div>Filas ignoradas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.ignoredRows}</span></div>
+                  <div>Filas que heredaron foto por SPU: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.reusedSpuPhotoRows}</span></div>
+                  <div>Filas con foto: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.rowsWithPhotos}</span></div>
+                </div>
+              ) : null}
             </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-600">
-              {spreadsheetPreparationPending
-                ? 'Estamos preparando los product drafts automáticamente antes de crear el lote.'
-                : 'Los product drafts quedaron listos y se van a incluir en el lote.'}
-            </p>
-          )}
-          {sourceSpreadsheetSummary ? (
-            <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 md:grid-cols-3">
-              <div>Total filas útiles: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.totalRows}</span></div>
-              <div>Filas matcheadas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.matchedRows}</span></div>
-              <div>Prendas sin match: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.unmatchedGarments}</span></div>
-              <div>Filas ignoradas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.ignoredRows}</span></div>
-              <div>Filas que heredaron foto por SPU: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.reusedSpuPhotoRows}</span></div>
-              <div>Filas con foto: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.rowsWithPhotos}</span></div>
-            </div>
           ) : null}
-        </div>
-      ) : null}
 
-      <ProviderImageConfigSelection
-        provider={state.provider}
-        value={state.providerImageConfigs[state.provider]}
-        onChange={onProviderImageConfigChange}
-      />
-      <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
+          <ProviderImageConfigSelection
+            provider={state.provider}
+            value={state.providerImageConfigs[state.provider]}
+            onChange={onProviderImageConfigChange}
+          />
+          <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
 
-      <button
-        type="button"
-        onClick={onSubmit}
-        disabled={isSubmitDisabled}
-        className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {submitButtonLabel}
-      </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={isSubmitDisabled}
+            className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitButtonLabel}
+          </button>
+        </>
+      )}
     </div>
   );
 };

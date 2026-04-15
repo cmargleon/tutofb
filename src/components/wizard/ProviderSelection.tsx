@@ -5,7 +5,7 @@ import { PROVIDER_LABELS, PROVIDER_VALUES } from '../../../shared/src/domain';
 import { PROVIDER_COSTS, PROVIDER_PRICE_LABELS } from '../../../shared/src/constants/providerCosts';
 
 interface ProviderSelectionProps {
-  provider: Provider;
+  provider: Provider | null;
   onChange: (provider: Provider) => void;
   disabledProviders?: string[];
 }
@@ -82,7 +82,7 @@ export const ProviderSelection: React.FC<ProviderSelectionProps> = ({ provider, 
       {VISIBLE_PROVIDERS
         .filter((option) => !disabledProviders?.includes(option))
         .map((option) => {
-          const selected = provider === option;
+          const selected = provider !== null && provider === option;
 
           return (
             <button

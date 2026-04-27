@@ -16,6 +16,7 @@ import {
   MODEL_POSE_GROUPS,
   MODEL_POSE_RECIPES_BY_ID,
   MODEL_POSE_RECIPES,
+  ModelPhotoProviderOption,
   PROVIDER_OPTIONS,
 } from '../constants';
 import {
@@ -53,12 +54,14 @@ import {
   Provider,
   ProviderImageConfig,
 } from '../../../../shared/src/types';
+import { isModelPhotoProviderDisabled } from '../../system/providerAvailability';
 
 type SetProviderImageConfig = (config: ProviderImageConfig) => void;
 
 interface UseReferenceModelFlowParams {
   newModelName: string;
   selectedClientId: string;
+  disabledProviders?: string[];
   setNewModelName: (value: string) => void;
   setSelectedClientId: (value: string) => void;
   onSuccess: () => void;
@@ -76,8 +79,9 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 export interface ModelCreateFlowReferenceState {
   referenceFile: File | null;
-  providerOptions: typeof PROVIDER_OPTIONS;
+  providerOptions: ModelPhotoProviderOption[];
   provider: ModelPhotoProvider;
+  selectedProviderDisabled: boolean;
   setProvider: (provider: ModelPhotoProvider) => void;
   providerImageConfigs: Record<Provider, ProviderImageConfig>;
   providerImageConfig: ProviderImageConfig;
@@ -141,6 +145,7 @@ export interface UseReferenceModelFlowResult {
 export const useReferenceModelFlow = ({
   newModelName,
   selectedClientId,
+  disabledProviders,
   setNewModelName,
   setSelectedClientId,
   onSuccess,
@@ -177,6 +182,17 @@ export const useReferenceModelFlow = ({
   const mappedProvider = mapModelPhotoProviderToProvider(provider);
   const providerImageConfig = providerImageConfigs[mappedProvider];
   const aspectRatio = resolveModelAspectRatioForImageConfig(providerImageConfig);
+  const providerOptions = useMemo(
+    () => PROVIDER_OPTIONS.map((option) => ({
+      ...option,
+      disabled: isModelPhotoProviderDisabled(option.value, disabledProviders),
+    })),
+    [disabledProviders],
+  );
+  const selectedProviderDisabled = useMemo(
+    () => isModelPhotoProviderDisabled(provider, disabledProviders),
+    [disabledProviders, provider],
+  );
 
   useEffect(() => {
     if (!promptEdited) {
@@ -292,6 +308,7 @@ export const useReferenceModelFlow = ({
       && referenceFile
       && selectedClientId
       && prompt.trim()
+      && !selectedProviderDisabled
       && !generatingCandidates
       && regeneratingCandidateIndex === null
       && !isUploadingReference,
@@ -302,6 +319,7 @@ export const useReferenceModelFlow = ({
       ? Boolean(referenceFile && selectedClientId)
       : Boolean(selectedCandidate))
       && selectedPoseRecipes.length > 0
+      && !selectedProviderDisabled
       && !generatingPoses
       && regeneratingPoseIndex === null
       && !isUploadingReference,
@@ -470,7 +488,7 @@ export const useReferenceModelFlow = ({
   }, [clearGeneratedPoses]);
 
   const handleRegenerateCandidate = useCallback(async (index: number) => {
-    if (!referenceFile) return;
+    if (!referenceFile || selectedProviderDisabled) return;
 
     setRegeneratingCandidateIndex(index);
     setError(null);
@@ -500,6 +518,7 @@ export const useReferenceModelFlow = ({
     clearGeneratedPoses,
     generateCandidates,
     referenceFile,
+    selectedProviderDisabled,
     selectedCandidateIndex,
     toast,
   ]);
@@ -596,7 +615,7 @@ export const useReferenceModelFlow = ({
   ]);
 
   const handleRegeneratePose = useCallback(async (index: number) => {
-    if (!selectedCandidate) return;
+    if (!selectedCandidate || selectedProviderDisabled) return;
 
     const poseRecipe = selectedPoseRecipes[index];
     if (!poseRecipe || poseRecipe.usesReferenceImage) return;
@@ -616,6 +635,7 @@ export const useReferenceModelFlow = ({
   }, [
     generatePoseFromCandidate,
     selectedCandidate,
+    selectedProviderDisabled,
     selectedPoseRecipes,
     toast,
   ]);
@@ -723,8 +743,9 @@ export const useReferenceModelFlow = ({
     error,
     reference: {
       referenceFile,
-      providerOptions: PROVIDER_OPTIONS,
+      providerOptions,
       provider,
+      selectedProviderDisabled,
       setProvider,
       providerImageConfigs,
       providerImageConfig,

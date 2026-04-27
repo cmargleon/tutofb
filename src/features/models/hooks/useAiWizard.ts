@@ -15,6 +15,7 @@ import { canSelectWizardStep } from '../../wizard/navigation';
 interface UseAiWizardParams {
   newModelName: string;
   selectedClientId: string;
+  disabledProviders?: string[];
   setNewModelName: (value: string) => void;
   setSelectedClientId: (value: string) => void;
   onSuccess: () => void;
@@ -44,13 +45,14 @@ export interface UseAiWizardResult {
 export const useAiWizard = ({
   newModelName,
   selectedClientId,
+  disabledProviders,
   setNewModelName,
   setSelectedClientId,
   onSuccess,
 }: UseAiWizardParams): UseAiWizardResult => {
   const toast = useToast();
   const confirm = useConfirm();
-  const identityForm = useAiIdentityForm();
+  const identityForm = useAiIdentityForm({ disabledProviders });
 
   const [wizardStep, setWizardStep] = useState(1);
   const [draftModelId] = useState(() => uuidv4());

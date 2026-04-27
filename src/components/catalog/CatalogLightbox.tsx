@@ -10,6 +10,7 @@ import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRege
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useToast } from '../../features/feedback/FeedbackProvider';
+import { getCatalogJobErrorMessage } from '../../features/catalog/errorMessage';
 import { db } from '../../firebase';
 import { AttemptThumbnail } from '../evaluation/AttemptThumbnail';
 import { HoverZoomImage } from '../evaluation/HoverZoomImage';
@@ -24,6 +25,7 @@ const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string =>
 
 interface CatalogLightboxProps {
   job: Job;
+  disabledProviders?: string[];
   canGoPrevious: boolean;
   canGoNext: boolean;
   onClose: () => void;
@@ -33,6 +35,7 @@ interface CatalogLightboxProps {
 
 export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   job,
+  disabledProviders,
   canGoPrevious,
   canGoNext,
   onClose,
@@ -133,10 +136,12 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const regenerationError = job.id ? regenerationErrors[job.id] || null : null;
   const isRemoteGenerating = job.status === 'pending' || job.status === 'processing';
   const isRegenerationActive = isQueueing || regenerationInFlight || isRemoteGenerating;
+  const selectedProviderDisabled = Boolean(disabledProviders?.includes(draft.provider));
   const controlsDisabled = !role.canRegenerate || !job.id || isRegenerationActive;
   const displayedImageValue = displayedImageUrl || displayedOutput?.resultImagePath || null;
   const isGeneratingJob = isRemoteGenerating;
   const showSpreadsheetPanel = batch?.outputMode !== 'photos_only';
+  const failedJobMessage = getCatalogJobErrorMessage(job);
 
   useEffect(() => {
     if (pendingSelectedOutputId === undefined) {
@@ -240,7 +245,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   };
 
   const handleRegenerateClick = async () => {
-    if (!job.id) return;
+    if (!job.id || selectedProviderDisabled) return;
     const success = await handleRegenerate(job.id);
     if (success) {
       pendingHistoryBaselineIdsRef.current = new Set(outputsDesc.map((output) => output.id));
@@ -379,6 +384,20 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                       <Loader2 className="h-4 w-4 animate-spin" />
                       {isGeneratingJob ? 'La imagen todavía se está generando.' : 'Cargando imagen...'}
                     </div>
+                  ) : job.status === 'failed' ? (
+                    <div className="flex w-full max-w-full items-center justify-center overflow-hidden px-6">
+                      <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-3 text-center">
+                        <AlertCircle className="h-8 w-8 text-rose-300" />
+                        <div className="w-full space-y-2">
+                          <p className="text-base font-semibold text-rose-100">La generación falló</p>
+                          <div className="max-h-56 w-full overflow-y-auto rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-left text-sm leading-6 text-rose-200">
+                            <p className="whitespace-pre-wrap break-all">
+                              {failedJobMessage || 'No encontramos detalle adicional del error para este job.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <div className="text-sm">No pudimos cargar esta imagen.</div>
                   )}
@@ -480,12 +499,21 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                     className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-100 shadow-inner shadow-black/20 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {PROVIDER_VALUES.map((provider) => (
-                      <option key={provider} value={provider}>
-                        {PROVIDER_LABELS[provider]}
+                      <option key={provider} value={provider} disabled={disabledProviders?.includes(provider)}>
+                        {PROVIDER_LABELS[provider]}{disabledProviders?.includes(provider) ? ' (deshabilitado)' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {selectedProviderDisabled ? (
+                  <div
+                    className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Este modelo IA está deshabilitado en Configuración. Puedes verlo para referencia, pero debes elegir otro para regenerar.
+                  </div>
+                ) : null}
 
                 {regenerationError ? (
                   <div
@@ -512,7 +540,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
               <button
                 type="button"
                 onClick={() => void handleRegenerateClick()}
-                disabled={controlsDisabled || !draft.prompt.trim()}
+                disabled={controlsDisabled || selectedProviderDisabled || !draft.prompt.trim()}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 <RefreshCw className={`h-4 w-4 ${isRegenerationActive ? 'animate-spin' : ''}`} />

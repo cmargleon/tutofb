@@ -10,7 +10,7 @@ import type { AiIdentityFormState } from './useAiIdentityForm';
 interface UseAiCandidatesParams {
   selectedClientId: string;
   draftModelId: string;
-  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio' | 'providerImageConfig'>;
+  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio' | 'providerImageConfig' | 'selectedProviderDisabled'>;
   onResetPoses: () => void;
   onAdvanceToStep2: () => void;
 }
@@ -49,8 +49,13 @@ export const useAiCandidates = ({
   );
 
   const canGenerateCandidates = useCallback(
-    (modelName: string) => Boolean(modelName.trim() && selectedClientId && identityForm.prompt.trim()),
-    [identityForm.prompt, selectedClientId],
+    (modelName: string) => Boolean(
+      modelName.trim()
+      && selectedClientId
+      && identityForm.prompt.trim()
+      && !identityForm.selectedProviderDisabled
+    ),
+    [identityForm.prompt, identityForm.selectedProviderDisabled, selectedClientId],
   );
 
   const resetCandidates = useCallback(() => {
@@ -61,7 +66,7 @@ export const useAiCandidates = ({
   }, [onResetPoses]);
 
   const handleGenerateCandidates = useCallback(async () => {
-    if (!selectedClientId || !identityForm.prompt.trim()) return;
+    if (!selectedClientId || !identityForm.prompt.trim() || identityForm.selectedProviderDisabled) return;
 
     if (candidates.length > 0) {
       const accepted = await confirm({
@@ -120,6 +125,7 @@ export const useAiCandidates = ({
     identityForm.providerImageConfig,
     identityForm.prompt,
     identityForm.provider,
+    identityForm.selectedProviderDisabled,
     onAdvanceToStep2,
     onResetPoses,
     selectedClientId,
@@ -133,7 +139,7 @@ export const useAiCandidates = ({
 
   const handleRegenerateCandidate = useCallback(
     async (index: number) => {
-      if (!selectedClientId) return;
+      if (!selectedClientId || identityForm.selectedProviderDisabled) return;
 
       setRegeneratingCandidateIndex(index);
       try {
@@ -175,6 +181,7 @@ export const useAiCandidates = ({
       identityForm.providerImageConfig,
       identityForm.prompt,
       identityForm.provider,
+      identityForm.selectedProviderDisabled,
       onResetPoses,
       selectedCandidateIndex,
       selectedClientId,

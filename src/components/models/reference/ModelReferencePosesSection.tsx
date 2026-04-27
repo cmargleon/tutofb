@@ -108,7 +108,7 @@ export const ModelReferencePosesSection: React.FC<ModelReferencePosesSectionProp
                 isRegenerating={reference.regeneratingPoseIndex === index}
                 isLoading={photo.loading}
                 selectionDisabled={shared.isCreating}
-                regenerateDisabled={reference.busy}
+                regenerateDisabled={reference.busy || reference.selectedProviderDisabled}
                 onReject={() => reference.handleRejectPose(index)}
                 onAccept={() => reference.handleAcceptPose(index)}
                 onRegenerate={

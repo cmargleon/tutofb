@@ -24,7 +24,7 @@ export const AiCandidatesStep: React.FC<AiCandidatesStepProps> = ({ ai }) => (
           index={index}
           isSelected={ai.selectedCandidateIndex === index}
           isRegenerating={ai.regeneratingCandidateIndex === index}
-          disabled={ai.busy}
+          disabled={ai.busy || ai.selectedProviderDisabled}
           onSelect={() => ai.handleSelectCandidate(index)}
           onRegenerate={() => void ai.handleRegenerateCandidate(index)}
         />

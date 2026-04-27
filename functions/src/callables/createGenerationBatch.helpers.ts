@@ -407,8 +407,10 @@ export const buildJobDraft = (
   job: Pick<Job, 'garmentIsMultiAngle' | 'garmentReferenceImageType' | 'promptCaseKey' | 'promptCaseText'>,
   provider: Job['provider'],
   promptBase: string,
+  modelIdentityTraitsSnapshot: Job['modelIdentityTraitsSnapshot'] = null,
   autoReviewMaxAttempts: number = 3,
 ) => ({
+  modelIdentityTraitsSnapshot,
   requestedPromptBase: promptBase.trim(),
   provider,
   promptBase,
@@ -418,6 +420,7 @@ export const buildJobDraft = (
     promptBase,
     job.garmentReferenceImageType || (job.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
     job.promptCaseText,
+    modelIdentityTraitsSnapshot,
   ),
   status: 'pending' as const,
   queuePriority: 1,

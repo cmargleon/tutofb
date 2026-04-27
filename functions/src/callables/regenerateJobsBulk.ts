@@ -1,15 +1,18 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Job, RegenerateJobsBulkRequest, RegenerateJobsBulkResponse } from '../../../shared/src/types';
+import { isProvider } from '../../../shared/src/domain';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
 import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
+import { getSystemConfigCached, isProviderDisabledInSystemConfig } from '../admin/systemConfig';
 
 const MAX_BULK_JOBS = 50;
 
 export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<RegenerateJobsBulkResponse>>(async (request) => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
+  const systemConfig = await getSystemConfigCached();
 
   const requestedJobs = Array.isArray(request.data?.jobs) ? request.data.jobs : [];
   const normalizedJobs = requestedJobs
@@ -58,6 +61,10 @@ export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<Rege
 
     const provider = entry.provider || job.provider;
     const prompt = entry.prompt || (job.promptBase || job.finalPrompt || '').trim();
+    if (!isProvider(provider) || isProviderDisabledInSystemConfig(provider, systemConfig)) {
+      skippedJobIds.push(entry.jobId);
+      continue;
+    }
 
     try {
       const patch = buildRegenerateJobPatch(job, provider, prompt);

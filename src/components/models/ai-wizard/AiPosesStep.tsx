@@ -105,7 +105,8 @@ export const AiPosesStep: React.FC<AiPosesStepProps> = ({ shared, ai }) => (
                 rejected={photo.rejected}
                 isRegenerating={ai.regeneratingPoseIndex === index}
                 isLoading={photo.loading}
-                disabled={ai.busy}
+                selectionDisabled={ai.busy}
+                regenerateDisabled={ai.busy || ai.selectedProviderDisabled}
                 onReject={() => ai.handleRejectPose(index)}
                 onAccept={() => ai.handleAcceptPose(index)}
                 onRegenerate={

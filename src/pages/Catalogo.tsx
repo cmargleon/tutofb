@@ -3,15 +3,18 @@ import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/fir
 import { AlertCircle, ChevronLeft, ChevronRight, Download, Images, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
+import { RetryFailedJobsDialog } from '../components/evaluation/RetryFailedJobsDialog';
 import { subscribeToClients } from '../features/clients/firebase';
 import { cancelBatchProcessing, exportBatchSpreadsheet, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
 import { useRole } from '../features/auth/AuthProvider';
 import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
-import { Batch, Client, Job } from '../../shared/src/types';
+import { Batch, Client, Job, Provider } from '../../shared/src/types';
 import { formatDateTimeLong, toMillisOrZero } from '../../shared/src/utils/dateUtils';
 import { CatalogGarmentSection } from '../components/catalog/CatalogGarmentSection';
 import { CatalogLightbox } from '../components/catalog/CatalogLightbox';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
+import { useSystemConfig } from '../features/system/useSystemConfig';
+import { PROVIDER_LABELS } from '../../shared/src/domain';
 import { db } from '../firebase';
 
 interface PendingCatalogRegeneration {
@@ -32,6 +35,7 @@ export const Catalogo: React.FC = () => {
   const toast = useToast();
   const confirm = useConfirm();
   const role = useRole();
+  const { config: systemConfig } = useSystemConfig();
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId);
   const [selectedBatchId, setSelectedBatchId] = useState<string>(initialBatchId);
@@ -46,6 +50,7 @@ export const Catalogo: React.FC = () => {
   const [isRegeneratingFailed, setIsRegeneratingFailed] = useState(false);
   const [isCancellingBatch, setIsCancellingBatch] = useState(false);
   const [batchActionMessage, setBatchActionMessage] = useState<string | null>(null);
+  const [isRetryDialogOpen, setIsRetryDialogOpen] = useState(false);
 
   const {
     batches,
@@ -327,18 +332,19 @@ export const Catalogo: React.FC = () => {
     );
   }, [lightbox?.jobId]);
 
-  const handleRegenerateFailedJobs = async () => {
+  const handleRegenerateFailedJobs = async (provider: Provider | null) => {
     if (!selectedBatchId) return;
     setIsRegeneratingFailed(true);
     setBatchActionMessage(null);
     try {
-      const result = await regenerateFailedBatchJobs(selectedBatchId);
+      const result = await regenerateFailedBatchJobs(selectedBatchId, provider);
+      const providerSuffix = result.retryProvider ? ` con ${PROVIDER_LABELS[result.retryProvider]}` : '';
       if (result.queuedJobs === 0) {
         setBatchActionMessage('No había trabajos fallidos pendientes para reintentar.');
       } else if (result.skippedJobs > 0) {
-        setBatchActionMessage(`Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'}. ${result.skippedJobs} se omitieron por datos inválidos.`);
+        setBatchActionMessage(`Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'}${providerSuffix}. ${result.skippedJobs} se omitieron por datos inválidos.`);
       } else {
-        setBatchActionMessage(`Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'} del lote.`);
+        setBatchActionMessage(`Se reintentaron ${result.queuedJobs} trabajo${result.queuedJobs === 1 ? '' : 's'} fallido${result.queuedJobs === 1 ? '' : 's'} del lote${providerSuffix}.`);
       }
     } catch (err: any) {
       toast({ tone: 'error', title: 'No pudimos reintentar los trabajos fallidos', description: err.message || 'Revisa el estado del lote e inténtalo nuevamente.' });
@@ -568,7 +574,7 @@ export const Catalogo: React.FC = () => {
               {selectedBatch.failedJobs > 0 && (
                 <button
                   type="button"
-                  onClick={() => void handleRegenerateFailedJobs()}
+                  onClick={() => setIsRetryDialogOpen(true)}
                   disabled={isRegeneratingFailed}
                   className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -666,6 +672,19 @@ export const Catalogo: React.FC = () => {
           )
         )}
 
+        <RetryFailedJobsDialog
+          isOpen={isRetryDialogOpen}
+          isSubmitting={isRegeneratingFailed}
+          failedJobsCount={selectedBatch?.failedJobs || 0}
+          scopeLabel="este lote"
+          disabledProviders={systemConfig.disabledProviders}
+          onClose={() => setIsRetryDialogOpen(false)}
+          onSubmit={async (provider) => {
+            setIsRetryDialogOpen(false);
+            await handleRegenerateFailedJobs(provider);
+          }}
+        />
+
         {!loading && displayGarmentGroups.length > 0 && (
           <div className="space-y-4">
             {displayGarmentGroups.map((group) => (
@@ -694,6 +713,7 @@ export const Catalogo: React.FC = () => {
       {lightbox && resolvedLightboxJob && (
         <CatalogLightbox
           job={resolvedLightboxJob}
+          disabledProviders={systemConfig.disabledProviders}
           canGoPrevious={Boolean(previousLightboxTarget)}
           canGoNext={Boolean(nextLightboxTarget)}
           onClose={handleCloseLightbox}

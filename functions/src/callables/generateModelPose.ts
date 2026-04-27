@@ -7,6 +7,7 @@ import {
 } from '../../../shared/src/types';
 import { getModelPhotoProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
+import { assertProviderEnabledInSystemConfig, getSystemConfigCached } from '../admin/systemConfig';
 import {
   generateSingleModelPhoto,
   mapModelPhotoProviderToProvider,
@@ -44,6 +45,12 @@ export const generateModelPose = onCall(
     const bucket = admin.storage().bucket();
     const falKey = FAL_KEY.value();
     const openaiKey = OPENAI_API_KEY.value();
+    const systemConfig = await getSystemConfigCached();
+    assertProviderEnabledInSystemConfig(
+      mapModelPhotoProviderToProvider(provider),
+      systemConfig,
+      'usar para generar fotos de modelo',
+    );
     const normalizedImageConfig = normalizeProviderImageConfig(
       mapModelPhotoProviderToProvider(provider),
       imageConfig,

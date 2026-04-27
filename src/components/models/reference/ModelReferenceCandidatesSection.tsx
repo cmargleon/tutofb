@@ -46,7 +46,7 @@ export const ModelReferenceCandidatesSection: React.FC<ModelReferenceCandidatesS
               index={index}
               isSelected={reference.selectedCandidateIndex === index}
               isRegenerating={reference.regeneratingCandidateIndex === index}
-              disabled={reference.busy}
+              disabled={reference.busy || reference.selectedProviderDisabled}
               onSelect={() => reference.handleSelectCandidate(index)}
               onRegenerate={() => void reference.handleRegenerateCandidate(index)}
             />

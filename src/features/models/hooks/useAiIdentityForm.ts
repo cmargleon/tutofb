@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { AspectRatio, ModelPhotoProvider, Provider, ProviderImageConfig } from '../../../../shared/src/types';
 import {
   AGE_OPTIONS,
@@ -9,6 +9,7 @@ import {
   FOOTWEAR_OPTIONS,
   HAIR_COLOR_OPTIONS,
   HAIR_LENGTH_OPTIONS,
+  ModelPhotoProviderOption,
   PROVIDER_OPTIONS,
   SEX_OPTIONS,
   SKIN_OPTIONS,
@@ -20,6 +21,7 @@ import {
   mapModelPhotoProviderToProvider,
   resolveModelAspectRatioForImageConfig,
 } from '../providerImageConfig';
+import { isModelPhotoProviderDisabled } from '../../system/providerAvailability';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -35,7 +37,7 @@ export interface AiIdentityFormState {
   bottomOptions: typeof BOTTOM_OPTIONS;
   footwearOptions: typeof FOOTWEAR_OPTIONS;
   aspectOptions: typeof ASPECT_OPTIONS;
-  providerOptions: typeof PROVIDER_OPTIONS;
+  providerOptions: ModelPhotoProviderOption[];
   sex: string;
   setSex: SetState<string>;
   age: string;
@@ -59,6 +61,7 @@ export interface AiIdentityFormState {
   footwear: string;
   setFootwear: SetState<string>;
   provider: ModelPhotoProvider;
+  selectedProviderDisabled: boolean;
   setProvider: SetState<ModelPhotoProvider>;
   providerImageConfigs: Record<Provider, ProviderImageConfig>;
   providerImageConfig: ProviderImageConfig;
@@ -72,7 +75,13 @@ export interface AiIdentityFormState {
   setPromptExpanded: SetState<boolean>;
 }
 
-export const useAiIdentityForm = (): AiIdentityFormState => {
+interface UseAiIdentityFormParams {
+  disabledProviders?: string[];
+}
+
+export const useAiIdentityForm = ({
+  disabledProviders,
+}: UseAiIdentityFormParams = {}): AiIdentityFormState => {
   const [sex, setSex] = useState('female');
   const [age, setAge] = useState('25-35');
   const [skin, setSkin] = useState('medium');
@@ -94,6 +103,17 @@ export const useAiIdentityForm = (): AiIdentityFormState => {
   const mappedProvider = mapModelPhotoProviderToProvider(provider);
   const providerImageConfig = providerImageConfigs[mappedProvider];
   const aspectRatio = resolveModelAspectRatioForImageConfig(providerImageConfig);
+  const providerOptions = useMemo(
+    () => PROVIDER_OPTIONS.map((option) => ({
+      ...option,
+      disabled: isModelPhotoProviderDisabled(option.value, disabledProviders),
+    })),
+    [disabledProviders],
+  );
+  const selectedProviderDisabled = useMemo(
+    () => isModelPhotoProviderDisabled(provider, disabledProviders),
+    [disabledProviders, provider],
+  );
 
   useEffect(() => {
     if (!promptEdited) {
@@ -145,7 +165,7 @@ export const useAiIdentityForm = (): AiIdentityFormState => {
     bottomOptions: BOTTOM_OPTIONS,
     footwearOptions: FOOTWEAR_OPTIONS,
     aspectOptions: ASPECT_OPTIONS,
-    providerOptions: PROVIDER_OPTIONS,
+    providerOptions,
     sex,
     setSex,
     age,
@@ -169,6 +189,7 @@ export const useAiIdentityForm = (): AiIdentityFormState => {
     footwear,
     setFootwear,
     provider,
+    selectedProviderDisabled,
     setProvider,
     providerImageConfigs,
     providerImageConfig,

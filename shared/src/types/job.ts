@@ -13,6 +13,7 @@ import type {
   PoseBodyFocus,
   TryOnPromptCaseKey,
 } from './common';
+import type { ModelIdentityTraits } from './model';
 import type { ProviderImageConfig } from './provider';
 
 export interface ProviderUsageStats {
@@ -151,6 +152,7 @@ export interface Job {
   aspectRatio: AspectRatio;
   imageConfig?: ProviderImageConfig | null;
   provider: Provider;
+  modelIdentityTraitsSnapshot?: ModelIdentityTraits | null;
   requestedPromptBase?: string;
   promptBase: string;
   promptCaseKey?: TryOnPromptCaseKey | null;

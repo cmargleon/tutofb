@@ -5,9 +5,11 @@ import { assertCallableRoles } from '../auth/roles';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
+import { assertProviderEnabledInSystemConfig, getSystemConfigCached } from '../admin/systemConfig';
 
 export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobResponse>>(async (request) => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
+  const systemConfig = await getSystemConfigCached();
 
   const jobId = typeof request.data?.jobId === 'string' ? request.data.jobId.trim() : '';
   const provider = request.data?.provider;
@@ -27,6 +29,7 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
   }
 
   const job = { id: snapshot.id, ...snapshot.data() } as Job;
+  assertProviderEnabledInSystemConfig(provider || job.provider, systemConfig, 'usar para regenerar');
   if (job.status === 'processing') {
     throw new HttpsError(
       'failed-precondition',

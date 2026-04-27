@@ -13,7 +13,7 @@ import {
 import { assertCallableRoles } from '../auth/roles';
 import { getJobAutoReviewMaxAttempts } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { getSystemConfigCached } from '../admin/systemConfig';
+import { assertProviderEnabledInSystemConfig, getSystemConfigCached } from '../admin/systemConfig';
 import { buildStoredProductDraft } from '../spreadsheets/productDrafts';
 import {
   assertModelOwnershipAndPoses,
@@ -29,6 +29,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     await assertCallableRoles(request, ['admin', 'operador']);
     const systemConfig = await getSystemConfigCached();
     const validated = validateCreateGenerationBatchInput(request.data, request.auth!.uid, systemConfig.batchMaxJobs);
+    assertProviderEnabledInSystemConfig(validated.provider, systemConfig, 'usar para crear un lote');
 
     const db = getAppFirestore();
     const clientRef = db.collection('clients').doc(validated.clientId);
@@ -204,6 +205,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         } as Pick<Job, 'garmentIsMultiAngle' | 'garmentReferenceImageType' | 'promptCaseKey' | 'promptCaseText'>,
         validated.provider,
         validated.promptBase,
+        model.identityTraits || null,
         autoReviewMaxAttempts,
       );
       const jobData: Omit<Job, 'id'> = {

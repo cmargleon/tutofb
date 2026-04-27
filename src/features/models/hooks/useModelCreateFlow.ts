@@ -1,4 +1,5 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useSystemConfig } from '../../system/useSystemConfig';
 import { CreateTab } from '../types';
 import { ModelCreateFlowAiState, useAiWizard } from './useAiWizard';
 import {
@@ -38,6 +39,7 @@ export const useModelCreateFlow = (): UseModelCreateFlowResult => {
   const [newModelName, setNewModelName] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [createSuccess, setCreateSuccess] = useState(false);
+  const { config: systemConfig } = useSystemConfig();
 
   const showCreateSuccess = useCallback(() => {
     setCreateSuccess(true);
@@ -59,6 +61,7 @@ export const useModelCreateFlow = (): UseModelCreateFlowResult => {
   const { ai, isCreating: aiCreating } = useAiWizard({
     newModelName,
     selectedClientId,
+    disabledProviders: systemConfig.disabledProviders,
     setNewModelName,
     setSelectedClientId,
     onSuccess: showCreateSuccess,
@@ -71,6 +74,7 @@ export const useModelCreateFlow = (): UseModelCreateFlowResult => {
   } = useReferenceModelFlow({
     newModelName,
     selectedClientId,
+    disabledProviders: systemConfig.disabledProviders,
     setNewModelName,
     setSelectedClientId,
     onSuccess: showCreateSuccess,

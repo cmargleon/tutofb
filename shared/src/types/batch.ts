@@ -87,6 +87,7 @@ export interface CreateGenerationBatchResponse {
 export interface RegenerateFailedBatchJobsRequest {
   batchId: string;
   source?: 'catalog' | 'notification';
+  provider?: Provider | null;
 }
 
 export interface RegenerateFailedBatchJobsResponse {

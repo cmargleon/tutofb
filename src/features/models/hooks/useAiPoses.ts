@@ -17,7 +17,7 @@ interface UseAiPosesParams {
   selectedClientId: string;
   draftModelId: string;
   selectedCandidate: GeneratedPhotoState | null;
-  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio' | 'providerImageConfig'>;
+  identityForm: Pick<AiIdentityFormState, 'prompt' | 'provider' | 'aspectRatio' | 'providerImageConfig' | 'selectedProviderDisabled'>;
 }
 
 export interface UseAiPosesReturn {
@@ -68,7 +68,10 @@ export const useAiPoses = ({
   );
 
   const canGeneratePoses =
-    selectedPoseRecipes.length > 0 && !generatingPoses && regeneratingPoseIndex === null;
+    selectedPoseRecipes.length > 0
+    && !generatingPoses
+    && regeneratingPoseIndex === null
+    && !identityForm.selectedProviderDisabled;
 
   const clearPosePhotos = useCallback(() => setPosePhotos([]), []);
 
@@ -101,6 +104,7 @@ export const useAiPoses = ({
       !selectedClientId ||
       !selectedCandidate ||
       !identityForm.prompt.trim() ||
+      identityForm.selectedProviderDisabled ||
       selectedPoseRecipes.length === 0
     ) {
       return;
@@ -164,6 +168,7 @@ export const useAiPoses = ({
     identityForm.providerImageConfig,
     identityForm.prompt,
     identityForm.provider,
+    identityForm.selectedProviderDisabled,
     selectedCandidate,
     selectedClientId,
     selectedPoseRecipes,
@@ -171,7 +176,7 @@ export const useAiPoses = ({
 
   const handleRegeneratePose = useCallback(
     async (index: number) => {
-      if (!selectedClientId || !selectedCandidate) return;
+      if (!selectedClientId || !selectedCandidate || identityForm.selectedProviderDisabled) return;
 
       const poseRecipe = selectedPoseRecipes[index];
       if (!poseRecipe || poseRecipe.usesReferenceImage) return;
@@ -216,6 +221,7 @@ export const useAiPoses = ({
       identityForm.providerImageConfig,
       identityForm.prompt,
       identityForm.provider,
+      identityForm.selectedProviderDisabled,
       selectedCandidate,
       selectedClientId,
       selectedPoseRecipes,

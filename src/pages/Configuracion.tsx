@@ -376,7 +376,7 @@ export const Configuracion: React.FC = () => {
           <h2 className="text-base font-semibold text-slate-900">Proveedores habilitados</h2>
         </div>
         <p className="text-sm text-slate-500 mb-6">
-          Los proveedores deshabilitados no aparecen en el wizard de generación.
+          Los proveedores deshabilitados siguen visibles en generación, modelos y regeneraciones, pero no se pueden seleccionar.
         </p>
         {systemConfigLoading ? (
           <LoadingBlock message="Cargando configuración..." />

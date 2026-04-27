@@ -1,7 +1,8 @@
 import {
   DEFAULT_TRY_ON_PROMPT_CASES,
 } from '../../../shared/src/domain';
-import { SystemConfig } from '../../../shared/src/types';
+import { Provider, SystemConfig } from '../../../shared/src/types';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { getJobMaxRetries, getJobRetryDelayMs, getBatchMaxJobs, getGeminiImageReviewModel } from '../config/runtime';
 
@@ -58,4 +59,22 @@ export const getSystemConfigCached = async (): Promise<SystemConfig> => {
 export const invalidateSystemConfigCache = () => {
   _cachedConfig = null;
   _cacheExpiresAt = 0;
+};
+
+export const isProviderDisabledInSystemConfig = (
+  provider: Provider,
+  systemConfig: Pick<SystemConfig, 'disabledProviders'>,
+): boolean => systemConfig.disabledProviders.includes(provider);
+
+export const assertProviderEnabledInSystemConfig = (
+  provider: Provider,
+  systemConfig: Pick<SystemConfig, 'disabledProviders'>,
+  actionLabel = 'usar este modelo',
+) => {
+  if (isProviderDisabledInSystemConfig(provider, systemConfig)) {
+    throw new HttpsError(
+      'failed-precondition',
+      `El modelo seleccionado está deshabilitado en Configuración y no se puede ${actionLabel}.`,
+    );
+  }
 };

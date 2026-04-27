@@ -154,11 +154,16 @@ export const ModelReferenceOptionsSection: React.FC<ModelReferenceOptionsSection
           disabled={reference.busy}
         >
           {reference.providerOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label} - {option.hint}
+            <option key={option.value} value={option.value} disabled={option.disabled}>
+              {option.label} - {option.hint}{option.disabled ? ' · Deshabilitado' : ''}
             </option>
           ))}
         </SelectField>
+        {reference.selectedProviderDisabled ? (
+          <p className="mt-2 text-xs text-amber-700">
+            Este modelo IA está deshabilitado en Configuración. Sigue visible como referencia, pero no se puede usar para generar.
+          </p>
+        ) : null}
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-gray-600">Relación resultante</label>

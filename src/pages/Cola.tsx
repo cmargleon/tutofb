@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Clock3, Filter, RefreshCw, Rows3, SquareStack } from 'lucide-react';
 import { EmptyState, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
+import { RetryFailedJobsDialog } from '../components/evaluation/RetryFailedJobsDialog';
 import { useQueueData } from '../features/queue/firebase';
 import { cancelPendingBatchJobs, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
 import { useRole } from '../features/auth/AuthProvider';
@@ -9,6 +10,7 @@ import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { PROVIDER_LABELS } from '../../shared/src/domain';
 import { Batch, Job, Provider } from '../../shared/src/types';
 import { formatDateTime, toMillis } from '../../shared/src/utils/dateUtils';
+import { useSystemConfig } from '../features/system/useSystemConfig';
 
 interface QueueRow {
   id: string;
@@ -259,6 +261,7 @@ export const Cola: React.FC = () => {
   const role = useRole();
   const toast = useToast();
   const confirm = useConfirm();
+  const { config: systemConfig } = useSystemConfig();
   const { batches, jobsByBatch, loading, error } = useQueueData();
   const [clientFilter, setClientFilter] = useState('all');
   const [providerFilter, setProviderFilter] = useState<'all' | Provider>('all');
@@ -266,6 +269,7 @@ export const Cola: React.FC = () => {
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
   const [busyAction, setBusyAction] = useState<'retry' | 'cancel' | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [retryDialogBatchIds, setRetryDialogBatchIds] = useState<string[] | null>(null);
 
   const rows = useMemo<QueueRow[]>(() => {
     const fallbackAverageSeconds = average(
@@ -396,7 +400,7 @@ export const Cola: React.FC = () => {
     );
   };
 
-  const handleRetryFailed = async (batchIds: string[]) => {
+  const handleRetryFailed = async (batchIds: string[], provider: Provider | null) => {
     const eligibleRows = batchIds.map((batchId) => rowsById[batchId]).filter((row): row is QueueRow => Boolean(row) && row.batch.failedJobs > 0);
     if (eligibleRows.length === 0) {
       setActionMessage('No había jobs fallidos en los lotes seleccionados.');
@@ -407,18 +411,20 @@ export const Cola: React.FC = () => {
     setActionMessage(null);
 
     try {
-      const results = await Promise.all(eligibleRows.map((row) => regenerateFailedBatchJobs(row.id)));
+      const results = await Promise.all(eligibleRows.map((row) => regenerateFailedBatchJobs(row.id, provider)));
       const queuedJobs = results.reduce((sum, result) => sum + result.queuedJobs, 0);
       const skippedJobs = results.reduce((sum, result) => sum + result.skippedJobs, 0);
+      const retryProvider = results.find((result) => result.retryProvider)?.retryProvider || null;
+      const providerSuffix = retryProvider ? ` con ${PROVIDER_LABELS[retryProvider]}` : '';
 
       if (queuedJobs === 0) {
         setActionMessage('No había jobs fallidos listos para reencolar.');
       } else if (skippedJobs > 0) {
         setActionMessage(
-          `Se reencolaron ${queuedJobs} jobs fallidos en ${eligibleRows.length} lotes. ${skippedJobs} se omitieron por datos inválidos.`,
+          `Se reencolaron ${queuedJobs} jobs fallidos${providerSuffix} en ${eligibleRows.length} lote${eligibleRows.length === 1 ? '' : 's'}. ${skippedJobs} se omitieron por datos inválidos.`,
         );
       } else {
-        setActionMessage(`Se reencolaron ${queuedJobs} jobs fallidos en ${eligibleRows.length} lotes.`);
+        setActionMessage(`Se reencolaron ${queuedJobs} jobs fallidos${providerSuffix} en ${eligibleRows.length} lote${eligibleRows.length === 1 ? '' : 's'}.`);
       }
     } catch (error: any) {
       toast({
@@ -430,6 +436,19 @@ export const Cola: React.FC = () => {
       setBusyAction(null);
     }
   };
+
+  const retryDialogRows = useMemo(
+    () =>
+      (retryDialogBatchIds || [])
+        .map((batchId) => rowsById[batchId])
+        .filter((row): row is QueueRow => Boolean(row) && row.batch.failedJobs > 0),
+    [retryDialogBatchIds, rowsById],
+  );
+  const retryDialogFailedJobs = useMemo(
+    () => retryDialogRows.reduce((sum, row) => sum + row.batch.failedJobs, 0),
+    [retryDialogRows],
+  );
+  const retryDialogScopeLabel = retryDialogRows.length <= 1 ? 'este lote' : `${retryDialogRows.length} lotes`;
 
   const handleCancelPending = async (batchIds: string[]) => {
     const eligibleRows = batchIds.map((batchId) => rowsById[batchId]).filter((row): row is QueueRow => Boolean(row) && (row.batch.pendingJobs > 0 || row.batch.processingJobs > 0));
@@ -632,7 +651,7 @@ export const Cola: React.FC = () => {
                 <>
                   <button
                     type="button"
-                    onClick={() => void handleRetryFailed(selectedRows.map((row) => row.id))}
+                    onClick={() => setRetryDialogBatchIds(selectedRows.map((row) => row.id))}
                     disabled={busyAction !== null}
                     className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -705,7 +724,7 @@ export const Cola: React.FC = () => {
                           busyAction={busyAction}
                           canRegenerate={role.canRegenerate}
                           onToggle={handleToggleBatch}
-                          onRetry={handleRetryFailed}
+                          onRetry={async (batchIds) => setRetryDialogBatchIds(batchIds)}
                           onCancel={handleCancelPending}
                         />
                       ))
@@ -723,6 +742,20 @@ export const Cola: React.FC = () => {
             Abrir un lote desde aquí envía `clientId` y `batchId` al catálogo. La columna “Resultados” agrupa lotes con salidas o fallos ya visibles.
           </div>
         ) : null}
+
+        <RetryFailedJobsDialog
+          isOpen={Boolean(retryDialogBatchIds?.length)}
+          isSubmitting={busyAction === 'retry'}
+          failedJobsCount={retryDialogFailedJobs}
+          scopeLabel={retryDialogScopeLabel}
+          disabledProviders={systemConfig.disabledProviders}
+          onClose={() => setRetryDialogBatchIds(null)}
+          onSubmit={async (provider) => {
+            const batchIds = retryDialogBatchIds || [];
+            setRetryDialogBatchIds(null);
+            await handleRetryFailed(batchIds, provider);
+          }}
+        />
       </section>
     </div>
   );

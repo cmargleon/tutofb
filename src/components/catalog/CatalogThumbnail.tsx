@@ -3,6 +3,7 @@ import { Ban, Download, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
+import { getCatalogJobErrorMessage } from '../../features/catalog/errorMessage';
 
 interface CatalogThumbnailProps {
   job: Job;
@@ -24,6 +25,7 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   const resultPath = resolveApprovedJobOutput(job)?.resultImagePath;
   const isGenerating = job.status === 'pending' || job.status === 'processing';
   const isFailed = job.status === 'failed';
+  const failureMessage = getCatalogJobErrorMessage(job) || 'Abre el detalle para revisar el error.';
   const { url, error } = useStorageAssetUrl(resultPath || null);
   const loadError = Boolean(error);
   const showRegenerationOverlay = regenerationPending && Boolean(url);
@@ -90,7 +92,12 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
             <div className="absolute inset-0 bg-black/55" />
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-3 text-center">
               <Ban className="h-8 w-8 text-rose-300" aria-hidden="true" />
-              <p className="text-sm font-semibold text-white leading-tight">La generación falló</p>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-white leading-tight">La generación falló</p>
+                <p className="line-clamp-3 text-xs text-rose-100">
+                  {failureMessage}
+                </p>
+              </div>
             </div>
           </>
         )}
@@ -115,7 +122,7 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
           <div className="space-y-1">
             <p className="text-sm font-semibold text-rose-800">La generación falló</p>
             <p className="line-clamp-3 text-xs text-rose-600">
-              {job.lastError?.trim() || 'Abre el detalle para revisar el error.'}
+              {failureMessage}
             </p>
           </div>
         </div>

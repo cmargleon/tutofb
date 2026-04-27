@@ -5,6 +5,7 @@ import {
   GarmentReferenceImageType,
   Job,
   JobOutput,
+  ModelIdentityTraits,
   Provider,
   Role,
   TryOnPromptCaseKey,
@@ -21,6 +22,19 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   'fal-nano-banana-2': 'fal.ai Nano Banana 2',
   'fal-seedream-5': 'fal.ai Seedream 5 Lite',
 };
+
+export const INTERNAL_GARMENT_DETAILS_PROMPT_MARKER = 'INTERNAL GARMENT DETAILS (CRITICAL)';
+
+export const INTERNAL_GARMENT_DETAILS_PROMPT_BLOCK =
+  `--------------------------------
+${INTERNAL_GARMENT_DETAILS_PROMPT_MARKER}
+--------------------------------
+
+- Treat neck labels, inner tags, care labels, size labels, and any label sewn to the inside of the garment as INTERNAL-ONLY details by default
+- If an internal label is visible in the reference only because the garment is laid flat, zoomed in, or slightly open, DO NOT reproduce it as an exterior patch, badge, logo, or decoration
+- Only render a label or tag as externally visible when the reference clearly shows it is intentionally placed on the outside of the garment
+- Do NOT convert internal branding into visible outer branding
+- Do NOT place inner collar or neckline labels on the outside of the garment unless the reference clearly proves that placement`;
 
 export const DEFAULT_TRY_ON_PROMPT =
   `Replace the clothing worn by the model with the garment from the reference image.
@@ -79,6 +93,8 @@ BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
 - Do NOT assume symmetry of branding (front != back)
 - Do NOT reconstruct hidden branding
 - Do NOT generate additional or duplicate logos
+
+${INTERNAL_GARMENT_DETAILS_PROMPT_BLOCK}
 
 --------------------------------
 UNSEEN AREA CONSTRAINTS (CRITICAL)
@@ -177,14 +193,70 @@ export const isActiveCatalogEntity = (value: { status?: CatalogEntityStatus | nu
   !isArchivedCatalogEntity(value);
 export const resolveApprovedJobOutput = (job: Pick<Job, 'userSelectedOutput' | 'currentOutput'>): JobOutput | null =>
   job.userSelectedOutput || job.currentOutput || null;
+
+const MODEL_IDENTITY_TRAIT_LABELS: Record<keyof ModelIdentityTraits, string> = {
+  sex: 'Biological sex / presentation anchor',
+  age: 'Apparent age anchor',
+  skin: 'Skin tone anchor',
+  hairColor: 'Hair color anchor',
+  hairLength: 'Hair length anchor',
+  build: 'Body build anchor',
+};
+
+const buildModelIdentityTraitLines = (identityTraits?: ModelIdentityTraits | null): string[] => {
+  if (!identityTraits) {
+    return [];
+  }
+
+  return (Object.entries(MODEL_IDENTITY_TRAIT_LABELS) as Array<[keyof ModelIdentityTraits, string]>)
+    .map(([key, label]) => {
+      const value = identityTraits[key];
+      return typeof value === 'string' && value.trim()
+        ? `- ${label}: ${value.trim()}`
+        : null;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+};
+
+export const buildModelIdentityPromptBlock = (identityTraits?: ModelIdentityTraits | null): string => {
+  const traitLines = buildModelIdentityTraitLines(identityTraits);
+
+  return [
+    'IDENTITY PRESERVATION RULES (ABSOLUTE PRIORITY):',
+    '- The generated person must remain the exact same individual shown in the selected pose/model reference image.',
+    '- Treat the pose/model image as the source of truth for identity.',
+    '- If any other instruction conflicts with preserving identity, preserving identity wins.',
+    '- Preserve the same facial structure, skin tone, apparent age, body proportions, and visible hair identity.',
+    '- Do NOT swap to a different person, ethnicity, age group, face, or hairstyle.',
+    '- Do NOT age up, age down, beautify, editorialize, or stylize the face in a way that changes who the model is.',
+    '- Brand styling, mood, polish, and expression can be adjusted only if the selected model still reads as the same person.',
+    ...(traitLines.length > 0
+      ? [
+          'IDENTITY ANCHORS FROM THE SELECTED MODEL:',
+          ...traitLines,
+        ]
+      : []),
+  ].join('\n');
+};
+
+export const applyGlobalTryOnPromptGuards = (promptBase: string): string => {
+  const normalizedPrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
+  if (normalizedPrompt.includes(INTERNAL_GARMENT_DETAILS_PROMPT_MARKER)) {
+    return normalizedPrompt;
+  }
+
+  return [normalizedPrompt, INTERNAL_GARMENT_DETAILS_PROMPT_BLOCK].join('\n\n');
+};
+
 export const buildFinalGenerationPrompt = (
   promptBase: string,
   garmentReferenceImageType: GarmentReferenceImageType | boolean = 'single_view',
   promptCaseText?: string | null,
+  modelIdentityTraits?: ModelIdentityTraits | null,
 ): string => {
-  const basePrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
+  const basePrompt = applyGlobalTryOnPromptGuards(promptBase);
   const normalizedPromptCaseText = typeof promptCaseText === 'string' ? promptCaseText.trim() : '';
-  const sections = [basePrompt];
+  const sections = [buildModelIdentityPromptBlock(modelIdentityTraits), basePrompt];
   const usesMultiAngleReference =
     garmentReferenceImageType === true || garmentReferenceImageType === 'multi_angle_composite';
 
@@ -217,5 +289,7 @@ export default {
   isArchivedCatalogEntity,
   isActiveCatalogEntity,
   resolveApprovedJobOutput,
+  buildModelIdentityPromptBlock,
+  applyGlobalTryOnPromptGuards,
   buildFinalGenerationPrompt,
 };

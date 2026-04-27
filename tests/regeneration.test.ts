@@ -56,6 +56,8 @@ test('buildRegenerateJobPatch reinicia el job y recompone el prompt final', () =
   assert.equal(patch.status, 'pending');
   assert.equal(patch.retryCount, 0);
   assert.match(patch.finalPrompt, /nuevo prompt/i);
+  assert.match(patch.finalPrompt, /INTERNAL GARMENT DETAILS \(CRITICAL\)/);
+  assert.match(patch.finalPrompt, /inner collar|inside of the garment|internal label/i);
   assert.match(patch.finalPrompt, /multiples angulos/i);
   assert.doesNotMatch(patch.finalPrompt, /Instrucciones de fondo/i);
   assert.doesNotMatch(patch.finalPrompt, /Evitar en el fondo/i);

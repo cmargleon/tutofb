@@ -80,14 +80,17 @@ export const cancelBatchProcessing = async (
   }
 };
 
-export const regenerateFailedBatchJobs = async (batchId: string): Promise<RegenerateFailedBatchJobsResponse> => {
+export const regenerateFailedBatchJobs = async (
+  batchId: string,
+  provider?: Provider | null,
+): Promise<RegenerateFailedBatchJobsResponse> => {
   const callable = httpsCallable<RegenerateFailedBatchJobsRequest, RegenerateFailedBatchJobsResponse>(
     functions,
     'regenerateFailedBatchJobs',
   );
 
   try {
-    const result = await callable({ batchId });
+    const result = await callable({ batchId, provider: provider || null });
     return result.data;
   } catch (error) {
     console.error('Error calling regenerateFailedBatchJobs:', error);

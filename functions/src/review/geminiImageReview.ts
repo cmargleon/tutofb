@@ -1,8 +1,9 @@
-import { DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
+import { applyGlobalTryOnPromptGuards, DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
 import {
   JobAutoReviewCriterion,
   JobAutoReviewMarketplaceData,
   JobAutoReviewVerdict,
+  ModelIdentityTraits,
 } from '../../../shared/src/types';
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 
@@ -27,6 +28,7 @@ interface ReviewRequest {
   requestedPromptBase: string;
   promptBase: string;
   finalPrompt: string;
+  modelIdentityTraitsSnapshot?: ModelIdentityTraits | null;
   attemptNumber: number;
   maxAttempts: number;
   poseReference: ReviewImageAsset;
@@ -88,13 +90,13 @@ const REVIEW_RESPONSE_SCHEMA = {
     },
     criteria: {
       type: 'array',
-      minItems: 4,
+      minItems: 5,
       items: {
         type: 'object',
         properties: {
           key: {
             type: 'string',
-            description: 'Short machine-friendly id like background, pose, garment, logo, composition.',
+            description: 'Short machine-friendly id like identity, background, pose, garment, logo, composition.',
           },
           label: {
             type: 'string',
@@ -208,18 +210,45 @@ const sanitizeMarketplaceData = (value: unknown): JobAutoReviewMarketplaceData =
   };
 };
 
+const REVIEW_IDENTITY_TRAIT_LABELS: Record<keyof ModelIdentityTraits, string> = {
+  sex: 'Biological sex / presentation anchor',
+  age: 'Apparent age anchor',
+  skin: 'Skin tone anchor',
+  hairColor: 'Hair color anchor',
+  hairLength: 'Hair length anchor',
+  build: 'Body build anchor',
+};
+
+const buildIdentityAnchorLines = (identityTraits?: ModelIdentityTraits | null): string[] => {
+  if (!identityTraits) {
+    return [];
+  }
+
+  return (Object.entries(REVIEW_IDENTITY_TRAIT_LABELS) as Array<[keyof ModelIdentityTraits, string]>)
+    .map(([key, label]) => {
+      const value = identityTraits[key];
+      return typeof value === 'string' && value.trim()
+        ? `- ${label}: ${value.trim()}`
+        : null;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+};
+
 const buildReviewPrompt = ({
   requestedPromptBase,
   promptBase,
   finalPrompt,
+  modelIdentityTraitsSnapshot,
   attemptNumber,
   maxAttempts,
 }: Pick<
   ReviewRequest,
-  'requestedPromptBase' | 'promptBase' | 'finalPrompt' | 'attemptNumber' | 'maxAttempts'
+  'requestedPromptBase' | 'promptBase' | 'finalPrompt' | 'modelIdentityTraitsSnapshot' | 'attemptNumber' | 'maxAttempts'
 >): string => {
-  const originalPrompt = requestedPromptBase.trim() || DEFAULT_TRY_ON_PROMPT;
-  const currentPrompt = promptBase.trim() || DEFAULT_TRY_ON_PROMPT;
+  const originalPrompt = applyGlobalTryOnPromptGuards(requestedPromptBase.trim() || DEFAULT_TRY_ON_PROMPT);
+  const currentPrompt = applyGlobalTryOnPromptGuards(promptBase.trim() || DEFAULT_TRY_ON_PROMPT);
+  const reviewedFinalPrompt = applyGlobalTryOnPromptGuards(finalPrompt.trim() || DEFAULT_TRY_ON_PROMPT);
+  const identityAnchorLines = buildIdentityAnchorLines(modelIdentityTraitsSnapshot);
 
   return [
     'You are an expert evaluator of AI-generated fashion catalog images for marketplaces such as Shein and TikTok Shop.',
@@ -245,14 +274,30 @@ const buildReviewPrompt = ({
     '2. BRANDING / LOGOS / GRAPHICS (CRITICAL — HIGHEST PRIORITY)',
     '- Check if logos, text, or graphics visible in the reference are present in the result',
     '- Verify correct placement, size, and orientation',
+    '- Distinguish true exterior branding from internal construction details such as neck labels, inside tags, care labels, or size labels',
+    '- Internal labels or tags must stay hidden unless the reference clearly shows they are intentionally visible on the outside',
     '❗ HARD FAILURE CONDITIONS:',
     '- Missing logo when visible in reference → FAIL',
     '- Logo placed in incorrect position → FAIL',
     '- Distorted, warped, or altered logo → FAIL',
     '- Logo added where it does NOT exist in the reference → FAIL',
     '- Logo generated on areas not visible in the reference (e.g., back when only front is shown) → FAIL',
+    '- Internal label or inner tag rendered as an exterior patch, badge, or visible front branding → FAIL',
+    '- Inner collar or neckline label moved to the outside of the garment → FAIL',
     '--------------------------------',
-    '3. POSE / BODY ORIENTATION (MODERATELY STRICT)',
+    '3. MODEL IDENTITY (CRITICAL — HIGHEST PRIORITY)',
+    '- The generated person must remain the exact same individual shown in the base pose image',
+    '- Verify identity consistency across face, skin tone, apparent age, body proportions, and visible hair identity',
+    '- Hair color, hair length, and hair silhouette must stay consistent with the selected model unless the pose image clearly hides them',
+    '- Do NOT approve if the result looks like a different person even if the garment is correct',
+    '❗ HARD FAILURE CONDITIONS:',
+    '- Different face or facial structure → FAIL',
+    '- Different apparent age group → FAIL',
+    '- Different skin tone without a lighting-only explanation → FAIL',
+    '- Different hair color, hair length, or visible hair identity → FAIL',
+    '- Any clear identity drift toward another model/person → FAIL',
+    '--------------------------------',
+    '4. POSE / BODY ORIENTATION (MODERATELY STRICT)',
     '- The general orientation must match:',
     '  • If front-facing → result must be front-facing',
     '  • If back-facing → result must be back-facing',
@@ -262,12 +307,12 @@ const buildReviewPrompt = ({
     '- Incorrect facing direction (e.g., back → front) → FAIL',
     '- Incorrect gaze direction (e.g., looking away instead of at camera) → FAIL',
     '--------------------------------',
-    '4. BACKGROUND (RELAXED)',
+    '5. BACKGROUND (RELAXED)',
     '- Background does NOT need to be identical',
     '- Must maintain similar tone, lighting style, or general environment',
     '- Approximate similarity (~70%) is acceptable',
     '--------------------------------',
-    '5. OVERALL CONSISTENCY',
+    '6. OVERALL CONSISTENCY',
     '- Image should be photorealistic',
     '- No major artifacts, distortions, or inconsistencies',
     '--------------------------------',
@@ -276,6 +321,7 @@ const buildReviewPrompt = ({
     '- If ANY critical failure occurs in:',
     '  • Garment fidelity',
     '  • Branding / logos',
+    '  • Model identity',
     '→ The result MUST be marked as NOT APPROVED',
     '--------------------------------',
     'REVISED PROMPT (ONLY IF FAILED)',
@@ -285,9 +331,13 @@ const buildReviewPrompt = ({
     '- The prompt must:',
     '  • Be self-contained',
     '  • Focus ONLY on fixing the detected issues',
+    '  • Explicitly preserve the exact same person from the base pose image',
+    '  • Reinforce the same face, skin tone, apparent age, body proportions, hair color, and hair length',
     '  • Reinforce color accuracy and exact logo placement',
     '  • Explicitly forbid logo hallucination',
+    '  • Explicitly keep internal labels, care tags, and inside neck labels hidden unless they are clearly exterior in the reference',
     '  • Preserve pose, identity, lighting, and background',
+    '  • Keep any non-conflicting brand or commercial styling from the original prompt',
     'If the result PASSES:',
     '- revisedPrompt must be an empty string ""',
     '--------------------------------',
@@ -305,6 +355,15 @@ const buildReviewPrompt = ({
     '❗ DO NOT GUESS:',
     'If information is not clearly visible → return null',
     '--------------------------------',
+    ...(identityAnchorLines.length > 0
+      ? [
+          'IDENTITY ANCHORS FROM THE SELECTED MODEL',
+          ...identityAnchorLines,
+          '--------------------------------',
+        ]
+      : []),
+    'Use the pose image as the primary identity source of truth even if some traits above are missing.',
+    '--------------------------------',
     'ATTEMPT CONTEXT',
     '--------------------------------',
     `Current attempt: ${attemptNumber} of ${maxAttempts}`,
@@ -313,7 +372,7 @@ const buildReviewPrompt = ({
     'Prompt used in this attempt:',
     currentPrompt,
     'Final prompt sent to provider:',
-    finalPrompt,
+    reviewedFinalPrompt,
     '--------------------------------',
     'OUTPUT FORMAT',
     '--------------------------------',

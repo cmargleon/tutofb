@@ -58,6 +58,7 @@ export const BatchStep: React.FC<Props> = ({
     state.outputMode === 'spreadsheet'
     && productDraftPreparationStatus === 'failed'
   );
+  const selectedProviderDisabled = Boolean(disabledProviders?.includes(state.provider));
   const sourceSpreadsheetPending = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'uploading';
   const sourceSpreadsheetFailed = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'failed';
   const isSubmitDisabled = (
@@ -67,6 +68,7 @@ export const BatchStep: React.FC<Props> = ({
     || spreadsheetPreparationFailed
     || sourceSpreadsheetPending
     || sourceSpreadsheetFailed
+    || selectedProviderDisabled
   );
 
   return (
@@ -75,6 +77,12 @@ export const BatchStep: React.FC<Props> = ({
 
       {providerChosen && (
         <>
+          {selectedProviderDisabled ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Este modelo IA está deshabilitado en Configuración. Sigue visible para referencia, pero no se puede usar para crear nuevos lotes.
+            </div>
+          ) : null}
+
           {state.outputMode === 'spreadsheet' ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <h3 className="text-sm font-semibold text-slate-900">Preparación del spreadsheet</h3>
@@ -120,11 +128,13 @@ export const BatchStep: React.FC<Props> = ({
             </div>
           ) : null}
 
-          <ProviderImageConfigSelection
-            provider={state.provider}
-            value={state.providerImageConfigs[state.provider]}
-            onChange={onProviderImageConfigChange}
-          />
+          <div className={selectedProviderDisabled ? 'pointer-events-none opacity-60' : undefined}>
+            <ProviderImageConfigSelection
+              provider={state.provider}
+              value={state.providerImageConfigs[state.provider]}
+              onChange={onProviderImageConfigChange}
+            />
+          </div>
           <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
 
           <button

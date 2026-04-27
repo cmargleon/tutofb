@@ -3,14 +3,21 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
   Batch,
   Job,
+  Provider,
   RegenerateFailedBatchJobsRequest,
   RegenerateFailedBatchJobsResponse,
 } from '../../../shared/src/types';
+import { isProvider } from '../../../shared/src/domain';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { buildRegenerateJobPatch } from './regenerateJob.helpers';
 import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
 import { resolveNotificationRetryProvider } from './regenerateFailedBatchJobs.helpers';
+import {
+  assertProviderEnabledInSystemConfig,
+  getSystemConfigCached,
+  isProviderDisabledInSystemConfig,
+} from '../admin/systemConfig';
 
 export const regenerateFailedBatchJobs = onCall<
   RegenerateFailedBatchJobsRequest,
@@ -20,8 +27,16 @@ export const regenerateFailedBatchJobs = onCall<
 
   const batchId = typeof request.data?.batchId === 'string' ? request.data.batchId.trim() : '';
   const source = request.data?.source === 'notification' ? 'notification' : 'catalog';
+  const requestedProviderRaw = typeof request.data?.provider === 'string' ? request.data.provider.trim() : '';
+  const systemConfig = await getSystemConfigCached();
   if (!batchId) {
     throw new HttpsError('invalid-argument', 'Debes indicar un lote válido.');
+  }
+  if (requestedProviderRaw && !isProvider(requestedProviderRaw)) {
+    throw new HttpsError('invalid-argument', 'Debes indicar un modelo válido para reintentar.');
+  }
+  if (requestedProviderRaw) {
+    assertProviderEnabledInSystemConfig(requestedProviderRaw as Provider, systemConfig, 'usar para reintentar');
   }
 
   const db = getAppFirestore();
@@ -57,9 +72,14 @@ export const regenerateFailedBatchJobs = onCall<
   const now = admin.firestore.FieldValue.serverTimestamp();
   const skippedJobIds: string[] = [];
   let queuedJobs = 0;
-  const retryProvider = source === 'notification'
-    ? resolveNotificationRetryProvider(batch.provider)
-    : null;
+  const retryProvider: Provider | null = requestedProviderRaw
+    ? requestedProviderRaw as Provider
+    : source === 'notification'
+      ? resolveNotificationRetryProvider(batch.provider)
+      : null;
+  if (retryProvider) {
+    assertProviderEnabledInSystemConfig(retryProvider, systemConfig, 'usar para reintentar');
+  }
 
   if (source === 'notification') {
     writeBatch.update(batchSnapshot.ref, {
@@ -77,6 +97,10 @@ export const regenerateFailedBatchJobs = onCall<
   failedJobs.forEach((job) => {
     const prompt = (job.promptBase || job.finalPrompt || '').trim();
     const targetProvider = retryProvider ?? job.provider;
+    if (isProviderDisabledInSystemConfig(targetProvider, systemConfig)) {
+      skippedJobIds.push(job.id!);
+      return;
+    }
 
     try {
       const patch = buildRegenerateJobPatch(job, targetProvider, prompt);

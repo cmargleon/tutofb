@@ -358,6 +358,8 @@ test('buildJobDraft usa single_view para el matching nuevo y deja el job en pend
   assert.equal(draft.promptCaseKey, 'top_only');
   assert.equal(draft.promptCaseText, defaultPromptCases.top_only);
   assert.match(draft.finalPrompt, /plain black leggings/i);
+  assert.match(draft.finalPrompt, /INTERNAL GARMENT DETAILS \(CRITICAL\)/);
+  assert.match(draft.finalPrompt, /internal label|inside of the garment/i);
   assert.doesNotMatch(draft.finalPrompt, /multiples angulos/i);
   assert.doesNotMatch(draft.finalPrompt, /Instrucciones de fondo/i);
   assert.doesNotMatch(draft.finalPrompt, /Evitar en el fondo/i);
@@ -374,6 +376,21 @@ test('buildJobDraft mantiene la nota de multiangulo en jobs legacy compuestos', 
   );
 
   assert.match(draft.finalPrompt, /multiples angulos/i);
+});
+
+test('buildJobDraft no duplica la regla de etiquetas internas si el prompt base ya la incluye', () => {
+  const marker = 'INTERNAL GARMENT DETAILS (CRITICAL)';
+  const draft = buildJobDraft(
+    {
+      garmentIsMultiAngle: false,
+      garmentReferenceImageType: 'single_view',
+    },
+    'openai-gpt-image-1.5',
+    `Prompt custom\n\n${marker}\n\n- Keep inside labels hidden.`,
+  );
+
+  const markerCount = draft.finalPrompt.split(marker).length - 1;
+  assert.equal(markerCount, 1);
 });
 
 test('resolveJobPromptCase usa el fallback por defecto cuando la configuración no trae override', () => {

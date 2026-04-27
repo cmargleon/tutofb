@@ -105,6 +105,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
         requestedPromptBase: job.requestedPromptBase || job.promptBase,
         promptBase: job.promptBase,
         finalPrompt: job.finalPrompt,
+        modelIdentityTraitsSnapshot: job.modelIdentityTraitsSnapshot || null,
         attemptNumber,
         maxAttempts,
         poseReference,

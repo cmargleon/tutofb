@@ -341,6 +341,7 @@ const persistGeneratedAttempt = async ({
       resolvedPromptBase,
       claimedJob.garmentReferenceImageType || (claimedJob.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
       claimedJob.promptCaseText,
+      claimedJob.modelIdentityTraitsSnapshot || null,
     );
   }
 
@@ -754,6 +755,7 @@ export const processJob = async (
         requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
         promptBase: claimedJob.promptBase,
         finalPrompt: claimedJob.finalPrompt,
+        modelIdentityTraitsSnapshot: claimedJob.modelIdentityTraitsSnapshot || null,
         attemptNumber: generationAttempt,
         maxAttempts: maxAutoReviewAttempts,
         poseReference,

@@ -1,6 +1,13 @@
 import { AspectRatio, ModelPhotoProvider } from '../../../shared/src/types';
 import { PoseRecipe, PoseGroupOption } from './types';
 
+export interface ModelPhotoProviderOption {
+  value: ModelPhotoProvider;
+  label: string;
+  hint: string;
+  disabled?: boolean;
+}
+
 export const IDENTITY_CANDIDATE_COUNT = 4;
 
 const LOWER_BODY_PROMPT_DIRECTIVES = [
@@ -578,7 +585,7 @@ export const ASPECT_OPTIONS: { value: AspectRatio; label: string }[] = [
   { value: '1:1', label: '1:1 (cuadrado)' },
 ];
 
-export const PROVIDER_OPTIONS: { value: ModelPhotoProvider; label: string; hint: string }[] = [
+export const PROVIDER_OPTIONS: ModelPhotoProviderOption[] = [
   { value: 'fal-seedream-v4.5', label: 'Seedream v4.5 (fal.ai)',    hint: 'ByteDance · $0.04/foto' },
   { value: 'fal-banana-pro',    label: 'Nano Banana Pro (fal.ai)',  hint: 'Gemini Pro · $0.15/foto base, $0.30 en 4K' },
   { value: 'openai-dalle',      label: 'OpenAI gpt-image-1.5',      hint: 'OpenAI · $0.02-$0.25/foto segun quality y size' },

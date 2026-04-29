@@ -1,344 +1,133 @@
-# ARCHITECTURE
+# Architecture
 
-Documento regenerado desde la estructura y el codigo actual del repositorio.
+## Core Flow
+- Auth flow:
+  - `src/features/auth/AuthProvider.tsx` loads Firebase auth plus `users/{uid}`.
+  - Frontend route access is gated in `src/app/AppRouter.tsx` by active user doc and role.
+  - Backend callables re-check roles through `functions/src/auth/roles.ts`; frontend role checks are not authority.
+- Catalog setup flow:
+  - Admins manage `clients` and `models`; most simple catalog edits are direct Firestore writes allowed by rules.
+  - Spreadsheet template import uploads XLS/XLSX to `client_spreadsheets/{clientId}/...`, then `importClientSpreadsheetTemplate` parses and writes `clients/{clientId}/spreadsheetTemplates/{templateId}` plus `categories`.
+  - Model bundle import reads a ZIP manifest and writes model poses under `models/{clientId}/{modelId}/poses/...`.
+- Generation flow:
+  - Wizard uploads garment drafts to `garments/drafts/{uid}/{draftBatchId}/{garmentId}/...`.
+  - Optional Gemini helpers classify garment views and preview product drafts before submission.
+  - `createGenerationBatch` validates role, `system_config/main`, provider availability, client/model ownership, template/categories, pose compatibility, draft ownership, and job limit.
+  - The callable writes one `batches/{batchId}` document, optional `batches/{batchId}/productDrafts/{garmentId}`, and one `jobs/{jobId}` per compatible garment-photo/pose pair.
+- Job processing flow:
+  - `processJobOnCreate`, `processJobOnRequeue`, and `processJobOnActivation` wake `functions/src/workers/jobWorker.ts`.
+  - Worker claims pending jobs transactionally using `claimToken`, builds signed URLs for pose and garment images, calls `generateWithProvider`, compresses output if needed, and stores it under `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`.
+  - Worker writes `jobs/{jobId}/outputs/{outputId}`, updates `jobs/{jobId}.currentOutput`, writes `jobs/{jobId}/logs`, and sends pose/garment/result to Gemini auto-review.
+  - Approved review sets job `completed`; rejected review requeues with revised prompt until `autoReviewMaxAttempts`; provider errors retry until `maxRetries`.
+- Post-processing flow:
+  - `onJobStatusChange` recomputes batch counters from all jobs in the batch; it does not trust deltas.
+  - `onJobCompletedSquareCrop` syncs the approved output crop into spreadsheet product drafts.
+  - Catalog/queue/evaluation pages read `batches`, `jobs`, `outputs`, `logs`, and `productDrafts` through realtime subscriptions and callables.
+- Derived data flow:
+  - Analytics docs are trigger-maintained from `jobs` and `jobs/*/outputs`; `rebuildAnalytics` can rebuild snapshots.
+  - Finance events are trigger-maintained from job outputs, Gemini usage, model-generation logs, human intervention, and terminal batches; finance snapshots are callable-built.
 
-Objetivo:
-- describir lo que hoy se puede verificar en el repo
-- reducir supuestos heredados de iteraciones anteriores
-- dejar un mapa util para ubicar responsabilidades, contratos y zonas sensibles
-
-Si este archivo contradice al codigo, manda el codigo.
-
-## 1. Snapshot del repositorio
-
-El repo esta organizado en tres capas principales:
-
-- `src/`: frontend SPA con React 19, TypeScript y Vite
-- `functions/src/`: backend con Firebase Cloud Functions v2
-- `shared/src/`: contrato compartido entre frontend y backend
-
-Infraestructura y config visibles:
-- `firebase.json`: Hosting, Firestore, Storage, Functions y emuladores
-- `.firebaserc`: proyecto Firebase por defecto
-- `firestore.rules`, `firestore.indexes.json`, `storage.rules`
-- `firebase-applet-config.json`: configuracion del cliente Firebase usada por `src/firebase.ts`
-- `.env.example`: flags locales para frontend y referencia de params/secrets de Functions
-- `playwright.config.ts`: configuracion E2E
-- `tests/` y `e2e/`: validacion automatizada
-
-Scripts observados:
-- raiz: `npm run dev`, `npm run build`, `npm run preview`, `npm run clean`, `npm run lint`, `npm test`
-- functions: `npm --prefix functions run build`, `serve`, `shell`, `deploy`, `logs`
-
-## 2. Mapa del frontend
-
-### Shell y providers
-
-- `src/app/App.tsx`: monta `ErrorBoundary`, `ThemeProvider`, `FeedbackProvider` y `AuthProvider`
-- `src/app/AppRouter.tsx`: define rutas protegidas, lazy loading y chequeo de roles
-- `src/components/Layout.tsx`: shell principal con sidebar, header y outlet
-- `src/components/layout/Sidebar.tsx`: navegacion lateral por permisos
-- `src/components/layout/GlobalSearch.tsx`: busqueda global de clientes, modelos y batches
-- `src/components/ui.tsx`: componentes UI reutilizables
-
-### Rutas observadas
-
-| Ruta | Pagina | Roles permitidos |
-| --- | --- | --- |
-| `/login` | `src/pages/Login.tsx` | publica |
-| `/` | `src/pages/Dashboard.tsx` | autenticado y activo |
-| `/users` | redirect a `/users/crear` | `admin` |
-| `/users/crear` | `src/pages/Users.tsx` (`view="create"`) | `admin` |
-| `/users/lista` | `src/pages/Users.tsx` (`view="list"`) | `admin` |
-| `/clients` | redirect a `/clients/crear` o `/clients/lista` | `admin` |
-| `/clients/crear` | `src/pages/Clients.tsx` (`view="create"`) | `admin` |
-| `/clients/lista` | `src/pages/Clients.tsx` (`view="list"`) | `admin` |
-| `/models` | redirect a `/models/catalogo` | `admin` |
-| `/models/generar` | `src/pages/ModelsGenerate.tsx` | `admin` |
-| `/models/catalogo` | `src/pages/ModelsCatalog.tsx` | `admin` |
-| `/generate` | `src/pages/Wizard.tsx` | `admin`, `operador` |
-| `/cola` | `src/pages/Cola.tsx` | `admin`, `operador`, `revisor` |
-| `/catalogo` | `src/pages/Catalogo.tsx` | `admin`, `operador`, `revisor` |
-| `/analytics` | `src/pages/Analytics.tsx` | `admin`, `revisor` |
-| `/configuracion` | `src/pages/Configuracion.tsx` | `admin` |
-
-### Features del frontend
-
-Dominios visibles por carpeta:
-- `src/features/auth/`: sesion, lectura de `users/{uid}` y capacidades por rol
-- `src/features/users/`: CRUD y filtros operativos de usuarios internos
-- `src/features/clients/`: CRUD de clientes y gestion de spreadsheet templates
-- `src/features/models/`: catalogo de modelos, poses, wizard IA y carga de referencias
-- `src/features/generate/` y `src/features/wizard/`: wizard, uploads draft, clasificacion de vistas y envio de batches
-- `src/features/evaluation/`: seleccion manual de outputs, traceabilidad, output history, product drafts, regeneracion y descargas
-- `src/features/queue/`: vista operativa de batches activos
-- `src/features/catalog/`: catalogo visual de jobs completados agrupados por prenda y batch, con acciones operativas
-- `src/features/dashboard/`: snapshot operativo para la home
-- `src/features/analytics/`: analytics agregados y uso de Gemini
-- `src/features/system/`: salud del sistema, alertas y config operativa compartida
-- `src/features/search/`, `src/features/notifications/`, `src/features/feedback/`, `src/features/theme/`, `src/features/storage/`: soporte transversal
-
-## 3. Mapa del backend
-
-### Entry points exportados
-
-`functions/src/index.ts` exporta estas areas:
-
-- Callables de generacion:
-  - `createGenerationBatch`
-  - `classifyGarmentViewsWithGemini`
-  - `previewProductDrafts`
-- Callables operativas de cola y catalogo:
-  - `regenerateJob`
-  - `deleteJob`
-  - `retryJobAutoReview`
-  - `cancelJobGeneration`
-  - `cancelBatchProcessing`
-  - `selectJobOutput`
-  - `updateBatchProductDraft`
-  - `exportBatchSpreadsheet`
-  - `regenerateFailedBatchJobs`
-  - `cancelPendingBatchJobs`
-  - `regenerateJobsBulk`
-- Callables de administracion, clientes y modelos:
-  - `syncUserClaims`
-  - `createAppUser`
-  - `updateAppUser`
-  - `archiveAppUser`
-  - `restoreAppUser`
-  - `permanentlyDeleteAppUser`
-  - `permanentlyDeleteClient`
-  - `permanentlyDeleteModel`
-  - `generateModelPose`
-  - `importClientSpreadsheetTemplate`
-  - `deleteClientSpreadsheetTemplate`
-  - `updateClientSpreadsheetTemplateCategory`
-  - `importModelBundle`
-- Admin:
-  - `rebuildAnalytics`
-  - `getSystemHealth`
-  - `updateSystemAlertSettings`
-  - `tagModelPosesWithGemini`
-  - `backfillModelPoses`
-  - `updateSystemConfig`
-  - `getSystemConfig`
-- HTTP:
-  - `downloadBatchZip`
-  - `downloadJobImage`
-  - `downloadModelBundle`
-  - `downloadSelectedJobsZip`
-  - `publicGeneratedImage`
-- Triggers:
-  - `onJobStatusChange`
-  - `processJobOnActivation`
-  - `onClientDelete`
-  - `onModelDelete`
-  - `processJobOnCreate`
-  - `processJobOnRequeue`
-  - `requeueExpiredJobsOnSchedule`
-  - `analyticsTriggers`
-  - `onModelWrite`
-  - `syncClaimsOnUserWrite`
-  - `storageCleanupOnSchedule`
-  - `onJobCompletedSquareCrop`
-
-Notas operativas visibles:
-- `admin.initializeApp()` se ejecuta en `functions/src/index.ts`
-- `setGlobalOptions({ maxInstances: 10 })` limita concurrencia global de Functions
-
-### Carpetas backend
-
-- `functions/src/callables/`: acciones invocadas desde frontend
-- `functions/src/http/`: descargas de imagenes y ZIPs
-- `functions/src/http/publicGeneratedImage.ts`: proxy publico restringido para servir solo assets bajo `generated/`
-- `functions/src/workers/`: worker de jobs y documentacion del flujo
-- `functions/src/triggers/`: procesamiento, analytics, borrados, sync de claims y cleanup
-- `functions/src/providers/`: integraciones con providers de imagen
-- `functions/src/review/`: auto review con Gemini
-- `functions/src/admin/`: rebuild de analytics, salud, alertas y config operativa
-- `functions/src/auth/`: autorizacion por rol
-- `functions/src/config/`: runtime params y secrets
-- `functions/src/firebase/`: acceso compartido a Firebase Admin
-- `functions/src/spreadsheets/`: parseo de templates y generacion/export de product drafts
-- `functions/src/utils/`: helpers server-side varios
-
-## 4. Contrato compartido
-
-`shared/src/` es la capa comun entre frontend y backend.
-
-Piezas principales:
-- `shared/src/types/`: entidades, requests, responses, analytics, system config y salud
-- `shared/src/domain.ts`: enums, labels, validadores y prompt base de generacion
-- `shared/src/constants.ts` y `shared/src/constants/providerCosts.ts`: constantes de dominio y costos
-- `shared/src/providerImageConfig.ts`: tipos de configuracion por provider
-- `shared/src/reviewMetrics.ts`: metricas derivadas de review
-- `shared/src/utils/dateUtils.ts`: helpers de fecha
-- `shared/src/utils/garmentViewMatching.ts`: matching pose-prenda por vistas compatibles
-- `shared/src/utils/poseAiClassification.ts`: normalizacion de tagging IA de poses
-
-Cambiar `shared/src/` implica revisar frontend, Functions y tests.
-
-## 5. Modelo de datos observable
-
-Colecciones y documentos que aparecen en el codigo:
-
-- `users`
-- `clients`
-- `clients/{clientId}/spreadsheetTemplates`
-- `clients/{clientId}/spreadsheetTemplates/{templateId}/categories`
-- `models`
-- `batches`
-- `batches/{batchId}/productDrafts`
-- `jobs`
-- `jobs/{jobId}/outputs`
-- `jobs/{jobId}/logs`
-- `analytics_summary/global`
-- `analytics_daily/{date}`
-- `analytics_providers/{provider}`
-- `analytics_clients/{clientId}`
-- `analytics_client_providers/{clientId__provider}`
-- `analytics_client_models/{clientId__modelId}`
-- `analytics_gemini_usage/{logId}`
-- `system_alert_settings/global`
-- `system_config/main`
-- `model_generation_logs`
-- `adminOperations`
-
-Entidades principales visibles en `shared/src/types/`:
-- `User`
-- `Client`
-- `SpreadsheetTemplate`
-- `SpreadsheetTemplateCategory`
-- `Model`
-- `Pose`
-- `Batch`
-- `Job`
-- `JobOutput`
-- `JobLog`
-- `ProductDraft`
-- `Analytics*`
-- `GeminiUsageRecord`
-- `SystemHealthSnapshot`
-- `SystemConfig`
-
-Semantica confirmada por tipos y worker:
-- `Batch` agrega estado por lote y puede operar en `photos_only` o `spreadsheet`
-- `Job` representa el estado operativo actual
-- `JobOutput` representa outputs persistidos por job
-- `ProductDraft` vive por lote y por prenda cuando el batch sale en modo spreadsheet
-- auth usa roles `admin`, `operador`, `revisor`
-
-## 6. Storage observable
-
-Paths que aparecen en el codigo:
-
-- poses de modelo: `models/{clientId}/{modelId}/poses/{fileName}`
-- drafts multi-archivo: `garments/drafts/{uid}/{draftBatchId}/{garmentId}/{fileName}`
-- source spreadsheets del wizard: `wizard_source_spreadsheets/{uid}/{uuid}/{fileName}`
-- outputs generados: `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`
-- square crops de outputs: `generated/{clientId}/{batchId}/{jobId}/square_crops/{outputId}.jpg`
-- templates de cliente: `client_spreadsheets/{clientId}/{templateId}/{fileName}`
-- exports de spreadsheet: `client_spreadsheet_exports/{clientId}/{batchId}/{fileName}`
-- fotos IA de modelos: `model_generations/{clientId}/{sessionId}/{fileName}`
-- fotos IA de modelos por stage: `model_generations/{clientId}/{modelId}/{stage}/{sessionId}/{fileName}`
-
-## 7. Flujos confirmados por codigo
-
-### Auth y acceso
-
-- login con email/password en `src/pages/Login.tsx`
-- despues del login se consulta `users/{uid}`
-- si el usuario existe y esta activo, la UI toma rol desde Firestore/claims
-- `AppRouter` protege rutas usando usuario autenticado, `active` y `role`
-- backend valida roles con `functions/src/auth/roles.ts`
-- `syncClaimsOnUserWrite` y `syncUserClaims` mantienen custom claims sincronizados
-
-### Clientes y templates de spreadsheet
-
-- admins crean y archivan clientes desde `src/pages/Clients.tsx`
-- cada cliente puede tener templates XLSX importados a `clients/{clientId}/spreadsheetTemplates`
-- `importClientSpreadsheetTemplate` parsea workbook, detecta hojas categoria y persiste metadata + categorias
-- `updateClientSpreadsheetTemplateCategory` define la categoria default operativa por template
-
-### Generacion de batches
-
-- el wizard soporta dos modos: `photos_only` y `spreadsheet`
-- el frontend sube prendas a Storage desde `src/features/generate/storage.ts`
-- si una prenda tiene varias fotos, `classifyGarmentViewsWithGemini` clasifica `front/back/side` y `garmentBodyArea`
-- las poses del modelo usan `pose.aiClassification` para sugerir compatibilidades pose-prenda
-- si el modo es `spreadsheet`, `previewProductDrafts` genera drafts previos por prenda usando template + categoria + Gemini
-- `useSystemConfig` inyecta prompt global, proveedores deshabilitados y parametros operativos leidos desde `system_config/main`
-- `createGenerationBatch` valida cliente, modelo, poses, prendas, template/categoria y crea `batch` + `jobs`
-- si el modo es `spreadsheet`, la callable tambien persiste `batches/{batchId}/productDrafts`
-
-### Pipeline de jobs
-
-- `processJobOnCreate` y `processJobOnRequeue` disparan el worker
-- `processJobOnActivation` retoma retries diferidos o jobs reactivados por scheduler sin cambiar de estado
-- `functions/src/workers/jobWorker.ts` reclama el job, llama al provider, guarda output en Storage y persiste `jobs/{jobId}/outputs/{outputId}`
-- el worker registra logs operativos y ejecuta auto review con Gemini
-- `retryJobAutoReview` permite reprocesar manualmente la revision del output vigente
-- `requeueExpiredJobsOnSchedule` recupera jobs atascados por timeout o claim vencido
-- `onJobStatusChange` actualiza agregados del batch
-- `onJobCompletedSquareCrop` sincroniza square crops hacia `productDrafts` cuando cambia el output efectivo de un job con spreadsheet
-- `storageCleanupOnSchedule` ejecuta limpieza periodica de outputs viejos en Storage
-
-### Cola y catalogo operativo
-
-- no hay rutas separadas `/evaluacion` ni `/archivo` en el router actual; esa operativa vive hoy entre `/cola` y `/catalogo`
-- `Cola` muestra batches vivos, ETA, estados, retries y cancelaciones/regeneraciones masivas
-- `Catalogo` concentra seleccion manual de output, requeue, cancelacion, edicion de `productDrafts` y export XLSX del batch
-- el catalogo agrupa jobs completados por prenda para exploracion visual y descarga puntual
-- `deleteJob` borra trabajos terminales y recompone los contadores del batch
-- las descargas salen por endpoints HTTP que devuelven imagenes individuales o ZIPs
-
-### Analytics, salud y config operativa
-
-- `analyticsTriggers.ts` mantiene agregados a partir de `jobs` y `outputs`
-- `rebuildAnalytics` recompone agregados leyendo `jobs` y `collectionGroup('outputs')`
-- cada uso de Gemini se registra en `analytics_gemini_usage`
-- `getSystemHealth` combina checks de OpenAI, fal.ai y Gemini con estado de cola y alertas compartidas
-- `updateSystemAlertSettings` persiste umbrales de alertas
-- `system_config/main` guarda config operativa compartida; frontend la lee por snapshot y Functions la cachea para runtime
-
-### Generacion IA de modelos y tagging de poses
-
-- `generateModelPose` genera imagenes temporales para modelos
-- esas imagenes se guardan en Storage bajo `model_generations/...`
-- el callable registra costo estimado en `model_generation_logs`
-- `downloadModelBundle` exporta poses + manifest de un modelo en ZIP y `importModelBundle` rehidrata ese bundle en otro cliente
-- `onModelWrite` clasifica automaticamente poses nuevas con Gemini y completa `pose.aiClassification`
-- `tagModelPosesWithGemini` permite reprocesar o sanear tagging de poses desde backend
-- `backfillModelPoses` encola operaciones administrativas para completar poses faltantes en modelos existentes
-
-## 8. Zonas sensibles
-
-Archivos y areas con impacto transversal:
-- `src/app/AppRouter.tsx`
-- `src/firebase.ts`
-- `src/features/generate/wizard/hooks/useGenerateWizard.ts`
-- `src/features/system/useSystemConfig.ts`
-- `shared/src/types/`
-- `shared/src/domain.ts`
-- `shared/src/utils/garmentViewMatching.ts`
-- `functions/src/index.ts`
-- `functions/src/auth/roles.ts`
-- `functions/src/admin/systemConfig.ts`
-- `functions/src/callables/createGenerationBatch.ts`
-- `functions/src/callables/exportBatchSpreadsheet.ts`
-- `functions/src/spreadsheets/templateWorkbook.ts`
-- `functions/src/spreadsheets/productDrafts.ts`
+## Components
+- `src/app/`
+  - App shell, providers, route protection, lazy page wiring.
+- `src/pages/`
+  - Page orchestration only; feature hooks own state/actions.
+- `src/features/*/firebase.ts`
+  - Frontend data boundary: typed `httpsCallable` wrappers, Firestore subscriptions, and narrowly allowed direct writes.
+- `src/features/generate/`
+  - Wizard state, garment upload/compression, product draft preview, request assembly for batch creation.
+- `src/features/evaluation/`
+  - Job output history, manual output selection, regeneration/cancel/retry callables, product draft editing/export.
+- `src/features/storage/assets.ts`
+  - Central resolver for Storage URLs; generated outputs route through `publicGeneratedImage`.
+- `shared/src/`
+  - Shared contracts, provider IDs/config normalization, domain enums, prompt construction, review metrics, pose/garment matching.
+- `functions/src/callables/`
+  - Privileged mutations and long-running operations invoked from the frontend.
 - `functions/src/workers/jobWorker.ts`
-- `functions/src/triggers/analyticsTriggers.ts`
-- `functions/src/admin/getSystemHealth.ts`
+  - Job claim/retry lifecycle, provider execution, output persistence, Gemini review, logging.
+- `functions/src/providers/`
+  - Adapter dispatch for `fal-seedream`, `fal-banana-pro`, `fal-nano-banana-2`, `fal-seedream-5`, and `openai-gpt-image-1.5`.
+- `functions/src/review/`
+  - Gemini image review and review signal patches.
+- `functions/src/spreadsheets/`
+  - Template parsing, product draft inference/matching, spreadsheet export, square crop sync.
+- `functions/src/triggers/`
+  - Job processing triggers, batch counter sync, analytics, finance, claims sync, model/client delete cleanup, storage cleanup.
+- `functions/src/admin/`
+  - System config, system health, analytics rebuild, model pose backfill/tagging.
+- `functions/src/http/`
+  - Download endpoints and `publicGeneratedImage` proxy for generated image paths.
 
-## 9. Como leer este repo sin asumir de mas
+## Data & Source of Truth
+- Primary Firestore collections:
+  - `users`: app user profile, active state, role; synced to auth claims by trigger/callable.
+  - `clients`: client catalog root and generation prompt defaults.
+  - `clients/{clientId}/spreadsheetTemplates/{templateId}` and `/categories/{categoryId}`: spreadsheet schema source for product drafts/exports.
+  - `models`: model catalog; poses are embedded in the model doc and point to Storage paths.
+  - `batches`: aggregate generation request, snapshots, counters, output mode, provider/config.
+  - `batches/{batchId}/productDrafts/{draftId}`: spreadsheet-mode draft rows and generated crop/image sync.
+  - `jobs`: operational job state and current approved/selected output.
+  - `jobs/{jobId}/outputs`: immutable-ish generated attempts and cost/duration/provider metadata.
+  - `jobs/{jobId}/logs`: worker/provider/review traceability.
+  - `system_config/main`: runtime limits, prompt cases, disabled providers, Gemini review model.
+  - `analytics_*`: derived read models; do not hand-write except rebuild/admin logic.
+  - `finance_*`: finance settings, events, and snapshots; mutations go through finance callables/triggers.
+- Storage paths:
+  - Model poses: `models/{clientId}/{modelId}/poses/{fileName}`.
+  - Wizard garment drafts: `garments/drafts/{uid}/{draftBatchId}/{garmentId}/{fileName}`.
+  - Source spreadsheets: `wizard_source_spreadsheets/{uid}/{uploadId}/{fileName}`.
+  - Client templates: `client_spreadsheets/{clientId}/{templateId}/{fileName}`.
+  - Generated outputs: `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`.
+  - Generated square crops: `generated/{clientId}/{batchId}/{jobId}/square_crops/{outputId}.jpg`.
+  - Model generation temp outputs: `model_generations/{clientId}/...`.
+- Source of truth rules:
+  - `shared/src/types` and `shared/src/domain.ts` define stable enum/status/provider contracts.
+  - `shared/src/providerImageConfig.ts` owns provider image config validation/defaults/legacy mapping.
+  - `functions/src/admin/systemConfig.ts` owns defaults and cache for `system_config/main`.
+  - `getAppFirestore()` is the backend Firestore entry point so `FIRESTORE_DATABASE_ID` is honored.
+  - `firestore.rules` and `storage.rules` are the permission source of truth for frontend direct access.
 
-Orden recomendado:
-1. `src/app/AppRouter.tsx` para ver rutas y roles
-2. `src/features/generate/wizard/hooks/useGenerateWizard.ts` para ver el flujo principal del frontend
-3. `shared/src/types/` para ver entidades y contratos reales
-4. `functions/src/index.ts` para ver entry points exportados hoy
-5. `functions/src/callables/createGenerationBatch.ts` para entender creacion de batches y `productDrafts`
-6. `functions/src/workers/jobWorker.ts` para entender el pipeline central
-7. `tests/` y `e2e/` para ver que comportamientos ya estan cubiertos
+## Integrations
+- Firebase Auth:
+  - Auth identity plus custom claims; `users/{uid}` remains the fallback/readable app profile.
+- Firestore:
+  - Realtime UI reads, trigger source, operational job queue, derived analytics/finance stores.
+- Firebase Storage:
+  - User uploads, model poses, generated images, spreadsheets, download/export artifacts.
+- Cloud Functions callables:
+  - Privileged writes, batch creation, user management, regeneration/cancel/select/export, system/finance admin.
+- Cloud Functions triggers:
+  - Firestore-driven job execution, counters, analytics, finance, claims sync, cleanup.
+- HTTP functions:
+  - Batch/job/model downloads and public generated image serving.
+- Image providers:
+  - fal.ai and OpenAI adapters via `functions/src/providers`.
+- Gemini:
+  - Garment view classification, model pose tagging, product draft inference, generated-image review, usage logging.
+- Spreadsheet parsing/export:
+  - Server-side workbook parsing and product draft export through `functions/src/spreadsheets`.
+
+## Critical Paths
+- Batch creation must go through `createGenerationBatch`; do not create `batches`/`jobs` directly from frontend.
+- Job state transitions must preserve `pending -> processing -> completed|failed` semantics, claim tokens, retry fields, and logs.
+- `onJobStatusChange` must continue recomputing batch counters from actual jobs to avoid concurrent delta races.
+- Provider additions require coordinated changes in shared provider enums/config/costs, UI selection, backend adapter dispatch, system config availability, tests, and rules if paths change.
+- Job output selection uses `resolveApprovedJobOutput(job)`: manual `userSelectedOutput` overrides `currentOutput`.
+- Generated image display must use `resolveStorageAssetUrl()`/`useStorageAssetUrl()` so `generated/` paths route through `publicGeneratedImage`.
+- Spreadsheet mode depends on one product draft per garment and category/template schema from `clients/{clientId}/spreadsheetTemplates`.
+- Analytics and finance are derived from job/output/Gemini/model-generation/batch events; direct writes break dashboards.
+- Auth/roles must be updated together across `shared/src/domain.ts`, frontend route gates, backend `assertCallableRoles`, Firestore rules, Storage rules, and tests.
+- Storage path formats are part of authorization and worker assumptions; changing them requires rules, validators, cleanup, downloads, and tests.
+
+## Constraints
+- Do not edit generated output: `functions/lib/`, `dist/`, `coverage/`, `node_modules/`.
+- Do not bypass Cloud Functions for privileged operations; frontend direct writes are intentionally narrow.
+- Use typed callable wrappers with request/response contracts in `shared/src/types`.
+- Use `assertCallableRoles`/`assertUserRoles` in backend privileged entry points.
+- Use `useAuth`/route role gates for frontend visibility only; never treat frontend gates as security.
+- Use `getAppFirestore()` in Functions instead of direct `getFirestore()`.
+- Keep shared changes compatible with both frontend and Functions.
+- Do not change provider IDs, job statuses, batch statuses, roles, or Storage paths without updating shared contracts, validation, backend logic, rules, and tests together.
+- Do not mutate `system_config/main`, analytics, finance events/snapshots, `jobs/*/outputs`, or `batches/*/productDrafts` directly from frontend.
+- If touching `functions/src/` or `shared/src/`, build Functions before tests that import compiled JS.

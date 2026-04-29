@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  DollarSign,
   Images,
   LayoutDashboard,
   Rows3,
@@ -19,6 +20,7 @@ export interface NavigationRole {
   canManageClients: boolean;
   canManageModels: boolean;
   canAccessAnalytics: boolean;
+  canAccessFinance: boolean;
   canManageUsers: boolean;
 }
 
@@ -93,9 +95,10 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
       name: 'Sistema',
       icon: SlidersHorizontal,
       defaultPath: '/analytics',
-      visible: role.canAccessAnalytics || role.canManageUsers,
+      visible: role.canAccessAnalytics || role.canAccessFinance || role.canManageUsers,
       children: [
         { type: 'item', name: 'Analíticas', path: '/analytics', icon: BarChart3, visible: role.canAccessAnalytics },
+        { type: 'item', name: 'Finanzas', path: '/finanzas', icon: DollarSign, visible: role.canAccessFinance },
         { type: 'item', name: 'Configuración', path: '/configuracion', icon: Settings, visible: role.canManageUsers },
       ],
     },

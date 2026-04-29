@@ -36,6 +36,25 @@ ${INTERNAL_GARMENT_DETAILS_PROMPT_MARKER}
 - Do NOT convert internal branding into visible outer branding
 - Do NOT place inner collar or neckline labels on the outside of the garment unless the reference clearly proves that placement`;
 
+export const CARRY_ACCESSORY_PROMPT_MARKER = 'CARRY ACCESSORY RULES (CRITICAL)';
+
+export const CARRY_ACCESSORY_PROMPT_BLOCK =
+  `--------------------------------
+${CARRY_ACCESSORY_PROMPT_MARKER}
+--------------------------------
+
+- The reference item may be a carry accessory, such as a backpack, shoulder bag, crossbody bag, handbag, tote bag, duffel bag, or similar bag-like product
+- If the reference item is a carry accessory, DO NOT reinterpret it as clothing
+- Preserve the accessory as a separate object carried or worn by the model, not as a shirt, jacket, pants, logo, patch, or background prop
+- Place the accessory only in a physically plausible visible position for its type:
+  - backpack: on the back or over visible shoulders/straps
+  - shoulder bag or tote: hanging from a visible shoulder, arm, or hand
+  - crossbody bag: strap crossing the visible torso with the bag visible
+  - handbag or duffel: held by a visible hand/arm or hanging near the side of the body
+- Do NOT remove the model's existing base clothing unless the accessory explicitly covers it
+- Keep straps, handles, buckles, zippers, pockets, proportions, material, color, and branding faithful to the reference
+- If the selected pose does not expose the required body area for that accessory, do not invent a hidden placement`;
+
 export const DEFAULT_TRY_ON_PROMPT =
   `Replace the clothing worn by the model with the garment from the reference image.
 
@@ -95,6 +114,8 @@ BRAND & LOGO CONSTRAINTS (EXTREMELY STRICT)
 - Do NOT generate additional or duplicate logos
 
 ${INTERNAL_GARMENT_DETAILS_PROMPT_BLOCK}
+
+${CARRY_ACCESSORY_PROMPT_BLOCK}
 
 --------------------------------
 UNSEEN AREA CONSTRAINTS (CRITICAL)
@@ -162,6 +183,11 @@ export const DEFAULT_TRY_ON_PROMPT_CASES: Record<TryOnPromptCaseKey, string> = {
 - For the top: ALWAYS use a plain white fitted bodysuit
 - The bodysuit must have no logos, textures, or patterns
 - Never generate top garments outside this fallback rule`,
+  carry_accessory: `GARMENT TYPE RULE - CASE D - CARRY ACCESSORY:
+- The reference item is a carry accessory, not clothing
+- Keep the model's clothing, body, face, pose, lighting, and background stable
+- Add or replace only the visible carry accessory according to its type and plausible attachment point
+- Never turn the accessory into apparel, a printed graphic, or a decorative background object`,
 };
 
 export const resolveTryOnPromptCaseKey = (
@@ -174,6 +200,8 @@ export const resolveTryOnPromptCaseKey = (
       return 'top_only';
     case 'lower_body':
       return 'bottom_only';
+    case 'carry_accessory':
+      return 'carry_accessory';
     default:
       return null;
   }

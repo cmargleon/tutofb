@@ -7,8 +7,6 @@ import {
   ImportModelBundleRequest,
   ImportModelBundleResponse,
   ModelIdentityTraits,
-  ModelPoseTaggingRequest,
-  ModelPoseTaggingResponse,
   PoseAiClassification,
   Pose,
   Client,
@@ -491,17 +489,6 @@ export const uploadModelReferenceFile = async (
 
 export const deleteStorageAsset = async (storagePath: string): Promise<void> => {
   await deleteObject(ref(storage, storagePath));
-};
-
-export const tagModelPosesWithGemini = async (
-  data: ModelPoseTaggingRequest,
-): Promise<ModelPoseTaggingResponse> => {
-  const callable = httpsCallable<ModelPoseTaggingRequest, ModelPoseTaggingResponse>(
-    functions,
-    'tagModelPosesWithGemini',
-  );
-  const result = await callable(data);
-  return result.data;
 };
 
 export const createModelFromPaths = async (

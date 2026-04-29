@@ -8,4 +8,5 @@ export * from './spreadsheet';
 export * from './batch';
 export * from './job';
 export * from './analytics';
+export * from './finance';
 export * from './system';

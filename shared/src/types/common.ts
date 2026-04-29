@@ -11,10 +11,24 @@ export type CatalogEntityStatus = 'active' | 'archived';
 export type GarmentView = 'front' | 'back' | 'side';
 export type GarmentPhotoClassificationSource = 'assumed_single_front' | 'gemini';
 export type GarmentReferenceImageType = 'single_view' | 'multi_angle_composite';
-export type TryOnPromptCaseKey = 'full_outfit' | 'top_only' | 'bottom_only';
+export type TryOnPromptCaseKey = 'full_outfit' | 'top_only' | 'bottom_only' | 'carry_accessory';
 export type PoseOrientationGroup = 'front' | 'back' | 'side' | 'ambiguous';
 export type SpreadsheetTemplateImportStatus = 'active' | 'archived';
 export type ProductDraftSuggestionSource = 'gemini' | 'wizard' | 'system' | 'user' | 'spreadsheet_source';
+export type GarmentAccessoryType =
+  | 'backpack'
+  | 'shoulder_bag'
+  | 'crossbody_bag'
+  | 'handbag'
+  | 'tote_bag'
+  | 'duffel_bag'
+  | 'generic_carry_accessory';
+export type AccessoryDisplaySlot =
+  | 'back'
+  | 'shoulder'
+  | 'crossbody'
+  | 'handheld'
+  | 'front_torso';
 export type PoseOrientationDetail =
   | 'front'
   | 'front_three_quarter'
@@ -31,5 +45,5 @@ export type PoseFraming =
   | 'feet_closeup'
   | 'unknown';
 export type PoseBodyFocus = 'full_body' | 'upper_body' | 'lower_body' | 'feet';
-export type GarmentBodyArea = 'upper_body' | 'lower_body' | 'footwear' | 'head_accessory' | 'full_body';
+export type GarmentBodyArea = 'upper_body' | 'lower_body' | 'footwear' | 'head_accessory' | 'full_body' | 'carry_accessory';
 export type HealthStatus = 'healthy' | 'degraded' | 'down';

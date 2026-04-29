@@ -14,6 +14,7 @@ const ModelsGenerate = lazy(() => import('../pages/ModelsGenerate').then((module
 const ModelsCatalog = lazy(() => import('../pages/ModelsCatalog').then((module) => ({ default: module.ModelsCatalog })));
 const Wizard = lazy(() => import('../pages/Wizard').then((module) => ({ default: module.Wizard })));
 const Analytics = lazy(() => import('../pages/Analytics').then((module) => ({ default: module.Analytics })));
+const Finanzas = lazy(() => import('../pages/Finanzas').then((module) => ({ default: module.Finanzas })));
 const Cola = lazy(() => import('../pages/Cola').then((module) => ({ default: module.Cola })));
 const Configuracion = lazy(() => import('../pages/Configuracion').then((module) => ({ default: module.Configuracion })));
 const Catalogo = lazy(() => import('../pages/Catalogo').then((module) => ({ default: module.Catalogo })));
@@ -83,6 +84,7 @@ export const AppRouter: React.FC = () => {
             <Route path="generate" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Wizard /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="cola" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Cola /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><PageErrorBoundary><Analytics /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="finanzas" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Finanzas /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Configuracion /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="catalogo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Catalogo /></PageErrorBoundary></ProtectedRoute>} />
           </Route>

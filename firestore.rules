@@ -47,6 +47,10 @@ service cloud.firestore {
       return isActiveUser() && (currentRole() in ['admin', 'revisor']);
     }
 
+    function canReadFinance() {
+      return isAdmin();
+    }
+
     function canUpdateJobSelection() {
       return canReview()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -185,6 +189,61 @@ service cloud.firestore {
 
     match /system_config/{docId} {
       allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    match /finance_settings/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_fx_rates/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_client_pricing/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_fixed_costs/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_events/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_snapshots_global/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_snapshots_clients/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_snapshots_batches/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_snapshots_jobs/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_snapshots_models/{docId} {
+      allow read: if canReadFinance();
+      allow write: if false;
+    }
+
+    match /finance_snapshots_providers/{docId} {
+      allow read: if canReadFinance();
       allow write: if false;
     }
   }

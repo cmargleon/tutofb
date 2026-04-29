@@ -1,4 +1,14 @@
-import type { TimestampLike, CatalogEntityStatus, GarmentView, PoseOrientationGroup, PoseOrientationDetail, PoseFraming, PoseBodyFocus, AspectRatio } from './common';
+import type {
+  AccessoryDisplaySlot,
+  TimestampLike,
+  CatalogEntityStatus,
+  GarmentView,
+  PoseOrientationGroup,
+  PoseOrientationDetail,
+  PoseFraming,
+  PoseBodyFocus,
+  AspectRatio,
+} from './common';
 import type { ProviderImageConfig } from './provider';
 
 export interface PoseAiClassification {
@@ -10,6 +20,7 @@ export interface PoseAiClassification {
   autoCategory: string;
   displayLabel?: string | null;
   usableForGarmentViews: GarmentView[];
+  accessoryDisplaySlots?: AccessoryDisplaySlot[];
   confidence: number | null;
   taggedBy: 'gemini' | 'manual';
   taggedAt: TimestampLike;
@@ -135,46 +146,6 @@ export interface GenerateModelPhotoResponse {
   photos: GeneratedModelPhoto[];
   errors: GeneratedModelPhotoError[];
   estimatedCostUsd: number;
-}
-
-export interface ModelPoseTaggingRequest {
-  modelId?: string;
-  targetModelName?: string;
-  dryRun?: boolean;
-  deleteOtherModels?: boolean;
-}
-
-export interface TaggedModelPoseSummary {
-  poseId: string;
-  fileName: string;
-  storagePath: string;
-  orientationGroup: PoseOrientationGroup;
-  orientationDetail: PoseOrientationDetail;
-  framing: PoseFraming;
-  bodyFocus: PoseBodyFocus;
-  faceVisible: boolean;
-  autoCategory: string;
-  usableForGarmentViews: GarmentView[];
-  confidence: number | null;
-}
-
-export interface ModelPoseTaggingModelSummary {
-  id: string;
-  name: string;
-  status: CatalogEntityStatus;
-  poseCount: number;
-  action: 'keep' | 'delete';
-}
-
-export interface ModelPoseTaggingResponse {
-  success: boolean;
-  targetModelName: string;
-  targetModelId: string;
-  dryRun: boolean;
-  models: ModelPoseTaggingModelSummary[];
-  taggedPoses: TaggedModelPoseSummary[];
-  deletedModelIds: string[];
-  warnings: string[];
 }
 
 export interface ModelGenerationLog {

@@ -29,6 +29,7 @@ export const useRole = () => {
     canEvaluate: appUser?.role === 'admin' || appUser?.role === 'operador' || appUser?.role === 'revisor',
     canRegenerate: appUser?.role === 'admin' || appUser?.role === 'operador',
     canAccessAnalytics: appUser?.role === 'admin' || appUser?.role === 'revisor',
+    canAccessFinance: appUser?.role === 'admin',
   };
 };
 

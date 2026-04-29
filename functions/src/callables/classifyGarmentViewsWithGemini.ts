@@ -403,6 +403,7 @@ const classifyGarmentWithGemini = async ({
     photos: classifiedPhotos,
     availableViews: [...new Set(classifiedPhotos.map((photo) => photo.view))] as ClassifyGarmentViewsResponse['garments'][number]['availableViews'],
     garmentBodyArea: isGarmentBodyArea(parsed.bodyArea) ? parsed.bodyArea : null,
+    garmentAccessoryType: null,
     usedGemini: true,
     matchedCategoryId: matchedCategory?.id || null,
     matchedCategoryLabel: matchedCategory?.label || null,

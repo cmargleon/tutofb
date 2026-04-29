@@ -16,7 +16,6 @@ import {
   permanentlyDeleteModel,
   replaceModelPoseWithGeneratedPhoto,
   restoreModel,
-  tagModelPosesWithGemini,
   updateModel,
 } from '../firebase';
 import { MODEL_POSE_RECIPES_BY_ID } from '../constants';
@@ -40,7 +39,6 @@ export interface UseModelLibraryResult {
   editPoseIdsToRemove: string[];
   isSavingEdit: boolean;
   isImportingBundle: boolean;
-  taggingModelId: string | null;
   exportingModelId: string | null;
   regeneratingPoseIds: Set<string>;
   handleStartEdit: (model: Model) => void;
@@ -53,11 +51,10 @@ export interface UseModelLibraryResult {
     model: Model,
     pose: Pose,
   ) => { canRegenerate: boolean; reason: string };
-  handleSaveEdit: (model: Model) => Promise<void>;
+  handleSaveEdit: (model: Model) => Promise<boolean>;
   handleArchive: (model: Model) => Promise<void>;
   handleRestore: (model: Model) => Promise<void>;
   handlePermanentDelete: (model: Model) => Promise<void>;
-  handleTagPosesWithGemini: (model: Model) => Promise<void>;
   handleExportModelBundle: (model: Model) => Promise<void>;
   handleImportModelBundle: (clientId: string, file: File) => Promise<boolean>;
 }
@@ -178,7 +175,6 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
   const [editPoseIdsToRemove, setEditPoseIdsToRemove] = useState<string[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isImportingBundle, setIsImportingBundle] = useState(false);
-  const [taggingModelId, setTaggingModelId] = useState<string | null>(null);
   const [exportingModelId, setExportingModelId] = useState<string | null>(null);
   const [regeneratingPoseIds, setRegeneratingPoseIds] = useState<Set<string>>(new Set());
 
@@ -324,10 +320,10 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     }
   };
 
-  const handleSaveEdit = async (model: Model) => {
+  const handleSaveEdit = async (model: Model): Promise<boolean> => {
     const id = model.id;
     const trimmedName = editName.trim();
-    if (!id || !trimmedName || !editClientId) return;
+    if (!id || !trimmedName || !editClientId) return false;
 
     const remainingPoseCount =
       (model.poses?.filter((pose) => !editPoseIdsToRemove.includes(pose.id)).length || 0)
@@ -340,7 +336,7 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
         description:
           'Debes conservar al menos una pose existente o subir una nueva foto antes de guardar.',
       });
-      return;
+      return false;
     }
 
     setIsSavingEdit(true);
@@ -353,12 +349,14 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
         poseIdsToRemove: editPoseIdsToRemove,
       });
       handleCancelEdit();
+      return true;
     } catch (err: any) {
       toast({
         tone: 'error',
         title: 'No pudimos actualizar el modelo',
         description: err.message || 'Revisa los cambios e inténtalo nuevamente.',
       });
+      return false;
     } finally {
       setIsSavingEdit(false);
     }
@@ -461,28 +459,6 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     }
   };
 
-  const handleTagPosesWithGemini = async (model: Model) => {
-    if (!model.id) return;
-
-    setTaggingModelId(model.id);
-    try {
-      await tagModelPosesWithGemini({ modelId: model.id, dryRun: false });
-      toast({
-        tone: 'success',
-        title: 'Poses clasificadas con Gemini',
-        description: `Las poses de "${model.name}" fueron analizadas y etiquetadas correctamente.`,
-      });
-    } catch (err: any) {
-      toast({
-        tone: 'error',
-        title: 'Error al clasificar poses',
-        description: err.message || 'No se pudo completar la clasificación con Gemini.',
-      });
-    } finally {
-      setTaggingModelId(null);
-    }
-  };
-
   const handleExportModelBundle = async (model: Model) => {
     if (!model.id) return;
 
@@ -544,7 +520,6 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     editPoseIdsToRemove,
     isSavingEdit,
     isImportingBundle,
-    taggingModelId,
     exportingModelId,
     regeneratingPoseIds,
     handleStartEdit,
@@ -558,7 +533,6 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     handleArchive,
     handleRestore,
     handlePermanentDelete,
-    handleTagPosesWithGemini,
     handleExportModelBundle,
     handleImportModelBundle,
   };

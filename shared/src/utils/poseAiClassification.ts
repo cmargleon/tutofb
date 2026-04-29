@@ -1,4 +1,5 @@
 import {
+  AccessoryDisplaySlot,
   GarmentView,
   PoseAiClassification,
   PoseBodyFocus,
@@ -7,8 +8,12 @@ import {
   PoseOrientationGroup,
   TimestampLike,
 } from '../types';
+import {
+  deriveAccessoryDisplaySlots,
+  normalizeAccessoryDisplaySlots,
+} from './accessoryMatching';
 
-export const POSE_AI_CLASSIFICATION_VERSION = 2;
+export const POSE_AI_CLASSIFICATION_VERSION = 3;
 
 export const POSE_ORIENTATION_DETAILS = [
   'front',
@@ -156,6 +161,7 @@ export const buildPoseAiClassification = ({
   taggedBy = 'gemini',
   taggedAt,
   reasoning = null,
+  accessoryDisplaySlots = null,
 }: {
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
@@ -165,6 +171,7 @@ export const buildPoseAiClassification = ({
   taggedBy?: PoseAiClassification['taggedBy'];
   taggedAt: TimestampLike;
   reasoning?: string | null;
+  accessoryDisplaySlots?: readonly AccessoryDisplaySlot[] | null;
 }): PoseAiClassification => ({
   orientationGroup: derivePoseOrientationGroup(orientationDetail),
   orientationDetail,
@@ -174,6 +181,13 @@ export const buildPoseAiClassification = ({
   autoCategory: buildPoseAutoCategory(orientationDetail, framing),
   displayLabel,
   usableForGarmentViews: derivePoseUsableForGarmentViews(orientationDetail),
+  accessoryDisplaySlots: normalizeAccessoryDisplaySlots(accessoryDisplaySlots).length > 0
+    ? normalizeAccessoryDisplaySlots(accessoryDisplaySlots)
+    : deriveAccessoryDisplaySlots({
+        orientationGroup: derivePoseOrientationGroup(orientationDetail),
+        bodyFocus: derivePoseBodyFocus(framing),
+        faceVisible,
+      }),
   confidence,
   taggedBy,
   taggedAt,

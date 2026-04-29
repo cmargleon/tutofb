@@ -332,7 +332,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
         </div>
 
         <div className={`grid min-h-0 flex-1 ${showSpreadsheetPanel ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-          <div className="relative flex min-h-[20rem] items-center justify-center overflow-visible border-b border-white/10 p-4 pt-20 sm:p-6 sm:pt-24 lg:border-b-0 lg:border-r lg:border-white/10 lg:p-8 lg:pt-24">
+          <div className="relative flex min-h-[20rem] min-w-0 items-center justify-center overflow-hidden border-b border-white/10 p-4 pt-20 sm:p-6 sm:pt-24 lg:border-b-0 lg:border-r lg:border-white/10 lg:p-8 lg:pt-24">
             {canGoPrevious ? (
               <button
                 type="button"
@@ -368,13 +368,13 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
 
             <CatalogGarmentThumbnailFloat job={job} />
 
-            <div className="flex h-full w-full items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <div className="flex h-full min-h-0 w-full min-w-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
               {displayedImageUrl ? (
                 <HoverZoomImage
                   src={displayedImageUrl}
                   alt={job.garmentName}
-                  containerClassName="max-h-full w-full"
-                  imageClassName="object-contain"
+                  containerClassName="h-full max-h-full w-auto max-w-full"
+                  imageClassName="h-full w-full object-contain"
                   preserveNaturalAspectRatio
                 />
               ) : (

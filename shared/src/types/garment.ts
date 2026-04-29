@@ -1,4 +1,10 @@
-import type { GarmentView, GarmentPhotoClassificationSource, GarmentSourceType, GarmentBodyArea } from './common';
+import type {
+  GarmentAccessoryType,
+  GarmentView,
+  GarmentPhotoClassificationSource,
+  GarmentSourceType,
+  GarmentBodyArea,
+} from './common';
 
 export interface GarmentPhotoAssetInput {
   id: string;
@@ -24,6 +30,7 @@ export interface UploadedGarmentInput {
   originalPhotoCount?: number;
   photos?: UploadedGarmentPhotoInput[];
   garmentBodyArea?: GarmentBodyArea | null;
+  garmentAccessoryType?: GarmentAccessoryType | null;
   matchedCategoryId?: string | null;
   matchedCategoryLabel?: string | null;
   matchedCategoryConfidence?: number | null;
@@ -56,6 +63,7 @@ export interface ClassifiedGarmentViewsGarmentResult {
   photos: ClassifiedGarmentPhoto[];
   availableViews: GarmentView[];
   garmentBodyArea: GarmentBodyArea | null;
+  garmentAccessoryType: GarmentAccessoryType | null;
   usedGemini: boolean;
   matchedCategoryId?: string | null;
   matchedCategoryLabel?: string | null;

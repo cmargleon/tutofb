@@ -7,10 +7,12 @@ import type {
   GarmentReferenceImageType,
   GarmentView,
   GarmentBodyArea,
+  GarmentAccessoryType,
   PoseFraming,
   PoseOrientationDetail,
   PoseOrientationGroup,
   PoseBodyFocus,
+  AccessoryDisplaySlot,
   TryOnPromptCaseKey,
 } from './common';
 import type { ModelIdentityTraits } from './model';
@@ -137,6 +139,7 @@ export interface Job {
   poseOrientationDetail?: PoseOrientationDetail | null;
   poseFraming?: PoseFraming | null;
   poseBodyFocus?: PoseBodyFocus | null;
+  poseAccessoryDisplaySlots?: AccessoryDisplaySlot[];
   garmentId: string;
   garmentName: string;
   garmentFilePath: string;
@@ -144,6 +147,7 @@ export interface Job {
   garmentPhotoFileName?: string | null;
   garmentView?: GarmentView | null;
   garmentBodyArea?: GarmentBodyArea | null;
+  garmentAccessoryType?: GarmentAccessoryType | null;
   productDraftId?: string | null;
   garmentSourceType?: GarmentSourceType;
   garmentOriginalFileNames?: string[];

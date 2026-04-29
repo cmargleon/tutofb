@@ -3,9 +3,7 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  Edit2,
   Image as ImageIcon,
-  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -43,15 +41,41 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
   library,
 }) => {
   const hasPoses = model.poses && model.poses.length > 0;
-
-  const handleStartEdit = () => {
-    library.handleStartEdit(model);
-    setExpandedId(model.id ?? null);
-  };
+  const isArchived = isArchivedCatalogEntity(model);
+  const showExpandedEditor = isExpanded && isEditing && !isArchived;
+  const showExpandedArchiveView = isExpanded && isArchived && hasPoses;
 
   const handleToggleExpanded = () => {
     if (!model.id) return;
-    setExpandedId(expandedId === model.id ? null : model.id);
+
+    if (isExpanded) {
+      if (isEditing) library.handleCancelEdit();
+      setExpandedId(null);
+      return;
+    }
+
+    if (!isArchived) {
+      library.handleStartEdit(model);
+    }
+
+    setExpandedId(model.id);
+  };
+
+  const handleSummaryKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    if (isArchived && !hasPoses) return;
+    handleToggleExpanded();
+  };
+
+  const handleCollapseEditor = () => {
+    library.handleCancelEdit();
+    setExpandedId(null);
+  };
+
+  const handleSaveAndCollapse = async () => {
+    const saved = await library.handleSaveEdit(model);
+    if (saved) setExpandedId(null);
   };
 
   return (
@@ -68,8 +92,100 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
           </div>
         )}
 
-        {isEditing ? (
-          <div className="flex flex-col gap-3">
+        <div
+          className={`flex items-center justify-between gap-4 ${
+            !isArchived || hasPoses ? 'cursor-pointer' : ''
+          }`}
+          onClick={!isArchived || hasPoses ? handleToggleExpanded : undefined}
+          onKeyDown={!isArchived || hasPoses ? handleSummaryKeyDown : undefined}
+          role={!isArchived || hasPoses ? 'button' : undefined}
+          tabIndex={!isArchived || hasPoses ? 0 : undefined}
+          aria-expanded={!isArchived || hasPoses ? isExpanded : undefined}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-indigo-600">{model.name}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+              <span>Cliente: {model.clientNameSnapshot}</span>
+              <span className="flex items-center gap-1">
+                <ImageIcon className="h-3 w-3" /> {model.poseCount || 0} poses
+              </span>
+              {(model.generatedPhotoCount || 0) > 0 && (
+                <span>
+                  IA: {model.generatedPhotoCount} img · $
+                  {Number(model.generatedPhotoCostUsd || 0).toFixed(4)}
+                </span>
+              )}
+              <span>Alta: {formatDateTimeLong(model.createdAt)}</span>
+            </div>
+          </div>
+
+          <div
+            className="flex shrink-0 items-center gap-2"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {!isArchived ? (
+              <>
+                {hasPoses && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Download}
+                    loading={library.exportingModelId === model.id}
+                    disabled={library.exportingModelId !== null}
+                    onClick={() => void library.handleExportModelBundle(model)}
+                    title="Exportar fotos y metadata del modelo"
+                  >
+                    Exportar
+                  </Button>
+                )}
+                <Button
+                  variant="warning"
+                  size="sm"
+                  icon={Trash2}
+                  onClick={() => void library.handleArchive(model)}
+                >
+                  Archivar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void library.handleRestore(model)}
+                  className="text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                >
+                  Reactivar
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  icon={Trash2}
+                  onClick={() => void library.handlePermanentDelete(model)}
+                >
+                  Borrar definitivo
+                </Button>
+              </>
+            )}
+
+            {(!isArchived || hasPoses) && (
+              <span
+                className="rounded-lg p-1.5 text-gray-400"
+                aria-hidden="true"
+              >
+                {isExpanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {showExpandedEditor ? (
+          <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4">
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -158,7 +274,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                 variant="primary"
                 size="sm"
                 loading={library.isSavingEdit}
-                onClick={() => void library.handleSaveEdit(model)}
+                onClick={() => void handleSaveAndCollapse()}
               >
                 Guardar
               </Button>
@@ -166,119 +282,15 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                 variant="ghost"
                 size="sm"
                 disabled={library.isSavingEdit}
-                onClick={library.handleCancelEdit}
+                onClick={handleCollapseEditor}
               >
                 Cancelar
               </Button>
             </div>
           </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-indigo-600">{model.name}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-                  <span>Cliente: {model.clientNameSnapshot}</span>
-                  <span className="flex items-center gap-1">
-                    <ImageIcon className="h-3 w-3" /> {model.poseCount || 0} poses
-                  </span>
-                  {(model.generatedPhotoCount || 0) > 0 && (
-                    <span>
-                      IA: {model.generatedPhotoCount} img · $
-                      {Number(model.generatedPhotoCostUsd || 0).toFixed(4)}
-                    </span>
-                  )}
-                  <span>Alta: {formatDateTimeLong(model.createdAt)}</span>
-                </div>
-              </div>
+        ) : null}
 
-              <div className="flex shrink-0 items-center gap-2">
-                {!isArchivedCatalogEntity(model) ? (
-                  <>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={Edit2}
-                      onClick={handleStartEdit}
-                    >
-                      Editar
-                    </Button>
-                    {hasPoses && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Download}
-                        loading={library.exportingModelId === model.id}
-                        disabled={library.exportingModelId !== null}
-                        onClick={() => void library.handleExportModelBundle(model)}
-                        title="Exportar fotos y metadata del modelo"
-                      >
-                        Exportar
-                      </Button>
-                    )}
-                    {hasPoses && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Sparkles}
-                        loading={library.taggingModelId === model.id}
-                        disabled={library.taggingModelId !== null}
-                        onClick={() => void library.handleTagPosesWithGemini(model)}
-                        title="Clasificar poses automáticamente con Gemini"
-                      >
-                        Gemini
-                      </Button>
-                    )}
-                    <Button
-                      variant="warning"
-                      size="sm"
-                      icon={Trash2}
-                      onClick={() => void library.handleArchive(model)}
-                    >
-                      Archivar
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => void library.handleRestore(model)}
-                      className="text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                    >
-                      Reactivar
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      icon={Trash2}
-                      onClick={() => void library.handlePermanentDelete(model)}
-                    >
-                      Borrar definitivo
-                    </Button>
-                  </>
-                )}
-
-                {hasPoses && (
-                  <button
-                    type="button"
-                    onClick={handleToggleExpanded}
-                    className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                    title={isExpanded ? 'Ocultar poses' : 'Ver poses'}
-                  >
-                    {isExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {isExpanded && hasPoses && <ModelPosesViewGrid model={model} />}
-          </>
-        )}
+        {showExpandedArchiveView ? <ModelPosesViewGrid model={model} /> : null}
       </div>
     </li>
   );

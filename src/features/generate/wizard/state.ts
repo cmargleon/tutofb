@@ -2,7 +2,6 @@ import {
   DEFAULT_TRY_ON_PROMPT,
 } from '../../../../shared/src/domain';
 import { createDefaultProviderImageConfig } from '../../../../shared/src/providerImageConfig';
-import { FalBananaProImageConfig, FalNanoBanana2ImageConfig, FalSeedream5ImageConfig, FalSeedreamImageConfig, OpenAIImageConfig } from '../../../../shared/src/types';
 import { WizardStepDefinition } from '../../wizard/types';
 import {
   GarmentUploadState,
@@ -40,11 +39,12 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   productDraftPreparation: createInitialProductDraftPreparationState(),
   provider: 'fal-seedream',
   providerImageConfigs: {
-    'fal-seedream': createDefaultProviderImageConfig('fal-seedream') as FalSeedreamImageConfig,
-    'fal-banana-pro': createDefaultProviderImageConfig('fal-banana-pro') as FalBananaProImageConfig,
-    'openai-gpt-image-1.5': createDefaultProviderImageConfig('openai-gpt-image-1.5') as OpenAIImageConfig,
-    'fal-nano-banana-2': createDefaultProviderImageConfig('fal-nano-banana-2') as FalNanoBanana2ImageConfig,
-    'fal-seedream-5': createDefaultProviderImageConfig('fal-seedream-5') as FalSeedream5ImageConfig,
+    'fal-seedream': createDefaultProviderImageConfig('fal-seedream'),
+    'fal-banana-pro': createDefaultProviderImageConfig('fal-banana-pro'),
+    'openai-gpt-image-1.5': createDefaultProviderImageConfig('openai-gpt-image-1.5'),
+    'fal-nano-banana-2': createDefaultProviderImageConfig('fal-nano-banana-2'),
+    'fal-seedream-5': createDefaultProviderImageConfig('fal-seedream-5'),
+    'fal-gpt-image-2': createDefaultProviderImageConfig('fal-gpt-image-2'),
   },
   prompt: DEFAULT_TRY_ON_PROMPT,
 });
@@ -116,10 +116,10 @@ export const getGarmentUploadStatusCopy = (
   }
 };
 
-export const getGarmentUploadProgressWidth = (
+export const getGarmentUploadProgressValue = (
   upload: GarmentUploadState,
   minimumProgress = 4,
-): string => `${Math.max(upload.progress, upload.status === 'uploaded' ? 100 : minimumProgress)}%`;
+): number => Math.max(upload.progress, upload.status === 'uploaded' ? 100 : minimumProgress);
 
 export const isGarmentUploadedForBatch = (
   garment: UploadedGarmentDraft,

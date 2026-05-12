@@ -6,17 +6,8 @@ import { updateSystemAlertSettings as saveSystemAlertSettings, updateSystemConfi
 import { useSystemConfig } from '../features/system/useSystemConfig';
 import { useRole } from '../features/auth/AuthProvider';
 import { useToast } from '../features/feedback/FeedbackProvider';
-import { Provider } from '../../shared/src/types';
-import { DEFAULT_TRY_ON_PROMPT, DEFAULT_TRY_ON_PROMPT_CASES } from '../../shared/src/domain';
+import { DEFAULT_TRY_ON_PROMPT, DEFAULT_TRY_ON_PROMPT_CASES, PROVIDER_LABELS, PROVIDER_VALUES } from '../../shared/src/domain';
 
-const KNOWN_PROVIDERS: Provider[] = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5', 'fal-nano-banana-2', 'fal-seedream-5'];
-const PROVIDER_DISPLAY: Record<Provider, string> = {
-  'fal-seedream': 'Fal Seedream v4',
-  'fal-banana-pro': 'Fal Nano Banana Pro',
-  'openai-gpt-image-1.5': 'OpenAI GPT Image 1.5',
-  'fal-nano-banana-2': 'Fal Nano Banana 2',
-  'fal-seedream-5': 'Fal Seedream 5 Lite',
-};
 const KNOWN_GEMINI_MODELS = [
   { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (recomendado)' },
   { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
@@ -382,7 +373,7 @@ export const Configuracion: React.FC = () => {
           <LoadingBlock message="Cargando configuración..." />
         ) : (
           <div className="flex flex-wrap gap-3">
-            {KNOWN_PROVIDERS.map((provider) => {
+            {PROVIDER_VALUES.map((provider) => {
               const isDisabled = disabledProviders.includes(provider);
               return (
                 <button
@@ -396,7 +387,7 @@ export const Configuracion: React.FC = () => {
                       : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300'
                   } disabled:cursor-default`}
                 >
-                  {PROVIDER_DISPLAY[provider]}
+                  {PROVIDER_LABELS[provider]}
                   {isDisabled && (
                     <span className="rounded-full bg-rose-200 px-2 py-0.5 text-xs text-rose-700">
                       Deshabilitado

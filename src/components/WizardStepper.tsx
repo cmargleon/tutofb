@@ -15,11 +15,9 @@ export const WizardStepper: React.FC<WizardStepperProps> = ({
   onStepSelect,
   canSelectStep,
 }) => {
-  const gridTemplateColumns = `repeat(${steps.length}, minmax(0, 1fr))`;
-
   return (
     <nav aria-label="Progress" className="mb-8">
-      <ol role="list" className="grid items-start gap-0" style={{ gridTemplateColumns }}>
+      <ol role="list" className="grid grid-flow-col auto-cols-fr items-start gap-0">
         {steps.map((step, stepIdx) => (
           <li key={step.name} className="relative">
             {stepIdx !== steps.length - 1 ? (

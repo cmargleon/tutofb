@@ -1,4 +1,5 @@
 import { AspectRatio, ModelPhotoProvider } from '../../../shared/src/types';
+import sharedDomain from '../../../shared/src/domain';
 import { PoseRecipe, PoseGroupOption } from './types';
 
 export interface ModelPhotoProviderOption {
@@ -585,10 +586,8 @@ export const ASPECT_OPTIONS: { value: AspectRatio; label: string }[] = [
   { value: '1:1', label: '1:1 (cuadrado)' },
 ];
 
-export const PROVIDER_OPTIONS: ModelPhotoProviderOption[] = [
-  { value: 'fal-seedream-v4.5', label: 'Seedream v4.5 (fal.ai)',    hint: 'ByteDance · $0.04/foto' },
-  { value: 'fal-banana-pro',    label: 'Nano Banana Pro (fal.ai)',  hint: 'Gemini Pro · $0.15/foto base, $0.30 en 4K' },
-  { value: 'openai-dalle',      label: 'OpenAI gpt-image-1.5',      hint: 'OpenAI · $0.02-$0.25/foto segun quality y size' },
-  { value: 'fal-nano-banana-2', label: 'Nano Banana 2 (fal.ai)',    hint: 'Gemini 3.1 Flash · $0.06-$0.16/foto segun resolucion' },
-  { value: 'fal-seedream-5',    label: 'Seedream 5 Lite (fal.ai)',  hint: 'ByteDance v5 · $0.035/foto' },
-];
+export const PROVIDER_OPTIONS: ModelPhotoProviderOption[] = sharedDomain.MODEL_PHOTO_PROVIDER_VALUES.map((provider) => ({
+  value: provider,
+  label: sharedDomain.MODEL_PHOTO_PROVIDER_LABELS[provider],
+  hint: sharedDomain.MODEL_PHOTO_PROVIDER_HINTS[provider],
+}));

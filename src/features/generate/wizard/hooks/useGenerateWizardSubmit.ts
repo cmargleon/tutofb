@@ -122,6 +122,31 @@ export const useGenerateWizardSubmit = ({
       }
     }
 
+    if (
+      selectedProviderImageConfig.provider === 'fal-gpt-image-2'
+      && typeof selectedProviderImageConfig.imageSize !== 'string'
+    ) {
+      const { width, height } = selectedProviderImageConfig.imageSize;
+      const totalPixels = width * height;
+      const shortestSide = Math.min(width, height);
+      const longestSide = Math.max(width, height);
+
+      if (width % 16 !== 0 || height % 16 !== 0) {
+        setFlowError('GPT Image 2 requiere dimensiones custom en múltiplos de 16.');
+        return;
+      }
+
+      if (longestSide > 3840 || shortestSide <= 0 || longestSide / shortestSide > 3) {
+        setFlowError('GPT Image 2 admite lado máximo 3840 px y relación máxima 3:1.');
+        return;
+      }
+
+      if (totalPixels < 655360 || totalPixels > 8294400) {
+        setFlowError('GPT Image 2 requiere entre 655,360 y 8,294,400 px en total.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setSubmitStage('uploading');
     setFlowError(null);

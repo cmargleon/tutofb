@@ -1,14 +1,9 @@
 import {
   BatchOutputMode,
-  FalBananaProImageConfig,
-  FalNanoBanana2ImageConfig,
-  FalSeedream5ImageConfig,
-  FalSeedreamImageConfig,
   GarmentBodyArea,
   GarmentPhotoClassificationSource,
   GarmentSourceType,
   GarmentView,
-  OpenAIImageConfig,
   ProductDraftInput,
   ProviderImageConfig,
   Provider,
@@ -155,13 +150,7 @@ export interface WizardState {
   productDrafts: ProductDraftInput[];
   productDraftPreparation: ProductDraftPreparationState;
   provider: Provider;
-  providerImageConfigs: {
-    'fal-seedream': FalSeedreamImageConfig;
-    'fal-banana-pro': FalBananaProImageConfig;
-    'openai-gpt-image-1.5': OpenAIImageConfig;
-    'fal-nano-banana-2': FalNanoBanana2ImageConfig;
-    'fal-seedream-5': FalSeedream5ImageConfig;
-  };
+  providerImageConfigs: Record<Provider, ProviderImageConfig>;
   prompt: string;
 }
 

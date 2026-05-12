@@ -1,5 +1,5 @@
 import { Provider } from '../../../shared/src/types';
-import { generateWithFalBananaPro, generateWithFalNanoBanana2, generateWithFalSeedream, generateWithFalSeedream5 } from './fal';
+import { generateWithFalBananaPro, generateWithFalGPTImage2, generateWithFalNanoBanana2, generateWithFalSeedream, generateWithFalSeedream5 } from './fal';
 import { generateWithOpenAI } from './openai';
 import { ProviderRequest, ProviderResponse } from './types';
 
@@ -29,6 +29,9 @@ export const generateWithProvider = async (
     case 'fal-seedream-5':
       if (!secrets.falKey) throw new Error('FAL_KEY no está configurada.');
       return generateWithFalSeedream5(request, secrets.falKey);
+    case 'fal-gpt-image-2':
+      if (!secrets.falKey) throw new Error('FAL_KEY no está configurada.');
+      return generateWithFalGPTImage2(request, secrets.falKey);
     default:
       throw new Error(`Proveedor no soportado: ${provider satisfies never}`);
   }

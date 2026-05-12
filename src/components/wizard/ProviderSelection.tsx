@@ -36,6 +36,11 @@ const PROVIDER_LOGOS: Record<Provider, { src: string; fallback: string; alt: str
     fallback: 'FA',
     alt: 'Logo oficial de fal.ai',
   },
+  'fal-gpt-image-2': {
+    src: 'https://fal.ai/favicon.ico',
+    fallback: 'FA',
+    alt: 'Logo oficial de fal.ai',
+  },
 };
 
 const VISIBLE_PROVIDERS = [...PROVIDER_VALUES].sort((left, right) => {

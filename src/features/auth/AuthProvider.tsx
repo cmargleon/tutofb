@@ -33,6 +33,8 @@ export const useRole = () => {
   };
 };
 
+export type RoleCapabilities = ReturnType<typeof useRole>;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);

@@ -1,7 +1,7 @@
 import React from 'react';
 import { GarmentUploadState } from '../../features/generate/types';
 import {
-  getGarmentUploadProgressWidth,
+  getGarmentUploadProgressValue,
   getGarmentUploadStatusCopy,
 } from '../../features/generate/wizard/state';
 
@@ -25,9 +25,11 @@ export const GarmentUploadStatus: React.FC<GarmentUploadStatusProps> = ({
         <span className="font-medium text-slate-500">{Math.round(upload.progress)}%</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-        <div
-          className={`h-full rounded-full transition-all ${uploadCopy.bar}`}
-          style={{ width: getGarmentUploadProgressWidth(upload, minimumProgress) }}
+        <progress
+          className={`garment-upload-progress ${uploadCopy.bar}`}
+          max={100}
+          value={getGarmentUploadProgressValue(upload, minimumProgress)}
+          aria-label={`Progreso de subida: ${Math.round(upload.progress)}%`}
         />
       </div>
       {upload.error ? (

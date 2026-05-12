@@ -1,16 +1,8 @@
 import { createDefaultProviderImageConfig, resolveAspectRatioForImageConfig } from '../../../shared/src/providerImageConfig';
-import { AspectRatio, ModelPhotoProvider, Provider, ProviderImageConfig } from '../../../shared/src/types';
+import sharedDomain from '../../../shared/src/domain';
+import { AspectRatio, Provider, ProviderImageConfig } from '../../../shared/src/types';
 
-const MODEL_PROVIDER_TO_PROVIDER: Record<ModelPhotoProvider, Provider> = {
-  'fal-seedream-v4.5': 'fal-seedream',
-  'fal-banana-pro': 'fal-banana-pro',
-  'openai-dalle': 'openai-gpt-image-1.5',
-  'fal-nano-banana-2': 'fal-nano-banana-2',
-  'fal-seedream-5': 'fal-seedream-5',
-};
-
-export const mapModelPhotoProviderToProvider = (provider: ModelPhotoProvider): Provider =>
-  MODEL_PROVIDER_TO_PROVIDER[provider];
+export const mapModelPhotoProviderToProvider = sharedDomain.mapModelPhotoProviderToProvider;
 
 export const createDefaultModelProviderImageConfigs = (): Record<Provider, ProviderImageConfig> => ({
   'fal-seedream': createDefaultProviderImageConfig('fal-seedream'),
@@ -18,6 +10,7 @@ export const createDefaultModelProviderImageConfigs = (): Record<Provider, Provi
   'openai-gpt-image-1.5': createDefaultProviderImageConfig('openai-gpt-image-1.5'),
   'fal-nano-banana-2': createDefaultProviderImageConfig('fal-nano-banana-2'),
   'fal-seedream-5': createDefaultProviderImageConfig('fal-seedream-5'),
+  'fal-gpt-image-2': createDefaultProviderImageConfig('fal-gpt-image-2'),
 });
 
 export const resolveModelAspectRatioForImageConfig = (config: ProviderImageConfig): AspectRatio =>

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
-import { resolveApprovedJobOutput } from '../../../shared/src/domain';
-import { PROVIDER_LABELS } from '../../../shared/src/domain';
+import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { StatusBadge } from '../ui';
 import { AlertCircle, ChevronDown, ChevronUp, Copy, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
 import { useRole } from '../../features/auth/AuthProvider';
@@ -446,9 +445,11 @@ export const JobEvaluationCard: React.FC<Props> = ({
                   disabled={controlsDisabled}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                 >
-                  <option value="fal-seedream">{PROVIDER_LABELS['fal-seedream']}</option>
-                  <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
-                  <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
+                  {PROVIDER_VALUES.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {PROVIDER_LABELS[provider]}
+                    </option>
+                  ))}
                 </select>
               </div>
             ) : null}

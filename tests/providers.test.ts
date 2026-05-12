@@ -45,6 +45,15 @@ test('normaliza configuraciones por proveedor a un payload real de API', () => {
     quality: 'high',
   });
   assert.equal(openai.aspectRatio, '2:3');
+
+  const gptImage2 = normalizeProviderImageConfig('fal-gpt-image-2', {
+    provider: 'fal-gpt-image-2',
+    imageSize: { width: 1280, height: 720 },
+    quality: 'high',
+    outputFormat: 'webp',
+  });
+  assert.equal(gptImage2.aspectRatio, '16:9');
+  assert.equal(gptImage2.imageConfig.provider, 'fal-gpt-image-2');
 });
 
 test('generateWithProvider valida secretos antes de intentar salir a red', async () => {
@@ -85,5 +94,26 @@ test('generateWithProvider valida secretos antes de intentar salir a red', async
         {},
       ),
     /OPENAI_API_KEY/,
+  );
+
+  await assert.rejects(
+    () =>
+      generateWithProvider(
+        'fal-gpt-image-2',
+        {
+          poseImageUrl: 'https://example.com/pose.jpg',
+          garmentImageUrl: 'https://example.com/garment.jpg',
+          prompt: 'hola',
+          imageConfig: {
+            provider: 'fal-gpt-image-2',
+            imageSize: 'portrait_4_3',
+            quality: 'medium',
+            outputFormat: 'png',
+          },
+          signal: AbortSignal.timeout(10),
+        },
+        {},
+      ),
+    /FAL_KEY/,
   );
 });

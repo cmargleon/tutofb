@@ -1,8 +1,9 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { CancelJobGenerationRequest, CancelJobGenerationResponse, Job } from '../../../shared/src/types';
+import { Batch, CancelJobGenerationRequest, CancelJobGenerationResponse, Job } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { syncProductDraftImagesForGarment } from '../spreadsheets/syncProductDraftImages';
 
 export const cancelJobGeneration = onCall<CancelJobGenerationRequest, Promise<CancelJobGenerationResponse>>(
   async (request) => {
@@ -35,36 +36,80 @@ export const cancelJobGeneration = onCall<CancelJobGenerationRequest, Promise<Ca
       userSnapshot.exists && typeof userSnapshot.data()?.displayName === 'string'
         ? userSnapshot.data()!.displayName
         : null;
-    const wasProcessing = job.status === 'processing';
+    await db.runTransaction(async (transaction) => {
+      const latestSnapshot = await transaction.get(jobRef);
+      if (!latestSnapshot.exists) {
+        throw new HttpsError('not-found', 'Trabajo no encontrado.');
+      }
 
-    await jobRef.update({
-      status: 'failed',
-      queuePriority: 0,
-      claimToken: null,
-      claimedBy: null,
-      claimExpiresAt: null,
-      timeoutAt: null,
-      startedAt: null,
-      updatedAt: now,
-      lastError: wasProcessing
-        ? 'Cancelado manualmente mientras se estaba generando.'
-        : 'Cancelado manualmente antes de comenzar la generación.',
+      const latestJob = { id: latestSnapshot.id, ...latestSnapshot.data() } as Job;
+      if (latestJob.status !== 'pending' && latestJob.status !== 'processing') {
+        throw new HttpsError(
+          'failed-precondition',
+          'Solo puedes cancelar trabajos que estén pendientes o en procesamiento.',
+        );
+      }
+
+      const latestWasProcessing = latestJob.status === 'processing';
+
+      transaction.update(jobRef, {
+        status: 'failed',
+        queuePriority: 0,
+        claimToken: null,
+        claimedBy: null,
+        claimExpiresAt: null,
+        timeoutAt: null,
+        retryNotBefore: null,
+        startedAt: null,
+        completedAt: null,
+        currentOutputId: null,
+        currentOutput: null,
+        userSelectedOutputId: null,
+        userSelectedOutput: null,
+        updatedAt: now,
+        lastError: latestWasProcessing
+          ? 'Cancelado manualmente mientras se estaba generando.'
+          : 'Cancelado manualmente antes de comenzar la generación.',
+      });
+
+      if (latestJob.currentOutputId) {
+        transaction.set(
+          jobRef.collection('outputs').doc(latestJob.currentOutputId),
+          { isCurrent: false },
+          { merge: true },
+        );
+      }
+
+      transaction.set(jobRef.collection('logs').doc(), {
+        type: 'system',
+        level: 'warn',
+        message: latestWasProcessing
+          ? 'Se canceló manualmente el job durante la generación. Los resultados tardíos serán ignorados.'
+          : 'Se canceló manualmente el job pendiente antes de ser reclamado por el worker.',
+        payload: {
+          requestedByUid: request.auth!.uid,
+          requestedByDisplayName,
+          source: 'evaluation_cancel_job',
+          previousStatus: latestJob.status,
+        },
+        createdAt: now,
+      });
     });
 
-    await jobRef.collection('logs').add({
-      type: 'system',
-      level: 'warn',
-      message: wasProcessing
-        ? 'Se canceló manualmente el job durante la generación. Los resultados tardíos serán ignorados.'
-        : 'Se canceló manualmente el job pendiente antes de ser reclamado por el worker.',
-      payload: {
-        requestedByUid: request.auth!.uid,
-        requestedByDisplayName,
-        source: 'evaluation_cancel_job',
-        previousStatus: job.status,
-      },
-      createdAt: now,
-    });
+    if (job.batchId && job.garmentId) {
+      const batchSnapshot = await db.collection('batches').doc(job.batchId).get();
+      const batch = batchSnapshot.exists ? ({ id: batchSnapshot.id, ...batchSnapshot.data() } as Batch) : null;
+
+      if (batch?.spreadsheetTemplateId) {
+        await syncProductDraftImagesForGarment({
+          db,
+          batchId: job.batchId,
+          garmentId: job.garmentId,
+          requestedByUid: request.auth!.uid,
+          batch,
+        });
+      }
+    }
 
     return {
       success: true,

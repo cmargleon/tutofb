@@ -6,6 +6,7 @@ import {
 import { AnalyticsReviewMetric } from './AnalyticsReviewMetric';
 import { COLORS, formatUsd } from './analyticsUtils';
 import type { AnalyticsSummary, AnalyticsDailyVolume, AnalyticsProviderStats, AnalyticsClientStats, AnalyticsClientModelStats } from '../../../shared/src/types';
+import { AnalyticsChartTooltip } from './AnalyticsChartTooltip';
 
 interface AnalyticsProductionSectionProps {
   summary: AnalyticsSummary;
@@ -115,7 +116,7 @@ export function AnalyticsProductionSection({
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="date" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Tooltip content={<AnalyticsChartTooltip />} />
                   <Legend />
                   <Area type="monotone" dataKey="completed" name="Completados" stroke="#10B981" fillOpacity={1} fill="url(#colorCompleted)" />
                   <Area type="monotone" dataKey="failed" name="Fallidos" stroke="#EF4444" fillOpacity={1} fill="url(#colorFailed)" />
@@ -138,7 +139,7 @@ export function AnalyticsProductionSection({
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Tooltip content={<AnalyticsChartTooltip />} />
                   <Legend verticalAlign="bottom" height={36} />
                 </PieChart>
               </ResponsiveContainer>
@@ -160,7 +161,10 @@ export function AnalyticsProductionSection({
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="provider" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} labelFormatter={(l) => `Proveedor: ${l}`} />
+                  <Tooltip
+                    content={<AnalyticsChartTooltip />}
+                    labelFormatter={(label) => `Proveedor: ${label ?? ''}`}
+                  />
                   <Legend />
                   <Bar dataKey="completed" name="Completados" stackId="a" fill="#10B981" radius={[0, 0, 4, 4]} />
                   <Bar dataKey="failed" name="Fallidos" stackId="a" fill="#EF4444" radius={[4, 4, 0, 0]} />
@@ -181,7 +185,7 @@ export function AnalyticsProductionSection({
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                   <XAxis type="number" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis dataKey="clientNameSnapshot" type="category" stroke="#6B7280" fontSize={12} tickLine={false} axisLine={false} width={100} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Tooltip content={<AnalyticsChartTooltip />} />
                   <Bar dataKey="completed" name="Completados" fill="#3B82F6" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>

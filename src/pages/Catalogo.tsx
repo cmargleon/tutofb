@@ -311,6 +311,17 @@ export const Catalogo: React.FC = () => {
     }));
   }, []);
 
+  const handleRegenerationCancelled = useCallback((jobId: string) => {
+    setPendingRegenerations((prev) => {
+      if (!prev[jobId]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[jobId];
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (!lightbox?.jobId) {
       setLightboxLiveJob(null);
@@ -693,6 +704,7 @@ export const Catalogo: React.FC = () => {
                 group={group}
                 onImageClick={openLightboxForJob}
                 onRegenerationQueued={handleRegenerationQueued}
+                onRegenerationCancelled={handleRegenerationCancelled}
                 pendingRegenerationJobIds={pendingRegenerationJobIds}
               />
             ))}

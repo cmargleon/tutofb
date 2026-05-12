@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
-import { PROVIDER_LABELS, resolveApprovedJobOutput } from '../../../shared/src/domain';
+import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { trimUrlAfterImageExtension } from '../../features/storage/urlDisplay';
@@ -17,6 +17,20 @@ import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils'
 import { setJobManualFlag } from '../../features/evaluation/firebase';
 
 const HISTORY_LIMIT = 18;
+
+const getGestureHintOpacityClass = (opacity: number) => {
+  if (opacity >= 0.9) return 'opacity-100';
+  if (opacity >= 0.6) return 'opacity-70';
+  if (opacity >= 0.3) return 'opacity-40';
+  return 'opacity-0';
+};
+
+const getGestureLayerOpacityClass = (isDragging: boolean, travel: number) => {
+  if (!isDragging) return 'opacity-100';
+  if (travel >= 90) return 'opacity-80';
+  if (travel >= 45) return 'opacity-90';
+  return 'opacity-100';
+};
 
 export const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string =>
   output.generationAttempt ? `Intento ${output.generationAttempt}` : `Salida ${fallbackIndex + 1}`;
@@ -396,9 +410,11 @@ export const PoseView: React.FC<PoseViewProps> = ({
               disabled={controlsDisabled}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
             >
-              <option value="fal-seedream">{PROVIDER_LABELS['fal-seedream']}</option>
-              <option value="fal-banana-pro">{PROVIDER_LABELS['fal-banana-pro']}</option>
-              <option value="openai-gpt-image-1.5">{PROVIDER_LABELS['openai-gpt-image-1.5']}</option>
+              {PROVIDER_VALUES.map((provider) => (
+                <option key={provider} value={provider}>
+                  {PROVIDER_LABELS[provider]}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -477,32 +493,30 @@ export const PoseView: React.FC<PoseViewProps> = ({
     } satisfies Record<'left' | 'right' | 'up' | 'down', string>)[gestureDirection]
     : null;
   const gestureHintOpacity = Math.min(1, gestureTravel / 90);
+  const gestureHintOpacityClass = getGestureHintOpacityClass(gestureHintOpacity);
+  const gestureLayerOpacityClass = getGestureLayerOpacityClass(isGestureDragging, gestureTravel);
   const imagePanel = (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
-          className={`absolute inset-0 flex items-center justify-center ${gesturesEnabled ? 'select-none' : ''}`}
+          className={`absolute inset-0 flex items-center justify-center ${gesturesEnabled ? 'select-none touch-none' : ''}`}
           onPointerDown={handleGesturePointerDown}
           onPointerMove={handleGesturePointerMove}
           onPointerUp={handleGesturePointerUp}
           onPointerCancel={handleGesturePointerCancel}
-          style={gesturesEnabled ? { touchAction: 'none' } : undefined}
         >
           {gesturesEnabled && gestureHint ? (
             <div
-              className="pointer-events-none absolute left-1/2 top-6 z-30 -translate-x-1/2 rounded-full bg-slate-950/82 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm"
-              style={{ opacity: gestureHintOpacity }}
+              className={`pointer-events-none absolute left-1/2 top-6 z-30 -translate-x-1/2 rounded-full bg-slate-950/82 px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm ${gestureHintOpacityClass}`}
             >
               {gestureHint}
             </div>
           ) : null}
           {hasOutput ? (
             <div
-              className={`relative will-change-transform ${isGestureDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'}`}
+              className={`relative h-full will-change-transform ${gestureLayerOpacityClass} ${isGestureDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'}`}
               style={{
-                height: '100%',
                 transform: gestureTransform,
-                opacity: isGestureDragging ? Math.max(0.78, 1 - gestureTravel / 420) : 1,
               }}
             >
               <HoverZoomImage
@@ -520,8 +534,9 @@ export const PoseView: React.FC<PoseViewProps> = ({
                 ) : null}
                 {!isViewingLatest ? (
                   <span
-                    className="absolute left-3 z-10 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-white"
-                    style={{ top: showApprovedBadge && !isLoadingState ? '2.75rem' : '0.75rem' }}
+                    className={`absolute left-3 z-10 rounded-lg bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-white ${
+                      showApprovedBadge && !isLoadingState ? 'top-11' : 'top-3'
+                    }`}
                   >
                     {formatOutputLabel(
                       displayedOutput!,
@@ -574,10 +589,11 @@ export const PoseView: React.FC<PoseViewProps> = ({
             </div>
           ) : (
             <div
-              className={`flex h-full w-full flex-col items-center justify-center bg-slate-50 text-center will-change-transform ${isGestureDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'}`}
+              className={`flex h-full w-full flex-col items-center justify-center bg-slate-50 text-center will-change-transform ${gestureLayerOpacityClass} ${
+                isGestureDragging ? 'transition-none' : 'transition-transform duration-200 ease-out'
+              }`}
               style={{
                 transform: gestureTransform,
-                opacity: isGestureDragging ? Math.max(0.78, 1 - gestureTravel / 420) : 1,
               }}
             >
               {job.status === 'failed' && !isLoadingState ? (
@@ -628,12 +644,7 @@ export const PoseView: React.FC<PoseViewProps> = ({
           onClick={onPrev}
           disabled={!canGoPrev}
           title="Pose anterior"
-          className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{
-            backgroundColor: 'var(--color-accent-light)',
-            borderColor: 'var(--color-accent-light)',
-            color: 'var(--color-bg-base)',
-          }}
+          className="evaluation-action-button evaluation-action-button--accent"
         >
           <ChevronLeft className="h-6 w-6" />
         </button>
@@ -643,14 +654,9 @@ export const PoseView: React.FC<PoseViewProps> = ({
           onClick={handleApproveAndAdvance}
           disabled={!hasOutput || isLoadingState}
           title="Aprobar esta foto"
-          className={`flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 ${
-            isUserApproved ? '' : 'bg-white/90'
+          className={`evaluation-action-button evaluation-action-button--success ${
+            isUserApproved ? 'evaluation-action-button--success-active' : 'bg-white/90'
           }`}
-          style={{
-            backgroundColor: isUserApproved ? 'var(--color-success)' : undefined,
-            borderColor: 'var(--color-success)',
-            color: isUserApproved ? 'var(--color-bg-base)' : 'var(--color-success)',
-          }}
         >
           <Heart className={`h-6 w-6 ${isUserApproved ? 'fill-current' : ''}`} />
         </button>
@@ -660,12 +666,7 @@ export const PoseView: React.FC<PoseViewProps> = ({
           onClick={onNext}
           disabled={!canGoNext}
           title="Pose siguiente"
-          className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{
-            backgroundColor: 'var(--color-accent-light)',
-            borderColor: 'var(--color-accent-light)',
-            color: 'var(--color-bg-base)',
-          }}
+          className="evaluation-action-button evaluation-action-button--accent"
         >
           <ChevronRight className="h-6 w-6" />
         </button>
@@ -675,14 +676,9 @@ export const PoseView: React.FC<PoseViewProps> = ({
           onClick={() => void handleToggleFlag()}
           disabled={isUpdatingFlag}
           title={isManuallyFlagged ? 'Quitar marca' : 'Marcar foto'}
-          className={`flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border-2 shadow-md transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 ${
-            isManuallyFlagged ? '' : 'bg-white/90'
+          className={`evaluation-action-button evaluation-action-button--danger ${
+            isManuallyFlagged ? 'evaluation-action-button--danger-active' : 'bg-white/90'
           }`}
-          style={{
-            backgroundColor: isManuallyFlagged ? 'var(--color-danger)' : undefined,
-            borderColor: 'var(--color-danger)',
-            color: isManuallyFlagged ? 'var(--color-bg-base)' : 'var(--color-danger)',
-          }}
         >
           <AlertTriangle className={`h-6 w-6 ${isManuallyFlagged ? 'fill-current' : ''}`} />
         </button>

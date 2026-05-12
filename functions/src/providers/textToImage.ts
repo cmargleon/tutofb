@@ -1,5 +1,6 @@
 import {
   FalBananaProImageConfig,
+  FalGPTImage2ImageConfig,
   FalNanoBanana2ImageConfig,
   FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
@@ -290,6 +291,44 @@ export const editModelPhotoWithSeedream5 = (
       num_images: 1,
       image_size: imageConfig.imageSize,
       enable_safety_checker: false,
+    },
+    falKey,
+  );
+
+// fal.ai GPT Image 2 (text-to-image)
+export const generateModelPhotoWithFalGPTImage2 = async (
+  prompt: string,
+  imageConfig: FalGPTImage2ImageConfig,
+  falKey: string,
+): Promise<TextToImageResult> =>
+  runFalTextToImage(
+    'openai/gpt-image-2',
+    {
+      prompt,
+      image_size: imageConfig.imageSize,
+      quality: imageConfig.quality,
+      num_images: 1,
+      output_format: imageConfig.outputFormat,
+    },
+    falKey,
+  );
+
+// fal.ai GPT Image 2 (image-to-image edit)
+export const editModelPhotoWithFalGPTImage2 = (
+  prompt: string,
+  imageConfig: FalGPTImage2ImageConfig,
+  referenceImageUrl: string,
+  falKey: string,
+): Promise<TextToImageResult> =>
+  runFalImageEdit(
+    'openai/gpt-image-2/edit',
+    {
+      prompt,
+      image_urls: [referenceImageUrl],
+      image_size: imageConfig.imageSize,
+      quality: imageConfig.quality,
+      num_images: 1,
+      output_format: imageConfig.outputFormat,
     },
     falKey,
   );

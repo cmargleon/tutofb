@@ -6,7 +6,7 @@ import { CatalogGarmentGroup } from '../../features/catalog/useCatalogJobs';
 import { CatalogThumbnail } from './CatalogThumbnail';
 import FileSaver from 'file-saver';
 import { resolveStorageAssetUrl } from '../../features/storage/assets';
-import { deleteJob, regenerateJob } from '../../features/evaluation/firebase';
+import { cancelJobGeneration, deleteJob, regenerateJob } from '../../features/evaluation/firebase';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useConfirm, useToast } from '../../features/feedback/FeedbackProvider';
 
@@ -14,6 +14,7 @@ interface CatalogGarmentSectionProps {
   group: CatalogGarmentGroup;
   onImageClick: (job: Job) => void;
   onRegenerationQueued?: (job: Job) => void;
+  onRegenerationCancelled?: (jobId: string) => void;
   pendingRegenerationJobIds?: Record<string, true>;
 }
 
@@ -21,11 +22,13 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
   group,
   onImageClick,
   onRegenerationQueued,
+  onRegenerationCancelled,
   pendingRegenerationJobIds = {},
 }) => {
   const [expanded, setExpanded] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [queueingJobIds, setQueueingJobIds] = useState<Record<string, boolean>>({});
+  const [cancellingJobIds, setCancellingJobIds] = useState<Record<string, boolean>>({});
   const role = useRole();
   const toast = useToast();
   const confirm = useConfirm();
@@ -102,6 +105,45 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
     }
   };
 
+  const handleCancelRegeneration = async (job: Job) => {
+    if (!job.id) return;
+    if (cancellingJobIds[job.id]) return;
+
+    const accepted = await confirm({
+      title: 'Cancelar regeneración',
+      description: `Vas a cancelar la regeneración de "${job.garmentName}".`,
+      impact: 'La foto quedará marcada como cancelada y se quitará del spreadsheet del lote si estaba siendo usada.',
+      confirmLabel: 'Sí, cancelar',
+      cancelLabel: 'Seguir generando',
+      tone: 'warning',
+    });
+    if (!accepted) return;
+
+    setCancellingJobIds((prev) => ({ ...prev, [job.id!]: true }));
+    try {
+      await cancelJobGeneration(job.id);
+      onRegenerationCancelled?.(job.id);
+      toast({
+        tone: 'success',
+        title: 'Regeneración cancelada',
+        description: 'La foto quedó marcada como cancelada.',
+      });
+    } catch (err: any) {
+      toast({
+        tone: 'error',
+        title: 'No se pudo cancelar la regeneración',
+        description: err.message || 'Inténtalo nuevamente.',
+      });
+    } finally {
+      setCancellingJobIds((prev) => {
+        if (!prev[job.id!]) return prev;
+        const next = { ...prev };
+        delete next[job.id!];
+        return next;
+      });
+    }
+  };
+
   const handleDelete = async (job: Job) => {
     if (!job.id) return;
     const accepted = await confirm({
@@ -159,6 +201,8 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
             const isRegenerationPending = Boolean(
               job.id && (queueingJobIds[job.id] || pendingRegenerationJobIds[job.id]),
             );
+            const isCancelling = Boolean(job.id && cancellingJobIds[job.id]);
+            const canCancelRegeneration = role.canRegenerate && (isRegenerationPending || job.status === 'pending' || job.status === 'processing');
 
             return (
               <CatalogThumbnail
@@ -166,9 +210,11 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
                 job={job}
                 onClick={onImageClick}
                 onRegenerate={role.canRegenerate && !isRegenerationPending ? handleRegenerate : undefined}
+                onCancel={canCancelRegeneration ? handleCancelRegeneration : undefined}
                 onDownload={handleDownloadSingle}
                 onDelete={role.canRegenerate ? handleDelete : undefined}
                 regenerationPending={isRegenerationPending}
+                cancellationPending={isCancelling}
               />
             );
           })}

@@ -21,7 +21,8 @@ const isModelPhotoProvider = (value: unknown): value is ModelPhotoProvider =>
   || value === 'fal-banana-pro'
   || value === 'openai-dalle'
   || value === 'fal-nano-banana-2'
-  || value === 'fal-seedream-5';
+  || value === 'fal-seedream-5'
+  || value === 'fal-gpt-image-2';
 
 export const backfillModelPoses = onCall<
   BackfillModelPosesRequest,

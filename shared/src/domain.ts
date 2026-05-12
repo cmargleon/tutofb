@@ -6,13 +6,21 @@ import {
   Job,
   JobOutput,
   ModelIdentityTraits,
+  ModelPhotoProvider,
   Provider,
   Role,
   TryOnPromptCaseKey,
 } from './types';
 
 export const ROLE_VALUES: Role[] = ['admin', 'operador', 'revisor'];
-export const PROVIDER_VALUES: Provider[] = ['fal-seedream', 'fal-banana-pro', 'openai-gpt-image-1.5', 'fal-nano-banana-2', 'fal-seedream-5'];
+export const PROVIDER_VALUES: Provider[] = [
+  'fal-seedream',
+  'fal-banana-pro',
+  'openai-gpt-image-1.5',
+  'fal-nano-banana-2',
+  'fal-seedream-5',
+  'fal-gpt-image-2',
+];
 export const ASPECT_RATIO_VALUES: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'];
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
@@ -21,7 +29,47 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   'openai-gpt-image-1.5': 'OpenAI gpt-image-1.5',
   'fal-nano-banana-2': 'fal.ai Nano Banana 2',
   'fal-seedream-5': 'fal.ai Seedream 5 Lite',
+  'fal-gpt-image-2': 'fal.ai GPT Image 2',
 };
+
+export const MODEL_PHOTO_PROVIDER_VALUES: ModelPhotoProvider[] = [
+  'fal-seedream-v4.5',
+  'fal-banana-pro',
+  'openai-dalle',
+  'fal-nano-banana-2',
+  'fal-seedream-5',
+  'fal-gpt-image-2',
+];
+
+export const MODEL_PHOTO_PROVIDER_TO_PROVIDER: Record<ModelPhotoProvider, Provider> = {
+  'fal-seedream-v4.5': 'fal-seedream',
+  'fal-banana-pro': 'fal-banana-pro',
+  'openai-dalle': 'openai-gpt-image-1.5',
+  'fal-nano-banana-2': 'fal-nano-banana-2',
+  'fal-seedream-5': 'fal-seedream-5',
+  'fal-gpt-image-2': 'fal-gpt-image-2',
+};
+
+export const MODEL_PHOTO_PROVIDER_LABELS: Record<ModelPhotoProvider, string> = {
+  'fal-seedream-v4.5': 'Seedream v4.5 (fal.ai)',
+  'fal-banana-pro': 'Nano Banana Pro (fal.ai)',
+  'openai-dalle': 'OpenAI gpt-image-1.5',
+  'fal-nano-banana-2': 'Nano Banana 2 (fal.ai)',
+  'fal-seedream-5': 'Seedream 5 Lite (fal.ai)',
+  'fal-gpt-image-2': 'GPT Image 2 (fal.ai)',
+};
+
+export const MODEL_PHOTO_PROVIDER_HINTS: Record<ModelPhotoProvider, string> = {
+  'fal-seedream-v4.5': 'ByteDance · $0.04/foto',
+  'fal-banana-pro': 'Gemini Pro · $0.15/foto base, $0.30 en 4K',
+  'openai-dalle': 'OpenAI · $0.02-$0.25/foto segun quality y size',
+  'fal-nano-banana-2': 'Gemini 3.1 Flash · $0.06-$0.16/foto segun resolucion',
+  'fal-seedream-5': 'ByteDance v5 · $0.035/foto',
+  'fal-gpt-image-2': 'OpenAI · $0.01-$0.41/foto segun quality y tamano',
+};
+
+export const mapModelPhotoProviderToProvider = (provider: ModelPhotoProvider): Provider =>
+  MODEL_PHOTO_PROVIDER_TO_PROVIDER[provider];
 
 export const INTERNAL_GARMENT_DETAILS_PROMPT_MARKER = 'INTERNAL GARMENT DETAILS (CRITICAL)';
 
@@ -304,8 +352,13 @@ export const buildFinalGenerationPrompt = (
 export default {
   ROLE_VALUES,
   PROVIDER_VALUES,
+  MODEL_PHOTO_PROVIDER_VALUES,
   ASPECT_RATIO_VALUES,
   PROVIDER_LABELS,
+  MODEL_PHOTO_PROVIDER_LABELS,
+  MODEL_PHOTO_PROVIDER_HINTS,
+  MODEL_PHOTO_PROVIDER_TO_PROVIDER,
+  mapModelPhotoProviderToProvider,
   DEFAULT_TRY_ON_PROMPT,
   DEFAULT_TRY_ON_PROMPT_CASES,
   resolveTryOnPromptCaseKey,

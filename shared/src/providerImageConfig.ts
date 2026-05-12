@@ -3,9 +3,13 @@ import {
   BananaAspectRatio,
   BananaResolution,
   FalBananaProImageConfig,
+  FalGPTImage2ImageConfig,
   FalNanoBanana2ImageConfig,
   FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
+  GPTImage2ImageSizePreset,
+  GPTImage2OutputFormat,
+  GPTImage2Quality,
   NanoBanana2AspectRatio,
   NanoBanana2Resolution,
   OpenAIImageConfig,
@@ -20,6 +24,17 @@ import {
 
 export const OPENAI_IMAGE_SIZE_VALUES: OpenAIImageSize[] = ['1024x1024', '1024x1536', '1536x1024'];
 export const OPENAI_IMAGE_QUALITY_VALUES: OpenAIImageQuality[] = ['low', 'medium', 'high'];
+export const GPT_IMAGE_2_IMAGE_SIZE_PRESET_VALUES: GPTImage2ImageSizePreset[] = [
+  'square_hd',
+  'square',
+  'portrait_4_3',
+  'portrait_16_9',
+  'landscape_4_3',
+  'landscape_16_9',
+  'auto',
+];
+export const GPT_IMAGE_2_QUALITY_VALUES: GPTImage2Quality[] = ['auto', 'low', 'medium', 'high'];
+export const GPT_IMAGE_2_OUTPUT_FORMAT_VALUES: GPTImage2OutputFormat[] = ['png', 'jpeg', 'webp'];
 export const BANANA_ASPECT_RATIO_VALUES: BananaAspectRatio[] = ['21:9', '16:9', '3:2', '4:3', '5:4', '1:1', '4:5', '3:4', '2:3', '9:16'];
 export const BANANA_RESOLUTION_VALUES: BananaResolution[] = ['1K', '2K', '4K'];
 export const NANO_BANANA_2_ASPECT_RATIO_VALUES: NanoBanana2AspectRatio[] = [
@@ -62,6 +77,11 @@ const cloneSeedream5ImageSize = (
 ): FalSeedream5ImageConfig['imageSize'] =>
   typeof imageSize === 'string' ? imageSize : { width: imageSize.width, height: imageSize.height };
 
+const cloneGPTImage2ImageSize = (
+  imageSize: FalGPTImage2ImageConfig['imageSize'],
+): FalGPTImage2ImageConfig['imageSize'] =>
+  typeof imageSize === 'string' ? imageSize : { width: imageSize.width, height: imageSize.height };
+
 export const createDefaultProviderImageConfig = (provider: Provider): ProviderImageConfig => {
   switch (provider) {
     case 'fal-seedream':
@@ -91,6 +111,13 @@ export const createDefaultProviderImageConfig = (provider: Provider): ProviderIm
       return {
         provider,
         imageSize: 'portrait_4_3',
+      };
+    case 'fal-gpt-image-2':
+      return {
+        provider,
+        imageSize: 'portrait_4_3',
+        quality: 'medium',
+        outputFormat: 'png',
       };
     default:
       throw new Error(`Proveedor no soportado: ${provider satisfies never}`);
@@ -142,6 +169,15 @@ export const isOpenAIImageSize = (value: unknown): value is OpenAIImageSize =>
 
 export const isOpenAIImageQuality = (value: unknown): value is OpenAIImageQuality =>
   OPENAI_IMAGE_QUALITY_VALUES.includes(value as OpenAIImageQuality);
+
+export const isGPTImage2ImageSizePreset = (value: unknown): value is GPTImage2ImageSizePreset =>
+  GPT_IMAGE_2_IMAGE_SIZE_PRESET_VALUES.includes(value as GPTImage2ImageSizePreset);
+
+export const isGPTImage2Quality = (value: unknown): value is GPTImage2Quality =>
+  GPT_IMAGE_2_QUALITY_VALUES.includes(value as GPTImage2Quality);
+
+export const isGPTImage2OutputFormat = (value: unknown): value is GPTImage2OutputFormat =>
+  GPT_IMAGE_2_OUTPUT_FORMAT_VALUES.includes(value as GPTImage2OutputFormat);
 
 export const isBananaAspectRatio = (value: unknown): value is BananaAspectRatio =>
   BANANA_ASPECT_RATIO_VALUES.includes(value as BananaAspectRatio);
@@ -209,6 +245,32 @@ export const isSeedream5CustomImageSize = (value: unknown): value is SeedreamCus
   return w >= 256 && h >= 256 && w <= 4096 && h <= 4096 && area >= 921600;
 };
 
+export const isGPTImage2CustomImageSize = (value: unknown): value is SeedreamCustomImageSize => {
+  if (!isRecord(value)) return false;
+  const width = value.width;
+  const height = value.height;
+  if (
+    typeof width !== 'number'
+    || typeof height !== 'number'
+    || !Number.isFinite(width)
+    || !Number.isFinite(height)
+  ) return false;
+  const w = Math.trunc(width);
+  const h = Math.trunc(height);
+  const shortest = Math.min(w, h);
+  const longest = Math.max(w, h);
+  const area = w * h;
+  return (
+    w % 16 === 0
+    && h % 16 === 0
+    && longest <= 3840
+    && shortest > 0
+    && longest / shortest <= 3
+    && area >= 655360
+    && area <= 8294400
+  );
+};
+
 export const isFalBananaProImageConfig = (value: unknown): value is FalBananaProImageConfig =>
   isRecord(value)
   && value.provider === 'fal-banana-pro'
@@ -232,12 +294,20 @@ export const isOpenAIImageConfig = (value: unknown): value is OpenAIImageConfig 
   && isOpenAIImageSize(value.size)
   && isOpenAIImageQuality(value.quality);
 
+export const isFalGPTImage2ImageConfig = (value: unknown): value is FalGPTImage2ImageConfig =>
+  isRecord(value)
+  && value.provider === 'fal-gpt-image-2'
+  && (isGPTImage2ImageSizePreset(value.imageSize) || isGPTImage2CustomImageSize(value.imageSize))
+  && isGPTImage2Quality(value.quality)
+  && isGPTImage2OutputFormat(value.outputFormat);
+
 export const isProviderImageConfig = (value: unknown): value is ProviderImageConfig =>
   isFalSeedreamImageConfig(value)
   || isFalBananaProImageConfig(value)
   || isOpenAIImageConfig(value)
   || isFalNanoBanana2ImageConfig(value)
-  || isFalSeedream5ImageConfig(value);
+  || isFalSeedream5ImageConfig(value)
+  || isFalGPTImage2ImageConfig(value);
 
 export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio: AspectRatio): ProviderImageConfig => {
   switch (provider) {
@@ -268,6 +338,13 @@ export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio:
       return {
         provider,
         imageSize: mapLegacyAspectRatioToSeedream5ImageSize(aspectRatio),
+      };
+    case 'fal-gpt-image-2':
+      return {
+        provider,
+        imageSize: mapLegacyAspectRatioToGPTImage2ImageSize(aspectRatio),
+        quality: 'medium',
+        outputFormat: 'png',
       };
     default:
       throw new Error(`Proveedor no soportado: ${provider satisfies never}`);
@@ -304,6 +381,13 @@ export const cloneProviderImageConfig = (config: ProviderImageConfig): ProviderI
         provider: config.provider,
         imageSize: cloneSeedream5ImageSize(config.imageSize),
       };
+    case 'fal-gpt-image-2':
+      return {
+        provider: config.provider,
+        imageSize: cloneGPTImage2ImageSize(config.imageSize),
+        quality: config.quality,
+        outputFormat: config.outputFormat,
+      };
     default:
       throw new Error(`Proveedor no soportado: ${config satisfies never}`);
   }
@@ -329,6 +413,25 @@ export const mapLegacyAspectRatioToSeedreamImageSize = (aspectRatio: AspectRatio
 };
 
 export const mapLegacyAspectRatioToSeedream5ImageSize = (aspectRatio: AspectRatio): Seedream5ImageSizePreset => {
+  switch (aspectRatio) {
+    case '9:16':
+      return 'portrait_16_9';
+    case '3:4':
+    case '2:3':
+      return 'portrait_4_3';
+    case '1:1':
+      return 'square_hd';
+    case '4:3':
+    case '3:2':
+      return 'landscape_4_3';
+    case '16:9':
+      return 'landscape_16_9';
+    default:
+      return 'square_hd';
+  }
+};
+
+export const mapLegacyAspectRatioToGPTImage2ImageSize = (aspectRatio: AspectRatio): GPTImage2ImageSizePreset => {
   switch (aspectRatio) {
     case '9:16':
       return 'portrait_16_9';
@@ -428,6 +531,26 @@ export const resolveAspectRatioForImageConfig = (config: ProviderImageConfig): A
         default:
           return '1:1';
       }
+    case 'fal-gpt-image-2':
+      if (typeof config.imageSize !== 'string') {
+        return getClosestAspectRatio(config.imageSize.width / config.imageSize.height);
+      }
+
+      switch (config.imageSize) {
+        case 'portrait_16_9':
+          return '9:16';
+        case 'portrait_4_3':
+          return '3:4';
+        case 'landscape_4_3':
+          return '4:3';
+        case 'landscape_16_9':
+          return '16:9';
+        case 'square':
+        case 'square_hd':
+        case 'auto':
+        default:
+          return '1:1';
+      }
     default:
       throw new Error(`Proveedor no soportado: ${config satisfies never}`);
   }
@@ -477,6 +600,10 @@ export const summarizeProviderImageConfig = (config: ProviderImageConfig): strin
       return typeof config.imageSize === 'string'
         ? config.imageSize
         : `${config.imageSize.width}x${config.imageSize.height}`;
+    case 'fal-gpt-image-2':
+      return `${typeof config.imageSize === 'string'
+        ? config.imageSize
+        : `${config.imageSize.width}x${config.imageSize.height}`} · ${config.quality} · ${config.outputFormat}`;
     default:
       throw new Error(`Proveedor no soportado: ${config satisfies never}`);
   }

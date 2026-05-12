@@ -1,5 +1,6 @@
 import type {
   FalBananaProImageConfig,
+  FalGPTImage2ImageConfig,
   FalNanoBanana2ImageConfig,
   ModelPhotoProvider,
   OpenAIImageConfig,
@@ -15,6 +16,7 @@ export const PROVIDER_COSTS: Record<Provider, number> = {
   'openai-gpt-image-1.5': 0.04,
   'fal-nano-banana-2': 0.08,
   'fal-seedream-5': 0.035,
+  'fal-gpt-image-2': 0.04,
 };
 
 export const PROVIDER_PRICE_LABELS: Record<Provider, string> = {
@@ -23,6 +25,7 @@ export const PROVIDER_PRICE_LABELS: Record<Provider, string> = {
   'openai-gpt-image-1.5': '$0.02-$0.25/img segun quality y size',
   'fal-nano-banana-2': '$0.06-$0.16/img segun resolucion',
   'fal-seedream-5': '$0.035/img',
+  'fal-gpt-image-2': '$0.01-$0.41/img segun quality y tamano',
 };
 
 export const MODEL_PHOTO_PROVIDER_COSTS: Record<ModelPhotoProvider, number> = {
@@ -31,6 +34,7 @@ export const MODEL_PHOTO_PROVIDER_COSTS: Record<ModelPhotoProvider, number> = {
   'openai-dalle': 0.04,
   'fal-nano-banana-2': 0.08,
   'fal-seedream-5': 0.035,
+  'fal-gpt-image-2': 0.04,
 };
 
 export const MODEL_PHOTO_PROVIDER_PRICE_LABELS: Record<ModelPhotoProvider, string> = {
@@ -39,6 +43,7 @@ export const MODEL_PHOTO_PROVIDER_PRICE_LABELS: Record<ModelPhotoProvider, strin
   'openai-dalle': '$0.02-$0.25/foto segun quality y size',
   'fal-nano-banana-2': '$0.06-$0.16/foto segun resolucion',
   'fal-seedream-5': '$0.035/foto',
+  'fal-gpt-image-2': '$0.01-$0.41/foto segun quality y tamano',
 };
 
 const SEEDREAM_V45_PRESET_COSTS: Partial<Record<SeedreamImageSizePreset, number>> = {
@@ -66,6 +71,42 @@ const OPENAI_IMAGE_COSTS: Record<OpenAIImageConfig['quality'], Record<OpenAIImag
     '1024x1024': 0.17,
     '1024x1536': 0.25,
     '1536x1024': 0.25,
+  },
+};
+
+const GPT_IMAGE_2_COSTS: Record<
+  Exclude<FalGPTImage2ImageConfig['quality'], 'auto'>,
+  Record<Exclude<FalGPTImage2ImageConfig['imageSize'], { width: number; height: number }> | 'custom', number>
+> = {
+  low: {
+    square_hd: 0.01,
+    square: 0.01,
+    portrait_4_3: 0.01,
+    portrait_16_9: 0.01,
+    landscape_4_3: 0.01,
+    landscape_16_9: 0.01,
+    auto: 0.01,
+    custom: 0.01,
+  },
+  medium: {
+    square_hd: 0.06,
+    square: 0.04,
+    portrait_4_3: 0.04,
+    portrait_16_9: 0.04,
+    landscape_4_3: 0.04,
+    landscape_16_9: 0.04,
+    auto: 0.04,
+    custom: 0.06,
+  },
+  high: {
+    square_hd: 0.22,
+    square: 0.15,
+    portrait_4_3: 0.15,
+    portrait_16_9: 0.15,
+    landscape_4_3: 0.15,
+    landscape_16_9: 0.15,
+    auto: 0.15,
+    custom: 0.22,
   },
 };
 
@@ -121,6 +162,13 @@ const getSeedream5Cost = (imageConfig?: ProviderImageConfig | null): number => {
   return PROVIDER_COSTS['fal-seedream-5'];
 };
 
+const getGPTImage2Cost = (imageConfig?: ProviderImageConfig | null): number => {
+  if (!imageConfig || imageConfig.provider !== 'fal-gpt-image-2') return PROVIDER_COSTS['fal-gpt-image-2'];
+  const quality = imageConfig.quality === 'auto' ? 'medium' : imageConfig.quality;
+  const sizeKey = typeof imageConfig.imageSize === 'string' ? imageConfig.imageSize : 'custom';
+  return GPT_IMAGE_2_COSTS[quality][sizeKey] ?? PROVIDER_COSTS['fal-gpt-image-2'];
+};
+
 export const getProviderCostUsd = (provider: Provider, imageConfig?: ProviderImageConfig | null): number => {
   switch (provider) {
     case 'fal-seedream':
@@ -133,6 +181,8 @@ export const getProviderCostUsd = (provider: Provider, imageConfig?: ProviderIma
       return getNanoBanana2Cost(imageConfig);
     case 'fal-seedream-5':
       return getSeedream5Cost(imageConfig);
+    case 'fal-gpt-image-2':
+      return getGPTImage2Cost(imageConfig);
     default:
       return 0;
   }
@@ -153,6 +203,8 @@ export const getModelPhotoProviderCostUsd = (
       return getNanoBanana2Cost(imageConfig);
     case 'fal-seedream-5':
       return getSeedream5Cost(imageConfig);
+    case 'fal-gpt-image-2':
+      return getGPTImage2Cost(imageConfig);
     default:
       return 0;
   }

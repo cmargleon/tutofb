@@ -25,6 +25,7 @@ export const PROVIDERS = {
   OPENAI_GPT_IMAGE_1_5: 'openai-gpt-image-1.5',
   FAL_NANO_BANANA_2: 'fal-nano-banana-2',
   FAL_SEEDREAM_5: 'fal-seedream-5',
+  FAL_GPT_IMAGE_2: 'fal-gpt-image-2',
 } as const;
 
 export const ASPECT_RATIOS = {

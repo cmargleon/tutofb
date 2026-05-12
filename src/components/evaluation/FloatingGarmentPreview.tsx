@@ -22,10 +22,7 @@ export const FloatingGarmentPreview: React.FC<FloatingGarmentPreviewProps> = ({
   }
 
   return (
-    <div
-      className="pointer-events-none fixed bottom-4 z-30 hidden sm:block"
-      style={{ left: 'calc(var(--app-sidebar-width, 0rem) + 1rem)' }}
-    >
+    <div className="floating-garment-preview pointer-events-none fixed bottom-4 z-30 hidden sm:block">
       <div className="pointer-events-auto group relative" tabIndex={0}>
         <div className="w-24 rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-lg backdrop-blur transition group-hover:-translate-y-1 group-hover:shadow-xl group-focus-within:-translate-y-1 group-focus-within:shadow-xl">
           <div className="absolute -top-2 right-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 shadow-sm">

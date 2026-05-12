@@ -60,6 +60,23 @@ export const formatDateTimeLong = (value: unknown): string => {
 };
 
 /**
+ * Numeric short date+time format (es-MX): dd/mm/aa, hour, minute.
+ * Example: "22/03/26, 04:04 a.m."
+ * Returns "sin fecha" if value is falsy or unparseable.
+ */
+export const formatDateTimeShortNumeric = (value: unknown): string => {
+  const date = toDate(value);
+  if (!date) return 'sin fecha';
+  return new Intl.DateTimeFormat('es-MX', {
+    year: '2-digit',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+/**
  * Full date+time format (es-MX) using dateStyle/timeStyle presets.
  * Example: "22 mar 2026, 04:04 a.m."
  * Returns "sin fecha" if value is falsy or unparseable.

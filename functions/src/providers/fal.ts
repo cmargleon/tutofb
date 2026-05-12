@@ -1,4 +1,4 @@
-import { AspectRatio, FalBananaProImageConfig, FalNanoBanana2ImageConfig, FalSeedream5ImageConfig, FalSeedreamImageConfig } from '../../../shared/src/types';
+import { AspectRatio, FalBananaProImageConfig, FalGPTImage2ImageConfig, FalNanoBanana2ImageConfig, FalSeedream5ImageConfig, FalSeedreamImageConfig } from '../../../shared/src/types';
 import { mapLegacyAspectRatioToSeedreamImageSize } from '../../../shared/src/providerImageConfig';
 import { getFalPollIntervalMs, getFalPollTimeoutMs } from '../config/runtime';
 import { ProviderRequest, ProviderResponse } from './types';
@@ -304,6 +304,48 @@ export const generateWithFalSeedream5 = async (
   const downloaded = await fetchImageBytes(image.url, request.signal);
   return {
     provider: 'fal-seedream-5',
+    contentType: image.contentType || downloaded.contentType,
+    imageBytes: downloaded.bytes,
+    remoteUrl: image.url,
+    requestId: queue.request_id || null,
+    responseSummary: {
+      endpointId,
+      requestId: queue.request_id || null,
+      remoteUrl: image.url,
+    },
+  };
+};
+
+export const generateWithFalGPTImage2 = async (
+  request: ProviderRequest,
+  falKey: string,
+): Promise<ProviderResponse> => {
+  const imageConfig = request.imageConfig as FalGPTImage2ImageConfig;
+  const endpointId = 'openai/gpt-image-2/edit';
+  const queue = await submitFalRequest(
+    endpointId,
+    {
+      prompt: request.prompt,
+      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      num_images: 1,
+      image_size: imageConfig.imageSize,
+      quality: imageConfig.quality,
+      output_format: imageConfig.outputFormat,
+    },
+    falKey,
+    request.signal,
+  );
+
+  const payload = await pollFalResponse(endpointId, queue, falKey, request.signal);
+  const image = extractImage(payload);
+
+  if (!image) {
+    throw new Error('fal.ai gpt-image-2 no devolvió una imagen utilizable.');
+  }
+
+  const downloaded = await fetchImageBytes(image.url, request.signal);
+  return {
+    provider: 'fal-gpt-image-2',
     contentType: image.contentType || downloaded.contentType,
     imageBytes: downloaded.bytes,
     remoteUrl: image.url,

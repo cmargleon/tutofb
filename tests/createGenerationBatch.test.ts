@@ -167,6 +167,40 @@ test('validateCreateGenerationBatchInput conserva provider y calcula jobs por po
   assert.equal(validated.totalJobs, 2);
 });
 
+test('validateCreateGenerationBatchInput conserva configuración de GPT Image 2', () => {
+  const validated = validateCreateGenerationBatchInput(
+    {
+      ...baseTemplateFields,
+      clientId: 'client-1',
+      modelId: 'model-1',
+      poseIds: ['pose-1'],
+      garments: [
+        {
+          id: 'gar-1',
+          name: 'Vestido Azul',
+          storagePath: 'garments/drafts/user-1/draft-1/gar-1.jpg',
+          isMultiAngle: false,
+        },
+      ],
+      productDrafts: [buildProductDraft('gar-1', 'Vestido Azul')],
+      provider: 'fal-gpt-image-2',
+      promptBase: 'Prompt lote',
+      imageConfig: {
+        provider: 'fal-gpt-image-2',
+        imageSize: { width: 1280, height: 720 },
+        quality: 'high',
+        outputFormat: 'webp',
+      },
+    },
+    'user-1',
+    20,
+  );
+
+  assert.equal(validated.provider, 'fal-gpt-image-2');
+  assert.equal(validated.aspectRatio, '16:9');
+  assert.equal(validated.imageConfig.provider, 'fal-gpt-image-2');
+});
+
 test('validateCreateGenerationBatchInput rechaza provider inválido', () => {
   assert.throws(
     () =>

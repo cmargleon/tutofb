@@ -1,20 +1,23 @@
 import {
   FalBananaProImageConfig,
+  FalGPTImage2ImageConfig,
   FalNanoBanana2ImageConfig,
   FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
   ModelPhotoProvider,
   OpenAIImageConfig,
-  Provider,
   ProviderImageConfig,
 } from '../../../shared/src/types';
+import { mapModelPhotoProviderToProvider } from '../../../shared/src/domain';
 import {
   editModelPhotoWithBananaPro,
+  editModelPhotoWithFalGPTImage2,
   editModelPhotoWithNanoBanana2,
   editModelPhotoWithOpenAI,
   editModelPhotoWithSeedream5,
   editModelPhotoWithSeedreamV45,
   generateModelPhotoWithBananaPro,
+  generateModelPhotoWithFalGPTImage2,
   generateModelPhotoWithNanoBanana2,
   generateModelPhotoWithOpenAI,
   generateModelPhotoWithSeedream5,
@@ -24,6 +27,8 @@ import {
 
 const OPENAI_RATE_LIMIT_MAX_RETRIES = 5;
 const DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS = 15_000;
+
+export { mapModelPhotoProviderToProvider };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -40,23 +45,6 @@ const getOpenAIRetryDelayMs = (error: unknown): number => {
   const seconds = Number(match[1]);
   if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_OPENAI_RATE_LIMIT_DELAY_MS;
   return Math.ceil(seconds * 1000);
-};
-
-export const mapModelPhotoProviderToProvider = (provider: ModelPhotoProvider): Provider => {
-  switch (provider) {
-    case 'fal-seedream-v4.5':
-      return 'fal-seedream';
-    case 'fal-banana-pro':
-      return 'fal-banana-pro';
-    case 'openai-dalle':
-      return 'openai-gpt-image-1.5';
-    case 'fal-nano-banana-2':
-      return 'fal-nano-banana-2';
-    case 'fal-seedream-5':
-      return 'fal-seedream-5';
-    default:
-      throw new Error(`Proveedor de foto de modelo no reconocido: ${provider satisfies never}`);
-  }
 };
 
 const runProvider = (
@@ -86,6 +74,8 @@ const runProvider = (
         return editModelPhotoWithNanoBanana2(prompt, imageConfig as FalNanoBanana2ImageConfig, referenceImageUrl, falKey);
       case 'fal-seedream-5':
         return editModelPhotoWithSeedream5(prompt, imageConfig as FalSeedream5ImageConfig, referenceImageUrl, falKey);
+      case 'fal-gpt-image-2':
+        return editModelPhotoWithFalGPTImage2(prompt, imageConfig as FalGPTImage2ImageConfig, referenceImageUrl, falKey);
       default:
         throw new Error(`El proveedor ${provider} no soporta generación de poses desde referencia.`);
     }
@@ -102,6 +92,8 @@ const runProvider = (
       return generateModelPhotoWithNanoBanana2(prompt, imageConfig as FalNanoBanana2ImageConfig, falKey);
     case 'fal-seedream-5':
       return generateModelPhotoWithSeedream5(prompt, imageConfig as FalSeedream5ImageConfig, falKey);
+    case 'fal-gpt-image-2':
+      return generateModelPhotoWithFalGPTImage2(prompt, imageConfig as FalGPTImage2ImageConfig, falKey);
     default:
       throw new Error(`Proveedor de foto de modelo no reconocido: ${provider}`);
   }

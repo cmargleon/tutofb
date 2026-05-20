@@ -638,7 +638,7 @@ export const buildPreviewProductDrafts = async ({
         ...inferredValues,
         ...sourceValues,
       };
-      const sourceMatchedColor = resolveSourceSpreadsheetRowColor(matchedSourceRow, category);
+      const sourceMatchedColor = resolveSourceSpreadsheetRowColor(matchedSourceRow?.row || null, category);
 
       return {
         garmentId: garment.id,

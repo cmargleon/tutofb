@@ -4,6 +4,13 @@ import { Job, JobAutoReview, JobOutput, RetryJobAutoReviewRequest, RetryJobAutoR
 import { assertCallableRoles } from '../auth/roles';
 import { GEMINI_API_KEY, getJobAutoReviewMaxAttempts } from '../config/runtime';
 import { getSystemConfigCached } from '../admin/systemConfig';
+import {
+  buildGeminiRejectedFailureInfo,
+  buildJobFailureInfo,
+  serializeError,
+  toFailureSummary,
+  withFailureOutputId,
+} from '../errors/jobFailure';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
@@ -115,10 +122,26 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
       });
 
       const storedReview = buildStoredReview(review, attemptNumber);
+      const failureInfo = review.verdict === 'approved'
+        ? null
+        : buildGeminiRejectedFailureInfo({
+            summary: review.summary,
+            attemptNumber,
+            maxAttempts,
+            provider: output.provider,
+            requestId: output.requestId || null,
+            retryable: false,
+            raw: {
+              criteria: review.criteria,
+              revisedPrompt: review.revisedPrompt,
+              retriedManuallyByUid: request.auth?.uid || null,
+            },
+          });
       const now = admin.firestore.FieldValue.serverTimestamp();
       const updatedOutput: JobOutput = {
         ...output,
         autoReview: storedReview,
+        failureInfo: withFailureOutputId(failureInfo, output.id),
       };
 
       const jobPatch: Record<string, unknown> = {
@@ -126,10 +149,8 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
         latestAutoReview: storedReview,
         ...buildAutoReviewSignalsPatch(job, storedReview.verdict),
         updatedAt: now,
-        lastError:
-          review.verdict === 'approved'
-            ? null
-            : `Gemini rechazó la imagen tras ${attemptNumber} intentos: ${review.summary}`,
+        lastError: review.verdict === 'approved' ? null : toFailureSummary(failureInfo),
+        failureInfo,
       };
 
       if (review.verdict === 'approved') {
@@ -155,6 +176,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
             model: storedReview.model,
             verdict: storedReview.verdict,
             summary: storedReview.summary,
+            failureInfo,
             reviewPrompt: storedReview.reviewPrompt,
             revisedPrompt: storedReview.revisedPrompt,
             criteria: storedReview.criteria,
@@ -172,15 +194,30 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
         verdict: storedReview.verdict,
       };
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? `No se pudo validar la imagen con Gemini: ${error.message}`
-          : 'No se pudo validar la imagen con Gemini.';
+      const failureInfo = withFailureOutputId(
+        buildJobFailureInfo(error, {
+          provider: output.provider,
+          requestId: output.requestId || null,
+          outputId: output.id,
+          attemptNumber: output.generationAttempt || job.generationAttemptCount || 1,
+          maxAttempts: job.autoReviewMaxAttempts || getJobAutoReviewMaxAttempts(),
+        }),
+        output.id,
+      );
+      const message = toFailureSummary(failureInfo) || 'No se pudo validar la imagen con Gemini.';
+      const updatedCurrentOutput: JobOutput = {
+        ...output,
+        failureInfo,
+      };
 
       await jobRef.update({
         lastError: message,
+        failureInfo,
+        currentOutput: updatedCurrentOutput,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+
+      await outputRef.set({ failureInfo }, { merge: true });
 
       await jobRef.collection('logs').add({
         type: 'quality_review',
@@ -188,7 +225,8 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
         message: 'La revisión manual con Gemini falló.',
         outputId: output.id,
         payload: {
-          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          failureInfo,
+          error: serializeError(error),
           retriedManuallyByUid: request.auth?.uid || null,
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),

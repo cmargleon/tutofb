@@ -45,6 +45,32 @@ export const normalizeAccessoryDisplaySlots = (
   return normalized;
 };
 
+const normalizeComparableAccessoryText = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+export const inferGarmentAccessoryTypeFromText = (
+  values: Array<string | null | undefined>,
+): GarmentAccessoryType | null => {
+  const normalized = values
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map(normalizeComparableAccessoryText)
+    .join(' ');
+
+  if (/\b(mochila|mochilas|backpack|backpacks|morral|morrales)\b/.test(normalized)) return 'backpack';
+  if (/\b(crossbody|bandolera|bandoleras|cruzada|cruzadas)\b/.test(normalized)) return 'crossbody_bag';
+  if (/\b(tote|totes)\b/.test(normalized)) return 'tote_bag';
+  if (/\b(duffel|duffels|maleta|maletas|bolsa de gimnasio|bolsas de gimnasio)\b/.test(normalized)) return 'duffel_bag';
+  if (/\b(handbag|handbags|bolso de mano|bolsos de mano|cartera|carteras)\b/.test(normalized)) return 'handbag';
+  if (/\b(shoulder bag|shoulder bags|bolsa de hombro|bolsas de hombro|bolso de hombro|bolsos de hombro)\b/.test(normalized)) return 'shoulder_bag';
+
+  return null;
+};
+
 export const deriveAccessoryDisplaySlots = ({
   orientationGroup,
   bodyFocus,
@@ -76,7 +102,7 @@ export const getRequiredAccessoryDisplaySlots = (
 ): AccessoryDisplaySlot[] => {
   switch (accessoryType) {
     case 'backpack':
-      return ['back', 'shoulder'];
+      return ['back'];
     case 'crossbody_bag':
       return ['crossbody', 'front_torso'];
     case 'shoulder_bag':
@@ -99,4 +125,3 @@ export const canPoseShowCarryAccessory = (
   const poseSlotSet = new Set(poseSlots || []);
   return requiredSlots.some((slot) => poseSlotSet.has(slot));
 };
-

@@ -157,6 +157,15 @@ export interface SourceSpreadsheetMatchSummary {
   matchedRows: number;
   matchedGarments: number;
   unmatchedGarments: number;
+  sheetName?: string | null;
+  headerRowNumber?: number | null;
+  textOnlyRows?: number;
+  matchedByImage?: number;
+  matchedByText?: number;
+  highConfidenceMatches?: number;
+  needsReviewMatches?: number;
+  detectedColumns?: string[];
+  warnings?: string[];
 }
 
 export interface PreviewProductDraftsRequest {

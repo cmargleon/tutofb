@@ -2,6 +2,10 @@ import { CreateGenerationBatchRequest } from '../../../../shared/src/types';
 import { resolveAspectRatioForImageConfig } from '../../../../shared/src/providerImageConfig';
 import { UploadGarmentDraftsResult } from '../storage';
 import { GarmentUploadState, UploadedGarmentDraft, WizardState } from '../types';
+import {
+  getEffectiveGarmentAccessoryType,
+  getEffectiveGarmentBodyArea,
+} from '../garments';
 import { getSelectedProviderImageConfig, isGarmentUploadedForBatch } from './state';
 
 type UploadedGarmentPhotoRequest = NonNullable<CreateGenerationBatchRequest['garments'][number]['photos']>[number];
@@ -90,6 +94,7 @@ export const mergeGarmentUploadResults = (
 export const getUploadedGarmentsForBatch = (
   garments: UploadedGarmentDraft[],
   draftBatchId: string,
+  accessoryInferenceTextsByGarmentId: Map<string, Array<string | null | undefined>> = new Map(),
 ): CreateGenerationBatchRequest['garments'] =>
   garments
     .filter((garment) => isGarmentUploadedForBatch(garment, draftBatchId))
@@ -113,6 +118,8 @@ export const getUploadedGarmentsForBatch = (
         return result;
       }, []);
 
+      const accessoryInferenceTexts = accessoryInferenceTextsByGarmentId.get(garment.id) || [];
+
       return {
         id: garment.id,
         name: garment.name,
@@ -121,6 +128,8 @@ export const getUploadedGarmentsForBatch = (
         sourceType: garment.sourceType,
         originalFileNames: garment.originalFileNames,
         originalPhotoCount: garment.originalPhotos.length,
+        garmentBodyArea: getEffectiveGarmentBodyArea(garment, accessoryInferenceTexts),
+        garmentAccessoryType: getEffectiveGarmentAccessoryType(garment, accessoryInferenceTexts),
         matchedCategoryId: garment.matchedCategoryId || null,
         matchedCategoryLabel: garment.matchedCategoryLabel || null,
         matchedCategoryConfidence: garment.matchedCategoryConfidence ?? null,

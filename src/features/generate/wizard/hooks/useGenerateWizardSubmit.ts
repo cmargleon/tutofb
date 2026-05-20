@@ -192,7 +192,17 @@ export const useGenerateWizardSubmit = ({
         return;
       }
 
-      const uploadedGarments = getUploadedGarmentsForBatch(nextGarments, activeDraftBatchId);
+      const draftCategoryTextsByGarmentId = new Map(
+        state.productDrafts.map((draft): [string, Array<string | null | undefined>] => [
+          draft.garmentId,
+          [draft.categoryName],
+        ]),
+      );
+      const uploadedGarments = getUploadedGarmentsForBatch(
+        nextGarments,
+        activeDraftBatchId,
+        draftCategoryTextsByGarmentId,
+      );
       if (uploadedGarments.length === 0) {
         setFlowError('No hay prendas listas para crear el lote.');
         return;

@@ -116,13 +116,33 @@ export const BatchStep: React.FC<Props> = ({
                 </p>
               )}
               {sourceSpreadsheetSummary ? (
-                <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 md:grid-cols-3">
-                  <div>Total filas útiles: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.totalRows}</span></div>
-                  <div>Filas matcheadas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.matchedRows}</span></div>
-                  <div>Prendas sin match: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.unmatchedGarments}</span></div>
-                  <div>Filas ignoradas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.ignoredRows}</span></div>
-                  <div>Filas que heredaron foto por SPU: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.reusedSpuPhotoRows}</span></div>
-                  <div>Filas con foto: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.rowsWithPhotos}</span></div>
+                <div className="mt-3 space-y-3">
+                  <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 md:grid-cols-3">
+                    <div>Total filas útiles: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.totalRows}</span></div>
+                    <div>Filas matcheadas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.matchedRows}</span></div>
+                    <div>Prendas sin match: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.unmatchedGarments}</span></div>
+                    <div>Filas ignoradas: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.ignoredRows}</span></div>
+                    <div>Filas con foto: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.rowsWithPhotos}</span></div>
+                    <div>Filas solo texto: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.textOnlyRows ?? 0}</span></div>
+                    <div>Match por imagen/mixto: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.matchedByImage ?? 0}</span></div>
+                    <div>Match por datos: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.matchedByText ?? 0}</span></div>
+                    <div>Confianza media: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.needsReviewMatches ?? 0}</span></div>
+                    <div>Filas que heredaron foto por código: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.reusedSpuPhotoRows}</span></div>
+                    <div>Hoja: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.sheetName || 'Detectada'}</span></div>
+                    <div>Header fila: <span className="font-semibold text-slate-900">{sourceSpreadsheetSummary.headerRowNumber || '-'}</span></div>
+                  </div>
+                  {sourceSpreadsheetSummary.detectedColumns?.length ? (
+                    <p className="text-xs text-slate-500">
+                      Columnas detectadas: {sourceSpreadsheetSummary.detectedColumns.join(', ')}.
+                    </p>
+                  ) : null}
+                  {sourceSpreadsheetSummary.warnings?.length ? (
+                    <div className="space-y-1 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      {sourceSpreadsheetSummary.warnings.map((warning) => (
+                        <p key={warning}>{warning}</p>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

@@ -10,7 +10,15 @@ import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRege
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useToast } from '../../features/feedback/FeedbackProvider';
-import { getCatalogJobErrorMessage } from '../../features/catalog/errorMessage';
+import {
+  getCatalogJobErrorMessage,
+  getCatalogJobFailureFacts,
+  getCatalogJobFailureTechnicalMessage,
+  getCatalogJobFailureTitle,
+  getJobFailureInfo,
+  getOutputFailureInfo,
+  isFailureCancellation,
+} from '../../features/catalog/errorMessage';
 import { db } from '../../firebase';
 import { AttemptThumbnail } from '../evaluation/AttemptThumbnail';
 import { HoverZoomImage } from '../evaluation/HoverZoomImage';
@@ -141,7 +149,29 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const displayedImageValue = displayedImageUrl || displayedOutput?.resultImagePath || null;
   const isGeneratingJob = isRemoteGenerating;
   const showSpreadsheetPanel = batch?.outputMode !== 'photos_only';
-  const failedJobMessage = getCatalogJobErrorMessage(job);
+  const displayedOutputFailure = useMemo(() => getOutputFailureInfo(displayedOutput), [displayedOutput]);
+  const displayedFailureInfo = useMemo(() => {
+    if (displayedOutputFailure) {
+      return displayedOutputFailure;
+    }
+
+    if (!displayedOutput || displayedOutput.id === job.currentOutput?.id) {
+      return getJobFailureInfo(job, displayedOutput || null);
+    }
+
+    return null;
+  }, [displayedOutput, displayedOutputFailure, job]);
+  const failedJobMessage = displayedFailureInfo
+    ? getCatalogJobErrorMessage(job, displayedOutput || null)
+    : getCatalogJobErrorMessage(job);
+  const failedJobTitle = displayedFailureInfo
+    ? getCatalogJobFailureTitle(job, displayedOutput || null)
+    : getCatalogJobFailureTitle(job);
+  const failedJobTechnicalMessage = displayedFailureInfo
+    ? getCatalogJobFailureTechnicalMessage(job, displayedOutput || null)
+    : getCatalogJobFailureTechnicalMessage(job);
+  const failedJobFacts = getCatalogJobFailureFacts(displayedFailureInfo);
+  const failedJobIsCancellation = isFailureCancellation(displayedFailureInfo);
 
   useEffect(() => {
     if (pendingSelectedOutputId === undefined) {
@@ -370,13 +400,52 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
 
             <div className="flex h-full min-h-0 w-full min-w-0 items-center justify-center" onClick={(e) => e.stopPropagation()}>
               {displayedImageUrl ? (
-                <HoverZoomImage
-                  src={displayedImageUrl}
-                  alt={job.garmentName}
-                  containerClassName="h-full max-h-full w-auto max-w-full"
-                  imageClassName="h-full w-full object-contain"
-                  preserveNaturalAspectRatio
-                />
+                <div className="relative flex h-full w-full items-center justify-center">
+                  <HoverZoomImage
+                    src={displayedImageUrl}
+                    alt={job.garmentName}
+                    containerClassName="flex h-full w-full items-center justify-center"
+                    imageClassName="max-h-full max-w-full object-contain"
+                    preserveNaturalAspectRatio
+                  />
+                  {displayedFailureInfo ? (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/85 via-black/55 to-transparent px-4 pb-4 pt-20">
+                      <div
+                        className={`pointer-events-auto w-full max-w-3xl rounded-2xl border px-4 py-3 text-left shadow-2xl backdrop-blur ${
+                          failedJobIsCancellation
+                            ? 'border-amber-400/30 bg-amber-500/10 text-amber-50'
+                            : 'border-rose-400/30 bg-rose-500/10 text-rose-50'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold">
+                            {failedJobTitle || (failedJobIsCancellation ? 'Generacion cancelada' : 'La generacion fallo')}
+                          </p>
+                          {failedJobFacts.map((fact) => (
+                            <span
+                              key={`${fact.label}-${fact.value}`}
+                              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                failedJobIsCancellation
+                                  ? 'border-amber-200/35 bg-amber-400/10 text-amber-50'
+                                  : 'border-rose-200/35 bg-rose-400/10 text-rose-50'
+                              }`}
+                            >
+                              {fact.label}: {fact.value}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-sm leading-6">
+                          {failedJobMessage || 'No encontramos detalle adicional del error para esta imagen.'}
+                        </p>
+                        {failedJobTechnicalMessage ? (
+                          <p className={`mt-2 text-xs leading-5 ${failedJobIsCancellation ? 'text-amber-100/90' : 'text-rose-100/90'}`}>
+                            {failedJobTechnicalMessage}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <div className="flex h-full min-h-[22rem] w-full items-center justify-center border border-dashed border-white/15 text-slate-300">
                   {displayedImageLoading || isGeneratingJob ? (
@@ -384,16 +453,23 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                       <Loader2 className="h-4 w-4 animate-spin" />
                       {isGeneratingJob ? 'La imagen todavía se está generando.' : 'Cargando imagen...'}
                     </div>
-                  ) : job.status === 'failed' ? (
+                  ) : (displayedFailureInfo || job.status === 'failed') ? (
                     <div className="flex w-full max-w-full items-center justify-center overflow-hidden px-6">
                       <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-3 text-center">
                         <AlertCircle className="h-8 w-8 text-rose-300" />
                         <div className="w-full space-y-2">
-                          <p className="text-base font-semibold text-rose-100">La generación falló</p>
+                          <p className="text-base font-semibold text-rose-100">
+                            {failedJobTitle || (failedJobIsCancellation ? 'Generacion cancelada' : 'La generacion fallo')}
+                          </p>
                           <div className="max-h-56 w-full overflow-y-auto rounded-2xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-left text-sm leading-6 text-rose-200">
                             <p className="whitespace-pre-wrap break-all">
                               {failedJobMessage || 'No encontramos detalle adicional del error para este job.'}
                             </p>
+                            {failedJobTechnicalMessage ? (
+                              <p className="mt-2 whitespace-pre-wrap break-all text-xs text-rose-100/90">
+                                {failedJobTechnicalMessage}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -459,6 +535,45 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
               </div>
 
               <div className="space-y-4 px-4 py-4 sm:px-5">
+                {displayedFailureInfo ? (
+                  <div
+                    className={`rounded-2xl border px-4 py-3 ${
+                      failedJobIsCancellation
+                        ? 'border-amber-400/30 bg-amber-500/10 text-amber-50'
+                        : 'border-rose-400/30 bg-rose-500/10 text-rose-50'
+                    }`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p className="text-sm font-semibold">
+                      {failedJobTitle || (failedJobIsCancellation ? 'Generacion cancelada' : 'La generacion fallo')}
+                    </p>
+                    <p className="mt-2 text-sm leading-6">
+                      {failedJobMessage || 'No encontramos detalle adicional del error para esta imagen.'}
+                    </p>
+                    {failedJobTechnicalMessage ? (
+                      <p className={`mt-2 text-xs leading-5 ${failedJobIsCancellation ? 'text-amber-100/90' : 'text-rose-100/90'}`}>
+                        {failedJobTechnicalMessage}
+                      </p>
+                    ) : null}
+                    {failedJobFacts.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {failedJobFacts.map((fact) => (
+                          <span
+                            key={`sidebar-${fact.label}-${fact.value}`}
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                              failedJobIsCancellation
+                                ? 'border-amber-200/35 bg-amber-400/10 text-amber-50'
+                                : 'border-rose-200/35 bg-rose-400/10 text-rose-50'
+                            }`}
+                          >
+                            {fact.label}: {fact.value}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
                   <label className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">URL</label>
                   <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950 px-3 py-2.5 shadow-inner shadow-black/20">

@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GarmentView, PoseAiClassification, PoseBodyFocus } from '../shared/src/types';
+import {
+  AccessoryDisplaySlot,
+  GarmentView,
+  PoseAiClassification,
+  PoseBodyFocus,
+  PoseOrientationGroup,
+} from '../shared/src/types';
 import * as garmentViewMatchingNamespace from '../shared/src/utils/garmentViewMatching';
 
 const garmentViewMatchingModule =
@@ -19,14 +25,17 @@ const buildAiClassification = (
   usableForGarmentViews: GarmentView[],
   bodyFocus: PoseBodyFocus = 'full_body',
   faceVisible = true,
+  orientationGroup: PoseOrientationGroup = 'front',
+  accessoryDisplaySlots?: AccessoryDisplaySlot[],
 ): PoseAiClassification => ({
-  orientationGroup: 'front',
-  orientationDetail: 'front',
+  orientationGroup,
+  orientationDetail: orientationGroup === 'back' ? 'back' : orientationGroup === 'side' ? 'left_profile' : 'front',
   framing: 'full_body',
   bodyFocus,
   faceVisible,
-  autoCategory: 'frente_cuerpo_completo',
+  autoCategory: `${orientationGroup}_cuerpo_completo`,
   usableForGarmentViews,
+  accessoryDisplaySlots,
   confidence: 0.9,
   taggedBy: 'gemini',
   taggedAt: new Date(),
@@ -165,6 +174,51 @@ test('getSuggestedPoseIdsForGarments restringe accesorios de cabeza a poses con 
     countCompatibleGarmentsForPose(
       buildAiClassification(['front'], 'full_body', true),
       [{ availableViews: ['front'], garmentBodyArea: 'head_accessory' as const }],
+    ),
+    0,
+  );
+});
+
+test('getSuggestedPoseIdsForGarments restringe mochilas a poses con espalda visible', () => {
+  const suggested = getSuggestedPoseIdsForGarments(
+    [
+      {
+        id: 'pose-back-upper',
+        aiClassification: buildAiClassification(['back'], 'upper_body', false, 'back', ['back', 'shoulder']),
+      },
+      {
+        id: 'pose-back-three-quarter',
+        aiClassification: buildAiClassification(['back', 'side'], 'full_body', false, 'back', ['back', 'shoulder']),
+      },
+      {
+        id: 'pose-front-portrait',
+        aiClassification: buildAiClassification(['front'], 'upper_body', true, 'front', ['shoulder', 'front_torso']),
+      },
+      {
+        id: 'pose-footwear',
+        aiClassification: buildAiClassification(['front'], 'feet', false, 'front', []),
+      },
+    ],
+    [
+      {
+        availableViews: ['front'],
+        garmentBodyArea: 'carry_accessory' as const,
+        garmentAccessoryType: 'backpack' as const,
+      },
+    ],
+  );
+
+  assert.deepEqual(suggested, ['pose-back-upper', 'pose-back-three-quarter']);
+  assert.equal(
+    countCompatibleGarmentsForPose(
+      buildAiClassification(['front'], 'upper_body', true, 'front', ['shoulder', 'front_torso']),
+      [
+        {
+          availableViews: ['front'],
+          garmentBodyArea: 'carry_accessory' as const,
+          garmentAccessoryType: 'backpack' as const,
+        },
+      ],
     ),
     0,
   );

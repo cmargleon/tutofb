@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, Clock, ExternalLink, RefreshCw } from 'lucide-react';
-import { Job, JobLog } from '../../../shared/src/types';
+import { Job, JobFailureInfo, JobLog } from '../../../shared/src/types';
 import { useBatchErrorLogs } from '../../features/evaluation/useBatchErrorLogs';
-import { traceabilityErrorMessage, traceabilityPayload } from '../../features/evaluation/useJobTraceability';
+import { traceabilityErrorMessage, traceabilityFailureInfo } from '../../features/evaluation/useJobTraceability';
+import { getCatalogJobErrorMessage, getJobFailureInfo } from '../../features/catalog/errorMessage';
 import { LoadingBlock, StatusBadge } from '../ui';
 
 const VISIBLE_ITEMS = 6;
@@ -29,68 +30,46 @@ const logLabel = (log: JobLog): string => {
   return 'Error';
 };
 
-const collectErrorText = (job: Job, logs: JobLog[]): string => {
-  const logMessages = logs.flatMap((log) => {
-    const payload = traceabilityPayload(log.payload);
-    const payloadError = payload && typeof payload.error === 'object' && payload.error !== null
-      ? payload.error as Record<string, unknown>
-      : null;
+const classifyError = (failureInfo: JobFailureInfo | null) => {
+  if (!failureInfo) {
+    return {
+      label: 'Error operativo',
+      chipClassName: 'border-slate-200 bg-slate-100 text-slate-700',
+    };
+  }
 
-    return [
-      log.message,
-      traceabilityErrorMessage(log),
-      payloadError && typeof payloadError.name === 'string' ? payloadError.name : null,
-    ].filter((entry): entry is string => Boolean(entry));
-  });
+  if (failureInfo.reasonCode === 'manual_cancellation') {
+    return {
+      label: 'Cancelado',
+      chipClassName: 'border-amber-200 bg-amber-50 text-amber-700',
+    };
+  }
 
-  return [
-    job.lastError,
-    job.traceability?.lastProviderErrorMessage,
-    ...logMessages,
-  ]
-    .filter((entry): entry is string => Boolean(entry))
-    .join(' ')
-    .toLowerCase();
-};
-
-const classifyError = (job: Job, logs: JobLog[]) => {
-  const text = collectErrorText(job, logs);
-
-  if (
-    text.includes('aborterror')
-    || text.includes('timeout')
-    || text.includes('timed out')
-    || text.includes('excedió el tiempo')
-    || text.includes('tiempo máximo')
-    || text.includes('atascado')
-  ) {
+  if (failureInfo.reasonCode === 'job_timeout' || failureInfo.reasonCode === 'provider_timeout' || failureInfo.reasonCode === 'gemini_timeout') {
     return {
       label: 'Timeout',
       chipClassName: 'border-amber-200 bg-amber-50 text-amber-700',
     };
   }
 
-  if (
-    text.includes('fal.ai')
-    || text.includes('openai')
-    || text.includes('proveedor')
-    || text.includes('request_id')
-    || text.includes('no devolvió')
-  ) {
+  if (failureInfo.stage === 'validation' || failureInfo.source === 'gemini') {
     return {
-      label: 'Error de provider',
-      chipClassName: 'border-rose-200 bg-rose-50 text-rose-700',
+      label: 'Revision Gemini',
+      chipClassName: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
     };
   }
 
-  if (
-    text.includes('descargar la imagen')
-    || text.includes('storage')
-    || text.includes('signed url')
-  ) {
+  if (failureInfo.stage === 'delivery') {
     return {
       label: 'Entrega de archivo',
       chipClassName: 'border-sky-200 bg-sky-50 text-sky-700',
+    };
+  }
+
+  if (failureInfo.source === 'provider' || failureInfo.stage === 'generation') {
+    return {
+      label: 'Error de provider',
+      chipClassName: 'border-rose-200 bg-rose-50 text-rose-700',
     };
   }
 
@@ -103,8 +82,11 @@ const classifyError = (job: Job, logs: JobLog[]) => {
 const latestErrorAt = (job: Job, logs: JobLog[]): unknown =>
   job.traceability?.lastProviderErrorAt || logs[0]?.createdAt || job.updatedAt;
 
+const latestFailureInfo = (job: Job, logs: JobLog[]): JobFailureInfo | null =>
+  job.failureInfo || traceabilityFailureInfo(logs[0]) || getJobFailureInfo(job, job.currentOutput);
+
 const latestErrorMessage = (job: Job, logs: JobLog[]): string | null =>
-  job.traceability?.lastProviderErrorMessage || traceabilityErrorMessage(logs[0]) || job.lastError;
+  getCatalogJobErrorMessage(job, job.currentOutput) || job.traceability?.lastProviderErrorMessage || traceabilityErrorMessage(logs[0]) || job.lastError;
 
 interface Props {
   jobs: Job[];
@@ -132,7 +114,7 @@ export const BatchErrorLogPanel: React.FC<Props> = ({ jobs, focusedJobId = null,
   const summary = useMemo(() => {
     return sortedEntries.reduce(
       (acc, entry) => {
-        const kind = classifyError(entry.job, entry.recentLogs).label;
+        const kind = classifyError(latestFailureInfo(entry.job, entry.recentLogs)).label;
 
         if (entry.job.status === 'failed') {
           acc.failed += 1;
@@ -141,6 +123,8 @@ export const BatchErrorLogPanel: React.FC<Props> = ({ jobs, focusedJobId = null,
         if (kind === 'Timeout') {
           acc.timeout += 1;
         } else if (kind === 'Error de provider') {
+          acc.provider += 1;
+        } else if (kind === 'Revision Gemini') {
           acc.provider += 1;
         } else {
           acc.other += 1;
@@ -203,7 +187,8 @@ export const BatchErrorLogPanel: React.FC<Props> = ({ jobs, focusedJobId = null,
           ) : (
             <div className="mt-5 space-y-3">
               {visibleEntries.map(({ job, recentLogs }) => {
-                const kind = classifyError(job, recentLogs);
+                const failureInfo = latestFailureInfo(job, recentLogs);
+                const kind = classifyError(failureInfo);
                 const message = latestErrorMessage(job, recentLogs);
                 const active = focusedJobId === job.id;
 

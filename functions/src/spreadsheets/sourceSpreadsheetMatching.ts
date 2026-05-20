@@ -11,9 +11,29 @@ import { getProductDraftSpecificationAttributeName } from '../../../shared/src/u
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 import { GEMINI_API_KEY, getGeminiImageReviewModel } from '../config/runtime';
 
-const bucket = admin.storage().bucket();
+const getBucket = () => admin.storage().bucket();
 const MATCH_FINGERPRINT_CONCURRENCY = 2;
 const MIN_AUTO_MATCH_SCORE = 34;
+const HIGH_CONFIDENCE_MATCH_SCORE = 56;
+
+type SourceColumnRole =
+  | 'photo'
+  | 'code'
+  | 'productName'
+  | 'description'
+  | 'color'
+  | 'size'
+  | 'stock'
+  | 'price'
+  | 'weight'
+  | 'length'
+  | 'width'
+  | 'height'
+  | 'brand'
+  | 'origin'
+  | 'ipCharacter';
+
+type SourceMatchStrategy = 'image' | 'text' | 'mixed';
 
 interface WorkbookFileEntry {
   content?: unknown;
@@ -35,6 +55,7 @@ interface ParsedSourceSpreadsheetCell {
   normalizedHeader: string;
   value: string;
   columnIndex: number;
+  role: SourceColumnRole | null;
 }
 
 interface ParsedSourceSpreadsheetImage {
@@ -48,13 +69,25 @@ interface ParsedSourceSpreadsheetRow {
   rowId: string;
   rowNumber: number;
   spu: string | null;
+  codeValues: string[];
+  productName: string | null;
+  description: string | null;
+  color: string | null;
+  searchableText: string;
   cells: ParsedSourceSpreadsheetCell[];
   image: ParsedSourceSpreadsheetImage | null;
   fingerprint: ImageMatchFingerprint | null;
 }
 
+interface MatchedSourceSpreadsheetRow {
+  row: ParsedSourceSpreadsheetRow;
+  score: number;
+  strategy: SourceMatchStrategy;
+  evidence: string[];
+}
+
 interface MatchedSourceSpreadsheetRowsResult {
-  matchedRowByGarmentId: Map<string, ParsedSourceSpreadsheetRow>;
+  matchedRowByGarmentId: Map<string, MatchedSourceSpreadsheetRow>;
   summary: SourceSpreadsheetMatchSummary;
 }
 
@@ -122,6 +155,115 @@ const normalizeText = (value: unknown): string | null =>
 
 const normalizeBoolean = (value: unknown): boolean | null =>
   typeof value === 'boolean' ? value : null;
+
+const SOURCE_HEADER_ALIASES: Record<SourceColumnRole, RegExp[]> = {
+  photo: [/^foto$/, /\bfoto\b/, /^image$/, /\bimage\b/, /imagen/, /picture/, /photo/],
+  code: [
+    /^spu$/,
+    /\bspu\b/,
+    /^sku$/,
+    /\bsku\b/,
+    /seller sku/,
+    /supplier sku/,
+    /^modelo$/,
+    /\bmodelo\b/,
+    /^model$/,
+    /\bmodel\b/,
+    /codigo/,
+    /c[oó]digo/,
+    /\bcode\b/,
+    /referencia/,
+    /^ref$/,
+    /\bitem\b/,
+  ],
+  productName: [/nombre del producto/, /^nombre$/, /product name/, /titulo/, /title/, /^producto$/, /\bproducto\b/],
+  description: [/descripcion/, /descripci[oó]n/, /detalle/, /details?/, /concepto/],
+  color: [/^color$/, /\bcolor\b/, /colour/],
+  size: [/^talla$/, /\bsize\b/, /medida/, /tamano/, /tamaño/],
+  stock: [/^stock$/, /inventario/, /existencia/, /quantity/, /\bqty\b/, /cantidad/],
+  price: [
+    /precio minimo/,
+    /precio mínimo/,
+    /min price/,
+    /^precio$/,
+    /\bprecio\b/,
+    /\bprice\b/,
+    /costo/,
+    /\bcost\b/,
+    /iva incluido/,
+    /importe/,
+    /monto/,
+  ],
+  weight: [/peso/, /weight/, /peso gr/],
+  length: [/largo/, /longitud/, /length/],
+  width: [/ancho/, /width/],
+  height: [/alto/, /height/],
+  brand: [/^marca$/, /\bbrand\b/],
+  origin: [/^origen$/, /\borigin\b/, /pais de origen/, /pa[ií]s de origen/, /country of origin/],
+  ipCharacter: [/propiedad intelectual/, /\bip\b/, /character/, /personaje/, /licencia/],
+};
+
+const SOURCE_ROLE_LABELS: Record<SourceColumnRole, string> = {
+  photo: 'foto',
+  code: 'codigo/modelo',
+  productName: 'nombre',
+  description: 'descripcion',
+  color: 'color',
+  size: 'talla',
+  stock: 'stock',
+  price: 'precio/costo',
+  weight: 'peso',
+  length: 'largo',
+  width: 'ancho',
+  height: 'alto',
+  brand: 'marca',
+  origin: 'origen',
+  ipCharacter: 'propiedad intelectual',
+};
+
+const SOURCE_ROLE_WEIGHTS: Record<SourceColumnRole, number> = {
+  photo: 4,
+  code: 4,
+  productName: 3,
+  description: 3,
+  color: 2,
+  size: 2,
+  stock: 2,
+  price: 2,
+  weight: 1,
+  length: 1,
+  width: 1,
+  height: 1,
+  brand: 2,
+  origin: 1,
+  ipCharacter: 1,
+};
+
+const detectSourceColumnRole = (header: string): SourceColumnRole | null => {
+  const normalized = normalizeComparable(header);
+  if (!normalized) {
+    return null;
+  }
+
+  const orderedRoles: SourceColumnRole[] = [
+    'photo',
+    'code',
+    'productName',
+    'description',
+    'color',
+    'size',
+    'stock',
+    'price',
+    'weight',
+    'length',
+    'width',
+    'height',
+    'brand',
+    'origin',
+    'ipCharacter',
+  ];
+  return orderedRoles.find((role) => SOURCE_HEADER_ALIASES[role].some((matcher) => matcher.test(normalized))) || null;
+};
 
 const normalizeFingerprint = (payload: GeminiMatchFingerprintPayload): ImageMatchFingerprint => ({
   garmentType: normalizeText(payload.garmentType),
@@ -237,20 +379,8 @@ const pickHeaderRowIndex = (rows: string[][]): number => {
 
   rows.slice(0, 8).forEach((row, index) => {
     const score = row.reduce((total, cell) => {
-      const normalized = normalizeComparable(cell);
-      if (!normalized) {
-        return total;
-      }
-      if (normalized.includes('foto') || normalized.includes('image')) {
-        return total + 3;
-      }
-      if (normalized.includes('spu') || normalized.includes('sku')) {
-        return total + 3;
-      }
-      if (normalized.includes('color') || normalized.includes('talla') || normalized.includes('nombre')) {
-        return total + 1;
-      }
-      return total;
+      const role = detectSourceColumnRole(cell);
+      return role ? total + SOURCE_ROLE_WEIGHTS[role] : total;
     }, 0);
 
     if (score > bestScore) {
@@ -270,14 +400,8 @@ const pickSourceSheetName = (workbook: XLSX.WorkBook): string => {
   const scoredSheets = rowsBySheet.map(({ sheetName, rows }) => {
     const headerRow = rows[pickHeaderRowIndex(rows)] || [];
     const headerScore = headerRow.reduce((score, cell) => {
-      const normalized = normalizeComparable(cell);
-      if (normalized.includes('foto') || normalized.includes('image')) {
-        return score + 3;
-      }
-      if (normalized.includes('spu') || normalized.includes('sku')) {
-        return score + 2;
-      }
-      return score;
+      const role = detectSourceColumnRole(cell);
+      return role ? score + SOURCE_ROLE_WEIGHTS[role] : score;
     }, 0);
     return { sheetName, score: headerScore };
   });
@@ -374,7 +498,40 @@ const findMatchingCellValues = (cells: ParsedSourceSpreadsheetCell[], matchers: 
   return results;
 };
 
-const buildSourceSpreadsheetRows = (
+const findBestRoleValue = (cells: ParsedSourceSpreadsheetCell[], roles: SourceColumnRole[]): string | null => {
+  const roleMatch = cells.find((cell) => cell.role && roles.includes(cell.role) && cell.value.trim());
+  if (roleMatch) {
+    return roleMatch.value.trim();
+  }
+
+  return findBestCellValue(cells, roles.flatMap((role) => SOURCE_HEADER_ALIASES[role]));
+};
+
+const findRoleValues = (cells: ParsedSourceSpreadsheetCell[], roles: SourceColumnRole[]): string[] => {
+  const results = new Set<string>();
+  cells.forEach((cell) => {
+    if (cell.role && roles.includes(cell.role) && cell.value.trim()) {
+      results.add(cell.value.trim());
+    }
+  });
+  findMatchingCellValues(cells, roles.flatMap((role) => SOURCE_HEADER_ALIASES[role])).forEach((value) => results.add(value));
+  return [...results];
+};
+
+const buildRowSearchableText = (cells: ParsedSourceSpreadsheetCell[]): string =>
+  cells
+    .filter((cell) => cell.role !== 'photo')
+    .map((cell) => cell.value)
+    .join(' ');
+
+const hasUsefulSourceText = (row: Pick<ParsedSourceSpreadsheetRow, 'codeValues' | 'productName' | 'description' | 'color' | 'searchableText'>): boolean =>
+  row.codeValues.length > 0
+  || Boolean(row.productName)
+  || Boolean(row.description)
+  || Boolean(row.color)
+  || normalizeComparable(row.searchableText).length >= 3;
+
+export const buildSourceSpreadsheetRows = (
   workbook: XLSX.WorkBook,
 ): {
   rows: ParsedSourceSpreadsheetRow[];
@@ -382,12 +539,17 @@ const buildSourceSpreadsheetRows = (
   directRowsWithPhotos: number;
   ignoredRows: number;
   reusedSpuPhotoRows: number;
+  sheetName: string;
+  headerRowNumber: number;
+  textOnlyRows: number;
+  detectedColumns: string[];
 } => {
   const sheetName = pickSourceSheetName(workbook);
   const sheetRows = toSheetRows(workbook.Sheets[sheetName]!);
   const headerRowIndex = pickHeaderRowIndex(sheetRows);
   const headers = (sheetRows[headerRowIndex] || []).map((header, index) => header || `columna_${index + 1}`);
-  const photoColumnIndex = headers.findIndex((header) => /foto|image|imagen/.test(normalizeComparable(header)));
+  const detectedColumns = [...new Set(headers.map(detectSourceColumnRole).filter((role): role is SourceColumnRole => Boolean(role)).map((role) => SOURCE_ROLE_LABELS[role]))];
+  const photoColumnIndex = headers.findIndex((header) => detectSourceColumnRole(header) === 'photo');
   const images = extractSheetImages(workbook, sheetName);
   const directImagesByRow = images.reduce<Map<number, ParsedSourceSpreadsheetImage[]>>((result, image) => {
     const bucketForRow = result.get(image.rowNumber) || [];
@@ -404,11 +566,13 @@ const buildSourceSpreadsheetRows = (
         return result;
       }
 
+      const role = detectSourceColumnRole(header);
       result.push({
         header,
         normalizedHeader: normalizeComparable(header),
         value,
         columnIndex,
+        role,
       });
       return result;
     }, []);
@@ -423,11 +587,21 @@ const buildSourceSpreadsheetRows = (
           return Math.abs(left.columnIndex - photoColumnIndex) - Math.abs(right.columnIndex - photoColumnIndex);
         })[0] || null;
 
-    const spu = findBestCellValue(cells, [/^spu$/, /\bspu\b/, /^sku$/, /\bsku\b/]);
+    const codeValues = findRoleValues(cells, ['code']);
+    const productName = findBestRoleValue(cells, ['productName']);
+    const description = findBestRoleValue(cells, ['description']);
+    const color = findBestRoleValue(cells, ['color']);
+    const searchableText = buildRowSearchableText(cells);
+    const spu = codeValues[0] || null;
     return {
       rowId: `row-${rowNumber}`,
       rowNumber,
       spu,
+      codeValues,
+      productName,
+      description,
+      color,
+      searchableText,
       cells,
       image: directImage,
     };
@@ -454,19 +628,31 @@ const buildSourceSpreadsheetRows = (
 
     const normalizedSpu = row.spu ? normalizeComparable(row.spu) : '';
     if (!normalizedSpu) {
-      ignoredRows += 1;
+      if (hasUsefulSourceText(row)) {
+        result.push({ ...row, fingerprint: null });
+      } else {
+        ignoredRows += 1;
+      }
       return result;
     }
 
     const rowsForSpu = rowsByNormalizedSpu.get(normalizedSpu) || [];
     if (rowsForSpu.length <= 1) {
-      ignoredRows += 1;
+      if (hasUsefulSourceText(row)) {
+        result.push({ ...row, fingerprint: null });
+      } else {
+        ignoredRows += 1;
+      }
       return result;
     }
 
     const representative = rowsForSpu.find((candidate) => candidate.image);
     if (!representative?.image) {
-      ignoredRows += 1;
+      if (hasUsefulSourceText(row)) {
+        result.push({ ...row, fingerprint: null });
+      } else {
+        ignoredRows += 1;
+      }
       return result;
     }
 
@@ -485,6 +671,10 @@ const buildSourceSpreadsheetRows = (
     directRowsWithPhotos: rawRows.filter((row) => Boolean(row.image)).length,
     ignoredRows,
     reusedSpuPhotoRows,
+    sheetName,
+    headerRowNumber: headerRowIndex + 1,
+    textOnlyRows: preparedRows.filter((row) => !row.image).length,
+    detectedColumns,
   };
 };
 
@@ -596,7 +786,7 @@ const pickGarmentPhotosForFingerprint = (garment: UploadedGarmentInput) => {
 };
 
 const downloadStorageAsset = async (storagePath: string): Promise<{ mimeType: string; base64: string }> => {
-  const [bytes] = await bucket.file(storagePath).download();
+  const [bytes] = await getBucket().file(storagePath).download();
   return {
     mimeType: mimeTypeFromPath(storagePath),
     base64: bytes.toString('base64'),
@@ -729,67 +919,151 @@ const textSimilarityScore = (left: string | null, right: string | null, exactSco
   return 0;
 };
 
+const comparableTokens = (value: string | null | undefined): Set<string> =>
+  new Set(
+    normalizeComparable(value || '')
+      .split(/\s+/)
+      .filter((token) => token.length >= 3),
+  );
+
+const tokenOverlapScore = (left: string | null | undefined, right: string | null | undefined, maxScore: number): number => {
+  const leftTokens = comparableTokens(left);
+  const rightTokens = comparableTokens(right);
+  if (leftTokens.size === 0 || rightTokens.size === 0) {
+    return 0;
+  }
+
+  const overlap = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  const denominator = Math.max(1, Math.min(leftTokens.size, rightTokens.size));
+  return Math.round(maxScore * Math.min(1, overlap / denominator));
+};
+
+const buildGarmentSearchText = (
+  garment: UploadedGarmentInput,
+  garmentFingerprint: ImageMatchFingerprint | null,
+): string => [
+  garment.name,
+  ...(garment.originalFileNames || []),
+  garment.matchedCategoryLabel || '',
+  garment.matchedColor || '',
+  garmentFingerprint?.garmentType || '',
+  garmentFingerprint?.primaryColor || '',
+  garmentFingerprint?.visibleBrand || '',
+  garmentFingerprint?.visibleText || '',
+  garmentFingerprint?.pattern || '',
+].join(' ');
+
+interface MatchScoreResult {
+  score: number;
+  strategy: SourceMatchStrategy;
+  evidence: string[];
+}
+
 const computeMatchScore = (
   row: ParsedSourceSpreadsheetRow,
   garment: UploadedGarmentInput,
   garmentFingerprint: ImageMatchFingerprint | null,
-): number => {
+): MatchScoreResult => {
   const rowFingerprint = row.fingerprint;
-  if (!rowFingerprint || !garmentFingerprint) {
-    return 0;
-  }
-
+  const evidence: string[] = [];
+  const garmentText = buildGarmentSearchText(garment, garmentFingerprint);
   let score = 0;
 
-  score += textSimilarityScore(rowFingerprint.garmentType, garmentFingerprint.garmentType, 30, 18);
-  score += textSimilarityScore(rowFingerprint.primaryColor, garmentFingerprint.primaryColor, 24, 12);
-  score += textSimilarityScore(
-    findBestCellValue(row.cells, [/^color$/, /\bcolor\b/]),
-    garment.matchedColor || garmentFingerprint.primaryColor,
-    18,
-    9,
+  row.codeValues.forEach((codeValue) => {
+    const codeScore = Math.max(
+      textSimilarityScore(codeValue, garment.name, 72, 42),
+      ...(garment.originalFileNames || []).map((fileName) => textSimilarityScore(codeValue, fileName, 72, 42)),
+    );
+    if (codeScore > 0) {
+      score += codeScore;
+      evidence.push(`codigo/modelo coincide: ${codeValue}`);
+    }
+  });
+
+  const descriptionScore = Math.max(
+    tokenOverlapScore(row.productName, garmentText, 26),
+    tokenOverlapScore(row.description, garmentText, 24),
+    tokenOverlapScore(row.searchableText, garmentText, 18),
   );
-  score += textSimilarityScore(rowFingerprint.secondaryColor, garmentFingerprint.secondaryColor, 8, 4);
-  score += textSimilarityScore(rowFingerprint.visibleBrand, garmentFingerprint.visibleBrand, 20, 10);
-  score += textSimilarityScore(rowFingerprint.visibleText, garmentFingerprint.visibleText, 26, 14);
-  score += textSimilarityScore(rowFingerprint.pattern, garmentFingerprint.pattern, 10, 5);
-  score += textSimilarityScore(rowFingerprint.garmentType, garment.matchedCategoryLabel || null, 16, 8);
-
-  if (rowFingerprint.hasHood !== null && garmentFingerprint.hasHood !== null) {
-    score += rowFingerprint.hasHood === garmentFingerprint.hasHood ? 10 : -12;
+  if (descriptionScore > 0) {
+    score += descriptionScore;
+    evidence.push('texto descriptivo compatible');
   }
 
-  if (rowFingerprint.sleeveLength && garmentFingerprint.sleeveLength) {
-    score += textSimilarityScore(rowFingerprint.sleeveLength, garmentFingerprint.sleeveLength, 8, 4);
+  const rowColor = row.color || findBestCellValue(row.cells, SOURCE_HEADER_ALIASES.color);
+  const colorScore = textSimilarityScore(rowColor, garment.matchedColor || garmentFingerprint?.primaryColor || null, 18, 9);
+  if (colorScore > 0) {
+    score += colorScore;
+    evidence.push(`color compatible: ${rowColor}`);
   }
 
-  return score;
+  if (rowFingerprint && garmentFingerprint) {
+    const imageScore =
+      textSimilarityScore(rowFingerprint.garmentType, garmentFingerprint.garmentType, 30, 18)
+      + textSimilarityScore(rowFingerprint.primaryColor, garmentFingerprint.primaryColor, 24, 12)
+      + textSimilarityScore(rowFingerprint.secondaryColor, garmentFingerprint.secondaryColor, 8, 4)
+      + textSimilarityScore(rowFingerprint.visibleBrand, garmentFingerprint.visibleBrand, 20, 10)
+      + textSimilarityScore(rowFingerprint.visibleText, garmentFingerprint.visibleText, 26, 14)
+      + textSimilarityScore(rowFingerprint.pattern, garmentFingerprint.pattern, 10, 5)
+      + textSimilarityScore(rowFingerprint.garmentType, garment.matchedCategoryLabel || null, 16, 8);
+
+    if (imageScore > 0) {
+      score += imageScore;
+      evidence.push('huella visual compatible');
+    }
+
+    if (rowFingerprint.hasHood !== null && garmentFingerprint.hasHood !== null) {
+      const hoodScore = rowFingerprint.hasHood === garmentFingerprint.hasHood ? 10 : -12;
+      score += hoodScore;
+      if (hoodScore > 0) {
+        evidence.push('capucha coincide');
+      }
+    }
+
+    if (rowFingerprint.sleeveLength && garmentFingerprint.sleeveLength) {
+      const sleeveScore = textSimilarityScore(rowFingerprint.sleeveLength, garmentFingerprint.sleeveLength, 8, 4);
+      score += sleeveScore;
+      if (sleeveScore > 0) {
+        evidence.push('largo de manga compatible');
+      }
+    }
+  }
+
+  const strategy: SourceMatchStrategy = rowFingerprint && score > descriptionScore + colorScore ? (descriptionScore > 0 ? 'mixed' : 'image') : 'text';
+  return {
+    score,
+    strategy,
+    evidence,
+  };
 };
 
 const resolveMatchedRowByGarment = (
   rows: ParsedSourceSpreadsheetRow[],
   garments: UploadedGarmentInput[],
   garmentFingerprintsById: Map<string, ImageMatchFingerprint>,
-): Map<string, ParsedSourceSpreadsheetRow> => {
+): Map<string, MatchedSourceSpreadsheetRow> => {
   const candidatePairs = rows.flatMap((row) =>
-    garments.map((garment) => ({
-      row,
-      garment,
-      score: computeMatchScore(row, garment, garmentFingerprintsById.get(garment.id) || null),
-    })),
+    garments.map((garment) => {
+      const match = computeMatchScore(row, garment, garmentFingerprintsById.get(garment.id) || null);
+      return {
+        row,
+        garment,
+        ...match,
+      };
+    }),
   );
 
   candidatePairs.sort((left, right) => right.score - left.score);
   const assignedGarments = new Set<string>();
   const assignedRows = new Set<string>();
-  const matchedByGarmentId = new Map<string, ParsedSourceSpreadsheetRow>();
+  const matchedByGarmentId = new Map<string, MatchedSourceSpreadsheetRow>();
 
-  candidatePairs.forEach(({ row, garment, score }) => {
+  candidatePairs.forEach(({ row, garment, score, strategy, evidence }) => {
     if (score < MIN_AUTO_MATCH_SCORE || assignedGarments.has(garment.id) || assignedRows.has(row.rowId)) {
       return;
     }
 
-    matchedByGarmentId.set(garment.id, row);
+    matchedByGarmentId.set(garment.id, { row, score, strategy, evidence });
     assignedGarments.add(garment.id);
     assignedRows.add(row.rowId);
   });
@@ -802,37 +1076,37 @@ const getSourceValueAliases = (column: Pick<SpreadsheetTemplateCategory, 'label'
   const normalizedKey = normalizeComparable(key);
 
   if (normalizedKey.includes('spu') || normalizedKey.includes('sku') || normalizedLabel.includes('spu') || normalizedLabel.includes('sku')) {
-    return [/^spu$/, /\bspu\b/, /^sku$/, /\bsku\b/];
+    return SOURCE_HEADER_ALIASES.code;
   }
   if (normalizedLabel.includes('nombre de producto') || normalizedKey.includes('default product name')) {
-    return [/nombre del producto/, /^nombre$/, /product name/, /titulo/];
+    return SOURCE_HEADER_ALIASES.productName;
   }
   if (normalizedLabel.includes('descripcion del producto') || normalizedKey.includes('default product desc')) {
-    return [/descripcion/, /descripci[oó]n/, /detalle/, /details?/];
+    return SOURCE_HEADER_ALIASES.description;
   }
   if (normalizedLabel.includes('color')) {
-    return [/^color$/, /\bcolor\b/];
+    return SOURCE_HEADER_ALIASES.color;
   }
   if (normalizedLabel.includes('talla') || normalizedKey.includes('size')) {
-    return [/^talla$/, /\bsize\b/, /medida/];
+    return SOURCE_HEADER_ALIASES.size;
   }
   if (normalizedLabel.includes('stock')) {
-    return [/^stock$/, /inventario/, /existencia/];
+    return SOURCE_HEADER_ALIASES.stock;
   }
-  if (normalizedLabel.includes('precio')) {
-    return [/precio/, /price/];
+  if (normalizedLabel.includes('precio') || normalizedLabel.includes('costo')) {
+    return SOURCE_HEADER_ALIASES.price;
   }
   if (normalizedLabel.includes('peso')) {
-    return [/peso/, /weight/];
+    return SOURCE_HEADER_ALIASES.weight;
   }
   if (normalizedLabel.includes('largo') || normalizedLabel.includes('longitud')) {
-    return [/largo/, /longitud/, /length/];
+    return SOURCE_HEADER_ALIASES.length;
   }
   if (normalizedLabel.includes('ancho') || normalizedKey.includes('width')) {
-    return [/ancho/, /width/];
+    return SOURCE_HEADER_ALIASES.width;
   }
   if (normalizedLabel.includes('alto') || normalizedKey.includes('height')) {
-    return [/alto/, /height/];
+    return SOURCE_HEADER_ALIASES.height;
   }
 
   return [
@@ -840,23 +1114,6 @@ const getSourceValueAliases = (column: Pick<SpreadsheetTemplateCategory, 'label'
     new RegExp(normalizedKey.replace(/\s+/g, '\\s+')),
   ];
 };
-
-const SOURCE_HEADER_ALIASES = {
-  spu: [/^spu$/, /\bspu\b/, /^sku$/, /\bsku\b/, /seller sku/, /supplier sku/],
-  productName: [/nombre del producto/, /^nombre$/, /product name/, /titulo/, /title/],
-  description: [/descripcion/, /descripci[oó]n/, /detalle/, /details?/],
-  stock: [/^stock$/, /inventario/, /existencia/, /quantity/, /qty/],
-  weight: [/peso/, /weight/, /peso gr/],
-  length: [/largo/, /longitud/, /length/],
-  width: [/ancho/, /width/],
-  height: [/alto/, /height/],
-  minPrice: [/precio minimo/, /precio mínimo/, /min price/, /^precio$/, /price/],
-  color: [/^color$/, /\bcolor\b/],
-  size: [/^talla$/, /\bsize\b/, /medida/, /tamano/, /tamaño/],
-  brand: [/^marca$/, /\bbrand\b/],
-  origin: [/^origen$/, /\borigin\b/, /pais de origen/, /country of origin/],
-  ipCharacter: [/propiedad intelectual/, /\bip\b/, /character/, /personaje/, /licencia/],
-} as const;
 
 const getSpecificSourceValueForColumn = (
   row: ParsedSourceSpreadsheetRow,
@@ -867,7 +1124,7 @@ const getSpecificSourceValueForColumn = (
   const normalizedLabel = normalizeComparable(column.label);
   const specificationAttributeName = getProductDraftSpecificationAttributeName(category, column);
   const normalizedSpecificationName = specificationAttributeName ? normalizeComparable(specificationAttributeName) : '';
-  const spuValues = findMatchingCellValues(row.cells, [...SOURCE_HEADER_ALIASES.spu]);
+  const spuValues = findMatchingCellValues(row.cells, [...SOURCE_HEADER_ALIASES.code]);
 
   if (normalizedKey === 'supplier_code') {
     return spuValues[0] || null;
@@ -902,7 +1159,7 @@ const getSpecificSourceValueForColumn = (
   }
 
   if (normalizedKey.includes('price') || normalizedKey.includes('precio') || normalizedLabel.includes('precio')) {
-    return findBestCellValue(row.cells, [...SOURCE_HEADER_ALIASES.minPrice]);
+    return findBestCellValue(row.cells, [...SOURCE_HEADER_ALIASES.price]);
   }
 
   if (
@@ -992,12 +1249,13 @@ const findSourceCellValueForColumn = (
 
 export const buildSourceSpreadsheetSuggestions = (
   category: SpreadsheetTemplateCategory,
-  row: ParsedSourceSpreadsheetRow | null,
+  match: MatchedSourceSpreadsheetRow | null,
 ): Record<string, ProductDraftValueSuggestion> => {
-  if (!row) {
+  if (!match) {
     return {};
   }
 
+  const { row } = match;
   return category.columns.reduce<Record<string, ProductDraftValueSuggestion>>((result, column) => {
     const value = findSourceCellValueForColumn(row, category, column);
     if (!value) {
@@ -1006,8 +1264,12 @@ export const buildSourceSpreadsheetSuggestions = (
 
     result[column.key] = {
       value,
-      confidence: 0.96,
-      reasoning: `Valor recuperado de la fila ${row.rowNumber} del spreadsheet fuente.`,
+      confidence: Math.min(0.98, Math.max(0.62, match.score / 100)),
+      reasoning: [
+        `Valor recuperado de la fila ${row.rowNumber} del spreadsheet fuente.`,
+        `Match ${match.strategy} con score ${match.score}.`,
+        match.evidence.length > 0 ? `Evidencia: ${match.evidence.slice(0, 3).join('; ')}.` : null,
+      ].filter(Boolean).join(' '),
       source: 'spreadsheet_source',
     };
     return result;
@@ -1040,9 +1302,17 @@ export const matchSourceSpreadsheetRowsToGarments = async ({
   garments: UploadedGarmentInput[];
   userUid: string;
 }): Promise<MatchedSourceSpreadsheetRowsResult> => {
-  const [buffer] = await bucket.file(sourceSpreadsheet.storagePath).download();
+  const [buffer] = await getBucket().file(sourceSpreadsheet.storagePath).download();
   const workbook = XLSX.read(buffer, { type: 'buffer', bookFiles: true });
   const parsed = buildSourceSpreadsheetRows(workbook);
+  const warnings = [
+    sourceSpreadsheet.originalFileName.toLowerCase().endsWith('.xls') && parsed.directRowsWithPhotos === 0
+      ? 'El archivo .xls no expuso imágenes embebidas al parser; se usaron columnas de texto/código para el matching.'
+      : null,
+    parsed.detectedColumns.length === 0
+      ? 'No se detectaron columnas semánticas conocidas; el matching se limitó al texto visible de las filas.'
+      : null,
+  ].filter((warning): warning is string => Boolean(warning));
 
   if (parsed.rows.length === 0 || garments.length === 0) {
     return {
@@ -1055,6 +1325,15 @@ export const matchSourceSpreadsheetRowsToGarments = async ({
         matchedRows: 0,
         matchedGarments: 0,
         unmatchedGarments: garments.length,
+        sheetName: parsed.sheetName,
+        headerRowNumber: parsed.headerRowNumber,
+        textOnlyRows: parsed.textOnlyRows,
+        matchedByImage: 0,
+        matchedByText: 0,
+        highConfidenceMatches: 0,
+        needsReviewMatches: 0,
+        detectedColumns: parsed.detectedColumns,
+        warnings,
       },
     };
   }
@@ -1062,6 +1341,7 @@ export const matchSourceSpreadsheetRowsToGarments = async ({
   const fingerprintedRows = await fingerprintSourceRows(parsed.rows, userUid);
   const garmentFingerprintsById = await fingerprintGarments(garments, userUid);
   const matchedRowByGarmentId = resolveMatchedRowByGarment(fingerprintedRows, garments, garmentFingerprintsById);
+  const matches = [...matchedRowByGarmentId.values()];
 
   return {
     matchedRowByGarmentId,
@@ -1073,6 +1353,15 @@ export const matchSourceSpreadsheetRowsToGarments = async ({
       matchedRows: matchedRowByGarmentId.size,
       matchedGarments: matchedRowByGarmentId.size,
       unmatchedGarments: Math.max(0, garments.length - matchedRowByGarmentId.size),
+      sheetName: parsed.sheetName,
+      headerRowNumber: parsed.headerRowNumber,
+      textOnlyRows: parsed.textOnlyRows,
+      matchedByImage: matches.filter((match) => match.strategy === 'image' || match.strategy === 'mixed').length,
+      matchedByText: matches.filter((match) => match.strategy === 'text').length,
+      highConfidenceMatches: matches.filter((match) => match.score >= HIGH_CONFIDENCE_MATCH_SCORE).length,
+      needsReviewMatches: matches.filter((match) => match.score < HIGH_CONFIDENCE_MATCH_SCORE).length,
+      detectedColumns: parsed.detectedColumns,
+      warnings,
     },
   };
 };

@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DEFAULT_TRY_ON_PROMPT } from '../../../../../shared/src/domain';
 import { useSystemConfig } from '../../../system/useSystemConfig';
-import { buildGarmentSuggestionSignature, getGarmentAvailableViews, handleGarmentFiles, revokeGarmentUrls } from '../../garments';
+import {
+  buildGarmentSuggestionSignature,
+  getEffectiveGarmentAccessoryType,
+  getEffectiveGarmentBodyArea,
+  getGarmentAvailableViews,
+  handleGarmentFiles,
+  revokeGarmentUrls,
+} from '../../garments';
 import { deleteGarmentDraftByStoragePath, uploadWizardSourceSpreadsheet } from '../../storage';
 import {
   GenerateWizardStepId,
@@ -217,9 +224,11 @@ export const useGenerateWizard = () => {
   );
 
   const totalJobs = useMemo(() => {
+    const accessoryInferenceTexts = [selectedSpreadsheetCategory?.label ?? null];
     const garmentsForMatching = state.garments.map((garment) => ({
       availableViews: getGarmentAvailableViews(garment),
-      garmentBodyArea: garment.garmentBodyArea ?? null,
+      garmentBodyArea: getEffectiveGarmentBodyArea(garment, accessoryInferenceTexts),
+      garmentAccessoryType: getEffectiveGarmentAccessoryType(garment, accessoryInferenceTexts),
     }));
     const compatiblePairCount = countCompatiblePoseMatchesForGarments(
       selectedModel?.poses || [],
@@ -228,18 +237,21 @@ export const useGenerateWizard = () => {
     );
 
     return getGenerateWizardTotalJobs(state, compatiblePairCount);
-  }, [selectedModel?.poses, state]);
+  }, [selectedModel?.poses, selectedSpreadsheetCategory?.label, state]);
 
   const compatiblePoseIds = useMemo(
-    () =>
-      getSuggestedPoseIdsForGarments(
+    () => {
+      const accessoryInferenceTexts = [selectedSpreadsheetCategory?.label ?? null];
+      return getSuggestedPoseIdsForGarments(
         selectedModel?.poses || [],
         state.garments.map((garment) => ({
           availableViews: getGarmentAvailableViews(garment),
-          garmentBodyArea: garment.garmentBodyArea ?? null,
+          garmentBodyArea: getEffectiveGarmentBodyArea(garment, accessoryInferenceTexts),
+          garmentAccessoryType: getEffectiveGarmentAccessoryType(garment, accessoryInferenceTexts),
         })),
-      ),
-    [selectedModel?.poses, state.garments],
+      );
+    },
+    [selectedModel?.poses, selectedSpreadsheetCategory?.label, state.garments],
   );
 
   const compatiblePoseIdSet = useMemo(() => new Set(compatiblePoseIds), [compatiblePoseIds]);
@@ -256,8 +268,18 @@ export const useGenerateWizard = () => {
   const canAdvance = useMemo(() => getGenerateWizardCanAdvance(state), [state]);
   const lastAccessibleStep = useMemo(() => getGenerateWizardLastAccessibleStep(state), [state]);
   const suggestionSignature = useMemo(
-    () => buildGarmentSuggestionSignature(state.selectedModelId, state.garments),
-    [state.selectedModelId, state.garments],
+    () => buildGarmentSuggestionSignature(state.selectedModelId, state.garments, {
+      outputMode: state.outputMode,
+      selectedSpreadsheetCategoryId: state.selectedSpreadsheetCategoryId,
+      selectedSpreadsheetCategoryLabel: selectedSpreadsheetCategory?.label ?? null,
+    }),
+    [
+      selectedSpreadsheetCategory?.label,
+      state.garments,
+      state.outputMode,
+      state.selectedModelId,
+      state.selectedSpreadsheetCategoryId,
+    ],
   );
   const productDraftSignature = useMemo(() => buildProductDraftSignature(state), [state]);
 
@@ -280,6 +302,7 @@ export const useGenerateWizard = () => {
     missingPoseClassificationCount,
     selectedModel,
     selectedClient,
+    selectedSpreadsheetCategoryLabel: selectedSpreadsheetCategory?.label ?? null,
     suggestionSignature,
     productDraftSignature,
   });

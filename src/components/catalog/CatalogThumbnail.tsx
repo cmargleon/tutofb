@@ -3,7 +3,7 @@ import { Ban, Download, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-react
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
-import { getCatalogJobErrorMessage } from '../../features/catalog/errorMessage';
+import { getCatalogJobErrorMessage, getJobFailureInfo, isFailureCancellation } from '../../features/catalog/errorMessage';
 
 interface CatalogThumbnailProps {
   job: Job;
@@ -29,7 +29,8 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   const resultPath = resolveApprovedJobOutput(job)?.resultImagePath;
   const isGenerating = job.status === 'pending' || job.status === 'processing';
   const isFailed = job.status === 'failed';
-  const isCancelled = isFailed && /cancelad[oa]/i.test(job.lastError || '');
+  const failureInfo = getJobFailureInfo(job, job.currentOutput);
+  const isCancelled = isFailureCancellation(failureInfo);
   const failureMessage = getCatalogJobErrorMessage(job) || 'Abre el detalle para revisar el error.';
   const { url, error } = useStorageAssetUrl(resultPath || null);
   const loadError = Boolean(error);
@@ -203,9 +204,11 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
     : regenerationPending ? 'Regenerando' : loadError ? 'Sin vista previa' : 'Cargando';
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onClick(job)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(job); }}
       className="relative group aspect-[3/4] cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-gray-100 transition-colors hover:border-indigo-400"
       title={job.garmentName}
     >
@@ -230,6 +233,6 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
         )}
       </div>
       {actionButtons}
-    </button>
+    </div>
   );
 };

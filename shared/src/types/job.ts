@@ -94,6 +94,51 @@ export interface JobTraceabilitySummary {
   lastProviderErrorMessage?: string | null;
 }
 
+export type JobFailureSource = 'provider' | 'gemini' | 'operator' | 'system';
+
+export type JobFailureStage = 'generation' | 'validation' | 'delivery' | 'manual' | 'system';
+
+export type JobFailureReasonCode =
+  | 'provider_http_error'
+  | 'provider_rate_limited'
+  | 'provider_timeout'
+  | 'provider_missing_request_id'
+  | 'provider_failed_status'
+  | 'provider_no_image'
+  | 'provider_image_download_failed'
+  | 'provider_configuration_missing'
+  | 'gemini_api_error'
+  | 'gemini_timeout'
+  | 'gemini_empty_response'
+  | 'gemini_finish_reason'
+  | 'gemini_prompt_blocked'
+  | 'gemini_rejected_output'
+  | 'manual_cancellation'
+  | 'job_timeout'
+  | 'legacy_error'
+  | 'unknown';
+
+export interface JobFailureInfo {
+  source: JobFailureSource;
+  stage: JobFailureStage;
+  reasonCode: JobFailureReasonCode;
+  title: string;
+  userMessage: string;
+  technicalMessage?: string | null;
+  retryable: boolean;
+  provider?: Provider | null;
+  requestId?: string | null;
+  outputId?: string | null;
+  attemptNumber?: number | null;
+  maxAttempts?: number | null;
+  httpStatus?: number | null;
+  providerStatus?: string | null;
+  finishReason?: string | null;
+  promptFeedback?: Record<string, unknown> | null;
+  raw?: Record<string, unknown> | null;
+  occurredAt?: TimestampLike | null;
+}
+
 export interface JobOutput {
   id: string;
   jobId: string;
@@ -120,6 +165,7 @@ export interface JobOutput {
   providerResponseSummary?: Record<string, unknown> | null;
   generationAttempt?: number | null;
   autoReview?: JobAutoReview | null;
+  failureInfo?: JobFailureInfo | null;
   isCurrent: boolean;
   storageDeletedAt?: TimestampLike | null;
   createdAt: TimestampLike;
@@ -192,6 +238,7 @@ export interface Job {
   manuallyFlaggedByUid?: string | null;
   reviewSignals?: JobReviewSignals;
   traceability?: JobTraceabilitySummary;
+  failureInfo?: JobFailureInfo | null;
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
   createdByUid: string;

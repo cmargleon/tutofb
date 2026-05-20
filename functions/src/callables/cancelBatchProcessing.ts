@@ -7,6 +7,7 @@ import {
   Job,
 } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
+import { buildManualCancellationFailureInfo, toFailureSummary } from '../errors/jobFailure';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 export const cancelBatchProcessing = onCall<
@@ -49,6 +50,14 @@ export const cancelBatchProcessing = onCall<
     activeJobs.forEach((job) => {
       const wasProcessing = job.status === 'processing';
       const jobRef = db.collection('jobs').doc(job.id!);
+      const failureInfo = buildManualCancellationFailureInfo({
+        userMessage: wasProcessing
+          ? 'El job fue cancelado manualmente mientras el lote estaba en procesamiento.'
+          : 'El job fue cancelado manualmente antes de iniciar la generación del lote.',
+        technicalMessage: wasProcessing
+          ? 'Se canceló el job mientras el worker estaba procesando el lote. Los resultados tardíos serán ignorados.'
+          : 'Se canceló el job pendiente desde la cancelación masiva del lote.',
+      });
 
       bulkWriter.update(jobRef, {
         status: 'failed',
@@ -60,9 +69,8 @@ export const cancelBatchProcessing = onCall<
         startedAt: null,
         lastAttemptStartedAt: null,
         updatedAt: now,
-        lastError: wasProcessing
-          ? 'Cancelado manualmente mientras el lote estaba en procesamiento.'
-          : 'Cancelado manualmente antes de comenzar la generacion del lote.',
+        lastError: toFailureSummary(failureInfo),
+        failureInfo,
       });
 
       bulkWriter.set(jobRef.collection('logs').doc(), {
@@ -77,6 +85,7 @@ export const cancelBatchProcessing = onCall<
           source: 'evaluation_cancel_batch',
           batchId,
           previousStatus: job.status,
+          failureInfo,
         },
         createdAt: now,
       });

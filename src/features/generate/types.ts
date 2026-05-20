@@ -1,5 +1,6 @@
 import {
   BatchOutputMode,
+  GarmentAccessoryType,
   GarmentBodyArea,
   GarmentPhotoClassificationSource,
   GarmentSourceType,
@@ -80,6 +81,7 @@ export interface UploadedGarmentDraft {
   originalPhotos: GarmentOriginalPhotoDraft[];
   upload: GarmentUploadState;
   garmentBodyArea?: GarmentBodyArea | null;
+  garmentAccessoryType?: GarmentAccessoryType | null;
   matchedCategoryId?: string | null;
   matchedCategoryLabel?: string | null;
   matchedCategoryConfidence?: number | null;

@@ -7,6 +7,7 @@ const ERROR_LOG_TYPES = new Set<JobLog['type']>(['retry_scheduled', 'failed']);
 
 const hasErrorContext = (job: Job): boolean =>
   job.status === 'failed'
+  || Boolean(job.failureInfo)
   || Boolean(job.lastError)
   || Boolean(job.traceability?.lastProviderErrorMessage);
 

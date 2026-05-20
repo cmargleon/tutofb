@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateCompositeLayout, groupGarmentFiles } from '../src/features/generate/garments';
+import {
+  applyGarmentAccessoryInference,
+  buildGarmentSuggestionSignature,
+  calculateCompositeLayout,
+  getEffectiveGarmentAccessoryType,
+  getEffectiveGarmentBodyArea,
+  groupGarmentFiles,
+} from '../src/features/generate/garments';
+import {
+  UploadedGarmentDraft,
+  createInitialGarmentPhotoClassificationState,
+  createInitialGarmentUploadState,
+} from '../src/features/generate/types';
 
 const makeFile = (overrides: Partial<{ name: string; type: string; size: number; lastModified: number; webkitRelativePath: string }> = {}) => ({
   name: overrides.name || 'image.jpg',
@@ -72,4 +84,60 @@ test('calculateCompositeLayout mantiene alto 1024 y gap 8', () => {
   assert.equal(layout.gap, 8);
   assert.deepEqual(layout.scaledWidths, [512, 512]);
   assert.equal(layout.totalWidth, 1032);
+});
+
+test('la categoría Mochilas fuerza matching de accesorio backpack aunque Gemini lo marque upper_body', () => {
+  const garment: UploadedGarmentDraft = {
+    id: 'gar-1',
+    name: '0',
+    sourceType: 'single',
+    files: [makeFile({ name: '0.png', type: 'image/png' }) as unknown as File],
+    previewUrl: 'blob:0',
+    isMultiAngle: false,
+    originalFileNames: ['0.png'],
+    originalPhotos: [
+      {
+        id: 'photo-1',
+        file: makeFile({ name: '0.png', type: 'image/png' }) as unknown as File,
+        fileName: '0.png',
+        sourceIndex: 0,
+        previewUrl: 'blob:0',
+        upload: createInitialGarmentUploadState(),
+        classification: createInitialGarmentPhotoClassificationState({
+          status: 'classified',
+          view: 'front',
+          classifiedBy: 'gemini',
+        }),
+      },
+    ],
+    upload: createInitialGarmentUploadState(),
+    garmentBodyArea: 'upper_body',
+    garmentAccessoryType: null,
+  };
+
+  assert.equal(getEffectiveGarmentBodyArea(garment, ['Mochilas']), 'carry_accessory');
+  assert.equal(getEffectiveGarmentAccessoryType(garment, ['Mochilas']), 'backpack');
+  assert.deepEqual(
+    {
+      garmentBodyArea: applyGarmentAccessoryInference(garment, ['Mochilas']).garmentBodyArea,
+      garmentAccessoryType: applyGarmentAccessoryInference(garment, ['Mochilas']).garmentAccessoryType,
+    },
+    {
+      garmentBodyArea: 'carry_accessory',
+      garmentAccessoryType: 'backpack',
+    },
+  );
+});
+
+test('buildGarmentSuggestionSignature cambia cuando cambia la categoría de spreadsheet', () => {
+  const signatureA = buildGarmentSuggestionSignature('model-1', [], {
+    selectedSpreadsheetCategoryId: 'cat-shirts',
+    selectedSpreadsheetCategoryLabel: 'Playeras',
+  });
+  const signatureB = buildGarmentSuggestionSignature('model-1', [], {
+    selectedSpreadsheetCategoryId: 'cat-backpacks',
+    selectedSpreadsheetCategoryLabel: 'Mochilas',
+  });
+
+  assert.notEqual(signatureA, signatureB);
 });

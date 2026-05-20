@@ -102,12 +102,12 @@ export const isPoseSuggestedForGarmentViews = (
   garmentBodyArea?: GarmentBodyArea | null,
   garmentAccessoryType?: GarmentAccessoryType | null,
 ): boolean => {
-  if (!canMatchPoseToGarmentViews(aiClassification, availableViews)) {
+  if (getPoseUsableGarmentViews(aiClassification).length === 0) {
     return false;
   }
 
   if (!garmentBodyArea) {
-    return true;
+    return canMatchPoseToGarmentViews(aiClassification, availableViews);
   }
 
   if (!isPoseFaceVisibilityCompatibleWithGarmentBodyArea(aiClassification?.faceVisible, garmentBodyArea)) {
@@ -122,11 +122,11 @@ export const isPoseSuggestedForGarmentViews = (
     return false;
   }
 
-  if (garmentBodyArea !== 'carry_accessory') {
-    return true;
+  if (garmentBodyArea === 'carry_accessory') {
+    return canPoseShowCarryAccessory(garmentAccessoryType, getPoseAccessoryDisplaySlots(aiClassification));
   }
 
-  return canPoseShowCarryAccessory(garmentAccessoryType, getPoseAccessoryDisplaySlots(aiClassification));
+  return canMatchPoseToGarmentViews(aiClassification, availableViews);
 };
 
 export const isPoseCompatibleWithGarmentViews = (

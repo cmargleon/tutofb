@@ -7,6 +7,7 @@ import {
   Job,
 } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
+import { buildManualCancellationFailureInfo, toFailureSummary } from '../errors/jobFailure';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 export const cancelPendingBatchJobs = onCall<
@@ -44,6 +45,10 @@ export const cancelPendingBatchJobs = onCall<
 
   pendingJobs.forEach((job) => {
     const jobRef = db.collection('jobs').doc(job.id!);
+    const failureInfo = buildManualCancellationFailureInfo({
+      userMessage: 'El job fue cancelado manualmente desde la cola.',
+      technicalMessage: 'Se canceló el job antes de completar la generación desde la vista de cola.',
+    });
 
     writeBatch.update(jobRef, {
       status: 'failed',
@@ -55,7 +60,8 @@ export const cancelPendingBatchJobs = onCall<
       startedAt: null,
       lastAttemptStartedAt: null,
       updatedAt: now,
-      lastError: 'Cancelado manualmente desde la cola.',
+      lastError: toFailureSummary(failureInfo),
+      failureInfo,
     });
 
     writeBatch.set(jobRef.collection('logs').doc(), {
@@ -66,6 +72,7 @@ export const cancelPendingBatchJobs = onCall<
         requestedByUid: request.auth!.uid,
         source: 'queue_cancel_pending',
         batchId,
+        failureInfo,
       },
       createdAt: now,
     });

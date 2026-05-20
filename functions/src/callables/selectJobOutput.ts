@@ -88,6 +88,7 @@ export const selectJobOutput = onCall<SelectJobOutputRequest, Promise<SelectJobO
     status: 'completed',
     completedAt: now,
     lastError: null,
+    failureInfo: null,
     'traceability.lastCompletedAt': now,
     'traceability.lastProviderErrorAt': null,
     'traceability.lastProviderErrorMessage': null,

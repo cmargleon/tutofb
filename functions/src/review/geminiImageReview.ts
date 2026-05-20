@@ -6,6 +6,7 @@ import {
   ModelIdentityTraits,
 } from '../../../shared/src/types';
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
+import { GeminiAutoReviewError, serializeError } from '../errors/jobFailure';
 
 interface ReviewImageAsset {
   bytes: Buffer;
@@ -392,85 +393,127 @@ const extractResponseText = (payload: GeminiGenerateContentResponse): string => 
   }
 
   const finishReason = payload.candidates?.[0]?.finishReason;
-  throw new Error(
-    finishReason
-      ? `Gemini no devolvio texto utilizable. Finish reason: ${finishReason}.`
-      : `Gemini no devolvio texto utilizable. Prompt feedback: ${JSON.stringify(payload.promptFeedback || {})}`,
-  );
+  if (finishReason) {
+    throw new GeminiAutoReviewError({
+      reasonCode: 'gemini_finish_reason',
+      finishReason,
+      retryable: finishReason.toUpperCase() !== 'SAFETY',
+      message: `Gemini no devolvio texto utilizable. Finish reason: ${finishReason}.`,
+      promptFeedback: payload.promptFeedback || null,
+    });
+  }
+
+  throw new GeminiAutoReviewError({
+    reasonCode: 'gemini_prompt_blocked',
+    retryable: false,
+    message: `Gemini no devolvio texto utilizable. Prompt feedback: ${JSON.stringify(payload.promptFeedback || {})}`,
+    promptFeedback: payload.promptFeedback || null,
+  });
 };
 
 export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Promise<GeneratedImageReviewResult> => {
   const reviewPrompt = buildReviewPrompt(request);
-  const { payload } = await callGeminiGenerateContent<GeminiGenerateContentResponse>({
-    apiKey: request.apiKey,
-    model: request.model,
-    signal: request.signal,
-    context: {
-      feature: 'image_review',
-      batchId: request.batchId,
-      jobId: request.jobId,
-      clientId: request.clientId,
-      clientNameSnapshot: request.clientNameSnapshot,
-      modelId: request.modelId,
-      modelNameSnapshot: request.modelNameSnapshot,
-      garmentId: request.garmentId,
-      garmentName: request.garmentName,
-      poseId: request.poseId,
-      userUid: request.userUid,
-    },
-    body: {
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: reviewPrompt },
-            {
-              inline_data: {
-                mime_type: request.poseReference.mimeType,
-                data: request.poseReference.bytes.toString('base64'),
-              },
-            },
-            {
-              inline_data: {
-                mime_type: request.garmentReference.mimeType,
-                data: request.garmentReference.bytes.toString('base64'),
-              },
-            },
-            {
-              inline_data: {
-                mime_type: request.generatedImage.mimeType,
-                data: request.generatedImage.bytes.toString('base64'),
-              },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseJsonSchema: REVIEW_RESPONSE_SCHEMA,
+  try {
+    const { payload } = await callGeminiGenerateContent<GeminiGenerateContentResponse>({
+      apiKey: request.apiKey,
+      model: request.model,
+      signal: request.signal,
+      context: {
+        feature: 'image_review',
+        batchId: request.batchId,
+        jobId: request.jobId,
+        clientId: request.clientId,
+        clientNameSnapshot: request.clientNameSnapshot,
+        modelId: request.modelId,
+        modelNameSnapshot: request.modelNameSnapshot,
+        garmentId: request.garmentId,
+        garmentName: request.garmentName,
+        poseId: request.poseId,
+        userUid: request.userUid,
       },
-    },
-  });
-  const reviewText = extractResponseText(payload);
-  const parsed = JSON.parse(reviewText) as GeminiReviewPayload;
-  const criteria = sanitizeCriteria(parsed.criteria);
-  const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' ? 'approved' : 'rejected';
-  const summary = sanitizeText(
-    parsed.summary,
-    verdict === 'approved'
-      ? 'La imagen cumple con los criterios solicitados.'
-      : 'La imagen no cumple con los criterios solicitados.',
-  );
-  const revisedPrompt = sanitizeText(parsed.revisedPrompt, '');
-  const marketplaceData = sanitizeMarketplaceData(parsed.marketplaceData);
+      body: {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: reviewPrompt },
+              {
+                inline_data: {
+                  mime_type: request.poseReference.mimeType,
+                  data: request.poseReference.bytes.toString('base64'),
+                },
+              },
+              {
+                inline_data: {
+                  mime_type: request.garmentReference.mimeType,
+                  data: request.garmentReference.bytes.toString('base64'),
+                },
+              },
+              {
+                inline_data: {
+                  mime_type: request.generatedImage.mimeType,
+                  data: request.generatedImage.bytes.toString('base64'),
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseJsonSchema: REVIEW_RESPONSE_SCHEMA,
+        },
+      },
+    });
+    const reviewText = extractResponseText(payload);
+    const parsed = JSON.parse(reviewText) as GeminiReviewPayload;
+    const criteria = sanitizeCriteria(parsed.criteria);
+    const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' ? 'approved' : 'rejected';
+    const summary = sanitizeText(
+      parsed.summary,
+      verdict === 'approved'
+        ? 'La imagen cumple con los criterios solicitados.'
+        : 'La imagen no cumple con los criterios solicitados.',
+    );
+    const revisedPrompt = sanitizeText(parsed.revisedPrompt, '');
+    const marketplaceData = sanitizeMarketplaceData(parsed.marketplaceData);
 
-  return {
-    model: request.model,
-    verdict,
-    summary,
-    reviewPrompt,
-    revisedPrompt: verdict === 'rejected' && revisedPrompt ? revisedPrompt : null,
-    criteria,
-    marketplaceData,
-  };
+    return {
+      model: request.model,
+      verdict,
+      summary,
+      reviewPrompt,
+      revisedPrompt: verdict === 'rejected' && revisedPrompt ? revisedPrompt : null,
+      criteria,
+      marketplaceData,
+    };
+  } catch (error) {
+    if (error instanceof GeminiAutoReviewError) {
+      throw error;
+    }
+
+    if (error instanceof SyntaxError) {
+      throw new GeminiAutoReviewError({
+        reasonCode: 'gemini_empty_response',
+        retryable: true,
+        message: 'Gemini devolvió una respuesta no parseable como JSON.',
+        raw: serializeError(error),
+      });
+    }
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new GeminiAutoReviewError({
+        reasonCode: 'gemini_timeout',
+        retryable: true,
+        message: 'La validación con Gemini excedió el tiempo máximo.',
+        raw: serializeError(error),
+      });
+    }
+
+    throw new GeminiAutoReviewError({
+      reasonCode: 'gemini_api_error',
+      retryable: true,
+      message: error instanceof Error ? error.message : 'Gemini falló durante la validación.',
+      raw: serializeError(error),
+    });
+  }
 };

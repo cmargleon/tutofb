@@ -3,7 +3,7 @@ import { AlertCircle, Check, RefreshCcw, Sparkles } from 'lucide-react';
 import { Model } from '../../../shared/src/types';
 import { formatPoseAutoCategoryLabel } from '../../../shared/src/utils/poseAiClassification';
 import { countCompatibleGarmentsForPose } from '../../../shared/src/utils/garmentViewMatching';
-import { getGarmentAvailableViews, getGarmentBodyArea } from '../../features/generate/garments';
+import { getGarmentAccessoryType, getGarmentAvailableViews, getGarmentBodyArea } from '../../features/generate/garments';
 import { UploadedGarmentDraft } from '../../features/generate/types';
 import { EmptyState, ImageThumb } from '../ui';
 
@@ -134,6 +134,7 @@ export const PoseSelectionStep: React.FC<Props> = ({
               garments.map((garment) => ({
                 availableViews: getGarmentAvailableViews(garment),
                 garmentBodyArea: getGarmentBodyArea(garment),
+                garmentAccessoryType: getGarmentAccessoryType(garment),
               })),
             );
             const isCompatible = compatiblePoseIdSet.has(pose.id);

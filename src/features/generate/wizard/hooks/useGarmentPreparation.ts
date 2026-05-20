@@ -1,7 +1,12 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Client, Model } from '../../../../../shared/src/types';
 import { classifyGarmentViewsWithGemini, previewProductDrafts } from '../../firebase';
-import { getGarmentAvailableViews, getGarmentBodyArea } from '../../garments';
+import {
+  applyGarmentAccessoryInference,
+  getEffectiveGarmentAccessoryType,
+  getEffectiveGarmentBodyArea,
+  getGarmentAvailableViews,
+} from '../../garments';
 import { uploadGarmentDrafts } from '../../storage';
 import {
   UploadedGarmentDraft,
@@ -38,13 +43,14 @@ const getGarmentsNeedingClassification = (
   garments.filter((garment) => {
     const needsPhotoViews = garment.originalPhotos.some((photo) => photo.classification.status !== 'classified');
     const needsBodyArea = !garment.garmentBodyArea;
+    const needsAccessoryType = garment.garmentBodyArea === 'carry_accessory' && !garment.garmentAccessoryType;
     const needsSpreadsheetMatch = shouldClassifySpreadsheetData && (!garment.matchedCategoryId || !garment.matchedColor);
 
     if (shouldClassifySpreadsheetData) {
-      return needsPhotoViews || needsBodyArea || needsSpreadsheetMatch;
+      return needsPhotoViews || needsBodyArea || needsAccessoryType || needsSpreadsheetMatch;
     }
 
-    return needsBodyArea || (garment.originalPhotos.length > 1 && needsPhotoViews);
+    return needsBodyArea || needsAccessoryType || (garment.originalPhotos.length > 1 && needsPhotoViews);
   });
 
 const buildProductDraftPreviewGarments = (garments: UploadedGarmentDraft[]) =>
@@ -56,6 +62,8 @@ const buildProductDraftPreviewGarments = (garments: UploadedGarmentDraft[]) =>
     sourceType: garment.sourceType,
     originalFileNames: garment.originalFileNames,
     originalPhotoCount: garment.originalPhotos.length,
+    garmentBodyArea: garment.garmentBodyArea ?? null,
+    garmentAccessoryType: garment.garmentAccessoryType ?? null,
     matchedCategoryId: garment.matchedCategoryId || null,
     matchedCategoryLabel: garment.matchedCategoryLabel || null,
     matchedCategoryConfidence: garment.matchedCategoryConfidence ?? null,
@@ -86,6 +94,7 @@ interface GarmentPreparationParams {
   missingPoseClassificationCount: number;
   selectedModel: Model | null;
   selectedClient: Client | null;
+  selectedSpreadsheetCategoryLabel: string | null;
   suggestionSignature: string;
   productDraftSignature: string;
 }
@@ -99,6 +108,7 @@ export const useGarmentPreparation = ({
   missingPoseClassificationCount,
   selectedModel,
   selectedClient,
+  selectedSpreadsheetCategoryLabel,
   suggestionSignature,
   productDraftSignature,
 }: GarmentPreparationParams) => {
@@ -213,7 +223,10 @@ export const useGarmentPreparation = ({
         shouldClassifySpreadsheetData,
       );
 
-      let preparedGarments = uploadedGarments;
+      const accessoryInferenceTexts = [selectedSpreadsheetCategoryLabel];
+      let preparedGarments = uploadedGarments.map((garment) =>
+        applyGarmentAccessoryInference(garment, accessoryInferenceTexts),
+      );
 
       if (garmentsNeedingClassification.length > 0) {
         const garmentIds = new Set(garmentsNeedingClassification.map((garment) => garment.id));
@@ -244,10 +257,12 @@ export const useGarmentPreparation = ({
           })),
         });
 
-        preparedGarments = mergeGarmentClassificationResults(uploadedGarments, classificationResult);
+        preparedGarments = mergeGarmentClassificationResults(uploadedGarments, classificationResult)
+          .map((garment) => applyGarmentAccessoryInference(garment, accessoryInferenceTexts));
         setState((current) => ({
           ...current,
-          garments: mergeGarmentClassificationResults(current.garments, classificationResult),
+          garments: mergeGarmentClassificationResults(current.garments, classificationResult)
+            .map((garment) => applyGarmentAccessoryInference(garment, accessoryInferenceTexts)),
         }));
       }
 
@@ -255,7 +270,8 @@ export const useGarmentPreparation = ({
         selectedModel.poses,
         preparedGarments.map((garment) => ({
           availableViews: getGarmentAvailableViews(garment),
-          garmentBodyArea: getGarmentBodyArea(garment),
+          garmentBodyArea: getEffectiveGarmentBodyArea(garment, accessoryInferenceTexts),
+          garmentAccessoryType: getEffectiveGarmentAccessoryType(garment, accessoryInferenceTexts),
         })),
       );
 

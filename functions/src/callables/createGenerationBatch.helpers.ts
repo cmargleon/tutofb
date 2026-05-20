@@ -4,6 +4,7 @@ import {
   BatchOutputMode,
   Client,
   CreateGenerationBatchRequest,
+  GarmentAccessoryType,
   GarmentBodyArea,
   Job,
   ProductDraftInput,
@@ -24,6 +25,7 @@ import {
 } from '../../../shared/src/domain';
 import { isProviderImageConfig, normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { EMPTY_JOB_REVIEW_SIGNALS } from '../../../shared/src/reviewMetrics';
+import { isGarmentAccessoryType } from '../../../shared/src/utils/accessoryMatching';
 import {
   getSortedUniqueGarmentViews,
   isPoseCompatibleWithGarmentViews,
@@ -44,7 +46,14 @@ const isGarmentBodyArea = (value: unknown): value is GarmentBodyArea =>
   || value === 'lower_body'
   || value === 'footwear'
   || value === 'head_accessory'
-  || value === 'full_body';
+  || value === 'full_body'
+  || value === 'carry_accessory';
+
+const normalizeGarmentAccessoryType = (
+  garmentBodyArea: GarmentBodyArea | null,
+  value: unknown,
+): GarmentAccessoryType | null =>
+  garmentBodyArea === 'carry_accessory' && isGarmentAccessoryType(value) ? value : null;
 
 const buildFallbackGarmentPhoto = (
   garment: Pick<UploadedGarmentInput, 'id' | 'name' | 'storagePath' | 'originalFileNames'>,
@@ -116,6 +125,7 @@ export const normalizeGarment = (value: unknown): UploadedGarmentInput => {
     Array.isArray(garment.photos) && garment.photos.length > 0
       ? garment.photos.map((photo, index) => normalizeGarmentPhoto(photo, { id, name }, index))
       : [buildFallbackGarmentPhoto({ id, name, storagePath, originalFileNames: garment.originalFileNames })];
+  const garmentBodyArea = isGarmentBodyArea(garment.garmentBodyArea) ? garment.garmentBodyArea : null;
 
   return {
     id,
@@ -131,7 +141,8 @@ export const normalizeGarment = (value: unknown): UploadedGarmentInput => {
         ? Math.max(1, Math.trunc(garment.originalPhotoCount))
         : photos.length,
     photos,
-    garmentBodyArea: isGarmentBodyArea(garment.garmentBodyArea) ? garment.garmentBodyArea : null,
+    garmentBodyArea,
+    garmentAccessoryType: normalizeGarmentAccessoryType(garmentBodyArea, garment.garmentAccessoryType),
     matchedCategoryId: typeof garment.matchedCategoryId === 'string' ? garment.matchedCategoryId.trim() || null : null,
     matchedCategoryLabel: typeof garment.matchedCategoryLabel === 'string' ? garment.matchedCategoryLabel.trim() || null : null,
     matchedCategoryConfidence:
@@ -388,6 +399,7 @@ export const canGeneratePoseForGarment = (
     pose.aiClassification,
     getGarmentAvailableViews(garment),
     garment.garmentBodyArea ?? null,
+    garment.garmentAccessoryType ?? null,
   );
 
 export const getCompatibleGarmentPoseCombinations = (
@@ -438,6 +450,7 @@ export const buildJobDraft = (
   startedAt: null,
   lastAttemptStartedAt: null,
   lastError: null,
+  failureInfo: null,
 });
 
 export const resolveJobPromptCase = (

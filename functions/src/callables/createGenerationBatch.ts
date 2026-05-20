@@ -221,6 +221,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         poseOrientationDetail: pose.aiClassification?.orientationDetail || null,
         poseFraming: pose.aiClassification?.framing || null,
         poseBodyFocus: pose.aiClassification?.bodyFocus || null,
+        poseAccessoryDisplaySlots: pose.aiClassification?.accessoryDisplaySlots || [],
         garmentId: garment.id,
         garmentName: garment.name,
         garmentFilePath: selectedGarmentPhoto.storagePath,
@@ -228,6 +229,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         garmentPhotoFileName: selectedGarmentPhoto.fileName,
         garmentView: selectedGarmentPhoto.view,
         garmentBodyArea: garment.garmentBodyArea ?? null,
+        garmentAccessoryType: garment.garmentAccessoryType ?? null,
         productDraftId: validated.outputMode === 'spreadsheet' ? garment.id : null,
         garmentSourceType: garment.sourceType,
         garmentOriginalFileNames: garment.originalFileNames || [],
@@ -262,6 +264,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         updatedAt: now,
         createdByUid: request.auth!.uid,
         lastError: null,
+        failureInfo: null,
       };
 
       writeBatch.set(jobRef, jobData);

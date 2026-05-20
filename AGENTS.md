@@ -2,6 +2,7 @@
 
 ## Project Rules
 - Treat this repo as a real Firebase project by default: `localhost:3000` does not imply emulators unless `VITE_USE_FIREBASE_EMULATORS=true`.
+- When a requested change has remote Firebase impact, treat the task as incomplete until the corresponding Firebase deploy has been run; do not leave remote code/config behind local edits.
 - Keep diffs small and domain-scoped; avoid broad rewrites of pages, hooks, rules, or shared contracts.
 - Source of truth order: code > tests > docs.
 - Tests in `tests/` may import compiled JS from `functions/lib`; build Functions before running them.
@@ -83,6 +84,6 @@
 - Ask before installs or dependency changes: `npm install`, package upgrades, lockfile edits.
 - Ask before destructive local actions: deleting files/directories, clearing generated data, migrations, or bulk rewrites.
 - Ask before git state changes unless explicitly requested: commit, push, reset, rebase, stash pop/drop.
-- Ask before Firebase deploys or remote data/rules/auth/storage mutations unless the user explicitly asked for the remote operation.
+- Firebase deploys are expected for remote-impacting code/config changes because this project works directly against real Firebase; ask only when the user explicitly wants no remote mutation or when the operation goes beyond the requested change.
 - If touching `functions/src/` or `shared/src/`, run `npm --prefix functions run build`.
 - Run `npm test` for changes affecting contracts, auth, jobs, analytics, spreadsheets, finance, or cross-domain behavior.

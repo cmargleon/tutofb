@@ -7,7 +7,7 @@ Herramienta interna para generación de imágenes fotorrealistas de prendas sobr
 ## Reglas operativas (SIEMPRE aplicar)
 
 1. **Asumir Firebase real** — `localhost:3000` no implica emuladores. Solo usar emuladores si `VITE_USE_FIREBASE_EMULATORS=true` confirmado.
-2. **Aplicar cambios end-to-end** — Si se toca `functions/src/`, hacer build + deploy. Si se toca `shared/src/`, compilar y testear antes de deploy. No dejar el sistema corriendo versión vieja.
+2. **Aplicar cambios end-to-end** — Si un cambio tiene impacto remoto en Firebase, el trabajo no queda terminado hasta hacer el deploy correspondiente. Si se toca `functions/src/`, hacer build + deploy. Si se toca `shared/src/`, compilar y testear antes de deploy. No dejar el sistema corriendo versión vieja.
 3. **Node 20** — `source ~/.nvm/nvm.sh && nvm use 20` (Node 24 genera bus error con Vite).
 4. **Firebase CLI bajo nvm** — Cargar nvm antes de usar `firebase`.
 

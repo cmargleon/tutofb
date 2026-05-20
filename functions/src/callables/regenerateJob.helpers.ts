@@ -41,5 +41,6 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     startedAt: null,
     lastAttemptStartedAt: null,
     lastError: null,
+    failureInfo: null,
   };
 };

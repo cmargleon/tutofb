@@ -45,6 +45,7 @@ export const mergeGarmentClassificationResults = (
     return {
       ...garment,
       garmentBodyArea: classifiedGarment.garmentBodyArea ?? garment.garmentBodyArea ?? null,
+      garmentAccessoryType: classifiedGarment.garmentAccessoryType ?? garment.garmentAccessoryType ?? null,
       matchedCategoryId: classifiedGarment.matchedCategoryId ?? garment.matchedCategoryId ?? null,
       matchedCategoryLabel: classifiedGarment.matchedCategoryLabel ?? garment.matchedCategoryLabel ?? null,
       matchedCategoryConfidence: classifiedGarment.matchedCategoryConfidence ?? garment.matchedCategoryConfidence ?? null,

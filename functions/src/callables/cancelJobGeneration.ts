@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Batch, CancelJobGenerationRequest, CancelJobGenerationResponse, Job } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
+import { buildManualCancellationFailureInfo, toFailureSummary } from '../errors/jobFailure';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { syncProductDraftImagesForGarment } from '../spreadsheets/syncProductDraftImages';
 
@@ -51,6 +52,14 @@ export const cancelJobGeneration = onCall<CancelJobGenerationRequest, Promise<Ca
       }
 
       const latestWasProcessing = latestJob.status === 'processing';
+      const failureInfo = buildManualCancellationFailureInfo({
+        userMessage: latestWasProcessing
+          ? 'El job fue cancelado manualmente mientras se estaba generando.'
+          : 'El job fue cancelado manualmente antes de iniciar la generación.',
+        technicalMessage: latestWasProcessing
+          ? 'Se canceló el job durante la etapa de generación. Los resultados tardíos del proveedor serán ignorados.'
+          : 'Se canceló el job antes de que el worker reclamara la tarea.',
+      });
 
       transaction.update(jobRef, {
         status: 'failed',
@@ -67,9 +76,8 @@ export const cancelJobGeneration = onCall<CancelJobGenerationRequest, Promise<Ca
         userSelectedOutputId: null,
         userSelectedOutput: null,
         updatedAt: now,
-        lastError: latestWasProcessing
-          ? 'Cancelado manualmente mientras se estaba generando.'
-          : 'Cancelado manualmente antes de comenzar la generación.',
+        lastError: toFailureSummary(failureInfo),
+        failureInfo,
       });
 
       if (latestJob.currentOutputId) {
@@ -91,6 +99,7 @@ export const cancelJobGeneration = onCall<CancelJobGenerationRequest, Promise<Ca
           requestedByDisplayName,
           source: 'evaluation_cancel_job',
           previousStatus: latestJob.status,
+          failureInfo,
         },
         createdAt: now,
       });

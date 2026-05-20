@@ -167,6 +167,45 @@ test('validateCreateGenerationBatchInput conserva provider y calcula jobs por po
   assert.equal(validated.totalJobs, 2);
 });
 
+test('validateCreateGenerationBatchInput conserva accesorios de carga y tipo mochila', () => {
+  const validated = validateCreateGenerationBatchInput(
+    {
+      clientId: 'client-1',
+      modelId: 'model-1',
+      outputMode: 'photos_only',
+      poseIds: ['pose-1'],
+      garments: [
+        {
+          id: 'gar-backpack',
+          name: 'Mochila negra',
+          storagePath: 'garments/drafts/user-1/draft-1/gar-backpack/front.jpg',
+          isMultiAngle: false,
+          garmentBodyArea: 'carry_accessory',
+          garmentAccessoryType: 'backpack',
+          photos: [
+            {
+              id: 'gar-backpack-front',
+              fileName: 'front.jpg',
+              storagePath: 'garments/drafts/user-1/draft-1/gar-backpack/front.jpg',
+              sourceIndex: 0,
+              view: 'front',
+              classifiedBy: 'gemini',
+            },
+          ],
+        },
+      ],
+      productDrafts: [],
+      provider: 'fal-seedream',
+      promptBase: 'Prompt',
+    },
+    'user-1',
+    10,
+  );
+
+  assert.equal(validated.garments[0]?.garmentBodyArea, 'carry_accessory');
+  assert.equal(validated.garments[0]?.garmentAccessoryType, 'backpack');
+});
+
 test('validateCreateGenerationBatchInput conserva configuración de GPT Image 2', () => {
   const validated = validateCreateGenerationBatchInput(
     {
@@ -741,5 +780,94 @@ test('getCompatibleGarmentPoseCombinations aplica matching estricto para calzado
   assert.deepEqual(
     combinations.map(({ garment, pose }) => `${garment.id}:${pose.id}`),
     ['gar-shoes:pose-feet-front', 'gar-glasses:pose-portrait-front'],
+  );
+});
+
+test('getCompatibleGarmentPoseCombinations permite mochila frontal de producto solo en poses de espalda', () => {
+  const combinations = getCompatibleGarmentPoseCombinations(
+    [
+      {
+        id: 'gar-backpack',
+        name: 'Mochila Negra',
+        storagePath: 'garments/drafts/user-1/draft-1/gar-backpack/front.jpg',
+        isMultiAngle: false,
+        garmentBodyArea: 'carry_accessory',
+        garmentAccessoryType: 'backpack',
+        photos: [
+          {
+            id: 'gar-backpack-front',
+            fileName: 'front.jpg',
+            storagePath: 'garments/drafts/user-1/draft-1/gar-backpack/front.jpg',
+            sourceIndex: 0,
+            view: 'front',
+            classifiedBy: 'gemini',
+          },
+        ],
+      },
+    ],
+    [
+      {
+        id: 'pose-back-upper',
+        fileName: 'pose-back-upper.jpg',
+        storagePath: 'models/client-1/model-1/poses/back-upper.jpg',
+        aiClassification: {
+          orientationGroup: 'back',
+          orientationDetail: 'back',
+          framing: 'medium_body',
+          bodyFocus: 'upper_body',
+          faceVisible: false,
+          autoCategory: 'espalda_medio_cuerpo',
+          usableForGarmentViews: ['back'],
+          accessoryDisplaySlots: ['back', 'shoulder'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 3,
+        },
+      },
+      {
+        id: 'pose-front-face',
+        fileName: 'pose-front-face.jpg',
+        storagePath: 'models/client-1/model-1/poses/front-face.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front',
+          framing: 'medium_body',
+          bodyFocus: 'upper_body',
+          faceVisible: true,
+          autoCategory: 'frente_medio_cuerpo',
+          usableForGarmentViews: ['front'],
+          accessoryDisplaySlots: ['shoulder', 'front_torso'],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 3,
+        },
+      },
+      {
+        id: 'pose-shoes',
+        fileName: 'pose-shoes.jpg',
+        storagePath: 'models/client-1/model-1/poses/shoes.jpg',
+        aiClassification: {
+          orientationGroup: 'front',
+          orientationDetail: 'front',
+          framing: 'feet_closeup',
+          bodyFocus: 'feet',
+          faceVisible: false,
+          autoCategory: 'frente_primer_plano_pies',
+          usableForGarmentViews: ['front'],
+          accessoryDisplaySlots: [],
+          confidence: 0.95,
+          taggedBy: 'gemini',
+          taggedAt: new Date(),
+          version: 3,
+        },
+      },
+    ],
+  );
+
+  assert.deepEqual(
+    combinations.map(({ garment, pose }) => `${garment.id}:${pose.id}`),
+    ['gar-backpack:pose-back-upper'],
   );
 });

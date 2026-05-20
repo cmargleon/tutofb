@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { GarmentView } from '../../../shared/src/types';
+import { GarmentAccessoryType, GarmentBodyArea, GarmentView } from '../../../shared/src/types';
 import * as garmentViewMatchingNamespace from '../../../shared/src/utils/garmentViewMatching';
 import {
   GarmentOriginalPhotoDraft,
@@ -287,16 +287,93 @@ export const getGarmentAvailableViews = (garment: UploadedGarmentDraft) =>
   );
 
 export const getGarmentBodyArea = (garment: UploadedGarmentDraft) => garment.garmentBodyArea ?? null;
+export const getGarmentAccessoryType = (garment: UploadedGarmentDraft) => garment.garmentAccessoryType ?? null;
+
+export const getGarmentAccessoryInferenceTexts = (
+  garment: UploadedGarmentDraft,
+  extraTexts: Array<string | null | undefined> = [],
+): Array<string | null | undefined> => [
+  garment.name,
+  ...garment.originalFileNames,
+  garment.matchedCategoryLabel,
+  ...extraTexts,
+];
+
+const normalizeAccessoryText = (value: string): string =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const inferGarmentAccessoryTypeFromText = (
+  values: Array<string | null | undefined>,
+): GarmentAccessoryType | null => {
+  const normalized = values
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map(normalizeAccessoryText)
+    .join(' ');
+
+  if (/\b(mochila|mochilas|backpack|backpacks|morral|morrales)\b/.test(normalized)) return 'backpack';
+  if (/\b(crossbody|bandolera|bandoleras|cruzada|cruzadas)\b/.test(normalized)) return 'crossbody_bag';
+  if (/\b(tote|totes)\b/.test(normalized)) return 'tote_bag';
+  if (/\b(duffel|duffels|maleta|maletas|bolsa de gimnasio|bolsas de gimnasio)\b/.test(normalized)) return 'duffel_bag';
+  if (/\b(handbag|handbags|bolso de mano|bolsos de mano|cartera|carteras)\b/.test(normalized)) return 'handbag';
+  if (/\b(shoulder bag|shoulder bags|bolsa de hombro|bolsas de hombro|bolso de hombro|bolsos de hombro)\b/.test(normalized)) return 'shoulder_bag';
+
+  return null;
+};
+
+export const getEffectiveGarmentAccessoryType = (
+  garment: UploadedGarmentDraft,
+  extraTexts: Array<string | null | undefined> = [],
+): GarmentAccessoryType | null =>
+  garment.garmentAccessoryType
+  || inferGarmentAccessoryTypeFromText(getGarmentAccessoryInferenceTexts(garment, extraTexts));
+
+export const getEffectiveGarmentBodyArea = (
+  garment: UploadedGarmentDraft,
+  extraTexts: Array<string | null | undefined> = [],
+): GarmentBodyArea | null =>
+  getEffectiveGarmentAccessoryType(garment, extraTexts) ? 'carry_accessory' : garment.garmentBodyArea ?? null;
+
+export const applyGarmentAccessoryInference = (
+  garment: UploadedGarmentDraft,
+  extraTexts: Array<string | null | undefined> = [],
+): UploadedGarmentDraft => {
+  const garmentAccessoryType = getEffectiveGarmentAccessoryType(garment, extraTexts);
+  if (!garmentAccessoryType) {
+    return garment;
+  }
+
+  return {
+    ...garment,
+    garmentBodyArea: 'carry_accessory',
+    garmentAccessoryType,
+  };
+};
 
 export const buildGarmentSuggestionSignature = (
   selectedModelId: string | null,
   garments: UploadedGarmentDraft[],
+  context: {
+    outputMode?: string | null;
+    selectedSpreadsheetCategoryId?: string | null;
+    selectedSpreadsheetCategoryLabel?: string | null;
+  } = {},
 ): string =>
   JSON.stringify({
     selectedModelId,
+    outputMode: context.outputMode ?? null,
+    selectedSpreadsheetCategoryId: context.selectedSpreadsheetCategoryId ?? null,
+    selectedSpreadsheetCategoryLabel: context.selectedSpreadsheetCategoryLabel ?? null,
     garments: garments.map((garment) => ({
       id: garment.id,
       name: garment.name,
+      garmentBodyArea: garment.garmentBodyArea ?? null,
+      garmentAccessoryType: garment.garmentAccessoryType ?? null,
+      matchedCategoryLabel: garment.matchedCategoryLabel ?? null,
       photos: garment.originalPhotos.map((photo) => ({
         id: photo.id,
         fingerprint: fileFingerprint(photo.file),

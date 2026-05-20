@@ -18,6 +18,14 @@ import {
 } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { getSystemConfigCached } from '../admin/systemConfig';
+import {
+  buildGeminiRejectedFailureInfo,
+  buildJobFailureInfo,
+  buildJobTimeoutFailureInfo,
+  serializeError,
+  toFailureSummary,
+  withFailureOutputId,
+} from '../errors/jobFailure';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
 import { shouldBackstopPendingJob } from './jobWorker.helpers';
@@ -111,21 +119,6 @@ const compressGeneratedImageIfNeeded = async ({
   return { bytes, contentType };
 };
 
-const serializeError = (error: unknown): Record<string, unknown> => {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    };
-  }
-
-  return {
-    message: 'Error desconocido',
-    raw: error,
-  };
-};
-
 const createLog = async (jobId: string, input: Omit<JobLog, 'createdAt'>): Promise<void> => {
   await db.collection('jobs').doc(jobId).collection('logs').add({
     ...input,
@@ -176,6 +169,7 @@ const claimJob = async (jobId: string, workerId: string): Promise<Job | null> =>
       'traceability.lastAttemptStartedAt': admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastError: null,
+      failureInfo: null,
     });
 
     return {
@@ -188,6 +182,7 @@ const claimJob = async (jobId: string, workerId: string): Promise<Job | null> =>
       startedAt,
       lastAttemptStartedAt: startedAt,
       lastError: null,
+      failureInfo: null,
     };
   });
 };
@@ -225,6 +220,7 @@ const persistGeneratedAttempt = async ({
   generationAttempt,
   nextStatus,
   autoReview,
+  failureInfo,
   lastError,
   nextPromptBase,
 }: {
@@ -234,6 +230,7 @@ const persistGeneratedAttempt = async ({
   generationAttempt: number;
   nextStatus: Job['status'];
   autoReview: JobAutoReview | null;
+  failureInfo: Job['failureInfo'] | null;
   lastError: string | null;
   nextPromptBase?: string;
 }): Promise<boolean> => {
@@ -262,6 +259,7 @@ const persistGeneratedAttempt = async ({
   });
 
   const costUsd = getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig);
+  const persistedFailureInfo = withFailureOutputId(failureInfo, outputId);
 
   const currentOutput: JobOutput = {
     id: outputId,
@@ -289,6 +287,7 @@ const persistGeneratedAttempt = async ({
     providerResponseSummary: providerResult.responseSummary,
     generationAttempt,
     autoReview,
+    failureInfo: persistedFailureInfo,
     isCurrent: true,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
@@ -320,6 +319,7 @@ const persistGeneratedAttempt = async ({
     ),
     generationAttemptCount: generationAttempt,
     latestAutoReview: autoReview,
+    failureInfo: persistedFailureInfo,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     lastError,
     ...(autoReview ? buildAutoReviewSignalsPatch(claimedJob, autoReview.verdict) : {}),
@@ -405,6 +405,7 @@ const persistGeneratedAttempt = async ({
           model: autoReview.model,
           verdict: autoReview.verdict,
           summary: autoReview.summary,
+          failureInfo: persistedFailureInfo,
           reviewPrompt: autoReview.reviewPrompt,
           revisedPrompt: autoReview.revisedPrompt,
           criteria: autoReview.criteria,
@@ -458,6 +459,12 @@ const failGeneratedAttemptAfterReviewError = async ({
   generationAttempt: number;
   error: unknown;
 }): Promise<void> => {
+  const failureInfo = buildJobFailureInfo(error, {
+    provider: providerResult.provider,
+    requestId: providerResult.requestId,
+    attemptNumber: generationAttempt,
+  });
+
   const persisted = await persistGeneratedAttempt({
     claimedJob,
     providerResult,
@@ -465,10 +472,8 @@ const failGeneratedAttemptAfterReviewError = async ({
     generationAttempt,
     nextStatus: 'failed',
     autoReview: null,
-    lastError:
-      error instanceof Error
-        ? `No se pudo validar la imagen con Gemini: ${error.message}`
-        : 'No se pudo validar la imagen con Gemini.',
+    failureInfo,
+    lastError: toFailureSummary(failureInfo),
   });
 
   if (!persisted) {
@@ -482,6 +487,7 @@ const failGeneratedAttemptAfterReviewError = async ({
     outputId: null,
     payload: {
       attemptNumber: generationAttempt,
+      failureInfo,
       error: serializeError(error),
     },
   });
@@ -491,8 +497,13 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
   const jobRef = db.collection('jobs').doc(claimedJob.id!);
   const nextRetryCount = (claimedJob.retryCount || 0) + 1;
   const shouldRetry = nextRetryCount <= (claimedJob.maxRetries || 0);
-  const errorMessage =
-    error instanceof Error ? error.message : 'Ocurrió un error desconocido durante la generación.';
+  const failureInfo = buildJobFailureInfo(error, {
+    provider: claimedJob.provider,
+    attemptNumber: claimedJob.generationAttemptCount || null,
+    maxAttempts: claimedJob.maxRetries,
+  });
+  const errorMessage = toFailureSummary(failureInfo)
+    || (error instanceof Error ? error.message : 'Ocurrió un error desconocido durante la generación.');
 
   await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(jobRef);
@@ -524,6 +535,7 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
       'traceability.lastProviderErrorMessage': errorMessage,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastError: errorMessage,
+      failureInfo,
     });
 
     transaction.set(jobRef.collection('logs').doc(), {
@@ -535,6 +547,7 @@ const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> =>
       payload: {
         retryCount: nextRetryCount,
         maxRetries: claimedJob.maxRetries,
+        failureInfo,
         error: serializeError(error),
       },
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -560,6 +573,14 @@ export const requeueExpiredJobs = async (): Promise<number> => {
       const job = { id: docSnapshot.id, ...docSnapshot.data() } as Job;
       const nextRetryCount = (job.retryCount || 0) + 1;
       const shouldRetry = nextRetryCount <= (job.maxRetries || 0);
+      const failureInfo = buildJobTimeoutFailureInfo({
+        retryable: shouldRetry,
+        attemptNumber: job.generationAttemptCount || null,
+        maxAttempts: job.maxRetries,
+        provider: job.provider,
+        requestId: job.currentOutput?.requestId || null,
+      });
+      const errorMessage = toFailureSummary(failureInfo);
 
       writeBatch.update(docSnapshot.ref, {
         status: shouldRetry ? 'pending' : 'failed',
@@ -571,13 +592,10 @@ export const requeueExpiredJobs = async (): Promise<number> => {
         timeoutAt: null,
         startedAt: null,
         'traceability.lastProviderErrorAt': admin.firestore.FieldValue.serverTimestamp(),
-        'traceability.lastProviderErrorMessage': shouldRetry
-          ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
-          : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
+        'traceability.lastProviderErrorMessage': errorMessage,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastError: shouldRetry
-          ? 'El trabajo excedió el tiempo máximo de ejecución y fue reencolado.'
-          : 'El trabajo excedió el tiempo máximo de ejecución y agotó sus reintentos.',
+        lastError: errorMessage,
+        failureInfo,
       });
 
       writeBatch.set(docSnapshot.ref.collection('logs').doc(), {
@@ -590,6 +608,7 @@ export const requeueExpiredJobs = async (): Promise<number> => {
           retryCount: nextRetryCount,
           maxRetries: job.maxRetries,
           previousClaimToken: job.claimToken,
+          failureInfo,
         },
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -777,6 +796,7 @@ export const processJob = async (
           generationAttempt,
           nextStatus: 'completed',
           autoReview: storedReview,
+          failureInfo: null,
           lastError: null,
         });
         return;
@@ -784,6 +804,18 @@ export const processJob = async (
 
       if (generationAttempt < maxAutoReviewAttempts) {
         const revisedPrompt = (review.revisedPrompt || claimedJob.promptBase).trim() || claimedJob.promptBase;
+        const failureInfo = buildGeminiRejectedFailureInfo({
+          summary: review.summary,
+          attemptNumber: generationAttempt,
+          maxAttempts: maxAutoReviewAttempts,
+          provider: providerResult.provider,
+          requestId: providerResult.requestId,
+          retryable: true,
+          raw: {
+            criteria: review.criteria,
+            revisedPrompt: review.revisedPrompt,
+          },
+        });
         await persistGeneratedAttempt({
           claimedJob,
           providerResult,
@@ -791,12 +823,25 @@ export const processJob = async (
           generationAttempt,
           nextStatus: 'pending',
           autoReview: storedReview,
+          failureInfo,
           nextPromptBase: revisedPrompt,
-          lastError: `Gemini rechazó el intento ${generationAttempt}/${maxAutoReviewAttempts}: ${review.summary}`,
+          lastError: toFailureSummary(failureInfo),
         });
         return;
       }
 
+      const failureInfo = buildGeminiRejectedFailureInfo({
+        summary: review.summary,
+        attemptNumber: generationAttempt,
+        maxAttempts: maxAutoReviewAttempts,
+        provider: providerResult.provider,
+        requestId: providerResult.requestId,
+        retryable: false,
+        raw: {
+          criteria: review.criteria,
+          revisedPrompt: review.revisedPrompt,
+        },
+      });
       await persistGeneratedAttempt({
         claimedJob,
         providerResult,
@@ -804,7 +849,8 @@ export const processJob = async (
         generationAttempt,
         nextStatus: 'failed',
         autoReview: storedReview,
-        lastError: `Gemini rechazó la imagen tras ${generationAttempt} intentos: ${review.summary}`,
+        failureInfo,
+        lastError: toFailureSummary(failureInfo),
       });
     } catch (reviewError) {
       await failGeneratedAttemptAfterReviewError({

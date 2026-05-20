@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { JobLog } from '../../../shared/src/types';
+import { JobFailureInfo, JobLog } from '../../../shared/src/types';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -44,6 +44,32 @@ export const useJobTraceability = (jobId: string | null) => {
 export const traceabilityPayload = (payload: unknown): Record<string, unknown> | null =>
   isRecord(payload) ? payload : null;
 
+export const traceabilityFailureInfo = (log: JobLog | undefined): JobFailureInfo | null => {
+  if (!log) {
+    return null;
+  }
+
+  const payload = traceabilityPayload(log.payload);
+  if (!payload) {
+    return null;
+  }
+
+  if (!isRecord(payload.failureInfo)) {
+    return null;
+  }
+
+  const failureInfo = payload.failureInfo;
+  return (
+    typeof failureInfo.source === 'string'
+    && typeof failureInfo.stage === 'string'
+    && typeof failureInfo.reasonCode === 'string'
+    && typeof failureInfo.title === 'string'
+    && typeof failureInfo.userMessage === 'string'
+  )
+    ? failureInfo as unknown as JobFailureInfo
+    : null;
+};
+
 export const traceabilityRequestedByUid = (log: JobLog): string | null => {
   const payload = traceabilityPayload(log.payload);
   return payload && typeof payload.requestedByUid === 'string' ? payload.requestedByUid : null;
@@ -57,6 +83,11 @@ export const traceabilityRequestedByDisplayName = (log: JobLog): string | null =
 export const traceabilityErrorMessage = (log: JobLog | undefined): string | null => {
   if (!log) {
     return null;
+  }
+
+  const failureInfo = traceabilityFailureInfo(log);
+  if (failureInfo?.userMessage) {
+    return failureInfo.userMessage;
   }
 
   const payload = traceabilityPayload(log.payload);

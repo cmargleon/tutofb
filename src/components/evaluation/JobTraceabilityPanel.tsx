@@ -3,11 +3,13 @@ import { AlertTriangle, BadgeDollarSign, ChevronDown, ChevronUp, History, Refres
 import { Batch, Job, JobLog } from '../../../shared/src/types';
 import {
   traceabilityErrorMessage,
+  traceabilityFailureInfo,
   traceabilityPayload,
   traceabilityRequestedByDisplayName,
   traceabilityRequestedByUid,
   useJobTraceability,
 } from '../../features/evaluation/useJobTraceability';
+import { getCatalogJobFailureFacts, getCatalogJobFailureTechnicalMessage, getCatalogJobFailureTitle, getJobFailureInfo } from '../../features/catalog/errorMessage';
 import { LoadingBlock, StatusBadge } from '../ui';
 
 import { formatDateTimeFull as formatDateTime } from '../../../shared/src/utils/dateUtils';
@@ -125,10 +127,19 @@ export const JobTraceabilityPanel: React.FC<Props> = ({ batch, job }) => {
   const latestQualityReviewLog = logs.find((log) => log.type === 'quality_review');
   const latestQualityReviewPayload = latestQualityReviewLog ? traceabilityPayload(latestQualityReviewLog.payload) : null;
 
+  const latestFailureInfo =
+    getJobFailureInfo(job, job.currentOutput)
+    || traceabilityFailureInfo(latestProviderErrorLog)
+    || traceabilityFailureInfo(latestQualityReviewLog);
   const latestProviderErrorMessage =
-    job.traceability?.lastProviderErrorMessage || traceabilityErrorMessage(latestProviderErrorLog);
+    latestFailureInfo?.userMessage
+    || job.traceability?.lastProviderErrorMessage
+    || traceabilityErrorMessage(latestProviderErrorLog);
 
-  const latestProviderErrorAt = job.traceability?.lastProviderErrorAt || latestProviderErrorLog?.createdAt;
+  const latestProviderErrorAt = job.traceability?.lastProviderErrorAt || latestProviderErrorLog?.createdAt || latestQualityReviewLog?.createdAt;
+  const latestFailureTitle = getCatalogJobFailureTitle(job, job.currentOutput);
+  const latestFailureTechnicalMessage = getCatalogJobFailureTechnicalMessage(job, job.currentOutput);
+  const latestFailureFacts = getCatalogJobFailureFacts(latestFailureInfo);
   const latestQualityReview = job.latestAutoReview;
   const latestQualityReviewSummary =
     latestQualityReview?.summary
@@ -196,14 +207,21 @@ export const JobTraceabilityPanel: React.FC<Props> = ({ batch, job }) => {
             />
             <SummaryCard
               icon={<AlertTriangle className="h-4 w-4" />}
-              label="Errores del provider"
-              value={latestProviderErrorMessage || 'Sin errores registrados'}
+              label="Ultimo fallo"
+              value={latestFailureTitle || latestProviderErrorMessage || 'Sin errores registrados'}
               detail={
                 latestProviderErrorAt
-                  ? `${providerErrorCount} incidentes · último ${formatDateTime(latestProviderErrorAt)}`
-                  : 'Sin incidentes de proveedor'
+                  ? [
+                      latestProviderErrorMessage,
+                      latestFailureTechnicalMessage,
+                      latestFailureFacts.length > 0
+                        ? latestFailureFacts.map((fact) => `${fact.label}: ${fact.value}`).join(' · ')
+                        : null,
+                      `${providerErrorCount} incidente${providerErrorCount === 1 ? '' : 's'} · ultimo ${formatDateTime(latestProviderErrorAt)}`,
+                    ].filter(Boolean).join(' · ')
+                  : 'Sin incidentes registrados'
               }
-              tone={latestProviderErrorMessage ? 'warning' : 'neutral'}
+              tone={latestFailureTitle || latestProviderErrorMessage ? 'warning' : 'neutral'}
             />
             <SummaryCard
               icon={<History className="h-4 w-4" />}

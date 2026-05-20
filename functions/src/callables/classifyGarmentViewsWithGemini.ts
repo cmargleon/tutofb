@@ -5,10 +5,15 @@ import {
   ClassifyGarmentViewsRequest,
   ClassifyGarmentViewsResponse,
   ClassifiedGarmentPhoto,
+  GarmentAccessoryType,
   GarmentBodyArea,
   GarmentPhotoAssetInput,
   SpreadsheetTemplateCategory,
 } from '../../../shared/src/types';
+import {
+  inferGarmentAccessoryTypeFromText,
+  isGarmentAccessoryType,
+} from '../../../shared/src/utils/accessoryMatching';
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 import { assertCallableRoles } from '../auth/roles';
 import {
@@ -27,6 +32,7 @@ interface GeminiGarmentPhotoClassificationPayload {
 interface GeminiGarmentClassificationPayload {
   photos?: unknown;
   bodyArea?: unknown;
+  accessoryType?: unknown;
   matchedCategory?: unknown;
   matchedCategoryConfidence?: unknown;
   matchedCategoryReasoning?: unknown;
@@ -56,7 +62,11 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
     },
     bodyArea: {
       type: ['string', 'null'],
-      enum: ['upper_body', 'lower_body', 'footwear', 'head_accessory', 'full_body', null],
+      enum: ['upper_body', 'lower_body', 'footwear', 'head_accessory', 'full_body', 'carry_accessory', null],
+    },
+    accessoryType: {
+      type: ['string', 'null'],
+      enum: ['backpack', 'shoulder_bag', 'crossbody_bag', 'handbag', 'tote_bag', 'duffel_bag', 'generic_carry_accessory', null],
     },
     matchedCategory: {
       type: ['string', 'null'],
@@ -80,6 +90,7 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
   required: [
     'photos',
     'bodyArea',
+    'accessoryType',
     'matchedCategory',
     'matchedCategoryConfidence',
     'matchedCategoryReasoning',
@@ -91,7 +102,7 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
 
 const bucket = admin.storage().bucket();
 const db = getAppFirestore();
-const VALID_GARMENT_BODY_AREAS: GarmentBodyArea[] = ['upper_body', 'lower_body', 'footwear', 'head_accessory', 'full_body'];
+const VALID_GARMENT_BODY_AREAS: GarmentBodyArea[] = ['upper_body', 'lower_body', 'footwear', 'head_accessory', 'full_body', 'carry_accessory'];
 
 const requireNonEmptyString = (value: unknown, label: string): string => {
   const normalized = typeof value === 'string' ? value.trim() : '';
@@ -207,6 +218,15 @@ const pickBestOption = (options: string[], candidates: Array<string | null | und
 
 const isGarmentBodyArea = (value: unknown): value is GarmentBodyArea =>
   typeof value === 'string' && (VALID_GARMENT_BODY_AREAS as string[]).includes(value);
+
+const normalizeGarmentAccessoryType = (
+  bodyArea: GarmentBodyArea | null,
+  value: unknown,
+  fallbackText: Array<string | null | undefined> = [],
+): GarmentAccessoryType | null =>
+  bodyArea === 'carry_accessory'
+    ? (isGarmentAccessoryType(value) ? value : inferGarmentAccessoryTypeFromText(fallbackText))
+    : null;
 
 const extractResponseText = (payload: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }): string => {
   const text = payload.candidates?.[0]?.content?.parts
@@ -329,9 +349,12 @@ const classifyGarmentWithGemini = async ({
 
   const prompt = [
     'Clasifica una prenda para un workflow de catálogo y spreadsheet.',
-    'Devuelve la vista principal de cada foto (front/back/side), el área del cuerpo (upper_body/lower_body/footwear/head_accessory/full_body), la categoría final más probable del spreadsheet y el color principal visible de la prenda.',
+    'Devuelve la vista principal de cada foto (front/back/side), el área del cuerpo (upper_body/lower_body/footwear/head_accessory/full_body/carry_accessory), el tipo de accesorio si aplica, la categoría final más probable del spreadsheet y el color principal visible de la prenda.',
     'Usa head_accessory para gorras, gorros, sombreros, lentes, gafas, diademas y accesorios cuyo foco principal sea cabeza o rostro.',
     'Usa footwear para zapatos, tenis, botas, sandalias y productos cuyo foco principal sean pies o tobillos.',
+    'Usa carry_accessory para mochilas, bolsas de hombro, crossbody, handbags, totes, duffels y productos que se cargan o cuelgan del cuerpo.',
+    'Para carry_accessory devuelve accessoryType: backpack, shoulder_bag, crossbody_bag, handbag, tote_bag, duffel_bag o generic_carry_accessory. Si es mochila o backpack, usa backpack.',
+    'Para productos carry_accessory, front/back/side describen la vista del producto fotografiado, no la pose del modelo.',
     'Usa front si la foto muestra el frente de la prenda o si es la única foto y no hay evidencia de espalda.',
     'El color debe salir en español y, si hay categorías disponibles, conviene aproximarlo a un valor real del catálogo de color de la categoría elegida.',
     'No inventes categoría ni color si la imagen no da base suficiente; en ese caso devuelve null.',
@@ -397,13 +420,20 @@ const classifyGarmentWithGemini = async ({
     };
   });
 
+  const garmentBodyArea = isGarmentBodyArea(parsed.bodyArea) ? parsed.bodyArea : null;
+  const garmentAccessoryType = normalizeGarmentAccessoryType(
+    garmentBodyArea,
+    parsed.accessoryType,
+    [garment.garmentName, normalizeText(parsed.matchedCategory)],
+  );
+
   return {
     garmentId: garment.garmentId,
     garmentName: garment.garmentName,
     photos: classifiedPhotos,
     availableViews: [...new Set(classifiedPhotos.map((photo) => photo.view))] as ClassifyGarmentViewsResponse['garments'][number]['availableViews'],
-    garmentBodyArea: isGarmentBodyArea(parsed.bodyArea) ? parsed.bodyArea : null,
-    garmentAccessoryType: null,
+    garmentBodyArea,
+    garmentAccessoryType,
     usedGemini: true,
     matchedCategoryId: matchedCategory?.id || null,
     matchedCategoryLabel: matchedCategory?.label || null,

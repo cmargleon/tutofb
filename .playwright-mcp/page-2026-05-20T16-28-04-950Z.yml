@@ -1,0 +1,22 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e7]
+      - text: Acceso interno
+    - heading "Tuto Catalog" [level=1] [ref=e10]
+    - paragraph [ref=e11]: Inicia sesión con tu usuario interno para trabajar en generación, cola y catálogo.
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]: Correo
+      - generic [ref=e15]:
+        - img [ref=e16]
+        - textbox "Correo" [ref=e19]:
+          - /placeholder: tu@empresa.com
+    - generic [ref=e20]:
+      - generic [ref=e21]: Contraseña
+      - generic [ref=e22]:
+        - img [ref=e23]
+        - textbox "Contraseña" [ref=e27]:
+          - /placeholder: Ingresa tu contraseña
+    - button "Entrar al sistema" [ref=e28] [cursor=pointer]
+    - paragraph [ref=e29]: El acceso se controla por Firebase Auth y roles internos sincronizados con custom claims.

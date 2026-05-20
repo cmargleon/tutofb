@@ -223,7 +223,7 @@ export const Catalogo: React.FC = () => {
   }, [displayGarmentGroups]);
 
   const selectedBatchLabel = useMemo(() => {
-    if (!selectedBatchId) return 'Todos los lotes';
+    if (!selectedBatchId) return 'Sin lotes disponibles';
     const found = batchOptions.find((b) => b.id === selectedBatchId);
     return found ? `${formatDateTimeLong(found.createdAt)} · ${found.id}` : selectedBatchId;
   }, [batchOptions, selectedBatchId]);
@@ -257,6 +257,28 @@ export const Catalogo: React.FC = () => {
       return '';
     });
   }, [initialClientId, selectedClientId]);
+
+  useEffect(() => {
+    if (!selectedClientId) {
+      return;
+    }
+
+    setSelectedBatchId((currentBatchId) => {
+      if (!batchOptions.length) {
+        return '';
+      }
+
+      const currentBatchStillExists = currentBatchId
+        ? batchOptions.some((batch) => batch.id === currentBatchId)
+        : false;
+
+      if (currentBatchStillExists) {
+        return currentBatchId;
+      }
+
+      return batchOptions[0].id;
+    });
+  }, [batchOptions, selectedClientId]);
 
   useEffect(() => {
     setLightbox(null);
@@ -511,15 +533,18 @@ export const Catalogo: React.FC = () => {
               <select
                 value={selectedBatchId}
                 onChange={(e) => setSelectedBatchId(e.target.value)}
-                disabled={!selectedClientId}
+                disabled={!selectedClientId || batchOptions.length === 0}
                 className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
               >
-                <option value="">Todos los lotes</option>
-                {batchOptions.map((batch) => (
-                  <option key={batch.id} value={batch.id}>
-                    {formatDateTimeLong(batch.createdAt)} · {batch.id}
-                  </option>
-                ))}
+                {batchOptions.length === 0 ? (
+                  <option value="">Sin lotes disponibles</option>
+                ) : (
+                  batchOptions.map((batch) => (
+                    <option key={batch.id} value={batch.id}>
+                      {formatDateTimeLong(batch.createdAt)} · {batch.id}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
 
@@ -678,7 +703,7 @@ export const Catalogo: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-16 text-gray-400">
-              <p>{selectedBatchId ? 'No hay imágenes completadas para ese lote' : 'No hay imágenes completadas para este cliente'}</p>
+              <p>{selectedBatchId ? 'No hay imágenes completadas para ese lote' : 'Este cliente todavía no tiene lotes.'}</p>
             </div>
           )
         )}

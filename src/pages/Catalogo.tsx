@@ -30,15 +30,15 @@ const SORT_ORDER_OPTIONS: Array<{ value: CatalogSortOrder; label: string }> = [
 
 export const Catalogo: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialClientId = searchParams.get('clientId') ?? '';
-  const initialBatchId = searchParams.get('batchId') ?? '';
+  const urlClientId = searchParams.get('clientId') ?? '';
+  const urlBatchId = searchParams.get('batchId') ?? '';
   const toast = useToast();
   const confirm = useConfirm();
   const role = useRole();
   const { config: systemConfig } = useSystemConfig();
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>(initialClientId);
-  const [selectedBatchId, setSelectedBatchId] = useState<string>(initialBatchId);
+  const [selectedClientId, setSelectedClientId] = useState<string>(urlClientId);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(urlBatchId);
   const [pageSize, setPageSize] = useState<number>(25);
   const [sortOrder, setSortOrder] = useState<CatalogSortOrder>('desc');
   const [lightbox, setLightbox] = useState<{ garmentIndex: number; jobIndex: number; jobId: string } | null>(null);
@@ -251,12 +251,16 @@ export const Catalogo: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    setSelectedBatchId((currentBatchId) => {
-      if (!selectedClientId) return '';
-      if (selectedClientId === initialClientId) return currentBatchId;
-      return '';
-    });
-  }, [initialClientId, selectedClientId]);
+    setSelectedClientId((currentClientId) => (
+      currentClientId === urlClientId ? currentClientId : urlClientId
+    ));
+  }, [urlClientId]);
+
+  useEffect(() => {
+    setSelectedBatchId((currentBatchId) => (
+      currentBatchId === urlBatchId ? currentBatchId : urlBatchId
+    ));
+  }, [urlBatchId]);
 
   useEffect(() => {
     if (!selectedClientId) {
@@ -518,7 +522,10 @@ export const Catalogo: React.FC = () => {
               <select
                 id="catalog-client"
                 value={selectedClientId}
-                onChange={(e) => setSelectedClientId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedClientId(e.target.value);
+                  setSelectedBatchId('');
+                }}
                 className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="">Selecciona un cliente...</option>

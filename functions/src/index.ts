@@ -21,6 +21,7 @@ export * from './callables/cancelBatchProcessing';
 export * from './callables/selectJobOutput';
 export * from './callables/updateBatchProductDraft';
 export * from './callables/exportBatchSpreadsheet';
+export * from './callables/editBatchSpreadsheet';
 export * from './callables/regenerateFailedBatchJobs';
 export * from './callables/cancelPendingBatchJobs';
 export * from './callables/regenerateJobsBulk';

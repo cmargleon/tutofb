@@ -3,6 +3,7 @@ import { defineInt, defineSecret, defineString } from 'firebase-functions/params
 export const FAL_KEY = defineSecret('FAL_KEY');
 export const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 export const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
+export const GOOGLE_PRIVATE_KEY = defineSecret('GOOGLE_PRIVATE_KEY');
 
 const BATCH_MAX_JOBS = defineInt('BATCH_MAX_JOBS', { default: 100 });
 const JOB_MAX_RETRIES = defineInt('JOB_MAX_RETRIES', { default: 3 });
@@ -22,6 +23,9 @@ const GEMINI_POSE_CLASSIFICATION_MODEL = defineString('GEMINI_POSE_CLASSIFICATIO
 const GEMINI_GARMENT_VIEW_CLASSIFICATION_MODEL = defineString('GEMINI_GARMENT_VIEW_CLASSIFICATION_MODEL', {
   default: 'gemini-3.1-flash-lite-preview',
 });
+const GOOGLE_CLIENT_EMAIL = defineString('GOOGLE_CLIENT_EMAIL', { default: '' });
+const GOOGLE_DRIVE_FOLDER_ID = defineString('GOOGLE_DRIVE_FOLDER_ID', { default: '' });
+const GOOGLE_WORKSPACE_USER_EMAIL = defineString('GOOGLE_WORKSPACE_USER_EMAIL', { default: '' });
 
 export const getBatchMaxJobs = (): number => BATCH_MAX_JOBS.value();
 export const getJobMaxRetries = (): number => JOB_MAX_RETRIES.value();
@@ -35,3 +39,6 @@ export const getOpenAIBaseUrl = (): string => OPENAI_BASE_URL.value();
 export const getGeminiImageReviewModel = (): string => GEMINI_IMAGE_REVIEW_MODEL.value();
 export const getGeminiPoseClassificationModel = (): string => GEMINI_POSE_CLASSIFICATION_MODEL.value();
 export const getGeminiGarmentViewClassificationModel = (): string => GEMINI_GARMENT_VIEW_CLASSIFICATION_MODEL.value();
+export const getGoogleClientEmail = (): string => GOOGLE_CLIENT_EMAIL.value();
+export const getGoogleDriveFolderId = (): string => GOOGLE_DRIVE_FOLDER_ID.value();
+export const getGoogleWorkspaceUserEmail = (): string => GOOGLE_WORKSPACE_USER_EMAIL.value();

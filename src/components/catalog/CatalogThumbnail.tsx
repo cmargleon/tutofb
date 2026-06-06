@@ -3,7 +3,7 @@ import { Ban, Download, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-react
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
-import { getCatalogJobErrorMessage, getJobFailureInfo, isFailureCancellation } from '../../features/catalog/errorMessage';
+import { getCatalogDisplayFailureInfo, isFailureCancellation } from '../../features/catalog/errorMessage';
 
 interface CatalogThumbnailProps {
   job: Job;
@@ -26,12 +26,13 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   regenerationPending = false,
   cancellationPending = false,
 }) => {
-  const resultPath = resolveApprovedJobOutput(job)?.resultImagePath;
+  const approvedOutput = resolveApprovedJobOutput(job);
+  const resultPath = approvedOutput?.resultImagePath;
   const isGenerating = job.status === 'pending' || job.status === 'processing';
-  const isFailed = job.status === 'failed';
-  const failureInfo = getJobFailureInfo(job, job.currentOutput);
+  const failureInfo = getCatalogDisplayFailureInfo(job, approvedOutput);
+  const isFailed = Boolean(failureInfo);
   const isCancelled = isFailureCancellation(failureInfo);
-  const failureMessage = getCatalogJobErrorMessage(job) || 'Abre el detalle para revisar el error.';
+  const failureMessage = failureInfo?.userMessage || failureInfo?.technicalMessage || failureInfo?.title || 'Abre el detalle para revisar el error.';
   const { url, error } = useStorageAssetUrl(resultPath || null);
   const loadError = Boolean(error);
   const showRegenerationOverlay = regenerationPending && Boolean(url);

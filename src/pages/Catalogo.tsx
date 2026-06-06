@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { AlertCircle, ChevronLeft, ChevronRight, Download, Images, RefreshCw } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Download, ExternalLink, Images, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
 import { RetryFailedJobsDialog } from '../components/evaluation/RetryFailedJobsDialog';
 import { subscribeToClients } from '../features/clients/firebase';
-import { cancelBatchProcessing, exportBatchSpreadsheet, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
+import { cancelBatchProcessing, editBatchSpreadsheet, exportBatchSpreadsheet, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
 import { useRole } from '../features/auth/AuthProvider';
 import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
 import { Batch, Client, Job, Provider } from '../../shared/src/types';
@@ -21,6 +21,8 @@ interface PendingCatalogRegeneration {
   job: Job;
   leftCatalog: boolean;
 }
+
+type SpreadsheetEditStatus = 'idle' | 'preparing' | 'opening';
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 const SORT_ORDER_OPTIONS: Array<{ value: CatalogSortOrder; label: string }> = [
@@ -46,7 +48,8 @@ export const Catalogo: React.FC = () => {
   const [generatingJobs, setGeneratingJobs] = useState<Job[]>([]);
   const [pendingRegenerations, setPendingRegenerations] = useState<Record<string, PendingCatalogRegeneration>>({});
   const [isExportingSpreadsheet, setIsExportingSpreadsheet] = useState(false);
-  const [latestSpreadsheetDownloadUrl, setLatestSpreadsheetDownloadUrl] = useState<string | null>(null);
+  const [spreadsheetEditStatus, setSpreadsheetEditStatus] = useState<SpreadsheetEditStatus>('idle');
+  const [spreadsheetEditError, setSpreadsheetEditError] = useState<string | null>(null);
   const [isRegeneratingFailed, setIsRegeneratingFailed] = useState(false);
   const [isCancellingBatch, setIsCancellingBatch] = useState(false);
   const [batchActionMessage, setBatchActionMessage] = useState<string | null>(null);
@@ -286,7 +289,8 @@ export const Catalogo: React.FC = () => {
 
   useEffect(() => {
     setLightbox(null);
-    setLatestSpreadsheetDownloadUrl(null);
+    setSpreadsheetEditStatus('idle');
+    setSpreadsheetEditError(null);
     setBatchActionMessage(null);
     setPendingRegenerations({});
   }, [currentPage, pageSize, selectedBatchId, selectedClientId, sortOrder]);
@@ -433,13 +437,33 @@ export const Catalogo: React.FC = () => {
     setIsExportingSpreadsheet(true);
     try {
       const result = await exportBatchSpreadsheet(selectedBatchId);
-      setLatestSpreadsheetDownloadUrl(result.downloadUrl);
       window.open(result.downloadUrl, '_blank', 'noopener,noreferrer');
       toast({ tone: 'success', title: 'Spreadsheet exportado', description: `${result.fileName} quedó listo para descarga.` });
     } catch (err: any) {
       toast({ tone: 'error', title: 'No pudimos exportar el spreadsheet', description: err.message || 'Inténtalo de nuevo.' });
     } finally {
       setIsExportingSpreadsheet(false);
+    }
+  };
+
+  const handleEditSpreadsheet = async () => {
+    if (!selectedBatchId) return;
+    setSpreadsheetEditStatus('preparing');
+    setSpreadsheetEditError(null);
+
+    try {
+      const result = await editBatchSpreadsheet(selectedBatchId);
+      setSpreadsheetEditStatus('opening');
+      const openedWindow = window.open(result.sheetUrl, '_blank', 'noopener,noreferrer');
+      if (!openedWindow) {
+        setSpreadsheetEditError('El navegador bloqueó la pestaña de Google Sheets. Permite ventanas emergentes e inténtalo de nuevo.');
+      }
+      window.setTimeout(() => setSpreadsheetEditStatus('idle'), 600);
+    } catch (err: any) {
+      const message = err.message || 'Google Drive no pudo preparar el Sheet editable.';
+      setSpreadsheetEditError(message);
+      toast({ tone: 'error', title: 'No pudimos abrir Google Sheets', description: message });
+      setSpreadsheetEditStatus('idle');
     }
   };
 
@@ -657,28 +681,40 @@ export const Catalogo: React.FC = () => {
                   {selectedBatch.spreadsheetCategoryNameSnapshot ? ` · ${selectedBatch.spreadsheetCategoryNameSnapshot}` : ''}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {latestSpreadsheetDownloadUrl && (
-                  <a
-                    href={latestSpreadsheetDownloadUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm font-medium text-emerald-700 underline decoration-emerald-300 underline-offset-2"
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleEditSpreadsheet()}
+                    disabled={spreadsheetEditStatus !== 'idle'}
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Abrir descarga
-                  </a>
+                    {spreadsheetEditStatus === 'preparing'
+                      ? <span className="app-spinner app-spinner-sm" aria-hidden="true" />
+                      : <ExternalLink className="h-4 w-4" />}
+                    {spreadsheetEditStatus === 'preparing'
+                      ? 'Preparando...'
+                      : spreadsheetEditStatus === 'opening'
+                        ? 'Abriendo...'
+                        : 'Editar Excel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExportSpreadsheet()}
+                    disabled={isExportingSpreadsheet}
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isExportingSpreadsheet
+                      ? <span className="app-spinner app-spinner-sm" aria-hidden="true" />
+                      : <Download className="h-4 w-4" />}
+                    {isExportingSpreadsheet ? 'Exportando...' : 'Exportar Excel'}
+                  </button>
+                </div>
+                {spreadsheetEditError && (
+                  <p className="max-w-md text-xs font-medium text-red-500 sm:text-right">
+                    {spreadsheetEditError}
+                  </p>
                 )}
-                <button
-                  type="button"
-                  onClick={() => void handleExportSpreadsheet()}
-                  disabled={isExportingSpreadsheet}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isExportingSpreadsheet
-                    ? <span className="app-spinner app-spinner-sm" aria-hidden="true" />
-                    : <Download className="h-4 w-4" />}
-                  {isExportingSpreadsheet ? 'Exportando...' : 'Exportar Excel'}
-                </button>
               </div>
             </div>
           )}

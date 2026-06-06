@@ -42,6 +42,11 @@ export interface Batch {
   spreadsheetTemplateNameSnapshot?: string | null;
   spreadsheetCategoryId?: string | null;
   spreadsheetCategoryNameSnapshot?: string | null;
+  googleSheetId?: string | null;
+  googleSheetUrl?: string | null;
+  googleSheetCreatedAt?: TimestampLike | null;
+  googleSheetUpdatedAt?: TimestampLike | null;
+  googleSheetWorkbookHash?: string | null;
   provider: Provider;
   aspectRatio: AspectRatio;
   imageConfig?: ProviderImageConfig | null;
@@ -131,6 +136,20 @@ export interface ExportBatchSpreadsheetResponse {
   storagePath: string;
   downloadUrl: string;
   fileName: string;
+}
+
+export interface EditBatchSpreadsheetRequest {
+  batchId: string;
+  refreshMode?: 'replace_existing' | 'create_new_version';
+}
+
+export interface EditBatchSpreadsheetResponse {
+  success: boolean;
+  batchId: string;
+  sheetId: string;
+  sheetUrl: string;
+  created: boolean;
+  updated: boolean;
 }
 
 export interface RegenerateJobsBulkItem {

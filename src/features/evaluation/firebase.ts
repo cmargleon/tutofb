@@ -7,6 +7,8 @@ import {
   CancelBatchProcessingResponse,
   CancelJobGenerationResponse,
   CancelPendingBatchJobsResponse,
+  EditBatchSpreadsheetRequest,
+  EditBatchSpreadsheetResponse,
   ExportBatchSpreadsheetRequest,
   ExportBatchSpreadsheetResponse,
   ProductDraft,
@@ -186,6 +188,19 @@ export const exportBatchSpreadsheet = async (
   const callable = httpsCallable<ExportBatchSpreadsheetRequest, ExportBatchSpreadsheetResponse>(
     functions,
     'exportBatchSpreadsheet',
+    { timeout: 300000 },
+  );
+
+  const result = await callable({ batchId });
+  return result.data;
+};
+
+export const editBatchSpreadsheet = async (
+  batchId: string,
+): Promise<EditBatchSpreadsheetResponse> => {
+  const callable = httpsCallable<EditBatchSpreadsheetRequest, EditBatchSpreadsheetResponse>(
+    functions,
+    'editBatchSpreadsheet',
     { timeout: 300000 },
   );
 

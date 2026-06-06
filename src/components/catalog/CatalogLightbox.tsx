@@ -11,12 +11,8 @@ import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
 import { useRole } from '../../features/auth/AuthProvider';
 import { useToast } from '../../features/feedback/FeedbackProvider';
 import {
-  getCatalogJobErrorMessage,
+  getCatalogDisplayFailureInfo,
   getCatalogJobFailureFacts,
-  getCatalogJobFailureTechnicalMessage,
-  getCatalogJobFailureTitle,
-  getJobFailureInfo,
-  getOutputFailureInfo,
   isFailureCancellation,
 } from '../../features/catalog/errorMessage';
 import { db } from '../../firebase';
@@ -149,27 +145,18 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const displayedImageValue = displayedImageUrl || displayedOutput?.resultImagePath || null;
   const isGeneratingJob = isRemoteGenerating;
   const showSpreadsheetPanel = batch?.outputMode !== 'photos_only';
-  const displayedOutputFailure = useMemo(() => getOutputFailureInfo(displayedOutput), [displayedOutput]);
-  const displayedFailureInfo = useMemo(() => {
-    if (displayedOutputFailure) {
-      return displayedOutputFailure;
-    }
-
-    if (!displayedOutput || displayedOutput.id === job.currentOutput?.id) {
-      return getJobFailureInfo(job, displayedOutput || null);
-    }
-
-    return null;
-  }, [displayedOutput, displayedOutputFailure, job]);
-  const failedJobMessage = displayedFailureInfo
-    ? getCatalogJobErrorMessage(job, displayedOutput || null)
-    : getCatalogJobErrorMessage(job);
-  const failedJobTitle = displayedFailureInfo
-    ? getCatalogJobFailureTitle(job, displayedOutput || null)
-    : getCatalogJobFailureTitle(job);
-  const failedJobTechnicalMessage = displayedFailureInfo
-    ? getCatalogJobFailureTechnicalMessage(job, displayedOutput || null)
-    : getCatalogJobFailureTechnicalMessage(job);
+  const displayedFailureInfo = useMemo(
+    () => getCatalogDisplayFailureInfo(job, displayedOutput || null),
+    [displayedOutput, job],
+  );
+  const failedJobMessage = displayedFailureInfo?.userMessage || displayedFailureInfo?.technicalMessage || displayedFailureInfo?.title || null;
+  const failedJobTitle = displayedFailureInfo?.title || null;
+  const failedJobTechnicalMessage =
+    displayedFailureInfo?.technicalMessage && displayedFailureInfo.technicalMessage !== displayedFailureInfo.userMessage
+      ? displayedFailureInfo.technicalMessage
+      : displayedFailureInfo?.finishReason
+        ? `Finish reason: ${displayedFailureInfo.finishReason}`
+        : null;
   const failedJobFacts = getCatalogJobFailureFacts(displayedFailureInfo);
   const failedJobIsCancellation = isFailureCancellation(displayedFailureInfo);
 
@@ -453,7 +440,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                       <Loader2 className="h-4 w-4 animate-spin" />
                       {isGeneratingJob ? 'La imagen todavía se está generando.' : 'Cargando imagen...'}
                     </div>
-                  ) : (displayedFailureInfo || job.status === 'failed') ? (
+                  ) : displayedFailureInfo ? (
                     <div className="flex w-full max-w-full items-center justify-center overflow-hidden px-6">
                       <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-3 text-center">
                         <AlertCircle className="h-8 w-8 text-rose-300" />

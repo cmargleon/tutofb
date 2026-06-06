@@ -19,7 +19,7 @@ const SOURCE_LABELS: Record<JobFailureInfo['source'], string> = {
   system: 'Sistema',
 };
 
-type FailureHost = Pick<Job, 'lastError' | 'traceability' | 'failureInfo' | 'latestAutoReview'>;
+type FailureHost = Pick<Job, 'status' | 'lastError' | 'traceability' | 'failureInfo' | 'latestAutoReview'>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -193,6 +193,26 @@ export const getOutputFailureInfo = (
   }
 
   return output.failureInfo || buildRejectedOutputFallback(output);
+};
+
+export const getCatalogDisplayFailureInfo = (
+  job: FailureHost,
+  output?: Pick<JobOutput, 'failureInfo' | 'autoReview' | 'requestId' | 'provider' | 'generationAttempt' | 'resultImagePath'> | null,
+): JobFailureInfo | null => {
+  const outputFailure = getOutputFailureInfo(output);
+  if (outputFailure) {
+    return outputFailure;
+  }
+
+  if (output?.resultImagePath) {
+    return null;
+  }
+
+  if (job.status !== 'failed') {
+    return null;
+  }
+
+  return getJobFailureInfo(job, output);
 };
 
 export const getJobFailureInfo = (

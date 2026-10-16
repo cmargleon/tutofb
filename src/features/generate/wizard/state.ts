@@ -1,3 +1,4 @@
+import { createDefaultProductScenes } from '../../../../shared/src/productGeneration';
 import {
   DEFAULT_TRY_ON_PROMPT,
 } from '../../../../shared/src/domain';
@@ -24,6 +25,8 @@ export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_ST
 
 export const createInitialGenerateWizardState = (): WizardState => ({
   step: 1,
+  generationKind: null,
+  productScenes: createDefaultProductScenes(),
   selectedClientId: null,
   selectedModelId: null,
   outputMode: 'spreadsheet',
@@ -140,12 +143,14 @@ export const isGarmentUploadedForBatch = (
 export const getGenerateWizardTotalJobs = (
   state: WizardState,
   compatiblePairCount: number = state.selectedPoseIds.length * state.garments.length,
-): number => compatiblePairCount;
+): number => state.generationKind === 'product' ? state.garments.length * state.productScenes.length : compatiblePairCount;
 
 export const isGenerateWizardStepComplete = (state: WizardState, stepId: number): boolean => {
   switch (stepId) {
     case 1:
+      if (state.generationKind === 'product') return Boolean(state.selectedClientId);
       return Boolean(
+        state.generationKind === 'garment' &&
         state.selectedClientId
         && state.selectedModelId
         && (
@@ -156,7 +161,9 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
     case 2:
       return state.garments.length > 0;
     case 3:
-      return state.selectedPoseIds.length > 0;
+      return state.generationKind === 'product'
+        ? state.productScenes.length > 0 && state.productScenes.every((scene) => Boolean(scene.prompt.trim()))
+        : state.selectedPoseIds.length > 0;
     case 4:
       return true;
     default:
@@ -213,3 +220,7 @@ export const getGenerateWizardSubmitButtonLabel = ({
 
   return 'Creando lote...';
 };
+
+export const getGenerateWizardSteps = (kind: WizardState['generationKind']): WizardStepDefinition[] => kind === 'product' ? [
+  { id: 1, name: 'Cliente y tipo' }, { id: 2, name: 'Objetos' }, { id: 3, name: 'Escenas' }, { id: 4, name: 'Lote' },
+] : GENERATE_WIZARD_STEPS;

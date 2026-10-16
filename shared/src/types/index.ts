@@ -12,3 +12,5 @@ export * from './finance';
 export * from './system';
 
 export * from './automation';
+
+export * from './productGeneration';

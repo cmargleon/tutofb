@@ -153,6 +153,32 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     assert.equal(batch.outputMode, 'photos_only');
     assert.equal(batch.modelId, 'model');
   });
+  await t.test('object wizard callable creates selected scenes without a model and deduplicates retries', async () => {
+    const { createProductGenerationBatch } = require('../functions/lib/functions/src/callables/createProductGenerationBatch.js');
+    const request = { auth: { uid, token: { role: 'operador' } }, data: {
+      requestId: randomUUID(), clientId: 'client', provider: 'fal-seedream', prompt: 'Warm soft light',
+      imageConfig: { provider: 'fal-seedream', imageSize: 'square_hd' },
+      items: [{ id: 'mug', name: 'Mug', referencePaths: [inputPath, inputPath] }],
+      scenes: [{ type: 'hero', prompt: 'On a wooden table' }, { type: 'clean', prompt: 'Pure white background' }],
+    } };
+    await assert.rejects(() => createProductGenerationBatch.run({ ...request, auth: undefined }), { code: 'unauthenticated' });
+    await assert.rejects(() => createProductGenerationBatch.run({ ...request, auth: { uid, token: { role: 'revisor' } } }), { code: 'permission-denied' });
+    const results = await Promise.all([createProductGenerationBatch.run(request), createProductGenerationBatch.run(request)]);
+    assert.equal(results[0].batchId, results[1].batchId);
+    const batch = (await db.collection('batches').doc(results[0].batchId).get()).data();
+    assert.equal(batch.generationKind, 'product'); assert.equal(batch.modelId, '');
+    assert.equal(batch.automationJobId, undefined); assert.equal(batch.outputMode, 'photos_only');
+    assert.equal(batch.totalJobs, 2); assert.equal(batch.aspectRatio, '1:1');
+    const jobs = await db.collection('jobs').where('batchId', '==', results[0].batchId).get();
+    assert.equal(jobs.size, 2);
+    for (const doc of jobs.docs) {
+      const job = doc.data();
+      assert.equal(job.generationKind, 'product'); assert.equal(job.productReferencePaths.length, 2);
+      assert.match(job.requestedPromptBase, /Warm soft light/);
+      assert.match(job.finalPrompt, /exact referenced product/);
+      assert.match(job.finalPrompt, job.productScene === 'hero' ? /On a wooden table/ : /Pure white background/);
+    }
+  });
   await t.test('missing model requires attention; intake retries are limited', async () => {
     const { jobId } = await persistence.createAutomation({ ...base, modelId: undefined, externalId: randomUUID() }, uid, 'operador');
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -204,13 +230,21 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     gemini.callGeminiGenerateContent = original;
   });
   let productId: string;
-  await t.test('product dispatch shares jobs queue and creates four scenes per product', async () => {
+  await t.test('product dispatch shares jobs queue and creates six scenes per product including human use', async () => {
     const result = await http('POST', '/jobs', { ...base, externalId: randomUUID(), jobType: 'product' });
     assert.equal(result.status, 202); productId = result.data.jobId;
     await worker.processAutomation(productId);
     const product = (await db.collection('automationJobs').doc(productId).get()).data();
     assert.equal(product.status, 'processing');
-    assert.equal(product.generationJobIds.length, 4);
+    assert.equal(product.generationJobIds.length, 6);
+    const jobs = await db.collection('jobs').where('automationJobId', '==', productId).get();
+    const humanUseJobs = jobs.docs.map((doc: any) => doc.data()).filter((job: any) => job.productScene.startsWith('human_use_'));
+    assert.equal(humanUseJobs.length, 2);
+    for (const job of humanUseJobs) {
+      assert.match(job.finalPrompt, /person naturally using/i);
+      assert.match(job.finalPrompt, /relatively neutral, uncluttered background/);
+      assert.match(job.requestedPromptBase, /person naturally using/i);
+    }
     await assert.rejects(() => persistence.retryAutomation({ jobId: productId }, uid, 'operador'), { code: 'failed-precondition' });
   });
   await t.test('existing worker persists attempts/costs, bounds review retries and completes approved outputs', async () => {
@@ -240,19 +274,19 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     for (const id of product.generationJobIds.slice(1)) await generation.processJob(id, 'create', { skipBacklogSweep: true });
     let status = await worker.refreshAutomation(productId);
     assert.equal(status.status, 'needs_attention');
-    assert.equal(status.outputImages.length, 3);
+    assert.equal(status.outputImages.length, 5);
     const { buildRegenerateJobPatch } = require('../functions/lib/functions/src/callables/regenerateJob.helpers.js');
     await first.update(buildRegenerateJobPatch((await first.get()).data(), 'fal-nano-banana-2', 'Clean studio product photo'));
     await generation.processJob(first.id, 'requeue', { skipBacklogSweep: true });
     status = await worker.refreshAutomation(productId);
-    assert.equal(status.status, 'completed'); assert.equal(status.outputImages.length, 4);
+    assert.equal(status.status, 'completed'); assert.equal(status.outputImages.length, 6);
     const costBeforeReview = (await first.get()).data().totalCostUsd;
     const retryReview = require('../functions/lib/functions/src/callables/retryJobAutoReview.js').retryJobAutoReview;
     const manualReview = await retryReview.run({ data: { jobId: first.id }, auth: { uid, token: { role: 'operador' } } });
     assert.equal(manualReview.verdict, 'approved');
     assert.equal((await first.get()).data().totalCostUsd, costBeforeReview);
     const response = await http('GET', `/jobs/${productId}`);
-    assert.equal(response.status, 200); assert.equal(response.data.outputs.length, 4);
+    assert.equal(response.status, 200); assert.equal(response.data.outputs.length, 6);
     assert.equal(response.data.pollAfterSeconds, 0); assert.equal(response.data.pollingTimedOut, false);
     assert.equal(response.data.outputs[0].expiresInSeconds, 900);
     assert.equal(response.data.outputs[0].metadata.itemId, 'sku');
@@ -280,7 +314,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
   await t.test('duplicate core submission cannot create a second product batch', async () => {
     const current = (await db.collection('automationJobs').doc(productId).get()).data();
     await pipeline.dispatchProduct({ ...current, leaseToken: 'stale' }, { name: 'Test' }, {});
-    assert.equal((await db.collection('jobs').where('automationJobId', '==', productId).get()).size, 4);
+    assert.equal((await db.collection('jobs').where('automationJobId', '==', productId).get()).size, 6);
   });
   await admin.app().delete();
 });

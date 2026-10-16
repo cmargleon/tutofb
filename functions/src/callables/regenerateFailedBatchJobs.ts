@@ -95,7 +95,7 @@ export const regenerateFailedBatchJobs = onCall<
   }
 
   failedJobs.forEach((job) => {
-    const prompt = (job.promptBase || job.finalPrompt || '').trim();
+    const prompt = ((job.generationKind === 'product' ? job.requestedPromptBase : null) || job.promptBase || job.finalPrompt || '').trim();
     const targetProvider = retryProvider ?? job.provider;
     if (isProviderDisabledInSystemConfig(targetProvider, systemConfig)) {
       skippedJobIds.push(job.id!);

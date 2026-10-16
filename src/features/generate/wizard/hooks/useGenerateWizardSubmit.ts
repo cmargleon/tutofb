@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createGenerationBatch } from '../../firebase';
+import { createGenerationBatch, createProductGenerationBatch } from '../../firebase';
 import { uploadGarmentDrafts } from '../../storage';
 import { GenerateSubmitStage, UploadSummary, WizardState } from '../../types';
 import {
@@ -46,6 +46,7 @@ export const useGenerateWizardSubmit = ({
   setDraftBatchId,
 }: UseGenerateWizardSubmitParams): UseGenerateWizardSubmitReturn => {
   const navigate = useNavigate();
+  const productSubmission = useRef<{ signature: string; id: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStage, setSubmitStage] = useState<GenerateSubmitStage>('idle');
 
@@ -54,18 +55,15 @@ export const useGenerateWizardSubmit = ({
     [draftBatchId, state.garments],
   );
 
-  const submitButtonLabel = useMemo(
-    () =>
-      getGenerateWizardSubmitButtonLabel({
-        isSubmitting,
-        submitStage,
-        uploadedGarmentCount,
-        garmentCount: state.garments.length,
-        totalJobs,
-        uploadSummary,
-      }),
-    [isSubmitting, state.garments.length, submitStage, totalJobs, uploadSummary, uploadedGarmentCount],
-  );
+  const submitButtonLabel = useMemo(() => {
+    if (state.generationKind === 'product') {
+      if (!isSubmitting) return `Crear lote y abrir evaluación (${totalJobs})`;
+      return submitStage === 'uploading' ? `Subiendo objetos (${uploadSummary.uploaded}/${uploadSummary.total})` : 'Creando lote...';
+    }
+    return getGenerateWizardSubmitButtonLabel({
+      isSubmitting, submitStage, uploadedGarmentCount, garmentCount: state.garments.length, totalJobs, uploadSummary,
+    });
+  }, [isSubmitting, state.generationKind, state.garments.length, submitStage, totalJobs, uploadSummary, uploadedGarmentCount]);
 
   const patchGarmentUpload = (garmentId: string, patch: Parameters<typeof patchGarmentUploadState>[2]) => {
     setState((current) => ({
@@ -75,18 +73,20 @@ export const useGenerateWizardSubmit = ({
   };
 
   const handleSubmit = async () => {
-    const requiresSpreadsheet = state.outputMode === 'spreadsheet';
+    const isProduct = state.generationKind === 'product';
+    const requiresSpreadsheet = !isProduct && state.outputMode === 'spreadsheet';
 
     if (
+      !state.generationKind ||
       !state.selectedClientId ||
-      !state.selectedModelId ||
-      state.selectedPoseIds.length === 0 ||
+      (!isProduct && (!state.selectedModelId || state.selectedPoseIds.length === 0)) ||
+      (isProduct && (!state.productScenes.length || state.productScenes.some((scene) => !scene.prompt.trim()))) ||
       state.garments.length === 0 ||
       (requiresSpreadsheet && !state.selectedSpreadsheetTemplateId) ||
       (requiresSpreadsheet && state.productDrafts.length === 0)
     ) {
       setFlowError(
-        requiresSpreadsheet
+        isProduct ? 'Completa cliente, objetos y escenas antes de crear el lote.' : requiresSpreadsheet
           ? 'Completa cliente, modelo, spreadsheet, poses, prendas y drafts antes de crear el lote.'
           : 'Completa cliente, modelo, poses y prendas antes de crear el lote.',
       );
@@ -190,7 +190,29 @@ export const useGenerateWizardSubmit = ({
       }
 
       if (uploadResult.failed.length > 0) {
-        setFlowError(getUploadFailureMessage(nextGarments, uploadResult.failed.length, activeDraftBatchId));
+        setFlowError(isProduct
+          ? `No se pudieron subir ${uploadResult.failed.length} objeto(s). Puedes reintentar; las fotos ya subidas se conservarán.`
+          : getUploadFailureMessage(nextGarments, uploadResult.failed.length, activeDraftBatchId));
+        return;
+      }
+
+      if (isProduct) {
+        const request = {
+          clientId: state.selectedClientId,
+          items: nextGarments.map((item) => ({ id: item.id, name: item.name,
+            referencePaths: item.originalPhotos.map((photo) => {
+              if (!photo.upload.storagePath) throw new Error('Hay fotos pendientes de subir.');
+              return photo.upload.storagePath;
+            }),
+          })),
+          scenes: state.productScenes, prompt: state.prompt, provider: state.provider,
+          imageConfig: selectedProviderImageConfig,
+        };
+        const signature = JSON.stringify(request);
+        if (productSubmission.current?.signature !== signature) productSubmission.current = { signature, id: crypto.randomUUID() };
+        setSubmitStage('creating-batch');
+        const result = await createProductGenerationBatch({ ...request, requestId: productSubmission.current.id });
+        navigate(`/catalogo?clientId=${state.selectedClientId}&batchId=${result.batchId}`);
         return;
       }
 
@@ -218,7 +240,7 @@ export const useGenerateWizardSubmit = ({
       console.error(submitError);
       setFlowError(
         submitError.message ||
-          'No se pudo crear el lote. Las prendas ya subidas quedaron listas para reintentar sin volver a cargarlas.',
+          'No se pudo crear el lote. Las fotos ya subidas quedaron listas para reintentar sin volver a cargarlas.',
       );
     } finally {
       setIsSubmitting(false);

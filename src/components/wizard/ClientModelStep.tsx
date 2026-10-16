@@ -1,10 +1,13 @@
 import React, { useRef } from 'react';
 import { Layers3 } from 'lucide-react';
 import { BatchOutputMode, Client, Model, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../../../shared/src/types';
-import { WizardSourceSpreadsheetState } from '../../features/generate/types';
+import { WizardState, WizardSourceSpreadsheetState } from '../../features/generate/types';
 import { EmptyState, ImageThumb } from '../ui';
 
 interface Props {
+  generationKind: WizardState['generationKind'];
+  isBusy: boolean;
+  onGenerationKindChange: (kind: NonNullable<WizardState['generationKind']>) => Promise<void>;
   clients: Client[];
   models: Model[];
   spreadsheetTemplates: SpreadsheetTemplate[];
@@ -27,6 +30,9 @@ interface Props {
 }
 
 export const ClientModelStep: React.FC<Props> = ({
+  generationKind,
+  isBusy,
+  onGenerationKindChange,
   clients,
   models,
   spreadsheetTemplates,
@@ -51,7 +57,7 @@ export const ClientModelStep: React.FC<Props> = ({
   const hideSpreadsheetControls = Boolean(
     selectedClientId && !loadingSpreadsheetTemplates && !selectedClientHasSpreadsheetTemplates,
   );
-  const showModels = hideSpreadsheetControls || (!loadingSpreadsheetTemplates && outputModeChosen);
+  const showModels = generationKind === 'garment' && (hideSpreadsheetControls || (!loadingSpreadsheetTemplates && outputModeChosen));
 
   return (
     <div className="space-y-6">
@@ -59,6 +65,8 @@ export const ClientModelStep: React.FC<Props> = ({
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <label className="mb-2 block text-sm font-medium text-slate-700">Cliente</label>
           <select
+            aria-label="Cliente"
+            disabled={isBusy}
             value={selectedClientId || ''}
             onChange={(event) => onClientChange(event.target.value || null)}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
@@ -71,7 +79,22 @@ export const ClientModelStep: React.FC<Props> = ({
             ))}
           </select>
 
-          {selectedClientId && (
+          {selectedClientId && <fieldset className="mt-5 min-w-0 space-y-2" disabled={isBusy}>
+            <legend className="mb-2 text-sm font-medium text-slate-700">¿Qué quieres fotografiar?</legend>
+            {([
+              ['garment', 'Ropa con modelo', 'Prendas, modelo humano y poses.'],
+              ['product', 'Objetos / productos', '6 fotos por objeto: 4 lifestyle y 2 con personas usándolo.'],
+            ] as const).map(([kind, title, description]) => <button key={kind} type="button" aria-pressed={generationKind === kind}
+              onClick={() => void onGenerationKindChange(kind)}
+              className={`w-full rounded-2xl border p-4 text-left transition disabled:opacity-60 ${generationKind === kind ? 'border-emerald-600 bg-emerald-50 text-slate-900' : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-400'}`}>
+              <span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-xs">{description}</span>
+            </button>)}
+          </fieldset>}
+          {selectedClientId && generationKind === 'product' && <p className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-700">
+            Salida: solo fotos. En los siguientes pasos cargarás los objetos y elegirás sus escenas.
+          </p>}
+
+          {selectedClientId && generationKind === 'garment' && (
             <div className="mt-4">
               <span className="mb-2 block text-sm font-medium text-slate-700">Salida final</span>
               {loadingSpreadsheetTemplates ? (
@@ -90,7 +113,7 @@ export const ClientModelStep: React.FC<Props> = ({
                     onClick={() => onOutputModeChange('spreadsheet')}
                     className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
                       outputMode === 'spreadsheet' && outputModeChosen
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-900'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
                         : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
                     }`}
                   >
@@ -104,7 +127,7 @@ export const ClientModelStep: React.FC<Props> = ({
                     onClick={() => onOutputModeChange('photos_only')}
                     className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
                       outputMode === 'photos_only' && outputModeChosen
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-900'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
                         : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
                     }`}
                   >
@@ -118,7 +141,7 @@ export const ClientModelStep: React.FC<Props> = ({
             </div>
           )}
 
-          {selectedClientId && outputModeChosen && !hideSpreadsheetControls && outputMode === 'spreadsheet' ? (
+          {generationKind === 'garment' && selectedClientId && outputModeChosen && !hideSpreadsheetControls && outputMode === 'spreadsheet' ? (
             <>
               <label className="mb-2 mt-4 block text-sm font-medium text-slate-700">Spreadsheet del cliente</label>
               <select
@@ -208,7 +231,7 @@ export const ClientModelStep: React.FC<Props> = ({
                 ) : null}
               </div>
             </>
-          ) : selectedClientId && outputModeChosen && !hideSpreadsheetControls ? (
+          ) : generationKind === 'garment' && selectedClientId && outputModeChosen && !hideSpreadsheetControls ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
               Este lote se guardará solo como imágenes. Más adelante no aparecerá la opción de exportar spreadsheet.
             </div>

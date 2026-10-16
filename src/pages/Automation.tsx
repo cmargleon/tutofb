@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Workflow } from 'lucide-react';
 import { PROVIDER_VALUES, PROVIDER_LABELS } from '../../shared/src/domain';
 import { AutomationJob, Provider } from '../../shared/src/types';
+import { PRODUCT_SCENES } from '../../shared/src/productGeneration';
 import { Button, ImageThumb, PageHeader, StatusBadge } from '../components/ui';
 import { useAutomation } from '../features/automation/useAutomation';
 
@@ -39,7 +40,7 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         <option value="">Usar configuración del cliente</option>{state.models.filter((entry) => entry.clientId === state.clientId).map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
       </select><span className="text-xs font-normal text-slate-500">Si no hay modelo configurado, el trabajo requerirá atención.</span></label>}
       <label className={labelClass}>Preset<select className={inputClass} value={state.preset} onChange={(event) => state.setPreset(event.target.value)}>
-        <option value="">Default del cliente</option><option value={state.jobType === 'product' ? 'generic_product' : 'standard'}>{state.jobType === 'product' ? 'Producto genérico · 4 escenas' : 'Standard · poses del modelo'}</option>
+        <option value="">Default del cliente</option><option value={state.jobType === 'product' ? 'generic_product' : 'standard'}>{state.jobType === 'product' ? `Producto genérico · ${PRODUCT_SCENES.length} escenas (4 lifestyle + 2 con personas)` : 'Standard · poses del modelo'}</option>
         {Object.keys(client?.automation?.presets || {}).filter((name) => name !== 'standard' && name !== 'generic_product').map((name) => <option key={name}>{name}</option>)}
       </select></label>
       <label className={labelClass}>Modelo de generación<select className={inputClass} value={state.provider} disabled={state.busy} onChange={(event) => state.setProvider(event.target.value as Provider | '')}>

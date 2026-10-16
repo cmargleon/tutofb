@@ -2,16 +2,12 @@ import { AutomationPreset, Client, CreateAutomationJobRequest } from '../../../s
 import { AutomationAttentionError } from './imports';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 
-export const PRODUCT_IDENTITY_RULES = 'Preserve the exact referenced product: shape, geometry, proportions, colors, materials, logos, lettering, prints and every physical part. Do not redesign, add or remove pieces. References show the same product, not a person or pose. Photorealistic commercial product photography, no invented branding or text.';
+export { PRODUCT_IDENTITY_RULES } from '../../../shared/src/productGeneration';
+import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
 export const PRODUCT_PRESETS = {
   generic_product: {
     mode: 'image-to-image', aspectRatio: '1:1', maxReviewAttempts: 3,
-    scenes: [
-      { type: 'clean', prompt: 'One product on a clean white seamless background, soft studio lighting, accurate contact shadow.' },
-      { type: 'lifestyle_1', prompt: 'One product in a realistic appropriate everyday environment, natural daylight. Product remains clearly visible.' },
-      { type: 'lifestyle_2', prompt: 'One product in a different realistic use-context, warm interior lighting. Do not invent functionality or attachments.' },
-      { type: 'hero', prompt: 'One product as the hero of an elegant studio composition, neutral background, detailed materials and controlled lighting.' },
-    ],
+    scenes: PRODUCT_SCENES,
     qualityRules: ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts'],
   },
 } as const;

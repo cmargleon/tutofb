@@ -1,3 +1,4 @@
+import { ProductPromptField } from './ProductPromptField';
 import { ProviderCostEstimate } from './ProviderCostEstimate';
 import React, { useState } from 'react';
 import { SourceSpreadsheetMatchSummary } from '../../../shared/src/types';
@@ -73,7 +74,7 @@ export const BatchStep: React.FC<Props> = ({
   );
 
   return (
-    <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <fieldset disabled={isSubmitting} className="min-w-0 space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <ProviderSelection provider={providerChosen ? state.provider : null} onChange={handleProviderSelect} disabledProviders={disabledProviders} />
 
       {providerChosen && (
@@ -156,8 +157,16 @@ export const BatchStep: React.FC<Props> = ({
               onChange={onProviderImageConfigChange}
             />
           </div>
-          <ProviderCostEstimate config={state.providerImageConfigs[state.provider]} imageCount={totalJobs} referenceCount={2} />
-          <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
+          {state.generationKind === 'product' ? <>
+            <p className="text-sm font-semibold text-slate-900">{state.garments.length} objeto(s) × {state.productScenes.length} escena(s) = {totalJobs} imágenes · Solo fotos</p>
+            {[...new Set(state.garments.map((item) => item.originalPhotos.length))].sort().map((references) => <ProviderCostEstimate key={references}
+              config={state.providerImageConfigs[state.provider]} referenceCount={references}
+              imageCount={state.garments.filter((item) => item.originalPhotos.length === references).length * state.productScenes.length} />)}
+            <ProductPromptField value={state.prompt} scenes={state.productScenes} disabled={isSubmitting} onChange={onPromptChange} />
+          </> : <>
+            <ProviderCostEstimate config={state.providerImageConfigs[state.provider]} imageCount={totalJobs} referenceCount={2} />
+            <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
+          </>}
 
           <button
             type="button"
@@ -169,6 +178,6 @@ export const BatchStep: React.FC<Props> = ({
           </button>
         </>
       )}
-    </div>
+    </fieldset>
   );
 };

@@ -1,3 +1,4 @@
+import type { ProductSceneInput } from './productGeneration';
 import type { TimestampLike, Provider, AspectRatio, BatchStatus, BatchOutputMode } from './common';
 import type { ProviderImageConfig } from './provider';
 import type { ModelIdentityTraits } from './model';
@@ -32,6 +33,7 @@ export interface BatchModelSnapshot {
 export interface Batch {
   automationJobId?: string;
   generationKind?: 'garment' | 'product';
+  productScenes?: ProductSceneInput[];
   id?: string;
   clientId: string;
   clientNameSnapshot: string;

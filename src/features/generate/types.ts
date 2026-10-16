@@ -1,5 +1,7 @@
 import {
   BatchOutputMode,
+  Batch,
+  ProductSceneInput,
   GarmentAccessoryType,
   GarmentBodyArea,
   GarmentPhotoClassificationSource,
@@ -138,6 +140,8 @@ export interface UploadSummary {
 
 export interface WizardState {
   step: GenerateWizardStepId;
+  generationKind: NonNullable<Batch['generationKind']> | null;
+  productScenes: ProductSceneInput[];
   selectedClientId: string | null;
   selectedModelId: string | null;
   outputMode: BatchOutputMode;

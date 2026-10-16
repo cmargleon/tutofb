@@ -30,10 +30,12 @@ test('garment model precedence and explicit missing model attention', () => {
   assert.throws(() => resolveAutomationPreset(payload as any, {} as any), /modelId/);
   assert.throws(() => resolveAutomationPreset({ ...payload, preset: 'missing' } as any, client), /Preset/);
 });
-test('product preset has bounded review and four identity-preserving scenes', () => {
+test('product preset has bounded review and shares the six scenes used by the object wizard', () => {
   const result = resolveAutomationPreset({ ...payload, jobType: 'product' } as any, {} as any);
   assert.equal(result.name, 'generic_product');
-  assert.equal(PRODUCT_PRESETS.generic_product.scenes.length, 4);
+  assert.equal(PRODUCT_PRESETS.generic_product.scenes.length, 6);
+  const { createDefaultProductScenes } = require('../shared/src/productGeneration.ts');
+  assert.deepEqual(PRODUCT_PRESETS.generic_product.scenes.map(({ type, prompt }) => ({ type, prompt })), createDefaultProductScenes());
   assert.equal(PRODUCT_PRESETS.generic_product.maxReviewAttempts, 3);
 });
 test('automation defaults to Seedream 5 Pro and preserves explicit provider and client presets', () => {

@@ -1,14 +1,11 @@
-import { FieldValue } from 'firebase-admin/firestore';
-import { HttpsError } from 'firebase-functions/v2/https';
-import { AutomationInput, AutomationJob, AutomationPreset, Batch, Client, Job, Model, UploadedGarmentInput } from '../../../shared/src/types';
-import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
+import { AutomationInput, AutomationJob, AutomationPreset, Client, Model, UploadedGarmentInput } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { assertProviderEnabledInSystemConfig, getSystemConfigCached } from '../admin/systemConfig';
 import { createGenerationBatchCore } from '../callables/createGenerationBatch';
-import { buildJobDraft, getCompatibleGarmentPoseCombinations } from '../callables/createGenerationBatch.helpers';
+import { getCompatibleGarmentPoseCombinations } from '../callables/createGenerationBatch.helpers';
 import { classifyGarmentWithGemini } from '../callables/classifyGarmentViewsWithGemini';
-import { GEMINI_API_KEY, getGeminiGarmentViewClassificationModel, getJobAutoReviewMaxAttempts } from '../config/runtime';
-import { PRODUCT_IDENTITY_RULES, PRODUCT_PRESETS } from './presets';
+import { GEMINI_API_KEY, getGeminiGarmentViewClassificationModel } from '../config/runtime';
+import { PRODUCT_PRESETS } from './presets';
+import { createProductGenerationBatchCore } from '../callables/createProductGenerationBatch';
 import { AutomationAttentionError } from './imports';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 
@@ -52,57 +49,14 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
   }, job.createdByUid, { id: job.id, leaseToken: job.leaseToken! });
 };
 
-export const dispatchProduct = async (job: AutomationJob, client: Client, config: AutomationPreset): Promise<void> => {
-  const db = getAppFirestore();
-  const system = await getSystemConfigCached();
-  const provider = config.provider || DEFAULT_AUTOMATION_PROVIDER;
-  assertProviderEnabledInSystemConfig(provider, system, 'automatizar productos');
+export const dispatchProduct = async (job: AutomationJob, _client: Client, config: AutomationPreset): Promise<void> => {
   const preset = PRODUCT_PRESETS.generic_product;
-  const imageConfig = normalizeProviderImageConfig(provider, null, config.aspectRatio || preset.aspectRatio);
-  const now = FieldValue.serverTimestamp();
-  const batchRef = db.collection('batches').doc(`automation-${job.id}`);
-  const jobs: Array<{ id: string; data: Omit<Job, 'id'> }> = [];
-  for (const [itemId, images] of groupedImages(job.inputImages)) {
-    for (const scene of preset.scenes) {
-      const prompt = `${PRODUCT_IDENTITY_RULES}\n${scene.prompt}`;
-      jobs.push({ id: db.collection('jobs').doc().id, data: {
-        ...buildJobDraft({ garmentIsMultiAngle: false }, provider, prompt, null, Math.max(1, Math.min(preset.maxReviewAttempts, getJobAutoReviewMaxAttempts() || 3))),
-        automationJobId: job.id, generationKind: 'product', productScene: scene.type,
-        productReferencePaths: images.map((image) => image.storagePath!),
-        batchId: batchRef.id, clientId: job.clientId, clientNameSnapshot: client.name,
-        modelId: '', modelNameSnapshot: 'Producto', poseImageId: scene.type,
-        poseImagePath: images[0].storagePath!, poseFileName: images[0].fileName,
-        garmentId: itemId, garmentName: images[0].fileName, garmentFilePath: (images[1] || images[0]).storagePath!,
-        garmentIsMultiAngle: images.length > 1, finalPrompt: prompt,
-        provider, aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig,
-        maxRetries: system.jobMaxRetries, completedAt: null, currentOutputId: null, currentOutput: null,
-        completedOutputCount: 0, totalCostUsd: 0, totalDurationSeconds: 0, manualRegenerationCount: 0,
-        createdAt: now, updatedAt: now, createdByUid: job.createdByUid,
-      } });
-    }
-  }
-  if (!jobs.length || jobs.length > system.batchMaxJobs) throw new HttpsError('out-of-range', 'El preset excede el límite de jobs del sistema.');
-  const batch: Omit<Batch, 'id'> = {
-    automationJobId: job.id, generationKind: 'product', clientId: job.clientId, clientNameSnapshot: client.name,
-    modelId: '', modelNameSnapshot: 'Producto', outputMode: 'photos_only',
-    provider, aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig,
-    promptBase: PRODUCT_IDENTITY_RULES, poseIds: [], garmentCount: groupedImages(job.inputImages).size,
-    totalJobs: jobs.length, pendingJobs: jobs.length, processingJobs: 0, completedJobs: 0, failedJobs: 0,
-    status: 'pending', latestJobCreatedAt: now, createdAt: now, updatedAt: now, createdByUid: job.createdByUid,
-  };
-  await db.runTransaction(async (tx) => {
-    const ref = db.collection('automationJobs').doc(job.id);
-    const snap = await tx.get(ref);
-    const current = snap.data() as AutomationJob;
-    if (current.batchId) return;
-    if (current.leaseToken !== job.leaseToken || current.status !== 'importing') throw new HttpsError('aborted', 'Reserva expirada.');
-    tx.create(batchRef, batch);
-    for (const generated of jobs) tx.create(db.collection('jobs').doc(generated.id), generated.data);
-    tx.update(ref, {
-      batchId: batchRef.id, generationJobIds: jobs.map((generated) => generated.id),
-      status: 'processing', leaseToken: null, leaseExpiresAt: null, error: null, updatedAt: now,
-      progress: { total: jobs.length, completed: 0, failed: 0 },
-    });
-    tx.update(db.collection('clients').doc(job.clientId), { batchCount: FieldValue.increment(1), lastBatchCreatedAt: now, updatedAt: now });
-  });
+  await createProductGenerationBatchCore({
+    requestId: job.id, clientId: job.clientId,
+    provider: config.provider || DEFAULT_AUTOMATION_PROVIDER, aspectRatio: config.aspectRatio || preset.aspectRatio,
+    prompt: '', scenes: preset.scenes.map(({ type, prompt }) => ({ type, prompt })),
+    items: [...groupedImages(job.inputImages)].map(([id, images]) => ({
+      id, name: images[0].fileName, referencePaths: images.map((image) => image.storagePath!),
+    })),
+  }, job.createdByUid, { id: job.id, leaseToken: job.leaseToken! });
 };

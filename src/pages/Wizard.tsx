@@ -1,3 +1,4 @@
+import { ProductScenesStep } from '../components/wizard/ProductScenesStep';
 import React, { useEffect, useRef } from 'react';
 import { LoadingBlock } from '../components/ui';
 import { WizardStepper } from '../components/WizardStepper';
@@ -8,7 +9,7 @@ import { PoseSelectionStep } from '../components/wizard/PoseSelectionStep';
 import { BatchStep } from '../components/wizard/BatchStep';
 import { useToast } from '../features/feedback/FeedbackProvider';
 import { useWizard } from '../features/generate/hooks/useWizard';
-import { GENERATE_WIZARD_MAX_STEP, GENERATE_WIZARD_STEPS } from '../features/generate/wizard/state';
+import { GENERATE_WIZARD_MAX_STEP, getGenerateWizardSteps } from '../features/generate/wizard/state';
 
 export const Wizard: React.FC = () => {
   const toast = useToast();
@@ -41,6 +42,8 @@ export const Wizard: React.FC = () => {
     removeGarment,
     handleSubmit,
     handleClientChange,
+    handleGenerationKindChange,
+    product,
     handleOutputModeChange,
     handleSpreadsheetTemplateChange,
     handleSpreadsheetCategoryChange,
@@ -87,7 +90,7 @@ export const Wizard: React.FC = () => {
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
       <div ref={stepperRef}>
         <WizardStepper
-          steps={GENERATE_WIZARD_STEPS}
+          steps={getGenerateWizardSteps(state.generationKind)}
           currentStep={state.step}
           onStepSelect={handleStepSelect}
           canSelectStep={canSelectStep}
@@ -96,6 +99,9 @@ export const Wizard: React.FC = () => {
 
       {state.step === 1 && (
         <ClientModelStep
+          generationKind={state.generationKind}
+          isBusy={isWizardBusy}
+          onGenerationKindChange={handleGenerationKindChange}
           clients={clients}
           models={models}
           spreadsheetTemplates={spreadsheetTemplates}
@@ -122,12 +128,17 @@ export const Wizard: React.FC = () => {
         <GarmentsStep
           garments={state.garments}
           isSubmitting={isWizardBusy}
-          onFiles={handleFiles}
+          productMode={state.generationKind === 'product'}
+          onSameItemFiles={(files) => product.handleFiles(files, true)}
+          onFiles={state.generationKind === 'product' ? product.handleFiles : handleFiles}
           onRemoveGarment={removeGarment}
         />
       )}
 
-      {state.step === 3 && (
+      {state.step === 3 && state.generationKind === 'product' && <ProductScenesStep
+        scenes={state.productScenes} disabled={isWizardBusy} onToggle={product.toggleScene} onPromptChange={product.changeScenePrompt} />}
+
+      {state.step === 3 && state.generationKind === 'garment' && (
         <PoseSelectionStep
           selectedModel={selectedModel}
           garments={state.garments}

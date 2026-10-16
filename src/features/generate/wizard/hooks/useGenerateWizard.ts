@@ -1,3 +1,7 @@
+import { createLegacyProviderImageConfig } from '../../../../../shared/src/providerImageConfig';
+import { DEFAULT_PRODUCT_PROMPT, createDefaultProductScenes } from '../../../../../shared/src/productGeneration';
+import { useConfirm } from '../../../feedback/FeedbackProvider';
+import { useProductGeneration } from './useProductGeneration';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DEFAULT_TRY_ON_PROMPT } from '../../../../../shared/src/domain';
@@ -105,6 +109,7 @@ const getStepFromSearchParams = (searchParams: URLSearchParams): GenerateWizardS
 };
 
 export const useGenerateWizard = () => {
+  const confirm = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const garmentUrlsRef = useRef<UploadedGarmentDraft[]>([]);
   const stepperRef = useRef<HTMLDivElement | null>(null);
@@ -149,7 +154,7 @@ export const useGenerateWizard = () => {
   }, [selectedClient?.generationPromptBase, selectedClient?.name, systemConfig.systemPromptOverride]);
 
   useEffect(() => {
-    if (isPromptDirty) {
+    if (isPromptDirty || state.generationKind === 'product') {
       return;
     }
 
@@ -158,7 +163,7 @@ export const useGenerateWizard = () => {
         ? current
         : { ...current, prompt: resolvedPromptBase }
     ));
-  }, [isPromptDirty, resolvedPromptBase]);
+  }, [isPromptDirty, resolvedPromptBase, state.generationKind]);
 
   useEffect(() => {
     if (!state.selectedClientId || loadingSpreadsheetTemplates || selectedClientHasSpreadsheetTemplates) {
@@ -439,13 +444,41 @@ export const useGenerateWizard = () => {
       ...current,
       selectedClientId: clientId,
       selectedModelId: null,
-      outputModeChosen: false,
+      outputModeChosen: current.generationKind === 'product',
       selectedSpreadsheetTemplateId: null,
       selectedSpreadsheetCategoryId: null,
       sourceSpreadsheet: null,
-      prompt: nextPrompt,
+      prompt: current.generationKind === 'product' ? DEFAULT_PRODUCT_PROMPT : nextPrompt,
     }));
   };
+
+  const handleGenerationKindChange = async (generationKind: NonNullable<WizardState['generationKind']>) => {
+    if (generationKind === state.generationKind || submit.isSubmitting || state.poseSuggestions.status === 'preparing') return;
+    const hasConfiguration = state.garments.length > 0 || state.selectedModelId || state.sourceSpreadsheet
+      || isPromptDirty || state.productScenes.some((scene) => scene.prompt !== createDefaultProductScenes().find((preset) => preset.type === scene.type)?.prompt)
+      || state.productScenes.length !== createDefaultProductScenes().length;
+    if (hasConfiguration && !await confirm({
+      title: 'Cambiar tipo de generación', tone: 'warning', confirmLabel: 'Cambiar y empezar de nuevo',
+      description: 'Se descartarán las fotos seleccionadas, el modelo, las escenas y los prompts de este recorrido.',
+    })) return;
+    revokeGarmentUrls(state.garments);
+    setDraftBatchId(null);
+    submit.resetDraftBatch();
+    setIsPromptDirty(false);
+    setFlowError(null);
+    setState((current) => ({
+      ...createInitialGenerateWizardState(), selectedClientId: current.selectedClientId, generationKind,
+      outputMode: generationKind === 'product' || !selectedClientHasSpreadsheetTemplates ? 'photos_only' : 'spreadsheet',
+      outputModeChosen: generationKind === 'product',
+      provider: current.provider,
+      providerImageConfigs: Object.fromEntries(Object.keys(current.providerImageConfigs).map((provider: WizardState['provider']) => [
+        provider, createLegacyProviderImageConfig(provider, generationKind === 'product' ? '1:1' : '3:4'),
+      ])) as WizardState['providerImageConfigs'],
+      prompt: generationKind === 'product' ? DEFAULT_PRODUCT_PROMPT : resolvedPromptBase,
+    }));
+  };
+
+  const product = useProductGeneration({ state, setState, setFlowError });
 
   const handleModelSelect = (modelId: string | null) => {
     setState((current) => resetWizardGeneratedOutputs({
@@ -637,6 +670,8 @@ export const useGenerateWizard = () => {
     removeGarment,
     handleSubmit: submit.handleSubmit,
     handleClientChange,
+    handleGenerationKindChange,
+    product,
     handleOutputModeChange,
     handleSpreadsheetTemplateChange,
     handleSpreadsheetCategoryChange,

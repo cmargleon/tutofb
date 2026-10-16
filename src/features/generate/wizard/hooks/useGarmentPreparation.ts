@@ -390,7 +390,8 @@ export const useGarmentPreparation = ({
 
   useEffect(() => {
     if (
-      state.step !== 3
+      state.generationKind !== 'garment'
+      || state.step !== 3
       || !selectedModel
       || state.garments.length === 0
       || state.poseSuggestions.status === 'preparing'
@@ -407,12 +408,14 @@ export const useGarmentPreparation = ({
     state.poseSuggestions.signature,
     state.poseSuggestions.status,
     state.step,
+    state.generationKind,
     suggestionSignature,
   ]);
 
   useEffect(() => {
     if (
-      state.step !== 4
+      state.generationKind !== 'garment'
+      || state.step !== 4
       || state.outputMode !== 'spreadsheet'
       || !state.selectedSpreadsheetTemplateId
       || state.garments.length === 0
@@ -434,5 +437,6 @@ export const useGarmentPreparation = ({
     state.productDraftPreparation.signature,
     state.productDraftPreparation.status,
     state.step,
+    state.generationKind,
   ]);
 };

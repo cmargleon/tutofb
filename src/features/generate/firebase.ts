@@ -4,6 +4,7 @@ import {
   ClassifyGarmentViewsRequest,
   ClassifyGarmentViewsResponse,
   CreateGenerationBatchRequest,
+  CreateProductGenerationBatchRequest,
   CreateGenerationBatchResponse,
   PreviewProductDraftsRequest,
   PreviewProductDraftsResponse,
@@ -43,3 +44,6 @@ export const previewProductDrafts = async (
   const result = await callable(data);
   return result.data;
 };
+
+export const createProductGenerationBatch = async (data: CreateProductGenerationBatchRequest): Promise<CreateGenerationBatchResponse> =>
+  (await httpsCallable<CreateProductGenerationBatchRequest, CreateGenerationBatchResponse>(functions, 'createProductGenerationBatch')(data)).data;

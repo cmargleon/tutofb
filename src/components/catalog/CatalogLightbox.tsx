@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AlertCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, RefreshCw, X } from 'lucide-react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
@@ -48,6 +48,8 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
 }) => {
   const role = useRole();
   const toast = useToast();
+  const failureDetailsId = useId();
+  const [showFailureDetails, setShowFailureDetails] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [pendingSelectedOutputId, setPendingSelectedOutputId] = useState<string | null | undefined>(undefined);
   const [selectionSavingOutputId, setSelectionSavingOutputId] = useState<string | null>(null);
@@ -159,6 +161,10 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
         : null;
   const failedJobFacts = getCatalogJobFailureFacts(displayedFailureInfo);
   const failedJobIsCancellation = isFailureCancellation(displayedFailureInfo);
+
+  useEffect(() => {
+    setShowFailureDetails(false);
+  }, [job.id, displayedOutput?.id]);
 
   useEffect(() => {
     if (pendingSelectedOutputId === undefined) {
@@ -396,39 +402,71 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                     preserveNaturalAspectRatio
                   />
                   {displayedFailureInfo ? (
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/85 via-black/55 to-transparent px-4 pb-4 pt-20">
+                    <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex justify-end">
                       <div
-                        className={`pointer-events-auto w-full max-w-3xl rounded-2xl border px-4 py-3 text-left shadow-2xl backdrop-blur ${
-                          failedJobIsCancellation
-                            ? 'border-amber-400/30 bg-amber-500/10 text-amber-50'
-                            : 'border-rose-400/30 bg-rose-500/10 text-rose-50'
-                        }`}
+                        className="pointer-events-auto flex max-w-full flex-col items-end"
+                        onMouseEnter={() => setShowFailureDetails(true)}
+                        onMouseLeave={() => setShowFailureDetails(false)}
+                        onFocus={() => setShowFailureDetails(true)}
+                        onBlur={(event) => {
+                          if (!event.currentTarget.contains(event.relatedTarget)) {
+                            setShowFailureDetails(false);
+                          }
+                        }}
                       >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold">
-                            {failedJobTitle || (failedJobIsCancellation ? 'Generacion cancelada' : 'La generacion fallo')}
-                          </p>
-                          {failedJobFacts.map((fact) => (
-                            <span
-                              key={`${fact.label}-${fact.value}`}
-                              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                                failedJobIsCancellation
-                                  ? 'border-amber-200/35 bg-amber-400/10 text-amber-50'
-                                  : 'border-rose-200/35 bg-rose-400/10 text-rose-50'
-                              }`}
-                            >
-                              {fact.label}: {fact.value}
-                            </span>
-                          ))}
+                        <button
+                          type="button"
+                          aria-expanded={showFailureDetails}
+                          aria-controls={failureDetailsId}
+                          onClick={() => setShowFailureDetails(true)}
+                          className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                            failedJobIsCancellation
+                              ? 'border-amber-400/40 bg-amber-950/90 text-amber-50'
+                              : 'border-rose-400/40 bg-rose-950/90 text-rose-50'
+                          }`}
+                        >
+                          <AlertCircle className="h-4 w-4" />
+                          {failedJobIsCancellation ? 'Cancelado' : 'Error'}
+                        </button>
+                        <div
+                          id={failureDetailsId}
+                          hidden={!showFailureDetails}
+                          className="absolute bottom-full left-0 right-0 pb-2"
+                        >
+                          <div
+                            className={`max-h-[min(60vh,28rem)] overflow-y-auto break-words rounded-2xl border px-4 py-3 text-left shadow-2xl backdrop-blur ${
+                              failedJobIsCancellation
+                                ? 'border-amber-400/30 bg-amber-950/95 text-amber-50'
+                                : 'border-rose-400/30 bg-rose-950/95 text-rose-50'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold">
+                                {failedJobTitle || (failedJobIsCancellation ? 'Generacion cancelada' : 'La generacion fallo')}
+                              </p>
+                              {failedJobFacts.map((fact) => (
+                                <span
+                                  key={`${fact.label}-${fact.value}`}
+                                  className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                                    failedJobIsCancellation
+                                      ? 'border-amber-200/35 bg-amber-400/10 text-amber-50'
+                                      : 'border-rose-200/35 bg-rose-400/10 text-rose-50'
+                                  }`}
+                                >
+                                  {fact.label}: {fact.value}
+                                </span>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-sm leading-6">
+                              {failedJobMessage || 'No encontramos detalle adicional del error para esta imagen.'}
+                            </p>
+                            {failedJobTechnicalMessage ? (
+                              <p className={`mt-2 text-xs leading-5 ${failedJobIsCancellation ? 'text-amber-100/90' : 'text-rose-100/90'}`}>
+                                {failedJobTechnicalMessage}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                        <p className="mt-2 text-sm leading-6">
-                          {failedJobMessage || 'No encontramos detalle adicional del error para esta imagen.'}
-                        </p>
-                        {failedJobTechnicalMessage ? (
-                          <p className={`mt-2 text-xs leading-5 ${failedJobIsCancellation ? 'text-amber-100/90' : 'text-rose-100/90'}`}>
-                            {failedJobTechnicalMessage}
-                          </p>
-                        ) : null}
                       </div>
                     </div>
                   ) : null}

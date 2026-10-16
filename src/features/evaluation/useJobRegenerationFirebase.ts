@@ -19,7 +19,7 @@ export const useJobRegenerationFirebase = () => {
         ...prev,
         [job.id!]: {
           provider: job.provider,
-          prompt: job.promptBase || job.finalPrompt || ''
+          prompt: (job.generationKind === 'product' ? job.requestedPromptBase : null) || job.promptBase || job.finalPrompt || ''
         }
       };
     });

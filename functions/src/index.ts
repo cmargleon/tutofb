@@ -7,6 +7,7 @@ setGlobalOptions({ maxInstances: 10 });
 
 // Export callables
 export * from './callables/createGenerationBatch';
+export * from './callables/createProductGenerationBatch';
 export * from './callables/classifyGarmentViewsWithGemini';
 export * from './callables/importClientSpreadsheetTemplate';
 export * from './callables/importModelBundle';

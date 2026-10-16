@@ -1,7 +1,18 @@
 export type TimestampLike = any;
 
 export type Role = 'admin' | 'operador' | 'revisor';
-export type Provider = 'fal-seedream' | 'fal-banana-pro' | 'openai-gpt-image-1.5' | 'fal-nano-banana-2' | 'fal-seedream-5' | 'fal-gpt-image-2';
+export type Provider =
+  | 'fal-seedream'
+  | 'fal-banana-pro'
+  | 'openai-gpt-image-1.5'
+  | 'fal-nano-banana-2'
+  | 'fal-seedream-5'
+  | 'fal-gpt-image-2'
+  | 'fal-gpt-image-2.5-flare'
+  | 'fal-gpt-image-2.5-sunburst'
+  | 'fal-seedream-5-pro'
+  | 'fal-seedream-5-flash'
+  | 'fal-flux-2-edit';
 export type BatchOutputMode = 'spreadsheet' | 'photos_only';
 export type AspectRatio = '9:16' | '3:4' | '2:3' | '1:1' | '4:3' | '3:2' | '16:9';
 export type BatchStatus = 'pending' | 'processing' | 'completed' | 'partial_failed' | 'failed';

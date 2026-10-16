@@ -250,3 +250,9 @@ npx playwright test
 - arquitectura detallada: [ARCHITECTURE.md](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/ARCHITECTURE.md)
 - decisiones tecnicas: [DECISIONS.md](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/DECISIONS.md)
 - flujo server-side: [PROCESSING_FLOW.md](/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/PROCESSING_FLOW.md)
+
+## Automatización de producción
+
+API autenticada, intake y panel: [docs/AUTOMATION.md](docs/AUTOMATION.md).
+
+Identidad técnica de Work y renovación automática: [docs/AUTOMATION_AUTH.md](docs/AUTOMATION_AUTH.md). Polling de jobs: cada 20 s durante 5 min, después cada 60 s; timeout total de 30 min. Revisión de Gmail configurable por separado en su scheduler externo.

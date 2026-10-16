@@ -3,8 +3,6 @@ import { Timestamp } from 'firebase-admin/firestore';
 import {
   FAL_KEY,
   GEMINI_API_KEY,
-  getOpenAIBaseUrl,
-  OPENAI_API_KEY,
 } from '../config/runtime';
 import { getSystemConfigCached } from './systemConfig';
 import { assertCallableRoles } from '../auth/roles';
@@ -58,45 +56,6 @@ const buildProviderResult = (
   latencyMs,
   checkedAt: new Date(),
 });
-
-const checkOpenAIHealth = async (): Promise<ProviderHealthCheck> => {
-  const apiKey = OPENAI_API_KEY.value();
-  if (!apiKey) {
-    return buildProviderResult('OpenAI', 'down', false, 'OPENAI_API_KEY no está configurada.', null, null);
-  }
-
-  try {
-    const { response, latencyMs } = await fetchWithTimeout(`${getOpenAIBaseUrl()}/models`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
-
-    if (response.ok) {
-      return buildProviderResult('OpenAI', 'healthy', true, 'API responde correctamente.', response.status, latencyMs);
-    }
-
-    const detail = response.status === 429
-      ? 'OpenAI respondió con rate limit.'
-      : `OpenAI respondió con estado ${response.status}.`;
-
-    return buildProviderResult(
-      'OpenAI',
-      response.status === 429 ? 'degraded' : 'down',
-      false,
-      detail,
-      response.status,
-      latencyMs,
-    );
-  } catch (error: any) {
-    const detail = error?.name === 'AbortError'
-      ? 'OpenAI no respondió dentro del tiempo esperado.'
-      : (error?.message || 'No se pudo contactar OpenAI.');
-
-    return buildProviderResult('OpenAI', 'down', false, detail, null, null);
-  }
-};
 
 const checkFalHealth = async (): Promise<ProviderHealthCheck> => {
   const apiKey = FAL_KEY.value();
@@ -253,13 +212,12 @@ const getTodayCostUsd = async (): Promise<number> => {
 export const getSystemHealth = onCall(
   {
     timeoutSeconds: 30,
-    secrets: [FAL_KEY, OPENAI_API_KEY, GEMINI_API_KEY],
+    secrets: [FAL_KEY, GEMINI_API_KEY],
   },
   async (request): Promise<SystemHealthSnapshot> => {
     await assertCallableRoles(request, ['admin', 'revisor']);
 
-    const [openaiHealth, falHealth, geminiHealth, queue, settings, todayCostUsd] = await Promise.all([
-      checkOpenAIHealth(),
+    const [falHealth, geminiHealth, queue, settings, todayCostUsd] = await Promise.all([
       checkFalHealth(),
       checkGeminiHealth(),
       getQueueHealth(),
@@ -267,7 +225,7 @@ export const getSystemHealth = onCall(
       getTodayCostUsd(),
     ]);
 
-    const providers = [falHealth, openaiHealth, geminiHealth];
+    const providers = [falHealth, geminiHealth];
     const overall = computeOverallHealth(providers, queue);
     const checkedAt = new Date();
     const alerts = buildSystemAlerts({

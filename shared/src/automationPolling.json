@@ -1,0 +1,6 @@
+{
+  "initialIntervalSeconds": 20,
+  "initialWindowSeconds": 300,
+  "subsequentIntervalSeconds": 60,
+  "timeoutSeconds": 1800
+}

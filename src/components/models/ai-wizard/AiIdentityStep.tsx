@@ -1,3 +1,4 @@
+import { ProviderCostEstimate } from '../../wizard/ProviderCostEstimate';
 import React from 'react';
 import { ChevronDown, ChevronUp, Wand2 } from 'lucide-react';
 import { ModelPhotoProvider } from '../../../../shared/src/types';
@@ -191,6 +192,8 @@ export const AiIdentityStep: React.FC<AiIdentityStepProps> = ({ ai }) => (
       />
     </div>
 
+    <ProviderCostEstimate config={ai.providerImageConfig} imageCount={ai.identityCandidateCount} referenceCount={0} />
+
     <div>
       <button
         type="button"
@@ -229,19 +232,31 @@ export const AiIdentityStep: React.FC<AiIdentityStepProps> = ({ ai }) => (
       ) : null}
     </div>
 
-    <Button
-      type="button"
-      variant="primary"
-      size="md"
-      loading={ai.generatingCandidates}
-      disabled={!ai.canGenerateCandidates}
-      onClick={() => void ai.handleGenerateCandidates()}
-      className="w-full justify-center"
+    <div
+      className="group relative w-full"
+      title={!ai.canGenerateCandidates ? ai.generateCandidatesDisabledReason ?? undefined : undefined}
     >
-      <Wand2 className="h-4 w-4" />
-      {ai.generatingCandidates
-        ? `Generando ${ai.identityCandidateCount} candidato(s)...`
-        : `Generar ${ai.identityCandidateCount} candidatos`}
-    </Button>
+      {!ai.canGenerateCandidates && ai.generateCandidatesDisabledReason ? (
+        <div className="pointer-events-none absolute -top-3 left-1/2 z-10 w-fit max-w-full -translate-x-1/2 -translate-y-full rounded-lg bg-slate-950 px-3 py-2 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 hover:opacity-100 group-hover:opacity-100">
+          {ai.generateCandidatesDisabledReason}
+        </div>
+      ) : null}
+      <div className="w-full">
+        <Button
+          type="button"
+          variant="primary"
+          size="md"
+          loading={ai.generatingCandidates}
+          disabled={!ai.canGenerateCandidates}
+          onClick={() => void ai.handleGenerateCandidates()}
+          className="w-full justify-center"
+        >
+          <Wand2 className="h-4 w-4" />
+          {ai.generatingCandidates
+            ? `Generando ${ai.identityCandidateCount} candidato(s)...`
+            : `Generar ${ai.identityCandidateCount} candidatos`}
+        </Button>
+      </div>
+    </div>
   </div>
 );

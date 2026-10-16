@@ -2,7 +2,7 @@ import { Provider } from '../../../shared/src/types';
 
 export const NOTIFICATION_RETRY_PROVIDERS: Readonly<[Provider, Provider]> = [
   'fal-seedream',
-  'openai-gpt-image-1.5',
+  'fal-gpt-image-2',
 ];
 
 export const resolveNotificationRetryProvider = (
@@ -10,10 +10,10 @@ export const resolveNotificationRetryProvider = (
   randomValue: number = Math.random(),
 ): Provider => {
   if (batchProvider === 'fal-seedream') {
-    return 'openai-gpt-image-1.5';
+    return 'fal-gpt-image-2';
   }
 
-  if (batchProvider === 'openai-gpt-image-1.5') {
+  if (batchProvider === 'fal-gpt-image-2') {
     return 'fal-seedream';
   }
 

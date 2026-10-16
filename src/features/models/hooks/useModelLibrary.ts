@@ -64,7 +64,7 @@ interface UseModelLibraryOptions {
   getModelsSnapshot?: () => Model[];
 }
 
-const CATALOG_REGEN_PROVIDER: ModelPhotoProvider = 'openai-dalle';
+const CATALOG_REGEN_PROVIDER: ModelPhotoProvider = 'fal-gpt-image-2';
 const CATALOG_REGEN_PROMPT = 'Return a polished catalog-ready fashion image.';
 const CATALOG_REGEN_PROVIDER_CONFIG =
   createDefaultModelProviderImageConfigs()[mapModelPhotoProviderToProvider(CATALOG_REGEN_PROVIDER)];

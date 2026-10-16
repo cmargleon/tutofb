@@ -75,6 +75,18 @@ service cloud.firestore {
         );
     }
 
+    match /automationJobs/{jobId} {
+      allow read: if isAdmin() || (isActiveUser() && currentRole() == 'operador' && resource.data.createdByUid == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /automationPrincipals/{id} { allow read, write: if false; }
+    match /automationAccessTokens/{id} { allow read, write: if false; }
+
+    match /automationKeys/{key} {
+      allow read, write: if false;
+    }
+
     match /users/{uid} {
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
       allow create: if isAdmin()

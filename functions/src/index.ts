@@ -65,3 +65,7 @@ export * from './triggers/syncClaimsOnUserWrite';
 export * from './triggers/storageCleanupSchedule';
 export * from './triggers/onJobCompletedSquareCrop';
 export * from './triggers/financeTriggers';
+
+// Automation intake and existing generation queue integration.
+export * from './automation/api';
+export * from './automation/worker';

@@ -10,3 +10,5 @@ export * from './job';
 export * from './analytics';
 export * from './finance';
 export * from './system';
+
+export * from './automation';

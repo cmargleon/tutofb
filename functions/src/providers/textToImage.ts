@@ -1,12 +1,12 @@
+import { buildNewFalRequest, NewFalImageConfig, NewFalProvider } from './falModels';
 import {
   FalBananaProImageConfig,
   FalGPTImage2ImageConfig,
   FalNanoBanana2ImageConfig,
   FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
-  OpenAIImageConfig,
 } from '../../../shared/src/types';
-import { getFalPollIntervalMs, getFalPollTimeoutMs, getOpenAIBaseUrl } from '../config/runtime';
+import { getFalPollIntervalMs, getFalPollTimeoutMs } from '../config/runtime';
 
 export interface TextToImageResult {
   imageBytes: Buffer;
@@ -333,84 +333,13 @@ export const editModelPhotoWithFalGPTImage2 = (
     falKey,
   );
 
-// OpenAI gpt-image-1 (generations)
-export const generateModelPhotoWithOpenAI = async (
+export const generateModelPhotoWithNewFalModel = (
+  provider: NewFalProvider,
   prompt: string,
-  imageConfig: OpenAIImageConfig,
-  openaiApiKey: string,
+  imageConfig: NewFalImageConfig,
+  falKey: string,
+  referenceImageUrl?: string | null,
 ): Promise<TextToImageResult> => {
-  const response = await fetch(`${getOpenAIBaseUrl()}/images/generations`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${openaiApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-image-1.5',
-      prompt,
-      n: 1,
-      size: imageConfig.size,
-      quality: imageConfig.quality,
-      output_format: 'png',
-    }),
-  });
-
-  if (!response.ok) throw new Error(`OpenAI: ${await response.text()}`);
-
-  const payload = (await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
-  const firstImage = payload.data?.[0];
-  if (!firstImage) throw new Error('OpenAI no devolvió imagen.');
-
-  if (firstImage.b64_json) {
-    return {
-      imageBytes: Buffer.from(firstImage.b64_json, 'base64'),
-      contentType: 'image/png',
-      remoteUrl: null,
-    };
-  }
-
-  if (!firstImage.url) throw new Error('OpenAI devolvió respuesta sin URL ni base64.');
-  return fetchRemoteImage(firstImage.url, 'image/png');
-};
-
-export const editModelPhotoWithOpenAI = async (
-  prompt: string,
-  imageConfig: OpenAIImageConfig,
-  referenceImageUrl: string,
-  openaiApiKey: string,
-  preserveReferenceDetails = true,
-): Promise<TextToImageResult> => {
-  const response = await fetch(`${getOpenAIBaseUrl()}/images/edits`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${openaiApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-image-1.5',
-      prompt,
-      size: imageConfig.size,
-      quality: imageConfig.quality,
-      output_format: 'png',
-      ...(preserveReferenceDetails ? { input_fidelity: 'high' } : {}),
-      images: [{ image_url: referenceImageUrl }],
-    }),
-  });
-
-  if (!response.ok) throw new Error(`OpenAI: ${await response.text()}`);
-
-  const payload = (await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
-  const firstImage = payload.data?.[0];
-  if (!firstImage) throw new Error('OpenAI no devolvió imagen.');
-
-  if (firstImage.b64_json) {
-    return {
-      imageBytes: Buffer.from(firstImage.b64_json, 'base64'),
-      contentType: 'image/png',
-      remoteUrl: null,
-    };
-  }
-
-  if (!firstImage.url) throw new Error('OpenAI devolvió respuesta sin URL ni base64.');
-  return fetchRemoteImage(firstImage.url, 'image/png');
+  const { endpointId, body } = buildNewFalRequest(provider, prompt, imageConfig, referenceImageUrl ? [referenceImageUrl] : []);
+  return runFalTextToImage(endpointId, body, falKey);
 };

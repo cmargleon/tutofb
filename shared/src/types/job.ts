@@ -172,6 +172,10 @@ export interface JobOutput {
 }
 
 export interface Job {
+  automationJobId?: string;
+  generationKind?: 'garment' | 'product';
+  productScene?: string;
+  productReferencePaths?: string[];
   id?: string;
   batchId: string;
   clientId: string;

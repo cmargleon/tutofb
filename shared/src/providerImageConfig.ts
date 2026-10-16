@@ -4,6 +4,9 @@ import {
   BananaResolution,
   FalBananaProImageConfig,
   FalGPTImage2ImageConfig,
+  FalGPTImage25ImageConfig,
+  FalSeedream5StandardImageConfig,
+  FalFlux2ImageConfig,
   FalNanoBanana2ImageConfig,
   FalSeedream5ImageConfig,
   FalSeedreamImageConfig,
@@ -67,23 +70,11 @@ export const ASPECT_RATIO_VALUES: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const cloneSeedreamImageSize = (
-  imageSize: FalSeedreamImageConfig['imageSize'],
-): FalSeedreamImageConfig['imageSize'] =>
-  typeof imageSize === 'string' ? imageSize : { width: imageSize.width, height: imageSize.height };
-
-const cloneSeedream5ImageSize = (
-  imageSize: FalSeedream5ImageConfig['imageSize'],
-): FalSeedream5ImageConfig['imageSize'] =>
-  typeof imageSize === 'string' ? imageSize : { width: imageSize.width, height: imageSize.height };
-
-const cloneGPTImage2ImageSize = (
-  imageSize: FalGPTImage2ImageConfig['imageSize'],
-): FalGPTImage2ImageConfig['imageSize'] =>
-  typeof imageSize === 'string' ? imageSize : { width: imageSize.width, height: imageSize.height };
-
 export const createDefaultProviderImageConfig = (provider: Provider): ProviderImageConfig => {
   switch (provider) {
+    case 'fal-seedream-5-pro':
+    case 'fal-seedream-5-flash':
+    case 'fal-flux-2-edit':
     case 'fal-seedream':
       return {
         provider,
@@ -112,6 +103,8 @@ export const createDefaultProviderImageConfig = (provider: Provider): ProviderIm
         provider,
         imageSize: 'portrait_4_3',
       };
+    case 'fal-gpt-image-2.5-sunburst':
+    case 'fal-gpt-image-2.5-flare':
     case 'fal-gpt-image-2':
       return {
         provider,
@@ -301,16 +294,52 @@ export const isFalGPTImage2ImageConfig = (value: unknown): value is FalGPTImage2
   && isGPTImage2Quality(value.quality)
   && isGPTImage2OutputFormat(value.outputFormat);
 
+export const GPT_IMAGE_25_QUALITY_VALUES: FalGPTImage25ImageConfig['quality'][] = ['auto', 'low', 'medium', 'high', 'xhigh', 'max'];
+export const FAL_STANDARD_IMAGE_SIZE_VALUES = ['square_hd', 'square', 'portrait_4_3', 'portrait_16_9', 'landscape_4_3', 'landscape_16_9'] as const;
+export const SEEDREAM_5_STANDARD_IMAGE_SIZE_VALUES = [...FAL_STANDARD_IMAGE_SIZE_VALUES, 'auto_1K', 'auto_2K'] as const;
+
+export const isFalGPTImage25ImageConfig = (value: unknown): value is FalGPTImage25ImageConfig =>
+  isRecord(value)
+  && (value.provider === 'fal-gpt-image-2.5-sunburst' || value.provider === 'fal-gpt-image-2.5-flare')
+  && (isGPTImage2ImageSizePreset(value.imageSize) || isGPTImage2CustomImageSize(value.imageSize))
+  && GPT_IMAGE_25_QUALITY_VALUES.includes(value.quality as FalGPTImage25ImageConfig['quality'])
+  && isGPTImage2OutputFormat(value.outputFormat);
+
+const isBoundedImageSize = (value: unknown, flux: boolean): boolean => {
+  if (!isRecord(value)) return false;
+  const { width, height } = value;
+  if (typeof width !== 'number' || typeof height !== 'number' || !Number.isInteger(width) || !Number.isInteger(height)) return false;
+  if (flux) return width >= 512 && height >= 512 && width <= 2048 && height <= 2048;
+  const area = width * height;
+  const ratio = width / height;
+  return width > 0 && height > 0 && area >= 1024 * 1024 && area <= 2048 * 2048 && ratio >= 1 / 16 && ratio <= 16;
+};
+
+export const isFalSeedream5StandardImageConfig = (value: unknown): value is FalSeedream5StandardImageConfig =>
+  isRecord(value)
+  && (value.provider === 'fal-seedream-5-pro' || value.provider === 'fal-seedream-5-flash')
+  && ((SEEDREAM_5_STANDARD_IMAGE_SIZE_VALUES as readonly unknown[]).includes(value.imageSize) || isBoundedImageSize(value.imageSize, false));
+
+export const isFalFlux2ImageConfig = (value: unknown): value is FalFlux2ImageConfig =>
+  isRecord(value) && value.provider === 'fal-flux-2-edit'
+  && ((FAL_STANDARD_IMAGE_SIZE_VALUES as readonly unknown[]).includes(value.imageSize) || isBoundedImageSize(value.imageSize, true));
+
 export const isProviderImageConfig = (value: unknown): value is ProviderImageConfig =>
   isFalSeedreamImageConfig(value)
   || isFalBananaProImageConfig(value)
   || isOpenAIImageConfig(value)
   || isFalNanoBanana2ImageConfig(value)
   || isFalSeedream5ImageConfig(value)
-  || isFalGPTImage2ImageConfig(value);
+  || isFalGPTImage2ImageConfig(value)
+  || isFalGPTImage25ImageConfig(value)
+  || isFalSeedream5StandardImageConfig(value)
+  || isFalFlux2ImageConfig(value);
 
 export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio: AspectRatio): ProviderImageConfig => {
   switch (provider) {
+    case 'fal-seedream-5-pro':
+    case 'fal-seedream-5-flash':
+    case 'fal-flux-2-edit':
     case 'fal-seedream':
       return {
         provider,
@@ -339,6 +368,8 @@ export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio:
         provider,
         imageSize: mapLegacyAspectRatioToSeedream5ImageSize(aspectRatio),
       };
+    case 'fal-gpt-image-2.5-sunburst':
+    case 'fal-gpt-image-2.5-flare':
     case 'fal-gpt-image-2':
       return {
         provider,
@@ -352,48 +383,13 @@ export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio:
 };
 
 export const cloneProviderImageConfig = (config: ProviderImageConfig): ProviderImageConfig => {
-  switch (config.provider) {
-    case 'fal-seedream':
-      return {
-        provider: config.provider,
-        imageSize: cloneSeedreamImageSize(config.imageSize),
-      };
-    case 'fal-banana-pro':
-      return {
-        provider: config.provider,
-        aspectRatio: config.aspectRatio,
-        resolution: config.resolution,
-      };
-    case 'openai-gpt-image-1.5':
-      return {
-        provider: config.provider,
-        size: config.size,
-        quality: config.quality,
-      };
-    case 'fal-nano-banana-2':
-      return {
-        provider: config.provider,
-        aspectRatio: config.aspectRatio,
-        resolution: config.resolution,
-      };
-    case 'fal-seedream-5':
-      return {
-        provider: config.provider,
-        imageSize: cloneSeedream5ImageSize(config.imageSize),
-      };
-    case 'fal-gpt-image-2':
-      return {
-        provider: config.provider,
-        imageSize: cloneGPTImage2ImageSize(config.imageSize),
-        quality: config.quality,
-        outputFormat: config.outputFormat,
-      };
-    default:
-      throw new Error(`Proveedor no soportado: ${config satisfies never}`);
+  if ('imageSize' in config && typeof config.imageSize !== 'string') {
+    return { ...config, imageSize: { ...config.imageSize } };
   }
+  return { ...config };
 };
 
-export const mapLegacyAspectRatioToSeedreamImageSize = (aspectRatio: AspectRatio): SeedreamImageSizePreset => {
+export const mapLegacyAspectRatioToSeedreamImageSize = (aspectRatio: AspectRatio): Exclude<GPTImage2ImageSizePreset, 'auto'> => {
   switch (aspectRatio) {
     case '9:16':
       return 'portrait_16_9';
@@ -468,6 +464,9 @@ const getClosestAspectRatio = (ratio: number): AspectRatio =>
 
 export const resolveAspectRatioForImageConfig = (config: ProviderImageConfig): AspectRatio => {
   switch (config.provider) {
+    case 'fal-seedream-5-pro':
+    case 'fal-seedream-5-flash':
+    case 'fal-flux-2-edit':
     case 'fal-seedream':
       if (typeof config.imageSize !== 'string') {
         return getClosestAspectRatio(config.imageSize.width / config.imageSize.height);
@@ -531,6 +530,8 @@ export const resolveAspectRatioForImageConfig = (config: ProviderImageConfig): A
         default:
           return '1:1';
       }
+    case 'fal-gpt-image-2.5-sunburst':
+    case 'fal-gpt-image-2.5-flare':
     case 'fal-gpt-image-2':
       if (typeof config.imageSize !== 'string') {
         return getClosestAspectRatio(config.imageSize.width / config.imageSize.height);
@@ -586,6 +587,9 @@ export const normalizeProviderImageConfig = (
 
 export const summarizeProviderImageConfig = (config: ProviderImageConfig): string => {
   switch (config.provider) {
+    case 'fal-seedream-5-pro':
+    case 'fal-seedream-5-flash':
+    case 'fal-flux-2-edit':
     case 'fal-seedream':
       return typeof config.imageSize === 'string'
         ? config.imageSize
@@ -600,6 +604,8 @@ export const summarizeProviderImageConfig = (config: ProviderImageConfig): strin
       return typeof config.imageSize === 'string'
         ? config.imageSize
         : `${config.imageSize.width}x${config.imageSize.height}`;
+    case 'fal-gpt-image-2.5-sunburst':
+    case 'fal-gpt-image-2.5-flare':
     case 'fal-gpt-image-2':
       return `${typeof config.imageSize === 'string'
         ? config.imageSize

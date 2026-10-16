@@ -1,3 +1,4 @@
+import { buildNewFalRequest, NewFalImageConfig, NewFalProvider } from './falModels';
 import {
   AspectRatio,
   FalBananaProImageConfig,
@@ -272,7 +273,7 @@ export const generateWithFalSeedream = async (
     endpointId,
     {
       prompt: request.prompt,
-      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      image_urls: (request.referenceImageUrls || [request.poseImageUrl, request.garmentImageUrl]),
       num_images: 1,
       image_size: imageConfig.imageSize,
       enable_safety_checker: true,
@@ -315,7 +316,7 @@ export const generateWithFalBananaPro = async (
     endpointId,
     {
       prompt: request.prompt,
-      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      image_urls: (request.referenceImageUrls || [request.poseImageUrl, request.garmentImageUrl]),
       num_images: 1,
       aspect_ratio: imageConfig.aspectRatio,
       resolution: imageConfig.resolution,
@@ -359,7 +360,7 @@ export const generateWithFalNanoBanana2 = async (
     endpointId,
     {
       prompt: request.prompt,
-      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      image_urls: (request.referenceImageUrls || [request.poseImageUrl, request.garmentImageUrl]),
       num_images: 1,
       aspect_ratio: imageConfig.aspectRatio,
       resolution: imageConfig.resolution,
@@ -403,7 +404,7 @@ export const generateWithFalSeedream5 = async (
     endpointId,
     {
       prompt: request.prompt,
-      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      image_urls: (request.referenceImageUrls || [request.poseImageUrl, request.garmentImageUrl]),
       num_images: 1,
       image_size: imageConfig.imageSize,
       enable_safety_checker: false,
@@ -446,7 +447,7 @@ export const generateWithFalGPTImage2 = async (
     endpointId,
     {
       prompt: request.prompt,
-      image_urls: [request.poseImageUrl, request.garmentImageUrl],
+      image_urls: (request.referenceImageUrls || [request.poseImageUrl, request.garmentImageUrl]),
       num_images: 1,
       image_size: imageConfig.imageSize,
       quality: imageConfig.quality,
@@ -475,5 +476,26 @@ export const generateWithFalGPTImage2 = async (
       requestId: queue.request_id || null,
       remoteUrl: image.url,
     },
+  };
+};
+
+export const generateWithNewFalModel = async (
+  provider: NewFalProvider,
+  request: ProviderRequest,
+  falKey: string,
+): Promise<ProviderResponse> => {
+  const { endpointId, body } = buildNewFalRequest(
+    provider, request.prompt, request.imageConfig as NewFalImageConfig,
+    request.referenceImageUrls || [request.poseImageUrl, request.garmentImageUrl],
+  );
+  const queue = await submitFalRequest(provider, endpointId, body, falKey, request.signal);
+  const payload = await pollFalResponse(provider, endpointId, queue, falKey, request.signal);
+  const image = extractImage(payload);
+  if (!image) throw buildNoImageError(provider, endpointId, payload, queue.request_id || null);
+  const downloaded = await fetchImageBytes(image.url, request.signal, provider, queue.request_id || null);
+  return {
+    provider, contentType: image.contentType || downloaded.contentType,
+    imageBytes: downloaded.bytes, remoteUrl: image.url, requestId: queue.request_id || null,
+    responseSummary: { endpointId, requestId: queue.request_id || null, remoteUrl: image.url },
   };
 };

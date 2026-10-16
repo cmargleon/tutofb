@@ -93,7 +93,7 @@ export const useAiIdentityForm = ({
   const [top, setTop] = useState('plain white t-shirt');
   const [bottom, setBottom] = useState('plain black pants');
   const [footwear, setFootwear] = useState('plain white sneakers');
-  const [provider, setProvider] = useState<ModelPhotoProvider>('openai-dalle');
+  const [provider, setProvider] = useState<ModelPhotoProvider>('fal-gpt-image-2');
   const [providerImageConfigs, setProviderImageConfigs] = useState<Record<Provider, ProviderImageConfig>>(
     createDefaultModelProviderImageConfigs,
   );

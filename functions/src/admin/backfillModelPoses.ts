@@ -1,3 +1,4 @@
+import { MODEL_PHOTO_PROVIDER_VALUES } from '../../../shared/src/domain';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ModelPhotoProvider } from '../../../shared/src/types';
@@ -17,12 +18,7 @@ type BackfillModelPosesResponse = {
 };
 
 const isModelPhotoProvider = (value: unknown): value is ModelPhotoProvider =>
-  value === 'fal-seedream-v4.5'
-  || value === 'fal-banana-pro'
-  || value === 'openai-dalle'
-  || value === 'fal-nano-banana-2'
-  || value === 'fal-seedream-5'
-  || value === 'fal-gpt-image-2';
+  MODEL_PHOTO_PROVIDER_VALUES.includes(value as ModelPhotoProvider);
 
 export const backfillModelPoses = onCall<
   BackfillModelPosesRequest,
@@ -30,7 +26,7 @@ export const backfillModelPoses = onCall<
 >(async (request) => {
   await assertCallableRoles(request, ['admin']);
 
-  const provider = isModelPhotoProvider(request.data?.provider) ? request.data.provider : 'openai-dalle';
+  const provider = isModelPhotoProvider(request.data?.provider) ? request.data.provider : 'fal-gpt-image-2';
   const chunkSize = Math.max(1, Math.min(5, Math.trunc(Number(request.data?.chunkSize) || 1)));
   const cursor = typeof request.data?.cursor === 'string' && request.data.cursor.trim()
     ? request.data.cursor.trim()

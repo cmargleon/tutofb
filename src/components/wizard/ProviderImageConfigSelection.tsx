@@ -5,10 +5,11 @@ import {
   GPT_IMAGE_2_IMAGE_SIZE_PRESET_VALUES,
   GPT_IMAGE_2_OUTPUT_FORMAT_VALUES,
   GPT_IMAGE_2_QUALITY_VALUES,
+  GPT_IMAGE_25_QUALITY_VALUES,
+  FAL_STANDARD_IMAGE_SIZE_VALUES,
+  SEEDREAM_5_STANDARD_IMAGE_SIZE_VALUES,
   NANO_BANANA_2_ASPECT_RATIO_VALUES,
   NANO_BANANA_2_RESOLUTION_VALUES,
-  OPENAI_IMAGE_QUALITY_VALUES,
-  OPENAI_IMAGE_SIZE_VALUES,
   SEEDREAM_5_IMAGE_SIZE_PRESET_VALUES,
   SEEDREAM_IMAGE_SIZE_PRESET_VALUES,
 } from '../../../shared/src/providerImageConfig';
@@ -23,19 +24,6 @@ interface ProviderImageConfigSelectionProps {
 
 const commonCardClassName =
   'rounded-2xl border px-4 py-3 text-left transition';
-
-const getOpenAISizeCopy = (size: (typeof OPENAI_IMAGE_SIZE_VALUES)[number]) => {
-  switch (size) {
-    case '1024x1024':
-      return { title: 'Cuadrado', description: 'Salida balanceada para composiciones centradas.' };
-    case '1024x1536':
-      return { title: 'Vertical', description: 'Formato retrato nativo de OpenAI.' };
-    case '1536x1024':
-      return { title: 'Horizontal', description: 'Formato apaisado nativo de OpenAI.' };
-    default:
-      return { title: size, description: 'Tamano soportado por OpenAI.' };
-  }
-};
 
 const getSeedreamPresetCopy = (preset: (typeof SEEDREAM_IMAGE_SIZE_PRESET_VALUES)[number]) => {
   switch (preset) {
@@ -73,12 +61,6 @@ const BANANA_RATIO_HINTS: Record<(typeof BANANA_ASPECT_RATIO_VALUES)[number], st
   '3:4': 'Catalogo vertical',
   '2:3': 'Portrait',
   '9:16': 'Stories / Reels',
-};
-
-const QUALITY_LABELS: Record<(typeof OPENAI_IMAGE_QUALITY_VALUES)[number], string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
 };
 
 const GPT_IMAGE_2_QUALITY_LABELS: Record<(typeof GPT_IMAGE_2_QUALITY_VALUES)[number], string> = {
@@ -226,44 +208,14 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
     if (
       (provider === 'fal-seedream' && value.provider === 'fal-seedream' && typeof value.imageSize !== 'string')
       || (provider === 'fal-seedream-5' && value.provider === 'fal-seedream-5' && typeof value.imageSize !== 'string')
-      || (provider === 'fal-gpt-image-2' && value.provider === 'fal-gpt-image-2' && typeof value.imageSize !== 'string')
+      || ((value.provider === 'fal-gpt-image-2' || value.provider === 'fal-gpt-image-2.5-sunburst' || value.provider === 'fal-gpt-image-2.5-flare') && typeof value.imageSize !== 'string')
     ) {
       setCustomWidthInput(String(value.imageSize.width));
       setCustomHeightInput(String(value.imageSize.height));
     }
   }, [provider, value]);
 
-  if (provider === 'openai-gpt-image-1.5' && value.provider === 'openai-gpt-image-1.5') {
-    return (
-      <div className="space-y-4">
-        <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Tamano de salida</label>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {OPENAI_IMAGE_SIZE_VALUES.map((size) => {
-              const copy = getOpenAISizeCopy(size);
-              return renderChoiceButton({
-                keyValue: size,
-                title: `${copy.title} · ${size}`,
-                description: copy.description,
-                selected: value.size === size,
-                onClick: () => onChange({ ...value, size }),
-              });
-            })}
-          </div>
-        </div>
-
-        {renderCompactOptions({
-          label: 'Calidad',
-          values: OPENAI_IMAGE_QUALITY_VALUES,
-          selected: value.quality,
-          onSelect: (quality) => onChange({ ...value, quality: quality as typeof value.quality }),
-          labels: QUALITY_LABELS,
-        })}
-      </div>
-    );
-  }
-
-  if (provider === 'fal-gpt-image-2' && value.provider === 'fal-gpt-image-2') {
+  if ((value.provider === 'fal-gpt-image-2' || value.provider === 'fal-gpt-image-2.5-sunburst' || value.provider === 'fal-gpt-image-2.5-flare') && provider === value.provider) {
     const selectedPreset = typeof value.imageSize === 'string' ? value.imageSize : null;
     const customWidth = typeof value.imageSize === 'string' ? 1024 : value.imageSize.width;
     const customHeight = typeof value.imageSize === 'string' ? 1360 : value.imageSize.height;
@@ -370,10 +322,10 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
 
         {renderCompactOptions({
           label: 'Calidad',
-          values: GPT_IMAGE_2_QUALITY_VALUES,
+          values: value.provider === 'fal-gpt-image-2' ? GPT_IMAGE_2_QUALITY_VALUES : GPT_IMAGE_25_QUALITY_VALUES,
           selected: value.quality,
           onSelect: (quality) => onChange({ ...value, quality: quality as typeof value.quality }),
-          labels: GPT_IMAGE_2_QUALITY_LABELS,
+          labels: { ...GPT_IMAGE_2_QUALITY_LABELS, xhigh: 'Extra alta', max: 'Máxima' },
         })}
 
         {renderCompactOptions({
@@ -383,6 +335,30 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
           onSelect: (outputFormat) => onChange({ ...value, outputFormat: outputFormat as typeof value.outputFormat }),
           labels: OUTPUT_FORMAT_LABELS,
         })}
+      </div>
+    );
+  }
+
+  if ((value.provider === 'fal-seedream-5-pro' || value.provider === 'fal-seedream-5-flash' || value.provider === 'fal-flux-2-edit') && provider === value.provider) {
+    const flux = value.provider === 'fal-flux-2-edit';
+    const presets = flux ? FAL_STANDARD_IMAGE_SIZE_VALUES : SEEDREAM_5_STANDARD_IMAGE_SIZE_VALUES;
+    return (
+      <div className="space-y-4">
+        <label className="block text-sm font-medium text-slate-700">Tamaño de imagen</label>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {presets.map((preset) => renderChoiceButton({
+            keyValue: preset,
+            title: preset === 'auto_1K' ? 'Auto 1K' : getSeedreamPresetCopy(preset === 'auto_1K' ? 'auto_2K' : preset).title,
+            description: preset.startsWith('auto_') ? 'Resolución automática según la referencia.' : getSeedreamPresetCopy(preset === 'auto_1K' ? 'auto_2K' : preset).description,
+            selected: value.imageSize === preset,
+            onClick: () => {
+              if (value.provider === 'fal-flux-2-edit') {
+                if (preset !== 'auto_1K' && preset !== 'auto_2K') onChange({ ...value, imageSize: preset });
+              } else onChange({ ...value, imageSize: preset });
+            },
+          }))}
+        </div>
+        <p className="text-xs text-slate-500">{flux ? 'Hasta 4 imágenes de referencia. Para crear una identidad sin referencia se usa FLUX.2 texto a imagen.' : 'Hasta 10 imágenes de referencia y resolución de salida hasta 2K.'}</p>
       </div>
     );
   }

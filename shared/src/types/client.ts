@@ -3,6 +3,7 @@ import type { TimestampLike, CatalogEntityStatus } from './common';
 export interface Client {
   id?: string;
   name: string;
+  automation?: { defaultModelId?: string; defaultPreset?: string; presets?: Record<string, import('./automation').AutomationPreset> };
   generationPromptBase?: string | null;
   status?: CatalogEntityStatus;
   archivedAt?: TimestampLike | null;

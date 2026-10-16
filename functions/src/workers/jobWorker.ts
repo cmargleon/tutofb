@@ -11,7 +11,6 @@ import { generateWithProvider } from '../providers';
 import {
   FAL_KEY,
   GEMINI_API_KEY,
-  OPENAI_API_KEY,
   getJobAutoReviewMaxAttempts,
   getJobStuckSweepLimit,
   getJobTimeoutMs,
@@ -28,6 +27,7 @@ import {
 } from '../errors/jobFailure';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
+import { PRODUCT_IDENTITY_RULES } from '../automation/presets';
 import { shouldBackstopPendingJob } from './jobWorker.helpers';
 
 const db = getAppFirestore();
@@ -258,7 +258,7 @@ const persistGeneratedAttempt = async ({
     },
   });
 
-  const costUsd = getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig);
+  const costUsd = getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
   const persistedFailureInfo = withFailureOutputId(failureInfo, outputId);
 
   const currentOutput: JobOutput = {
@@ -337,7 +337,7 @@ const persistGeneratedAttempt = async ({
 
   if (nextStatus === 'pending') {
     baseJobUpdate.promptBase = resolvedPromptBase;
-    baseJobUpdate.finalPrompt = buildFinalGenerationPrompt(
+    baseJobUpdate.finalPrompt = claimedJob.generationKind === 'product' ? `${PRODUCT_IDENTITY_RULES}\n${claimedJob.requestedPromptBase || claimedJob.promptBase}\nCorrection: ${resolvedPromptBase}` : buildFinalGenerationPrompt(
       resolvedPromptBase,
       claimedJob.garmentReferenceImageType || (claimedJob.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
       claimedJob.promptCaseText,
@@ -732,13 +732,13 @@ export const processJob = async (
       {
         poseImageUrl,
         garmentImageUrl,
+        ...(claimedJob.generationKind === 'product' ? { referenceImageUrls: await Promise.all((claimedJob.productReferencePaths || [claimedJob.poseImagePath]).map(getSignedUrl)) } : {}),
         prompt: claimedJob.finalPrompt,
         imageConfig: normalizedImageConfig.imageConfig,
         signal: controller.signal,
       },
       {
         falKey: FAL_KEY.value(),
-        openaiApiKey: OPENAI_API_KEY.value(),
       },
     );
 
@@ -759,6 +759,8 @@ export const processJob = async (
 
       const jobSystemConfig = await getSystemConfigCached();
       const review = await reviewGeneratedImageWithGemini({
+        generationKind: claimedJob.generationKind,
+        ...(claimedJob.generationKind === 'product' ? { productReferences: await Promise.all((claimedJob.productReferencePaths || [claimedJob.poseImagePath]).map(downloadStorageImage)) } : {}),
         apiKey: GEMINI_API_KEY.value(),
         model: jobSystemConfig.geminiImageReviewModel,
         batchId: claimedJob.batchId,

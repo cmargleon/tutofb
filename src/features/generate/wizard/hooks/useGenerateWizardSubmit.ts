@@ -123,7 +123,9 @@ export const useGenerateWizardSubmit = ({
     }
 
     if (
-      selectedProviderImageConfig.provider === 'fal-gpt-image-2'
+      (selectedProviderImageConfig.provider === 'fal-gpt-image-2'
+        || selectedProviderImageConfig.provider === 'fal-gpt-image-2.5-sunburst'
+        || selectedProviderImageConfig.provider === 'fal-gpt-image-2.5-flare')
       && typeof selectedProviderImageConfig.imageSize !== 'string'
     ) {
       const { width, height } = selectedProviderImageConfig.imageSize;

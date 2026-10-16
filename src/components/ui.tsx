@@ -118,6 +118,9 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIG: Record<string, StatusConfig> = {
+  importing:      { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Importando', icon: Loader2 },
+  review:         { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Revisión', icon: Clock },
+  needs_attention: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Requiere atención', icon: AlertTriangle },
   completed:      { bg: 'bg-green-100',   text: 'text-green-800',  label: 'Completado', icon: CheckCircle2  },
   processing:     { bg: 'bg-blue-100',    text: 'text-blue-800',   label: 'Procesando', icon: Loader2       },
   partial_failed: { bg: 'bg-amber-100',   text: 'text-amber-800',  label: 'Parcial',    icon: AlertTriangle },

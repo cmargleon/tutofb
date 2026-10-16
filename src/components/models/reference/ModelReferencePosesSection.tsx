@@ -1,3 +1,4 @@
+import { ProviderCostEstimate } from '../../wizard/ProviderCostEstimate';
 import React from 'react';
 import { Check, Wand2 } from 'lucide-react';
 import { ModelCreateFlowReferenceState } from '../../../features/models/hooks/useReferenceModelFlow';
@@ -65,6 +66,8 @@ export const ModelReferencePosesSection: React.FC<ModelReferencePosesSectionProp
         ))}
       </div>
     </div>
+
+    <ProviderCostEstimate config={reference.providerImageConfig} imageCount={reference.selectedPoseRecipes.filter(pose => !pose.usesReferenceImage).length} referenceCount={1} />
 
     <Button
       type="button"

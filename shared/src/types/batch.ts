@@ -30,6 +30,8 @@ export interface BatchModelSnapshot {
 }
 
 export interface Batch {
+  automationJobId?: string;
+  generationKind?: 'garment' | 'product';
   id?: string;
   clientId: string;
   clientNameSnapshot: string;

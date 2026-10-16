@@ -93,7 +93,7 @@ test('generateWithProvider valida secretos antes de intentar salir a red', async
         },
         {},
       ),
-    /OPENAI_API_KEY/,
+    /retirada/,
   );
 
   await assert.rejects(

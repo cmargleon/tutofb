@@ -1,3 +1,4 @@
+import { ProviderCostEstimate } from '../../wizard/ProviderCostEstimate';
 import React from 'react';
 import { Check, Wand2 } from 'lucide-react';
 import {
@@ -64,6 +65,8 @@ export const AiPosesStep: React.FC<AiPosesStepProps> = ({ shared, ai }) => (
         ))}
       </div>
     </div>
+
+    <ProviderCostEstimate config={ai.providerImageConfig} imageCount={ai.selectedPoseRecipes.filter(pose => !pose.usesReferenceImage).length} referenceCount={1} />
 
     <Button
       type="button"

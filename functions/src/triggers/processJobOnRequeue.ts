@@ -1,7 +1,7 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { Timestamp } from 'firebase-admin/firestore';
 import { Job } from '../../../shared/src/types';
-import { FAL_KEY, GEMINI_API_KEY, OPENAI_API_KEY } from '../config/runtime';
+import { FAL_KEY, GEMINI_API_KEY } from '../config/runtime';
 import { processJob } from '../workers/jobWorker';
 
 export const processJobOnRequeue = onDocumentUpdated(
@@ -10,7 +10,7 @@ export const processJobOnRequeue = onDocumentUpdated(
     timeoutSeconds: 540,
     memory: '2GiB',
     maxInstances: 20,
-    secrets: [FAL_KEY, OPENAI_API_KEY, GEMINI_API_KEY],
+    secrets: [FAL_KEY, GEMINI_API_KEY],
   },
   async (event) => {
     const snapshot = event.data;

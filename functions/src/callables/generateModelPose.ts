@@ -1,12 +1,14 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import { FAL_KEY, OPENAI_API_KEY } from '../config/runtime';
+import { FAL_KEY } from '../config/runtime';
 import {
   GenerateModelPhotoRequest,
   GenerateModelPhotoResponse,
 } from '../../../shared/src/types';
+import { MODEL_PHOTO_PROVIDER_VALUES } from '../../../shared/src/domain';
+import { getAppFirestore } from '../firebase/appFirestore';
 import { getModelPhotoProviderCostUsd } from '../../../shared/src/constants/providerCosts';
-import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
+import { isProviderImageConfig, normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { assertProviderEnabledInSystemConfig, getSystemConfigCached } from '../admin/systemConfig';
 import {
   generateSingleModelPhoto,
@@ -14,7 +16,7 @@ import {
 } from '../utils/modelPhotoGeneration';
 
 export const generateModelPose = onCall(
-  { secrets: [FAL_KEY, OPENAI_API_KEY], timeoutSeconds: 300 },
+  { secrets: [FAL_KEY], timeoutSeconds: 300 },
   async (request): Promise<GenerateModelPhotoResponse> => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesión para usar esta función.');
@@ -42,9 +44,12 @@ export const generateModelPose = onCall(
       throw new HttpsError('invalid-argument', 'El número de fotos debe estar entre 1 y 12.');
     }
 
+    if (!MODEL_PHOTO_PROVIDER_VALUES.includes(provider)) throw new HttpsError('invalid-argument', 'Selecciona un modelo de fal.ai válido.');
+
+    if (imageConfig && (!isProviderImageConfig(imageConfig) || imageConfig.provider !== mapModelPhotoProviderToProvider(provider))) throw new HttpsError('invalid-argument', 'Configuración de imagen inválida.');
+
     const bucket = admin.storage().bucket();
     const falKey = FAL_KEY.value();
-    const openaiKey = OPENAI_API_KEY.value();
     const systemConfig = await getSystemConfigCached();
     assertProviderEnabledInSystemConfig(
       mapModelPhotoProviderToProvider(provider),
@@ -70,7 +75,6 @@ export const generateModelPose = onCall(
           prompt,
           imageConfig: normalizedImageConfig,
           falKey,
-          openaiKey,
           referenceImageUrl,
           preserveReferenceDetails,
         });
@@ -90,22 +94,9 @@ export const generateModelPose = onCall(
 
     const generateAndStorePhoto = async (index: number) => generatePhoto(index);
 
-    const results: PromiseSettledResult<{ index: number; storagePath: string; contentType: string }>[] = [];
-    if (provider === 'openai-dalle') {
-      for (let index = 0; index < count; index += 1) {
-        try {
-          results.push({ status: 'fulfilled', value: await generateAndStorePhoto(index) });
-        } catch (reason) {
-          results.push({ status: 'rejected', reason });
-        }
-      }
-    } else {
-      results.push(
-        ...(await Promise.allSettled(
-          Array.from({ length: count }, (_, index) => generateAndStorePhoto(index)),
-        )),
-      );
-    }
+    const results = await Promise.allSettled(
+      Array.from({ length: count }, (_, index) => generateAndStorePhoto(index)),
+    );
 
     const photos = results
       .filter(
@@ -126,9 +117,9 @@ export const generateModelPose = onCall(
     }
 
     // Write cost log
-    const costPerPhoto = getModelPhotoProviderCostUsd(provider, normalizedImageConfig);
+    const costPerPhoto = getModelPhotoProviderCostUsd(provider, normalizedImageConfig, referenceImageUrl ? 1 : 0);
     const estimatedCostUsd = costPerPhoto * photos.length;
-    await admin.firestore().collection('model_generation_logs').add({
+    await getAppFirestore().collection('model_generation_logs').add({
       provider,
       requestedPhotos: count,
       completedPhotos: photos.length,

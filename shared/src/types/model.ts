@@ -113,7 +113,12 @@ export type ModelPhotoProvider =
   | 'openai-dalle'
   | 'fal-nano-banana-2'
   | 'fal-seedream-5'
-  | 'fal-gpt-image-2';
+  | 'fal-gpt-image-2'
+  | 'fal-gpt-image-2.5-sunburst'
+  | 'fal-gpt-image-2.5-flare'
+  | 'fal-seedream-5-pro'
+  | 'fal-seedream-5-flash'
+  | 'fal-flux-2-edit';
 
 export type ModelPhotoGenerationStage = 'identity' | 'pose';
 

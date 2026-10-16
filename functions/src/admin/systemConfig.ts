@@ -71,6 +71,9 @@ export const assertProviderEnabledInSystemConfig = (
   systemConfig: Pick<SystemConfig, 'disabledProviders'>,
   actionLabel = 'usar este modelo',
 ) => {
+  if (provider === 'openai-gpt-image-1.5') {
+    throw new HttpsError('failed-precondition', 'La generación directa con OpenAI fue retirada. Selecciona un modelo de fal.ai.');
+  }
   if (isProviderDisabledInSystemConfig(provider, systemConfig)) {
     throw new HttpsError(
       'failed-precondition',

@@ -24,17 +24,19 @@ import {
   validateCreateGenerationBatchInput,
 } from './createGenerationBatch.helpers';
 
-export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promise<CreateGenerationBatchResponse>>(
-  async (request) => {
-    await assertCallableRoles(request, ['admin', 'operador']);
+export const createGenerationBatchCore = async (
+  data: CreateGenerationBatchRequest,
+  uid: string,
+  automation?: { id: string; leaseToken: string },
+): Promise<CreateGenerationBatchResponse> => {
     const systemConfig = await getSystemConfigCached();
-    const validated = validateCreateGenerationBatchInput(request.data, request.auth!.uid, systemConfig.batchMaxJobs);
+    const validated = validateCreateGenerationBatchInput(data, uid, systemConfig.batchMaxJobs);
     assertProviderEnabledInSystemConfig(validated.provider, systemConfig, 'usar para crear un lote');
 
     const db = getAppFirestore();
     const clientRef = db.collection('clients').doc(validated.clientId);
     const modelRef = db.collection('models').doc(validated.modelId);
-    const userRef = db.collection('users').doc(request.auth!.uid);
+    const userRef = db.collection('users').doc(uid);
     const templateRef = validated.spreadsheetTemplateId
       ? clientRef.collection('spreadsheetTemplates').doc(validated.spreadsheetTemplateId)
       : null;
@@ -104,7 +106,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
     }
 
     const now = admin.firestore.FieldValue.serverTimestamp();
-    const batchRef = db.collection('batches').doc();
+    const batchRef = automation ? db.collection('batches').doc(`automation-${automation.id}`) : db.collection('batches').doc();
     const batchData: Omit<Batch, 'id'> = {
       clientId: client.id!,
       clientNameSnapshot: client.name,
@@ -147,12 +149,22 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
       lastJobCompletedAt: null,
       createdAt: now,
       updatedAt: now,
-      createdByUid: request.auth!.uid,
+      createdByUid: uid,
       createdByDisplayName,
     };
 
-    const writeBatch = db.batch();
-    writeBatch.set(batchRef, batchData);
+    return db.runTransaction(async (writeBatch) => {
+    const automationRef = automation ? db.collection('automationJobs').doc(automation.id) : null;
+    if (automationRef && automation) {
+      const snapshot = await writeBatch.get(automationRef);
+      const current = snapshot.data();
+      if (current?.batchId) return { batchId: current.batchId, createdJobs: current.generationJobIds.length };
+      if (current?.leaseToken !== automation.leaseToken || current?.status !== 'importing') {
+        throw new HttpsError('aborted', 'La importación ya no tiene una reserva activa.');
+      }
+    }
+    const generationJobIds: string[] = [];
+    writeBatch.set(batchRef, { ...batchData, ...(automation ? { automationJobId: automation.id, generationKind: 'garment' } : {}) });
     if (validated.outputMode === 'spreadsheet' && template) {
       const productDraftsByGarmentId = new Map(validated.productDrafts.map((draft) => [draft.garmentId, draft]));
 
@@ -176,7 +188,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
             category,
             garment,
             draftInput,
-            createdByUid: request.auth!.uid,
+            createdByUid: uid,
           }),
           createdAt: now,
           updatedAt: now,
@@ -250,7 +262,7 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         manualRegenerationCount: 0,
         traceability: {
           batchCreatedAt: now,
-          batchCreatedByUid: request.auth!.uid,
+          batchCreatedByUid: uid,
           batchCreatedByDisplayName: createdByDisplayName,
           lastAttemptStartedAt: null,
           lastCompletedAt: null,
@@ -262,12 +274,13 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
         },
         createdAt: now,
         updatedAt: now,
-        createdByUid: request.auth!.uid,
+        createdByUid: uid,
         lastError: null,
         failureInfo: null,
       };
 
-      writeBatch.set(jobRef, jobData);
+      generationJobIds.push(jobRef.id);
+      writeBatch.set(jobRef, { ...jobData, ...(automation ? { automationJobId: automation.id, generationKind: 'garment' } : {}) });
     }
 
     writeBatch.set(
@@ -280,11 +293,22 @@ export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promis
       { merge: true },
     );
 
-    await writeBatch.commit();
+    if (automationRef) writeBatch.update(automationRef, {
+      batchId: batchRef.id, generationJobIds, status: 'processing', leaseToken: null,
+      leaseExpiresAt: null, updatedAt: now, error: null,
+      progress: { total: actualTotalJobs, completed: 0, failed: 0 },
+    });
 
     return {
       batchId: batchRef.id,
       createdJobs: actualTotalJobs,
     };
+    });
+};
+
+export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promise<CreateGenerationBatchResponse>>(
+  async (request) => {
+    await assertCallableRoles(request, ['admin', 'operador']);
+    return createGenerationBatchCore(request.data, request.auth!.uid);
   },
 );

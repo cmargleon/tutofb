@@ -10,7 +10,7 @@ interface ProviderSelectionProps {
   disabledProviders?: string[];
 }
 
-const PROVIDER_LOGOS: Record<Provider, { src: string; fallback: string; alt: string }> = {
+const PROVIDER_LOGOS: Partial<Record<Provider, { src: string; fallback: string; alt: string }>> = {
   'fal-seedream': {
     src: 'https://fal.ai/favicon.ico',
     fallback: 'FA',
@@ -20,11 +20,6 @@ const PROVIDER_LOGOS: Record<Provider, { src: string; fallback: string; alt: str
     src: 'https://deepmind.google/favicon.ico',
     fallback: 'GM',
     alt: 'Logo oficial de Google DeepMind',
-  },
-  'openai-gpt-image-1.5': {
-    src: 'https://openai.com/favicon.ico',
-    fallback: 'OA',
-    alt: 'Logo oficial de OpenAI',
   },
   'fal-nano-banana-2': {
     src: 'https://deepmind.google/favicon.ico',
@@ -54,7 +49,7 @@ const VISIBLE_PROVIDERS = [...PROVIDER_VALUES].sort((left, right) => {
 
 const ProviderLogo: React.FC<{ provider: Provider; selected: boolean; disabled: boolean }> = ({ provider, selected, disabled }) => {
   const [hasError, setHasError] = useState(false);
-  const logo = PROVIDER_LOGOS[provider];
+  const logo = PROVIDER_LOGOS[provider] ?? { src: 'https://fal.ai/favicon.ico', fallback: 'FA', alt: 'Logo de fal.ai' };
 
   return (
     <div

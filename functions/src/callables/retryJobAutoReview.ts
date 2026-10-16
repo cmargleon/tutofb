@@ -97,6 +97,8 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
 
       const systemConfig = await getSystemConfigCached();
       const review = await reviewGeneratedImageWithGemini({
+        generationKind: job.generationKind,
+        ...(job.generationKind === 'product' ? { productReferences: await Promise.all((job.productReferencePaths || [job.poseImagePath]).map(downloadStorageImage)) } : {}),
         apiKey: GEMINI_API_KEY.value(),
         model: systemConfig.geminiImageReviewModel,
         batchId: job.batchId,

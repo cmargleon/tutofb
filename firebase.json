@@ -12,6 +12,13 @@
     ],
     "rewrites": [
       {
+        "source": "/api/automation/**",
+        "function": {
+          "functionId": "automationApi",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

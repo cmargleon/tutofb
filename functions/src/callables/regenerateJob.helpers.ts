@@ -1,5 +1,6 @@
 import { buildFinalGenerationPrompt, isProvider } from '../../../shared/src/domain';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
+import { PRODUCT_IDENTITY_RULES } from '../automation/presets';
 import { Job } from '../../../shared/src/types';
 
 export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: string) => {
@@ -22,7 +23,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     promptBase: trimmedPrompt,
     promptCaseKey: job.promptCaseKey ?? null,
     promptCaseText: job.promptCaseText ?? null,
-    finalPrompt: buildFinalGenerationPrompt(
+    finalPrompt: job.generationKind === 'product' ? `${PRODUCT_IDENTITY_RULES}\n${trimmedPrompt}` : buildFinalGenerationPrompt(
       trimmedPrompt,
       job.garmentReferenceImageType || (job.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
       job.promptCaseText,

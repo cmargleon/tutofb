@@ -1,0 +1,20 @@
+{
+  "verifiedAt": "2026-10-16T17:34:21.344Z",
+  "endpoint": "/api/automation/jobs/:id",
+  "jobId": "MZlufWPMjLzp5PNrWwPX",
+  "clientId": "automation-e2e-test",
+  "status": "completed",
+  "outputsCount": 4,
+  "pollingPolicy": {
+    "initialIntervalSeconds": 20,
+    "initialWindowSeconds": 300,
+    "subsequentIntervalSeconds": 60,
+    "timeoutSeconds": 1800
+  },
+  "pollAfterSeconds": 0,
+  "pollingTimedOut": false,
+  "deadlineDurationSeconds": 1800,
+  "authenticatedWithDedicatedMachineIdentity": true,
+  "generatedAdditionalImages": false,
+  "passed": true
+}

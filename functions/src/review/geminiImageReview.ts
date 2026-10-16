@@ -14,6 +14,8 @@ interface ReviewImageAsset {
 }
 
 interface ReviewRequest {
+  generationKind?: 'garment' | 'product';
+  productReferences?: ReviewImageAsset[];
   apiKey: string;
   model: string;
   batchId?: string | null;
@@ -412,7 +414,14 @@ const extractResponseText = (payload: GeminiGenerateContentResponse): string => 
 };
 
 export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Promise<GeneratedImageReviewResult> => {
-  const reviewPrompt = buildReviewPrompt(request);
+  const reviewPrompt = request.generationKind === 'product' ? [
+    'Evaluate commercial product photography. All images except the LAST are reference views of the exact same product. The LAST image is the generated result.',
+    'Reject incorrect product identity, altered colors, logos/text/prints, added or removed parts, deformed geometry/proportions/materials, or obvious visual artifacts.',
+    'No human model or garment replacement is required. Background and composition must satisfy the requested scene.',
+    'Return verdict approved only if every required criterion passes. Include criteria keys identity, colors, logos, parts, geometry, artifacts and scene, each with passed and notes.',
+    'Use the required JSON schema. marketplaceData fields may be null. revisedPrompt must preserve exact product identity and fix defects without redesigning the product.',
+    `Requested scene: ${request.requestedPromptBase}`, `Current prompt: ${request.finalPrompt}`,
+  ].join('\n') : buildReviewPrompt(request);
   try {
     const { payload } = await callGeminiGenerateContent<GeminiGenerateContentResponse>({
       apiKey: request.apiKey,
@@ -437,18 +446,9 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
             role: 'user',
             parts: [
               { text: reviewPrompt },
-              {
-                inline_data: {
-                  mime_type: request.poseReference.mimeType,
-                  data: request.poseReference.bytes.toString('base64'),
-                },
-              },
-              {
-                inline_data: {
-                  mime_type: request.garmentReference.mimeType,
-                  data: request.garmentReference.bytes.toString('base64'),
-                },
-              },
+              ...(request.productReferences || [request.poseReference, request.garmentReference]).map((reference) => ({
+                inline_data: { mime_type: reference.mimeType, data: reference.bytes.toString('base64') },
+              })),
               {
                 inline_data: {
                   mime_type: request.generatedImage.mimeType,
@@ -467,7 +467,9 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
     const reviewText = extractResponseText(payload);
     const parsed = JSON.parse(reviewText) as GeminiReviewPayload;
     const criteria = sanitizeCriteria(parsed.criteria);
-    const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' ? 'approved' : 'rejected';
+    const requiredProductCriteria = ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts', 'scene'];
+    const productCriteriaPass = request.generationKind !== 'product' || requiredProductCriteria.every((key) => criteria.some((criterion) => criterion.key === key && criterion.passed));
+    const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' && productCriteriaPass ? 'approved' : 'rejected';
     const summary = sanitizeText(
       parsed.summary,
       verdict === 'approved'

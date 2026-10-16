@@ -54,7 +54,7 @@ test('las notificaciones muestran reintento hasta que el retry desde navbar vuel
     failedJobs: 1,
     notification: {
       retryState: 'failed_after_retry',
-      retryProvider: 'openai-gpt-image-1.5',
+      retryProvider: 'fal-gpt-image-2',
     },
   });
   assert.equal(failedAfterRetryItem.canRetry, false);
@@ -69,10 +69,10 @@ test('la descripción del batch resume completados y fallidos', () => {
   );
 });
 
-test('el retry desde notificación alterna seedream y openai y nunca usa nanobanana', () => {
-  assert.equal(resolveNotificationRetryProvider('fal-seedream'), 'openai-gpt-image-1.5');
-  assert.equal(resolveNotificationRetryProvider('openai-gpt-image-1.5'), 'fal-seedream');
+test('el retry desde notificación alterna seedream y GPT Image 2 mediante fal.ai y nunca usa nanobanana', () => {
+  assert.equal(resolveNotificationRetryProvider('fal-seedream'), 'fal-gpt-image-2');
+  assert.equal(resolveNotificationRetryProvider('fal-gpt-image-2'), 'fal-seedream');
   assert.equal(resolveNotificationRetryProvider('fal-nano-banana-2', 0.2), 'fal-seedream');
-  assert.equal(resolveNotificationRetryProvider('fal-banana-pro', 0.8), 'openai-gpt-image-1.5');
-  assert.equal(resolveNotificationRetryProvider('fal-seedream-5', 0.8), 'openai-gpt-image-1.5');
+  assert.equal(resolveNotificationRetryProvider('fal-banana-pro', 0.8), 'fal-gpt-image-2');
+  assert.equal(resolveNotificationRetryProvider('fal-seedream-5', 0.8), 'fal-gpt-image-2');
 });

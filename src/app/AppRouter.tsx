@@ -1,23 +1,26 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthProvider';
 import { LoadingBlock } from '../components/ui';
 import { PageErrorBoundary } from '../components/PageErrorBoundary';
+import { lazyRoute } from './lazyRoute';
 
-const Layout = lazy(() => import('../components/Layout').then((module) => ({ default: module.Layout })));
-const Login = lazy(() => import('../pages/Login').then((module) => ({ default: module.Login })));
-const Dashboard = lazy(() => import('../pages/Dashboard').then((module) => ({ default: module.Dashboard })));
-const Users = lazy(() => import('../pages/Users').then((module) => ({ default: module.Users })));
-const Clients = lazy(() => import('../pages/Clients').then((module) => ({ default: module.Clients })));
-const Models = lazy(() => import('../pages/Models').then((module) => ({ default: module.Models })));
-const ModelsGenerate = lazy(() => import('../pages/ModelsGenerate').then((module) => ({ default: module.ModelsGenerate })));
-const ModelsCatalog = lazy(() => import('../pages/ModelsCatalog').then((module) => ({ default: module.ModelsCatalog })));
-const Wizard = lazy(() => import('../pages/Wizard').then((module) => ({ default: module.Wizard })));
-const Analytics = lazy(() => import('../pages/Analytics').then((module) => ({ default: module.Analytics })));
-const Finanzas = lazy(() => import('../pages/Finanzas').then((module) => ({ default: module.Finanzas })));
-const Cola = lazy(() => import('../pages/Cola').then((module) => ({ default: module.Cola })));
-const Configuracion = lazy(() => import('../pages/Configuracion').then((module) => ({ default: module.Configuracion })));
-const Catalogo = lazy(() => import('../pages/Catalogo').then((module) => ({ default: module.Catalogo })));
+const Layout = lazyRoute('layout', () => import('../components/Layout').then((module) => ({ default: module.Layout })));
+const Login = lazyRoute('login', () => import('../pages/Login').then((module) => ({ default: module.Login })));
+const Dashboard = lazyRoute('dashboard', () => import('../pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const Users = lazyRoute('users', () => import('../pages/Users').then((module) => ({ default: module.Users })));
+const Clients = lazyRoute('clients', () => import('../pages/Clients').then((module) => ({ default: module.Clients })));
+const Models = lazyRoute('models', () => import('../pages/Models').then((module) => ({ default: module.Models })));
+const ModelsGenerate = lazyRoute('models-generate', () => import('../pages/ModelsGenerate').then((module) => ({ default: module.ModelsGenerate })));
+const ModelsCatalog = lazyRoute('models-catalog', () => import('../pages/ModelsCatalog').then((module) => ({ default: module.ModelsCatalog })));
+const Wizard = lazyRoute('wizard', () => import('../pages/Wizard').then((module) => ({ default: module.Wizard })));
+const Analytics = lazyRoute('analytics', () => import('../pages/Analytics').then((module) => ({ default: module.Analytics })));
+const Finanzas = lazyRoute('finanzas', () => import('../pages/Finanzas').then((module) => ({ default: module.Finanzas })));
+const Cola = lazyRoute('cola', () => import('../pages/Cola').then((module) => ({ default: module.Cola })));
+const Configuracion = lazyRoute('configuracion', () => import('../pages/Configuracion').then((module) => ({ default: module.Configuracion })));
+const Catalogo = lazyRoute('catalogo', () => import('../pages/Catalogo').then((module) => ({ default: module.Catalogo })));
+
+const Automation = lazyRoute('automation', () => import('../pages/Automation').then((module) => ({ default: module.Automation })));
 
 const RouteLoadingFallback: React.FC = () => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -81,6 +84,8 @@ export const AppRouter: React.FC = () => {
             <Route path="models" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Models /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/generar" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsGenerate /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/catalogo" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsCatalog /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="automation" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Automation /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="automation/intake" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Automation intake /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="generate" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Wizard /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="cola" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Cola /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><PageErrorBoundary><Analytics /></PageErrorBoundary></ProtectedRoute>} />

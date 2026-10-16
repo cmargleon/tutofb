@@ -150,11 +150,12 @@ test('validateCreateGenerationBatchInput conserva provider y calcula jobs por po
         },
       ],
       productDrafts: [buildProductDraft('gar-1', 'Vestido Azul')],
-      provider: 'openai-gpt-image-1.5',
+      provider: 'fal-gpt-image-2',
       promptBase: 'Prompt lote',
       imageConfig: {
-        provider: 'openai-gpt-image-1.5',
-        size: '1024x1536',
+        provider: 'fal-gpt-image-2',
+        imageSize: { width: 1024, height: 1536 },
+        outputFormat: 'png',
         quality: 'high',
       },
     },
@@ -162,7 +163,7 @@ test('validateCreateGenerationBatchInput conserva provider y calcula jobs por po
     20,
   );
 
-  assert.equal(validated.provider, 'openai-gpt-image-1.5');
+  assert.equal(validated.provider, 'fal-gpt-image-2');
   assert.equal(validated.aspectRatio, '2:3');
   assert.equal(validated.totalJobs, 2);
 });
@@ -422,11 +423,11 @@ test('buildJobDraft usa single_view para el matching nuevo y deja el job en pend
       promptCaseKey: 'top_only',
       promptCaseText: defaultPromptCases.top_only,
     },
-    'openai-gpt-image-1.5',
+    'fal-gpt-image-2',
     '',
   );
 
-  assert.equal(draft.provider, 'openai-gpt-image-1.5');
+  assert.equal(draft.provider, 'fal-gpt-image-2');
   assert.equal(draft.status, 'pending');
   assert.equal(draft.promptCaseKey, 'top_only');
   assert.equal(draft.promptCaseText, defaultPromptCases.top_only);
@@ -444,7 +445,7 @@ test('buildJobDraft mantiene la nota de multiangulo en jobs legacy compuestos', 
       garmentIsMultiAngle: true,
       garmentReferenceImageType: 'multi_angle_composite',
     },
-    'openai-gpt-image-1.5',
+    'fal-gpt-image-2',
     '',
   );
 
@@ -458,7 +459,7 @@ test('buildJobDraft no duplica la regla de etiquetas internas si el prompt base 
       garmentIsMultiAngle: false,
       garmentReferenceImageType: 'single_view',
     },
-    'openai-gpt-image-1.5',
+    'fal-gpt-image-2',
     `Prompt custom\n\n${marker}\n\n- Keep inside labels hidden.`,
   );
 

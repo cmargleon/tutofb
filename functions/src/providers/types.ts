@@ -1,6 +1,7 @@
 import { Provider, ProviderImageConfig } from '../../../shared/src/types';
 
 export interface ProviderRequest {
+  referenceImageUrls?: string[];
   poseImageUrl: string;
   garmentImageUrl: string;
   prompt: string;

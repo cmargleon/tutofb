@@ -14,7 +14,7 @@ async function shot(page: any, name: string) {
   return p;
 }
 
-test('Flujo Generar con IA — OpenAI provider', async () => {
+test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
@@ -55,14 +55,14 @@ test('Flujo Generar con IA — OpenAI provider', async () => {
   await page.waitForTimeout(1000);
   await shot(page, '02-ai-identity-step');
 
-  // ── 6. Seleccionar proveedor OpenAI ───────────────────────────────────────
+  // ── 6. Seleccionar proveedor fal.ai GPT Image 2 ───────────────────────────────────────
   const providerLabel = page.locator('label:has-text("Proveedor IA")').locator('..').locator('select');
   if (await providerLabel.isVisible().catch(() => false)) {
-    // Select OpenAI option
+    // Select fal.ai GPT Image 2 option
     const provOpts = await providerLabel.locator('option').all();
     for (const opt of provOpts) {
       const val = await opt.getAttribute('value');
-      if (val?.includes('openai')) {
+      if (val === 'fal-gpt-image-2') {
         await providerLabel.selectOption(val);
         console.log(`✅ Proveedor: ${val}`);
         break;
@@ -84,13 +84,13 @@ test('Flujo Generar con IA — OpenAI provider', async () => {
   await pickRandom('Color de pelo');
   await pickRandom('Complexión');
   await shot(page, '03-characteristics-filled');
-  console.log('✅ Características completadas, usando OpenAI gpt-image-1.5');
+  console.log('✅ Características completadas, usando GPT Image 2 (fal.ai)');
 
   // ── 8. Generar candidatos ──────────────────────────────────────────────────
   const generateBtn = page.getByRole('button', { name: /generar.*candidato/i });
   await expect(generateBtn).toBeEnabled({ timeout: 5000 });
   await generateBtn.click();
-  console.log('⏳ Generando candidatos con OpenAI (1-2 min)...');
+  console.log('⏳ Generando candidatos con fal.ai GPT Image 2 (1-2 min)...');
   await page.waitForTimeout(5000);
   await shot(page, '04-generating-candidates');
 
@@ -99,7 +99,7 @@ test('Flujo Generar con IA — OpenAI provider', async () => {
   await eligeBtn.waitFor({ timeout: 300000 });
   await page.waitForTimeout(1000);
   await shot(page, '05-candidates-ready');
-  console.log('✅ Candidatos generados con OpenAI');
+  console.log('✅ Candidatos generados con fal.ai GPT Image 2');
 
   // ── 9. Seleccionar candidato ──────────────────────────────────────────────
   await eligeBtn.click();
@@ -128,7 +128,7 @@ test('Flujo Generar con IA — OpenAI provider', async () => {
   const generatePosesBtn = page.getByRole('button', { name: /generar poses/i });
   await expect(generatePosesBtn).toBeEnabled({ timeout: 5000 });
   await generatePosesBtn.click();
-  console.log('⏳ Generando poses con OpenAI (1-2 min)...');
+  console.log('⏳ Generando poses con fal.ai GPT Image 2 (1-2 min)...');
   await page.waitForTimeout(5000);
   await shot(page, '09-generating-poses');
 
@@ -137,7 +137,7 @@ test('Flujo Generar con IA — OpenAI provider', async () => {
   await saveBtn.waitFor({ timeout: 300000 });
   await page.waitForTimeout(1500);
   await shot(page, '10-poses-ready');
-  console.log('✅ Poses generadas con OpenAI');
+  console.log('✅ Poses generadas con fal.ai GPT Image 2');
 
   // ── 13. Aceptar todas ────────────────────────────────────────────────────
   const acceptAll = page.getByRole('button', { name: /seleccionar todas/i }).last();
@@ -162,5 +162,5 @@ test('Flujo Generar con IA — OpenAI provider', async () => {
   await shot(page, '13-library-final');
 
   await browser.close();
-  console.log('\n🎉 ¡Flujo completo exitoso con OpenAI!');
+  console.log('\n🎉 ¡Flujo completo exitoso con fal.ai GPT Image 2!');
 });

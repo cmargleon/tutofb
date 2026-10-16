@@ -303,7 +303,7 @@ const loadTemplateCategories = async (
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as SpreadsheetTemplateCategory));
 };
 
-const classifyGarmentWithGemini = async ({
+export const classifyGarmentWithGemini = async ({
   apiKey,
   model,
   garment,

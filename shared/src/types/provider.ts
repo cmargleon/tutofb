@@ -77,13 +77,33 @@ export interface FalGPTImage2ImageConfig {
   outputFormat: GPTImage2OutputFormat;
 }
 
+export type FalGPTImage25Provider = 'fal-gpt-image-2.5-sunburst' | 'fal-gpt-image-2.5-flare';
+export type FalSeedream5StandardProvider = 'fal-seedream-5-pro' | 'fal-seedream-5-flash';
+export interface FalGPTImage25ImageConfig {
+  provider: FalGPTImage25Provider;
+  imageSize: GPTImage2ImageSizePreset | SeedreamCustomImageSize;
+  quality: GPTImage2Quality | 'xhigh' | 'max';
+  outputFormat: GPTImage2OutputFormat;
+}
+export interface FalSeedream5StandardImageConfig {
+  provider: FalSeedream5StandardProvider;
+  imageSize: Exclude<GPTImage2ImageSizePreset, 'auto'> | 'auto_1K' | 'auto_2K' | SeedreamCustomImageSize;
+}
+export interface FalFlux2ImageConfig {
+  provider: 'fal-flux-2-edit';
+  imageSize: Exclude<GPTImage2ImageSizePreset, 'auto'> | SeedreamCustomImageSize;
+}
+
 export type ProviderImageConfig =
   | FalSeedreamImageConfig
   | FalBananaProImageConfig
   | OpenAIImageConfig
   | FalNanoBanana2ImageConfig
   | FalSeedream5ImageConfig
-  | FalGPTImage2ImageConfig;
+  | FalGPTImage2ImageConfig
+  | FalGPTImage25ImageConfig
+  | FalSeedream5StandardImageConfig
+  | FalFlux2ImageConfig;
 
 // Re-export for convenience — provider.ts is the natural home for Provider too
 export type { Provider, AspectRatio };

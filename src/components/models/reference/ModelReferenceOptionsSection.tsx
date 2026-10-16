@@ -1,3 +1,5 @@
+import { IDENTITY_CANDIDATE_COUNT } from '../../../features/models/constants';
+import { ProviderCostEstimate } from '../../wizard/ProviderCostEstimate';
 import React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { ModelPhotoProvider } from '../../../../shared/src/types';
@@ -180,6 +182,10 @@ export const ModelReferenceOptionsSection: React.FC<ModelReferenceOptionsSection
         onChange={reference.setProviderImageConfig}
       />
     </div>
+
+    {reference.identityMode === 'similar' ? (
+      <ProviderCostEstimate config={reference.providerImageConfig} imageCount={IDENTITY_CANDIDATE_COUNT} referenceCount={1} />
+    ) : null}
 
     <div>
       <button

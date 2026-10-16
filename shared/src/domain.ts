@@ -1,3 +1,4 @@
+import { MODEL_PHOTO_PROVIDER_PRICE_LABELS } from './constants/providerCosts';
 import {
   AspectRatio,
   CatalogEntityStatus,
@@ -16,10 +17,14 @@ export const ROLE_VALUES: Role[] = ['admin', 'operador', 'revisor'];
 export const PROVIDER_VALUES: Provider[] = [
   'fal-seedream',
   'fal-banana-pro',
-  'openai-gpt-image-1.5',
   'fal-nano-banana-2',
   'fal-seedream-5',
   'fal-gpt-image-2',
+  'fal-gpt-image-2.5-sunburst',
+  'fal-gpt-image-2.5-flare',
+  'fal-seedream-5-pro',
+  'fal-seedream-5-flash',
+  'fal-flux-2-edit',
 ];
 export const ASPECT_RATIO_VALUES: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '4:3', '3:2', '16:9'];
 
@@ -30,15 +35,24 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
   'fal-nano-banana-2': 'fal.ai Nano Banana 2',
   'fal-seedream-5': 'fal.ai Seedream 5 Lite',
   'fal-gpt-image-2': 'fal.ai GPT Image 2',
+  'fal-gpt-image-2.5-sunburst': 'fal.ai GPT Image 2.5 Sunburst',
+  'fal-gpt-image-2.5-flare': 'fal.ai GPT Image 2.5 Flare',
+  'fal-seedream-5-pro': 'fal.ai Seedream 5 Pro',
+  'fal-seedream-5-flash': 'fal.ai Seedream 5 Flash',
+  'fal-flux-2-edit': 'fal.ai FLUX.2 Edit',
 };
 
 export const MODEL_PHOTO_PROVIDER_VALUES: ModelPhotoProvider[] = [
   'fal-seedream-v4.5',
   'fal-banana-pro',
-  'openai-dalle',
   'fal-nano-banana-2',
   'fal-seedream-5',
   'fal-gpt-image-2',
+  'fal-gpt-image-2.5-sunburst',
+  'fal-gpt-image-2.5-flare',
+  'fal-seedream-5-pro',
+  'fal-seedream-5-flash',
+  'fal-flux-2-edit',
 ];
 
 export const MODEL_PHOTO_PROVIDER_TO_PROVIDER: Record<ModelPhotoProvider, Provider> = {
@@ -48,6 +62,11 @@ export const MODEL_PHOTO_PROVIDER_TO_PROVIDER: Record<ModelPhotoProvider, Provid
   'fal-nano-banana-2': 'fal-nano-banana-2',
   'fal-seedream-5': 'fal-seedream-5',
   'fal-gpt-image-2': 'fal-gpt-image-2',
+  'fal-gpt-image-2.5-sunburst': 'fal-gpt-image-2.5-sunburst',
+  'fal-gpt-image-2.5-flare': 'fal-gpt-image-2.5-flare',
+  'fal-seedream-5-pro': 'fal-seedream-5-pro',
+  'fal-seedream-5-flash': 'fal-seedream-5-flash',
+  'fal-flux-2-edit': 'fal-flux-2-edit',
 };
 
 export const MODEL_PHOTO_PROVIDER_LABELS: Record<ModelPhotoProvider, string> = {
@@ -57,16 +76,14 @@ export const MODEL_PHOTO_PROVIDER_LABELS: Record<ModelPhotoProvider, string> = {
   'fal-nano-banana-2': 'Nano Banana 2 (fal.ai)',
   'fal-seedream-5': 'Seedream 5 Lite (fal.ai)',
   'fal-gpt-image-2': 'GPT Image 2 (fal.ai)',
+  'fal-gpt-image-2.5-sunburst': 'GPT Image 2.5 Sunburst (fal.ai)',
+  'fal-gpt-image-2.5-flare': 'GPT Image 2.5 Flare (fal.ai)',
+  'fal-seedream-5-pro': 'Seedream 5 Pro (fal.ai)',
+  'fal-seedream-5-flash': 'Seedream 5 Flash (fal.ai)',
+  'fal-flux-2-edit': 'FLUX.2 Edit (fal.ai)',
 };
 
-export const MODEL_PHOTO_PROVIDER_HINTS: Record<ModelPhotoProvider, string> = {
-  'fal-seedream-v4.5': 'ByteDance · $0.04/foto',
-  'fal-banana-pro': 'Gemini Pro · $0.15/foto base, $0.30 en 4K',
-  'openai-dalle': 'OpenAI · $0.02-$0.25/foto segun quality y size',
-  'fal-nano-banana-2': 'Gemini 3.1 Flash · $0.06-$0.16/foto segun resolucion',
-  'fal-seedream-5': 'ByteDance v5 · $0.035/foto',
-  'fal-gpt-image-2': 'OpenAI · $0.01-$0.41/foto segun quality y tamano',
-};
+export const MODEL_PHOTO_PROVIDER_HINTS = MODEL_PHOTO_PROVIDER_PRICE_LABELS;
 
 export const mapModelPhotoProviderToProvider = (provider: ModelPhotoProvider): Provider =>
   MODEL_PHOTO_PROVIDER_TO_PROVIDER[provider];

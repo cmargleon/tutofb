@@ -157,7 +157,7 @@ export const useReferenceModelFlow = ({
   const [isCreating, setIsCreating] = useState(false);
   const [isUploadingReference, setIsUploadingReference] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [provider, setProviderState] = useState<ModelPhotoProvider>('openai-dalle');
+  const [provider, setProviderState] = useState<ModelPhotoProvider>('fal-gpt-image-2');
   const [providerImageConfigs, setProviderImageConfigs] = useState<Record<Provider, ProviderImageConfig>>(
     createDefaultModelProviderImageConfigs,
   );

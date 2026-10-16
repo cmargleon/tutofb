@@ -30,6 +30,7 @@ export interface ModelCreateFlowAiState
   wizardStep: number;
   busy: boolean;
   canGenerateCandidates: boolean;
+  generateCandidatesDisabledReason: string | null;
   canSaveModel: boolean;
   canSelectStep: (stepId: number) => boolean;
   handleStepSelect: (stepId: number) => Promise<void>;
@@ -87,6 +88,15 @@ export const useAiWizard = ({
     poses.regeneratingPoseIndex !== null;
 
   const canGenerateCandidates = candidates.canGenerateCandidates(newModelName);
+  const generateCandidatesDisabledReason = !newModelName.trim()
+    ? 'Falta completar el campo "Nombre del modelo".'
+    : !selectedClientId
+      ? 'Falta seleccionar el campo "Cliente".'
+      : !identityForm.prompt.trim()
+        ? 'Falta completar el campo "Prompt de identidad".'
+        : identityForm.selectedProviderDisabled
+          ? 'El campo "Proveedor IA" no es válido porque el proveedor está deshabilitado.'
+          : null;
   const canSaveModel = Boolean(
     poses.acceptedPoseCount > 0 && newModelName.trim() && selectedClientId,
   );
@@ -220,6 +230,7 @@ export const useAiWizard = ({
       wizardStep,
       busy,
       canGenerateCandidates,
+      generateCandidatesDisabledReason,
       canSaveModel,
       canSelectStep,
       handleStepSelect,

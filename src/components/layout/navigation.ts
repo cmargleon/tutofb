@@ -55,6 +55,7 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
   const entries: NavigationEntry[] = [
     { type: 'item', name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: role.isActive },
     { type: 'item', name: 'Generar Fotos', path: '/generate', icon: Wand2, visible: role.canCreateBatches },
+    { type: 'item', name: 'Automatización', path: '/automation', icon: Rows3, visible: role.canCreateBatches },
     { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate },
     { type: 'item', name: 'Cola', path: '/cola', icon: Rows3, visible: role.canEvaluate },
     {

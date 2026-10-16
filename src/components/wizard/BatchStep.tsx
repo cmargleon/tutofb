@@ -1,3 +1,4 @@
+import { ProviderCostEstimate } from './ProviderCostEstimate';
 import React, { useState } from 'react';
 import { SourceSpreadsheetMatchSummary } from '../../../shared/src/types';
 import { WizardProviderImageConfig, WizardState } from '../../features/generate/types';
@@ -155,6 +156,7 @@ export const BatchStep: React.FC<Props> = ({
               onChange={onProviderImageConfigChange}
             />
           </div>
+          <ProviderCostEstimate config={state.providerImageConfigs[state.provider]} imageCount={totalJobs} referenceCount={2} />
           <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
 
           <button

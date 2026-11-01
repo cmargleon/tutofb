@@ -20,7 +20,7 @@ Colecciones existentes relevantes:
 
 Flujo original: `src/features/generate/storage.ts` comprime/sube originales; los hooks del wizard agrupan prendas, llaman `classifyGarmentViewsWithGemini` y eligen modelo/poses. `createGenerationBatch` valida, selecciona combinaciones compatibles y crea batch/jobs. `processJobOnCreate`, `processJobOnRequeue`, `processJobOnActivation` y el barrido programado activan `jobWorker.ts`. Este reclama mediante transacción, genera mediante adapters fal/OpenAI, ejecuta revisión Gemini y persiste outputs/costos/reintentos. La automatización usa ese mismo recorrido.
 
-Las dependencias del frontend eran la preparación/subida de originales, la llamada de clasificación y la construcción de la solicitud al callable. Se han añadido entradas de servidor para ellas. El wizard conserva su wrapper, contrato y comportamiento.
+Las dependencias del frontend eran la preparación/subida de originales, la llamada de clasificación y la construcción de la solicitud al callable. Se han añadido entradas de servidor para ellas. El wizard usa ahora tres pasos con detección automática antes de seleccionar modelo/poses; las decisiones de clasificación y mayoría están en [PHOTO_GENERATION.md](PHOTO_GENERATION.md).
 
 ## Implementación
 
@@ -131,7 +131,7 @@ Create devuelve, por ejemplo, `{"jobId":"…","status":"pending","duplicate":fal
 
 Consulta GET cada 20 segundos durante los primeros 5 minutos desde `createdAt`, y después cada 60 segundos, con timeout total de seguimiento de 30 minutos. Usa `pollAfterSeconds`, `pollingDeadlineAt` y `pollingTimedOut` de la respuesta; detente si el intervalo es cero por estado terminal o timeout. Renueva Auth si expira. Termina el polling en `completed`, `failed` o `needs_attention`; estos dos últimos requieren intervención. Un timeout de seguimiento no cancela la generación: conserva el mismo jobId. Configura la revisión de Gmail por separado en su scheduler externo (`GMAIL_CHECK_INTERVAL_SECONDS`), sin usar ese intervalo para consultar jobs. Ante un timeout de POST repite **el mismo externalId y gmailMessageId**, sin crear una nueva orden. No vuelvas a subir archivos si ya conservas sus storagePaths.
 
-Para producto, usa `jobType:"product"`, `preset:"generic_product"`, omite `modelId` y conserva el mismo formato de inputs. Agrupa vistas del mismo artículo con el mismo `itemId`; usa distintos IDs para productos distintos. Se aceptan fotografías JPEG, PNG y WebP. Se permiten hasta 40 fotos, cuatro por artículo, menos de 10 MB por foto y 40 megapíxeles antes de normalizar. El límite efectivo de jobs sigue siendo `system_config/main.batchMaxJobs` (default 100). Cuatro escenas por artículo implican cuatro jobs y sus costos/reviews.
+Para producto, usa `jobType:"product"`, `preset:"generic_product"`, omite `modelId` y conserva el mismo formato de inputs. Agrupa vistas del mismo artículo con el mismo `itemId`; usa distintos IDs para productos distintos. Se aceptan fotografías JPEG, PNG y WebP. Se permiten hasta 40 fotos, cuatro por artículo, menos de 10 MB por foto y 40 megapíxeles antes de normalizar. El límite efectivo de jobs sigue siendo `system_config/main.batchMaxJobs` (default 100). Seis escenas por artículo implican seis jobs y sus costos/reviews.
 
 Para URLs HTTPS directas, sustituye `storagePath` por `url`. Solo se aceptan hosts explícitamente autorizados mediante `AUTOMATION_IMPORT_HOSTS`; no hay redirects. La resolución DNS se fija al descargar y se rechazan redes privadas/reservadas. Las descargas tienen límite de tamaño y 30 segundos. Los archivos se decodifican con sharp y normalizan a JPEG de hasta 2200 px. No se procesa HTML/SVG como fotografía.
 
@@ -156,7 +156,7 @@ Los resúmenes leen los jobs actuales dentro de una transacción, evitando regre
 
 ## Prendas y defaults por cliente
 
-El proveedor predeterminado de automatización es **Seedream 5 Pro** (`fal-seedream-5-pro`), tanto para prendas como para productos. Un `provider` explícito tiene prioridad, seguido del proveedor del preset del cliente y finalmente este default. La lectura de instrucciones desde correos de Work todavía no está implementada en este repositorio; el integrador debe enviar `provider` explícitamente para elegir otro modelo.
+El proveedor predeterminado de automatización es **GPT Image 2.5 Flare** (`fal-gpt-image-2.5-flare`), tanto para prendas como para productos. Un `provider` explícito tiene prioridad, seguido del proveedor del preset del cliente y finalmente este default. La lectura de instrucciones desde correos de Work todavía no está implementada en este repositorio; el integrador debe enviar `provider` explícitamente para elegir otro modelo.
 
 Orden de resolución: `modelId` explícito → modelo del preset del cliente → `clients/{id}.automation.defaultModelId`. Si no existe, no se elige una persona arbitrariamente.
 
@@ -171,10 +171,10 @@ Presets: parámetro `preset` → `automation.defaultPreset` del cliente → `sta
       "standard": {
         "modelId": "ID_MODELO_DEL_CLIENTE",
         "poseIds": ["ID_POSE_FRENTE"],
-        "provider": "fal-seedream-5-pro",
+        "provider": "fal-gpt-image-2.5-flare",
         "aspectRatio": "3:4"
       },
-      "generic_product": {"provider":"fal-seedream-5-pro","aspectRatio":"1:1"}
+      "generic_product": {"provider":"fal-gpt-image-2.5-flare","aspectRatio":"1:1"}
     }
   }
 }
@@ -184,7 +184,7 @@ Sin `poseIds` se consideran las poses existentes del modelo; el core filtra las 
 
 ## Productos, revisión y costos
 
-`generic_product`: una toma de fondo blanco, dos lifestyle y una hero. Es image-to-image con todas las vistas del mismo artículo (hasta cuatro), ratio default 1:1, proveedor default `fal-nano-banana-2`. El catálogo de presets es extensible en `presets.ts`; no se implementan todavía las categorías futuras ni text-to-image sin referencia.
+`generic_product`: seis fotos por artículo, cuatro lifestyle y dos con personas usando el producto sobre fondos relativamente neutros. Comparte las escenas y los prompts globales de `system_config/main` con el wizard manual. Es image-to-image con todas las vistas del mismo artículo (hasta cuatro), ratio default 3:4 vertical (Portrait 4:3 en el selector), proveedor default `fal-gpt-image-2.5-flare`. El catálogo de presets es extensible en `presets.ts`; no se implementan todavía las categorías futuras ni text-to-image sin referencia.
 
 La revisión usa el transporte/schema/registro Gemini existente, con criterios obligatorios `identity`, `colors`, `logos`, `parts`, `geometry`, `artifacts`, `scene`. No basta un verdict aprobado si falta un criterio o alguno falla. Los prompts exigen conservar forma, proporciones, colores, logos, gráficos, materiales y piezas. Los retries conservan estas reglas y la escena original.
 

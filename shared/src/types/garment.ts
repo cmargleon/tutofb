@@ -4,6 +4,7 @@ import type {
   GarmentPhotoClassificationSource,
   GarmentSourceType,
   GarmentBodyArea,
+  GenerationKind,
 } from './common';
 
 export interface GarmentPhotoAssetInput {
@@ -65,6 +66,10 @@ export interface ClassifiedGarmentViewsGarmentResult {
   garmentBodyArea: GarmentBodyArea | null;
   garmentAccessoryType: GarmentAccessoryType | null;
   usedGemini: boolean;
+  itemKind?: GenerationKind | null;
+  itemKindConfidence?: number | null;
+  itemKindReasoning?: string | null;
+  itemLabel?: string | null;
   matchedCategoryId?: string | null;
   matchedCategoryLabel?: string | null;
   matchedCategoryConfidence?: number | null;

@@ -14,6 +14,7 @@ import {
 } from './types';
 
 export const ROLE_VALUES: Role[] = ['admin', 'operador', 'revisor'];
+export const DEFAULT_IMAGE_PROVIDER: Provider = 'fal-gpt-image-2.5-flare';
 export const PROVIDER_VALUES: Provider[] = [
   'fal-seedream',
   'fal-banana-pro',

@@ -6,7 +6,7 @@ Hoy el sistema cubre:
 - login interno con roles `admin`, `operador`, `revisor`
 - alta de clientes y modelos
 - importacion y exportacion de bundles de modelos
-- wizard de generacion con clasificacion de prendas, sugerencia de poses y batches reales
+- wizard de generacion en tres pasos con deteccion de ropa/objetos, conservacion del tipo mayoritario, sugerencia de poses y batches reales; ver [reglas del flujo](docs/PHOTO_GENERATION.md)
 - dos modos de salida: `photos_only` y `spreadsheet`
 - cola operativa, seleccion manual de outputs, reintentos, cancelaciones, descargas y catalogo visual
 - analytics operativos, uso/costo de Gemini, salud del sistema y configuracion compartida

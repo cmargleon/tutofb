@@ -32,6 +32,7 @@ export const markGarmentsAsClassifying = (
 export const mergeGarmentClassificationResults = (
   garments: UploadedGarmentDraft[],
   response: Awaited<ReturnType<typeof classifyGarmentViewsWithGemini>>,
+  preserveVisualClassification = false,
 ): UploadedGarmentDraft[] => {
   const garmentsById = new Map(response.garments.map((garment) => [garment.garmentId, garment]));
 
@@ -44,16 +45,24 @@ export const mergeGarmentClassificationResults = (
     const photosById = new Map(classifiedGarment.photos.map((photo) => [photo.id, photo]));
     return {
       ...garment,
-      garmentBodyArea: classifiedGarment.garmentBodyArea ?? garment.garmentBodyArea ?? null,
-      garmentAccessoryType: classifiedGarment.garmentAccessoryType ?? garment.garmentAccessoryType ?? null,
-      matchedCategoryId: classifiedGarment.matchedCategoryId ?? garment.matchedCategoryId ?? null,
-      matchedCategoryLabel: classifiedGarment.matchedCategoryLabel ?? garment.matchedCategoryLabel ?? null,
+      ...(!preserveVisualClassification ? {
+        analysisStatus: 'ready' as const,
+        analysisError: null,
+        itemKind: classifiedGarment.itemKind ?? null,
+        itemKindConfidence: classifiedGarment.itemKindConfidence ?? null,
+        itemKindReasoning: classifiedGarment.itemKindReasoning ?? null,
+        itemLabel: classifiedGarment.itemLabel ?? null,
+      } : {}),
+      garmentBodyArea: preserveVisualClassification ? garment.garmentBodyArea : classifiedGarment.garmentBodyArea ?? garment.garmentBodyArea ?? null,
+      garmentAccessoryType: preserveVisualClassification ? garment.garmentAccessoryType : classifiedGarment.garmentAccessoryType ?? garment.garmentAccessoryType ?? null,
+      matchedCategoryId: classifiedGarment.matchedCategoryId ?? null,
+      matchedCategoryLabel: classifiedGarment.matchedCategoryLabel ?? null,
       matchedCategoryConfidence: classifiedGarment.matchedCategoryConfidence ?? garment.matchedCategoryConfidence ?? null,
       matchedCategoryReasoning: classifiedGarment.matchedCategoryReasoning ?? garment.matchedCategoryReasoning ?? null,
       matchedColor: classifiedGarment.matchedColor ?? garment.matchedColor ?? null,
       matchedColorConfidence: classifiedGarment.matchedColorConfidence ?? garment.matchedColorConfidence ?? null,
       matchedColorReasoning: classifiedGarment.matchedColorReasoning ?? garment.matchedColorReasoning ?? null,
-      originalPhotos: garment.originalPhotos.map((photo) => {
+      originalPhotos: preserveVisualClassification ? garment.originalPhotos : garment.originalPhotos.map((photo) => {
         const classifiedPhoto = photosById.get(photo.id);
         if (!classifiedPhoto) {
           return photo;

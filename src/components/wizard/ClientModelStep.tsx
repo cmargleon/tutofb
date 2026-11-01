@@ -7,7 +7,7 @@ import { EmptyState, ImageThumb } from '../ui';
 interface Props {
   generationKind: WizardState['generationKind'];
   isBusy: boolean;
-  onGenerationKindChange: (kind: NonNullable<WizardState['generationKind']>) => Promise<void>;
+  section: 'client' | 'model' | 'output';
   clients: Client[];
   models: Model[];
   spreadsheetTemplates: SpreadsheetTemplate[];
@@ -32,7 +32,7 @@ interface Props {
 export const ClientModelStep: React.FC<Props> = ({
   generationKind,
   isBusy,
-  onGenerationKindChange,
+  section,
   clients,
   models,
   spreadsheetTemplates,
@@ -57,13 +57,13 @@ export const ClientModelStep: React.FC<Props> = ({
   const hideSpreadsheetControls = Boolean(
     selectedClientId && !loadingSpreadsheetTemplates && !selectedClientHasSpreadsheetTemplates,
   );
-  const showModels = generationKind === 'garment' && (hideSpreadsheetControls || (!loadingSpreadsheetTemplates && outputModeChosen));
+  const showModels = generationKind === 'garment' && section === 'model';
 
   return (
     <div className="space-y-6">
-      <div className={`grid gap-5 ${showModels ? 'lg:grid-cols-[280px,1fr]' : ''}`}>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Cliente</label>
+      <div className="grid gap-5">
+        {section !== 'model' && <fieldset disabled={isBusy} className="min-w-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          {section === 'client' && <><label className="mb-2 block text-sm font-medium text-slate-700">Cliente</label>
           <select
             aria-label="Cliente"
             disabled={isBusy}
@@ -79,22 +79,12 @@ export const ClientModelStep: React.FC<Props> = ({
             ))}
           </select>
 
-          {selectedClientId && <fieldset className="mt-5 min-w-0 space-y-2" disabled={isBusy}>
-            <legend className="mb-2 text-sm font-medium text-slate-700">¿Qué quieres fotografiar?</legend>
-            {([
-              ['garment', 'Ropa con modelo', 'Prendas, modelo humano y poses.'],
-              ['product', 'Objetos / productos', '6 fotos por objeto: 4 lifestyle y 2 con personas usándolo.'],
-            ] as const).map(([kind, title, description]) => <button key={kind} type="button" aria-pressed={generationKind === kind}
-              onClick={() => void onGenerationKindChange(kind)}
-              className={`w-full rounded-2xl border p-4 text-left transition disabled:opacity-60 ${generationKind === kind ? 'border-emerald-600 bg-emerald-50 text-slate-900' : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-400'}`}>
-              <span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-xs">{description}</span>
-            </button>)}
-          </fieldset>}
-          {selectedClientId && generationKind === 'product' && <p className="mt-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-700">
-            Salida: solo fotos. En los siguientes pasos cargarás los objetos y elegirás sus escenas.
+          </>}
+          {section === 'output' && generationKind === 'product' && <p className="text-sm text-slate-600">
+            Las fotos de producto se guardarán como imágenes, con las escenas que seleccionaste.
           </p>}
 
-          {selectedClientId && generationKind === 'garment' && (
+          {section === 'output' && selectedClientId && generationKind === 'garment' && (
             <div className="mt-4">
               <span className="mb-2 block text-sm font-medium text-slate-700">Salida final</span>
               {loadingSpreadsheetTemplates ? (
@@ -141,10 +131,11 @@ export const ClientModelStep: React.FC<Props> = ({
             </div>
           )}
 
-          {generationKind === 'garment' && selectedClientId && outputModeChosen && !hideSpreadsheetControls && outputMode === 'spreadsheet' ? (
+          {section === 'output' && generationKind === 'garment' && selectedClientId && outputModeChosen && !hideSpreadsheetControls && outputMode === 'spreadsheet' ? (
             <>
               <label className="mb-2 mt-4 block text-sm font-medium text-slate-700">Spreadsheet del cliente</label>
               <select
+                aria-label="Spreadsheet del cliente"
                 value={selectedSpreadsheetTemplateId || ''}
                 onChange={(event) => onSpreadsheetTemplateChange(event.target.value || null)}
                 disabled={!selectedClientId}
@@ -160,6 +151,7 @@ export const ClientModelStep: React.FC<Props> = ({
 
               <label className="mb-2 mt-4 block text-sm font-medium text-slate-700">Categoría fallback del spreadsheet</label>
               <select
+                aria-label="Categoría fallback del spreadsheet"
                 value={selectedSpreadsheetCategoryId || ''}
                 onChange={(event) => onSpreadsheetCategoryChange(event.target.value || null)}
                 disabled={!selectedSpreadsheetTemplateId}
@@ -231,12 +223,12 @@ export const ClientModelStep: React.FC<Props> = ({
                 ) : null}
               </div>
             </>
-          ) : generationKind === 'garment' && selectedClientId && outputModeChosen && !hideSpreadsheetControls ? (
+          ) : section === 'output' && generationKind === 'garment' && selectedClientId && outputModeChosen && !hideSpreadsheetControls ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
               Este lote se guardará solo como imágenes. Más adelante no aparecerá la opción de exportar spreadsheet.
             </div>
           ) : null}
-        </div>
+        </fieldset>}
 
         {showModels && (
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -244,7 +236,7 @@ export const ClientModelStep: React.FC<Props> = ({
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Modelos del cliente</h2>
                 <p className="text-sm text-slate-500">
-                  Elige el modelo primero. Las poses se sugerirán después de subir las prendas.
+                  Elige el modelo. Preseleccionaremos las poses compatibles con las fotos que ya analizamos.
                 </p>
               </div>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
@@ -268,6 +260,8 @@ export const ClientModelStep: React.FC<Props> = ({
                       type="button"
                       key={model.id}
                       onClick={() => onModelSelect(model.id || null)}
+                      disabled={isBusy}
+                      aria-pressed={isSelected}
                       className={`overflow-hidden rounded-3xl border text-left transition ${
                         isSelected
                           ? 'border-emerald-700 bg-emerald-600 text-white shadow-lg shadow-emerald-900/20'

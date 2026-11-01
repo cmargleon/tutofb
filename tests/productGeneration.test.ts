@@ -11,25 +11,32 @@ const input = () => ({
   items: [{ id: 'sku', name: 'Mug', referencePaths: ['garments/drafts/user/draft/sku/front.jpg'] }], scenes: createDefaultProductScenes(),
 });
 
-test('objects require a client and scenes but no human model, poses or spreadsheet', () => {
-  const state = { ...createInitialGenerateWizardState(), generationKind: 'product' as const, selectedClientId: 'client', outputMode: 'photos_only' as const };
+test('three-step object flow starts with analyzed photos and needs no human model or spreadsheet', () => {
+  const state = { ...createInitialGenerateWizardState(), generationKind: 'product' as const, selectedClientId: 'client' };
+  assert.equal(state.provider, 'fal-gpt-image-2.5-flare');
+  assert.equal(isGenerateWizardStepComplete(state, 1), false);
+  assert.equal(getGenerateWizardLastAccessibleStep(state), 1);
+  const items = [1, 2].map((id) => ({ id: String(id), analysisStatus: 'ready', itemKind: 'product', itemKindConfidence: 0.99 })) as typeof state.garments;
+  const ready = { ...state, garments: items };
+  assert.equal(isGenerateWizardStepComplete(ready, 1), true);
+  assert.equal(isGenerateWizardStepComplete(ready, 2), true);
+  assert.equal(isGenerateWizardStepComplete({ ...ready, productScenes: [] }, 2), false);
+  assert.equal(isGenerateWizardStepComplete({ ...ready, productScenes: [{ type: 'hero', prompt: ' ' }] }, 2), false);
+  assert.equal(getGenerateWizardLastAccessibleStep(ready), 3);
+  assert.equal(getGenerateWizardTotalJobs(ready, 0), 12);
+  assert.equal(getGenerateWizardTotalJobs({ ...ready, productScenes: ready.productScenes.slice(0, 1) }, 0), 2);
+});
+test('garments choose model and poses after analysis and spreadsheet only in the final step', () => {
+  const state = { ...createInitialGenerateWizardState(), generationKind: 'garment' as const, selectedClientId: 'client',
+    garments: [{ id: 'shirt', analysisStatus: 'ready', itemKind: 'garment', itemKindConfidence: 0.99 }] as ReturnType<typeof createInitialGenerateWizardState>['garments'] };
   assert.equal(isGenerateWizardStepComplete(state, 1), true);
   assert.equal(isGenerateWizardStepComplete(state, 2), false);
-  assert.equal(isGenerateWizardStepComplete(state, 3), true);
-  assert.equal(isGenerateWizardStepComplete({ ...state, productScenes: [] }, 3), false);
-  assert.equal(isGenerateWizardStepComplete({ ...state, productScenes: [{ type: 'hero', prompt: ' ' }] }, 3), false);
-  assert.equal(getGenerateWizardLastAccessibleStep(state), 2);
-  const items = [1, 2].map((id) => ({ id: String(id) })) as typeof state.garments;
-  assert.equal(getGenerateWizardTotalJobs({ ...state, garments: items }, 0), 12);
-  assert.equal(getGenerateWizardTotalJobs({ ...state, garments: items, productScenes: state.productScenes.slice(0, 1) }, 0), 2);
-});
-test('garment flow still requires a model and a spreadsheet when selected', () => {
-  const state = { ...createInitialGenerateWizardState(), generationKind: 'garment' as const, selectedClientId: 'client' };
-  assert.equal(isGenerateWizardStepComplete({ ...state, outputMode: 'photos_only' }, 1), false);
-  assert.equal(isGenerateWizardStepComplete({ ...state, selectedModelId: 'model' }, 1), false);
-  assert.equal(isGenerateWizardStepComplete({ ...state, selectedModelId: 'model', outputMode: 'photos_only' }, 1), true);
-  assert.equal(isGenerateWizardStepComplete({ ...state, selectedModelId: 'model', selectedSpreadsheetTemplateId: 'template' }, 1), true);
-  assert.equal(isGenerateWizardStepComplete({ ...state, generationKind: null, selectedModelId: 'model', outputMode: 'photos_only' }, 1), false);
+  assert.equal(isGenerateWizardStepComplete({ ...state, selectedModelId: 'model' }, 2), false);
+  const ready = { ...state, selectedModelId: 'model', selectedPoseIds: ['pose'] };
+  assert.equal(isGenerateWizardStepComplete(ready, 2), true);
+  assert.equal(isGenerateWizardStepComplete(ready, 3), true);
+  assert.equal(isGenerateWizardStepComplete({ ...ready, outputMode: 'spreadsheet' }, 3), false);
+  assert.equal(isGenerateWizardStepComplete({ ...ready, outputMode: 'spreadsheet', selectedSpreadsheetTemplateId: 'template' }, 3), true);
   assert.equal(getGenerateWizardTotalJobs(state, 7), 7);
 });
 test('product inputs validate image ownership, grouping, unique scenes and bounded job counts', () => {

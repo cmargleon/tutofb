@@ -12,6 +12,7 @@ import {
 } from '../submit';
 import {
   getGenerateWizardSubmitButtonLabel,
+  isGenerateWizardStepComplete,
   getSelectedProviderImageConfig,
   isGarmentUploadedForBatch,
 } from '../state';
@@ -77,13 +78,14 @@ export const useGenerateWizardSubmit = ({
     const requiresSpreadsheet = !isProduct && state.outputMode === 'spreadsheet';
 
     if (
+      ![1, 2, 3].every((step) => isGenerateWizardStepComplete(state, step)) ||
       !state.generationKind ||
       !state.selectedClientId ||
       (!isProduct && (!state.selectedModelId || state.selectedPoseIds.length === 0)) ||
       (isProduct && (!state.productScenes.length || state.productScenes.some((scene) => !scene.prompt.trim()))) ||
       state.garments.length === 0 ||
       (requiresSpreadsheet && !state.selectedSpreadsheetTemplateId) ||
-      (requiresSpreadsheet && state.productDrafts.length === 0)
+      (requiresSpreadsheet && (state.productDrafts.length !== state.garments.length || state.productDraftPreparation.status !== 'ready'))
     ) {
       setFlowError(
         isProduct ? 'Completa cliente, objetos y escenas antes de crear el lote.' : requiresSpreadsheet

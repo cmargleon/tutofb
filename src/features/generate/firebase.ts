@@ -26,6 +26,7 @@ export const classifyGarmentViewsWithGemini = async (
   const callable = httpsCallable<ClassifyGarmentViewsRequest, ClassifyGarmentViewsResponse>(
     functions,
     'classifyGarmentViewsWithGemini',
+    { timeout: 540000 },
   );
 
   const result = await callable(data);

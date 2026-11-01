@@ -8,6 +8,8 @@ import { PRODUCT_PRESETS } from './presets';
 import { createProductGenerationBatchCore } from '../callables/createProductGenerationBatch';
 import { AutomationAttentionError } from './imports';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
+import { getSystemConfigCached } from '../admin/systemConfig';
+import { createDefaultProductGeneration } from '../../../shared/src/productGeneration';
 
 const groupedImages = (inputs: AutomationInput[]) => {
   const groups = new Map<string, AutomationInput[]>();
@@ -27,7 +29,7 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
         id: `${itemId}-${index}`, fileName: image.fileName, storagePath: image.storagePath!, sourceIndex: index,
       })) },
     });
-    if (!classified.garmentBodyArea || classified.photos.some((photo) => (photo.confidence ?? 0) < 0.65)) {
+    if (classified.itemKind === 'product' || !classified.garmentBodyArea || classified.photos.some((photo) => (photo.confidence ?? 0) < 0.65)) {
       throw new AutomationAttentionError(`La clasificación de ${images[0].fileName} necesita revisión. Usa el wizard para seleccionar vistas manualmente.`);
     }
     garments.push({
@@ -51,10 +53,11 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
 
 export const dispatchProduct = async (job: AutomationJob, _client: Client, config: AutomationPreset): Promise<void> => {
   const preset = PRODUCT_PRESETS.generic_product;
+  const defaults = createDefaultProductGeneration(await getSystemConfigCached());
   await createProductGenerationBatchCore({
     requestId: job.id, clientId: job.clientId,
     provider: config.provider || DEFAULT_AUTOMATION_PROVIDER, aspectRatio: config.aspectRatio || preset.aspectRatio,
-    prompt: '', scenes: preset.scenes.map(({ type, prompt }) => ({ type, prompt })),
+    prompt: defaults.prompt, scenes: defaults.scenes,
     items: [...groupedImages(job.inputImages)].map(([id, images]) => ({
       id, name: images[0].fileName, referencePaths: images.map((image) => image.storagePath!),
     })),

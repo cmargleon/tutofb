@@ -94,6 +94,7 @@ export const ProviderSelection: React.FC<ProviderSelectionProps> = ({ provider, 
               type="button"
               key={option}
               disabled={disabled}
+              aria-pressed={selected}
               onClick={() => onChange(option)}
               className={`rounded-3xl border px-5 py-4 text-left transition ${
                 disabled

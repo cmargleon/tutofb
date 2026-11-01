@@ -30,29 +30,6 @@ const getErrorMessage = (error: unknown, fallback: string): string =>
     ? error.message
     : fallback;
 
-const shouldClassifyGarmentSpreadsheetData = (
-  outputMode: WizardState['outputMode'],
-  clientId: string | null | undefined,
-  spreadsheetTemplateId: string | null,
-): boolean => outputMode === 'spreadsheet' && Boolean(clientId) && Boolean(spreadsheetTemplateId);
-
-const getGarmentsNeedingClassification = (
-  garments: UploadedGarmentDraft[],
-  shouldClassifySpreadsheetData: boolean,
-): UploadedGarmentDraft[] =>
-  garments.filter((garment) => {
-    const needsPhotoViews = garment.originalPhotos.some((photo) => photo.classification.status !== 'classified');
-    const needsBodyArea = !garment.garmentBodyArea;
-    const needsAccessoryType = garment.garmentBodyArea === 'carry_accessory' && !garment.garmentAccessoryType;
-    const needsSpreadsheetMatch = shouldClassifySpreadsheetData && (!garment.matchedCategoryId || !garment.matchedColor);
-
-    if (shouldClassifySpreadsheetData) {
-      return needsPhotoViews || needsBodyArea || needsAccessoryType || needsSpreadsheetMatch;
-    }
-
-    return needsBodyArea || needsAccessoryType || (garment.originalPhotos.length > 1 && needsPhotoViews);
-  });
-
 const buildProductDraftPreviewGarments = (garments: UploadedGarmentDraft[]) =>
   garments.map((garment) => ({
     id: garment.id,
@@ -113,6 +90,9 @@ export const useGarmentPreparation = ({
   productDraftSignature,
 }: GarmentPreparationParams) => {
   const stateRef = useRef(state);
+  const analysisInFlight = useRef(false);
+  const latestDraftSignature = useRef(productDraftSignature);
+  latestDraftSignature.current = productDraftSignature;
 
   useEffect(() => {
     stateRef.current = state;
@@ -128,9 +108,7 @@ export const useGarmentPreparation = ({
     }));
   };
 
-  const ensureGarmentsUploadedForSuggestions = async (
-    signature: string,
-  ): Promise<{ activeDraftBatchId: string; garments: UploadedGarmentDraft[] }> => {
+  const ensureGarmentsUploaded = async (): Promise<{ activeDraftBatchId: string; garments: UploadedGarmentDraft[] }> => {
     const currentState = stateRef.current;
     const activeDraftBatchId = draftBatchId ?? crypto.randomUUID();
 
@@ -175,147 +153,64 @@ export const useGarmentPreparation = ({
 
     if (uploadResult.failed.length > 0) {
       const message = getUploadFailureMessage(nextGarments, uploadResult.failed.length, activeDraftBatchId);
-      setState((current) => ({
-        ...current,
-        poseSuggestions: {
-          ...current.poseSuggestions,
-          status: 'failed',
-          error: message,
-          signature,
-          missingPoseClassificationCount,
-        },
-      }));
-      setFlowError(message);
       throw new Error(message);
     }
 
     return { activeDraftBatchId, garments: nextGarments };
   };
 
-  const preparePoseSuggestions = async (signature: string) => {
-    const currentState = stateRef.current;
+  const classificationInput = (garments: UploadedGarmentDraft[]) => garments.map((garment) => ({
+    garmentId: garment.id,
+    garmentName: garment.name,
+    photos: garment.originalPhotos.map((photo) => {
+      if (!photo.upload.storagePath) throw new Error(`La foto ${photo.fileName} todavía no se ha subido.`);
+      return { id: photo.id, fileName: photo.fileName, storagePath: photo.upload.storagePath, sourceIndex: photo.sourceIndex };
+    }),
+  }));
 
-    if (!selectedModel || currentState.garments.length === 0) {
-      return;
-    }
-
+  const prepareItemAnalysis = async (garmentIds: Set<string>) => {
+    analysisInFlight.current = true;
+    setFlowError(null);
     setState((current) => ({
       ...current,
-      poseSuggestions: {
-        ...current.poseSuggestions,
-        status: 'preparing',
-        error: null,
-        missingPoseClassificationCount,
-      },
+      garments: markGarmentsAsClassifying(current.garments, garmentIds).map((garment) =>
+        garmentIds.has(garment.id) ? { ...garment, analysisStatus: 'preparing', analysisError: null } : garment),
     }));
-    setFlowError(null);
-
     try {
-      const { garments: uploadedGarments } = await ensureGarmentsUploadedForSuggestions(signature);
-      const latestState = stateRef.current;
-      const shouldClassifySpreadsheetData = shouldClassifyGarmentSpreadsheetData(
-        latestState.outputMode,
-        selectedClient?.id,
-        latestState.selectedSpreadsheetTemplateId,
-      );
-      const garmentsNeedingClassification = getGarmentsNeedingClassification(
-        uploadedGarments,
-        shouldClassifySpreadsheetData,
-      );
-
-      const accessoryInferenceTexts = [selectedSpreadsheetCategoryLabel];
-      let preparedGarments = uploadedGarments.map((garment) =>
-        applyGarmentAccessoryInference(garment, accessoryInferenceTexts),
-      );
-
-      if (garmentsNeedingClassification.length > 0) {
-        const garmentIds = new Set(garmentsNeedingClassification.map((garment) => garment.id));
-        setState((current) => ({
-          ...current,
-          garments: markGarmentsAsClassifying(current.garments, garmentIds),
-        }));
-
-        const classificationResult = await classifyGarmentViewsWithGemini({
-          clientId: selectedClient?.id || null,
-          spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId || null,
-          fallbackCategoryId: latestState.selectedSpreadsheetCategoryId || null,
-          garments: garmentsNeedingClassification.map((garment) => ({
-            garmentId: garment.id,
-            garmentName: garment.name,
-            photos: garment.originalPhotos.map((photo) => {
-              if (!photo.upload.storagePath) {
-                throw new Error(`La foto ${photo.fileName} todavía no tiene storagePath.`);
-              }
-
-              return {
-                id: photo.id,
-                fileName: photo.fileName,
-                storagePath: photo.upload.storagePath,
-                sourceIndex: photo.sourceIndex,
-              };
-            }),
-          })),
-        });
-
-        preparedGarments = mergeGarmentClassificationResults(uploadedGarments, classificationResult)
-          .map((garment) => applyGarmentAccessoryInference(garment, accessoryInferenceTexts));
-        setState((current) => ({
-          ...current,
-          garments: mergeGarmentClassificationResults(current.garments, classificationResult)
-            .map((garment) => applyGarmentAccessoryInference(garment, accessoryInferenceTexts)),
-        }));
+      const { garments } = await ensureGarmentsUploaded();
+      const result = await classifyGarmentViewsWithGemini({
+        garments: classificationInput(garments.filter((garment) => garmentIds.has(garment.id))),
+      });
+      if (!result.success || [...garmentIds].some((id) => !result.garments.some((garment) => garment.garmentId === id))) {
+        throw new Error('El análisis no devolvió todos los artículos. Reintenta las fotos pendientes.');
       }
-
-      const suggestedPoseIds = getSuggestedPoseIdsForGarments(
-        selectedModel.poses,
-        preparedGarments.map((garment) => ({
-          availableViews: getGarmentAvailableViews(garment),
-          garmentBodyArea: getEffectiveGarmentBodyArea(garment, accessoryInferenceTexts),
-          garmentAccessoryType: getEffectiveGarmentAccessoryType(garment, accessoryInferenceTexts),
-        })),
-      );
-
+      setState((current) => ({ ...current, garments: mergeGarmentClassificationResults(current.garments, result) }));
+    } catch (error) {
+      const message = getErrorMessage(error, 'No se pudieron analizar las fotos. Puedes reintentar sin volver a subirlas.');
       setState((current) => ({
         ...current,
-        garments: preparedGarments,
-        selectedPoseIds: suggestedPoseIds,
-        poseSuggestions: {
-          status: 'ready',
-          error: null,
-          suggestedPoseIds,
-          signature,
-          missingPoseClassificationCount,
-        },
+        garments: markGarmentsClassificationFailed(current.garments, garmentIds, message).map((garment) =>
+          garmentIds.has(garment.id) ? { ...garment, analysisStatus: 'failed', analysisError: message } : garment),
       }));
-      setFlowError(null);
-    } catch (prepareError) {
-      const message = getErrorMessage(
-        prepareError,
-        'No se pudieron sugerir las poses automáticamente. Puedes seguir con selección manual.',
-      );
-
-      setState((current) => {
-        const garmentIds = new Set<string>(
-          current.garments
-            .filter((garment) => garment.originalPhotos.some((photo) => photo.classification.status === 'classifying'))
-            .map((garment) => garment.id),
-        );
-
-        return {
-          ...current,
-          garments: markGarmentsClassificationFailed(current.garments, garmentIds, message),
-          poseSuggestions: {
-            ...current.poseSuggestions,
-            status: 'failed',
-            error: message,
-            signature,
-            missingPoseClassificationCount,
-          },
-        };
-      });
-
       setFlowError(message);
+    } finally {
+      analysisInFlight.current = false;
     }
+  };
+
+  const preparePoseSuggestions = (signature: string) => {
+    if (!selectedModel) return;
+    const accessoryInferenceTexts = [selectedSpreadsheetCategoryLabel];
+    const garments = state.garments.map((garment) => applyGarmentAccessoryInference(garment, accessoryInferenceTexts));
+    const suggestedPoseIds = getSuggestedPoseIdsForGarments(selectedModel.poses, garments.map((garment) => ({
+      availableViews: getGarmentAvailableViews(garment),
+      garmentBodyArea: getEffectiveGarmentBodyArea(garment, accessoryInferenceTexts),
+      garmentAccessoryType: getEffectiveGarmentAccessoryType(garment, accessoryInferenceTexts),
+    })));
+    setState((current) => ({
+      ...current, selectedPoseIds: suggestedPoseIds,
+      poseSuggestions: { status: 'ready', error: null, suggestedPoseIds, signature, missingPoseClassificationCount },
+    }));
   };
 
   const prepareProductDrafts = async (signature: string) => {
@@ -343,14 +238,35 @@ export const useGarmentPreparation = ({
     setFlowError(null);
 
     try {
-      const { garments: uploadedGarments } = await ensureGarmentsUploadedForSuggestions(signature);
+      const { garments: uploadedGarments } = await ensureGarmentsUploaded();
+      if (latestDraftSignature.current !== signature) return;
       const latestState = stateRef.current;
+      const classificationKey = JSON.stringify([latestState.selectedClientId, latestState.selectedSpreadsheetTemplateId, latestState.selectedSpreadsheetCategoryId]);
+      const needsCategories = uploadedGarments.filter((garment) => garment.spreadsheetClassificationKey !== classificationKey);
+      let preparedGarments = uploadedGarments;
+      if (needsCategories.length > 0) {
+        const classification = await classifyGarmentViewsWithGemini({
+          clientId: latestState.selectedClientId,
+          spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId,
+          fallbackCategoryId: latestState.selectedSpreadsheetCategoryId,
+          garments: classificationInput(needsCategories),
+        });
+        if (latestDraftSignature.current !== signature) return;
+        if (!classification.success || needsCategories.some((garment) => !classification.garments.some((entry) => entry.garmentId === garment.id))) {
+          throw new Error('No se pudieron clasificar las categorías de todos los artículos.');
+        }
+        const classifiedIds = new Set(needsCategories.map((garment) => garment.id));
+        const mergeCategories = (garments: UploadedGarmentDraft[]) => mergeGarmentClassificationResults(garments, classification, true)
+          .map((garment) => classifiedIds.has(garment.id) ? { ...garment, spreadsheetClassificationKey: classificationKey } : garment);
+        preparedGarments = mergeCategories(uploadedGarments);
+        setState((current) => ({ ...current, garments: mergeCategories(current.garments) }));
+      }
       const result = await previewProductDrafts({
         clientId: selectedClient.id!,
         modelId: selectedModel.id!,
         spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId,
         fallbackCategoryId: latestState.selectedSpreadsheetCategoryId || null,
-        garments: buildProductDraftPreviewGarments(uploadedGarments),
+        garments: buildProductDraftPreviewGarments(preparedGarments),
         sourceSpreadsheet:
           latestState.sourceSpreadsheet?.status === 'uploaded' && latestState.sourceSpreadsheet.storagePath
             ? {
@@ -360,6 +276,7 @@ export const useGarmentPreparation = ({
             : null,
       });
 
+      if (latestDraftSignature.current !== signature) return;
       setState((current) => ({
         ...current,
         productDrafts: result.productDrafts,
@@ -371,6 +288,7 @@ export const useGarmentPreparation = ({
         },
       }));
     } catch (prepareError) {
+      if (latestDraftSignature.current !== signature) return;
       const message = getErrorMessage(
         prepareError,
         'No se pudieron preparar los drafts del producto. Puedes reintentar desde este paso.',
@@ -385,13 +303,23 @@ export const useGarmentPreparation = ({
         },
       }));
       setFlowError(message);
+    } finally {
+      setState((current) => current.productDraftPreparation.status === 'preparing'
+        && current.productDraftPreparation.signature === signature
+        ? { ...current, productDraftPreparation: { status: 'idle', error: null, signature: null } } : current);
     }
   };
 
   useEffect(() => {
+    if (state.step !== 1 || !state.selectedClientId || analysisInFlight.current) return;
+    const pending = state.garments.filter((garment) => !garment.analysisStatus || garment.analysisStatus === 'idle');
+    if (pending.length) void prepareItemAnalysis(new Set(pending.map((garment) => garment.id)));
+  }, [state.step, state.selectedClientId, state.garments]);
+
+  useEffect(() => {
     if (
       state.generationKind !== 'garment'
-      || state.step !== 3
+      || state.step !== 2
       || !selectedModel
       || state.garments.length === 0
       || state.poseSuggestions.status === 'preparing'
@@ -415,11 +343,12 @@ export const useGarmentPreparation = ({
   useEffect(() => {
     if (
       state.generationKind !== 'garment'
-      || state.step !== 4
+      || state.step !== 3
       || state.outputMode !== 'spreadsheet'
       || !state.selectedSpreadsheetTemplateId
       || state.garments.length === 0
       || state.productDraftPreparation.status === 'preparing'
+      || (state.productDraftPreparation.status === 'failed' && state.productDraftPreparation.signature === productDraftSignature)
       || (
         state.productDraftPreparation.status === 'ready'
         && state.productDraftPreparation.signature === productDraftSignature
@@ -431,6 +360,8 @@ export const useGarmentPreparation = ({
     void prepareProductDrafts(productDraftSignature);
   }, [
     productDraftSignature,
+    selectedClient,
+    selectedModel,
     state.garments.length,
     state.outputMode,
     state.selectedSpreadsheetTemplateId,

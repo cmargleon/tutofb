@@ -24,9 +24,12 @@ export const Wizard: React.FC = () => {
     loadingSpreadsheetTemplates,
     loadingData,
     isSubmitting,
+    isAnalyzing,
+    excludedItemsNotice,
     error,
     stepperRef,
     selectedModel,
+    selectedClient,
     allPosesSelected,
     canAdvance,
     totalJobs,
@@ -39,6 +42,7 @@ export const Wizard: React.FC = () => {
     handleStepSelect,
     canSelectStep,
     handleFiles,
+    handleRetryAnalysis,
     removeGarment,
     handleSubmit,
     handleClientChange,
@@ -58,7 +62,7 @@ export const Wizard: React.FC = () => {
     handleRetryPoseSuggestions,
     handleRetryProductDraftPreparation,
   } = useWizard();
-  const isWizardBusy = isSubmitting || state.poseSuggestions.status === 'preparing';
+  const isWizardBusy = isSubmitting || isAnalyzing;
 
   useEffect(() => {
     if (!error) {
@@ -87,22 +91,11 @@ export const Wizard: React.FC = () => {
     );
   }
 
-  return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      <div ref={stepperRef}>
-        <WizardStepper
-          steps={getGenerateWizardSteps(state.generationKind)}
-          currentStep={state.step}
-          onStepSelect={handleStepSelect}
-          canSelectStep={canSelectStep}
-        />
-      </div>
-
-      {state.step === 1 && (
+  const contextSection = (section: 'client' | 'model' | 'output') => (
         <ClientModelStep
+          section={section}
           generationKind={state.generationKind}
           isBusy={isWizardBusy}
-          onGenerationKindChange={handleGenerationKindChange}
           clients={clients}
           models={models}
           spreadsheetTemplates={spreadsheetTemplates}
@@ -123,23 +116,39 @@ export const Wizard: React.FC = () => {
           onSourceSpreadsheetFile={handleSourceSpreadsheetFile}
           onModelSelect={handleModelSelect}
         />
-      )}
+  );
 
-      {state.step === 2 && (
-        <GarmentsStep
+  return (
+    <div className="max-w-7xl mx-auto space-y-6 pb-12">
+      <div ref={stepperRef}>
+        <WizardStepper
+          steps={getGenerateWizardSteps(state.generationKind)}
+          currentStep={state.step}
+          onStepSelect={handleStepSelect}
+          canSelectStep={canSelectStep}
+        />
+      </div>
+
+      {state.step === 1 && <div className="space-y-6">
+        {contextSection('client')}
+        {state.selectedClientId && <GarmentsStep
           garments={state.garments}
           isSubmitting={isWizardBusy}
-          productMode={state.generationKind === 'product'}
+          generationKind={state.generationKind}
+          onGenerationKindChange={handleGenerationKindChange}
+          onRetryAnalysis={handleRetryAnalysis}
+          excludedItemsNotice={excludedItemsNotice}
           onSameItemFiles={(files) => product.handleFiles(files, true)}
-          onFiles={state.generationKind === 'product' ? product.handleFiles : handleFiles}
+          onFiles={handleFiles}
           onRemoveGarment={removeGarment}
-        />
-      )}
+        />}
+      </div>}
 
-      {state.step === 3 && state.generationKind === 'product' && <ProductScenesStep
+      {state.step === 2 && state.generationKind === 'product' && <ProductScenesStep
         scenes={state.productScenes} defaultScenes={product.defaultScenes} disabled={isWizardBusy} onToggle={product.toggleScene} onPromptChange={product.changeScenePrompt} />}
 
-      {state.step === 3 && state.generationKind === 'garment' && (
+      {state.step === 2 && state.generationKind === 'garment' && <div className="space-y-6">
+        {contextSection('model')}
         <PoseSelectionStep
           selectedModel={selectedModel}
           garments={state.garments}
@@ -154,10 +163,13 @@ export const Wizard: React.FC = () => {
           onToggleAllPoses={handleToggleAllPoses}
           onRetrySuggestions={handleRetryPoseSuggestions}
         />
-      )}
+      </div>}
 
-      {state.step === 4 && (
+      {state.step === 3 && <div className="space-y-6">
+        {contextSection('output')}
         <BatchStep
+          clientName={selectedClient?.name}
+          modelName={selectedModel?.name}
           state={state}
           isSubmitting={isWizardBusy}
           totalJobs={totalJobs}
@@ -176,7 +188,7 @@ export const Wizard: React.FC = () => {
           onPromptBlocksChange={handlePromptBlocksChange}
           onSubmit={handleSubmit}
         />
-      )}
+      </div>}
 
       <WizardFooter
         currentStep={state.step}

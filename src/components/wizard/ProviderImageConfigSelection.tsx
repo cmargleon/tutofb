@@ -93,6 +93,7 @@ const renderChoiceButton = ({
     type="button"
     key={keyValue}
     onClick={onClick}
+    aria-pressed={selected}
     className={`${commonCardClassName} ${
       selected
         ? 'border-emerald-700 bg-emerald-600 text-white'

@@ -8,6 +8,7 @@ import {
   GarmentPhotoClassificationSource,
   GarmentSourceType,
   GarmentView,
+  GenerationKind,
   ProductDraftInput,
   ProviderImageConfig,
   Provider,
@@ -15,7 +16,7 @@ import {
   } from '../../../shared/src/types';
 
 export type SourceType = GarmentSourceType;
-export type GenerateWizardStepId = 1 | 2 | 3 | 4;
+export type GenerateWizardStepId = 1 | 2 | 3;
 export type GenerateSubmitStage = 'idle' | 'uploading' | 'creating-batch';
 export type PoseSuggestionStatus = 'idle' | 'preparing' | 'ready' | 'failed';
 export type ProductDraftPreparationStatus = 'idle' | 'preparing' | 'ready' | 'failed';
@@ -83,6 +84,14 @@ export interface UploadedGarmentDraft {
   originalFileNames: string[];
   originalPhotos: GarmentOriginalPhotoDraft[];
   upload: GarmentUploadState;
+  analysisStatus?: PoseSuggestionStatus;
+  analysisError?: string | null;
+  itemKind?: GenerationKind | null;
+  itemKindConfidence?: number | null;
+  itemKindReasoning?: string | null;
+  itemLabel?: string | null;
+  itemKindOverride?: GenerationKind | null;
+  spreadsheetClassificationKey?: string;
   garmentBodyArea?: GarmentBodyArea | null;
   garmentAccessoryType?: GarmentAccessoryType | null;
   matchedCategoryId?: string | null;

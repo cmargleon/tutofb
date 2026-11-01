@@ -6,7 +6,7 @@ export { PRODUCT_IDENTITY_RULES } from '../../../shared/src/productGeneration';
 import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
 export const PRODUCT_PRESETS = {
   generic_product: {
-    mode: 'image-to-image', aspectRatio: '1:1', maxReviewAttempts: 3,
+    mode: 'image-to-image', aspectRatio: '3:4', maxReviewAttempts: 3,
     scenes: PRODUCT_SCENES,
     qualityRules: ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts'],
   },

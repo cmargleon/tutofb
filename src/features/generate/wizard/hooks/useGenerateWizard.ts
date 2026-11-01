@@ -1,7 +1,7 @@
 import { seedTryOnPrompt } from '../../../../../shared/src/approvedTryOnPrompt';
-import { createLegacyProviderImageConfig } from '../../../../../shared/src/providerImageConfig';
-import { DEFAULT_PRODUCT_PROMPT, createDefaultProductScenes } from '../../../../../shared/src/productGeneration';
-import { useConfirm } from '../../../feedback/FeedbackProvider';
+import { createDefaultProviderImageConfig } from '../../../../../shared/src/providerImageConfig';
+import { createDefaultProductGeneration } from '../../../../../shared/src/productGeneration';
+import { useToast } from '../../../feedback/FeedbackProvider';
 import { useProductGeneration } from './useProductGeneration';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -12,7 +12,6 @@ import {
   getEffectiveGarmentAccessoryType,
   getEffectiveGarmentBodyArea,
   getGarmentAvailableViews,
-  handleGarmentFiles,
   revokeGarmentUrls,
 } from '../../garments';
 import { deleteGarmentDraftByStoragePath, uploadWizardSourceSpreadsheet } from '../../storage';
@@ -42,6 +41,9 @@ import {
   getGenerateWizardLastAccessibleStep,
   getGenerateWizardTotalJobs,
   isGenerateWizardStepComplete,
+  resolveWizardMajorityKind,
+  getEffectiveItemKind,
+  selectGenerateWizardProvider,
 } from '../state';
 
 const resolvePromptBase = (
@@ -110,7 +112,7 @@ const getStepFromSearchParams = (searchParams: URLSearchParams): GenerateWizardS
 };
 
 export const useGenerateWizard = () => {
-  const confirm = useConfirm();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const garmentUrlsRef = useRef<UploadedGarmentDraft[]>([]);
   const stepperRef = useRef<HTMLDivElement | null>(null);
@@ -121,10 +123,53 @@ export const useGenerateWizard = () => {
   const [isPromptDirty, setIsPromptDirty] = useState(false);
   const [arePromptBlocksDirty, setArePromptBlocksDirty] = useState(false);
   const [areProductScenesDirty, setAreProductScenesDirty] = useState(false);
+  const [excludedItemsNotice, setExcludedItemsNotice] = useState<string | null>(null);
+  const excludedSignatureRef = useRef('');
+  const previousGenerationKindRef = useRef<WizardState['generationKind']>(null);
 
   const { config: systemConfig, loading: systemConfigLoading } = useSystemConfig();
-  const defaultProductPrompt = systemConfig.systemPromptProduct ?? DEFAULT_PRODUCT_PROMPT;
-  const defaultProductScenes = useMemo(() => createDefaultProductScenes(systemConfig), [systemConfig.systemProductScenePrompts]);
+  const productDefaults = useMemo(() => createDefaultProductGeneration(systemConfig), [systemConfig.systemPromptProduct, systemConfig.systemProductScenePrompts]);
+  const defaultProductPrompt = productDefaults.prompt;
+  const defaultProductScenes = productDefaults.scenes;
+  const isAnalyzing = state.garments.some((garment) => garment.analysisStatus === 'preparing');
+
+  useEffect(() => {
+    const generationKind = resolveWizardMajorityKind(state.garments);
+    const excludedItems = generationKind ? state.garments.filter((garment) => getEffectiveItemKind(garment) !== generationKind) : [];
+    const excludedIds = new Set(excludedItems.map((garment) => garment.id));
+    const shouldResetImageConfig = Boolean(generationKind && previousGenerationKindRef.current !== generationKind);
+    if (generationKind) previousGenerationKindRef.current = generationKind;
+    if (excludedItems.length) {
+      const signature = excludedItems.map((garment) => garment.id).join('|');
+      if (excludedSignatureRef.current !== signature) {
+        excludedSignatureRef.current = signature;
+        const message = `Se quitaron del lote ${excludedItems.length} artículo(s) que no corresponden: ${excludedItems.map((garment) => garment.name).join(', ')}. Se conservó la mayoría de ${generationKind === 'garment' ? 'ropa' : 'objetos'}.`;
+        setExcludedItemsNotice(message);
+        toast({ tone: 'warning', title: 'Conservamos el tipo mayoritario', description: message, durationMs: 10000 });
+        revokeGarmentUrls(excludedItems);
+      }
+    }
+    setState((current) => {
+      if (current.generationKind === generationKind && excludedItems.length === 0) return current;
+      return resetWizardGeneratedOutputs({
+        ...current,
+        generationKind,
+        garments: current.garments.filter((garment) => !excludedIds.has(garment.id)),
+        selectedModelId: generationKind === 'product' ? null : current.selectedModelId,
+        outputMode: generationKind === 'product' ? 'photos_only' : current.outputMode,
+        selectedSpreadsheetTemplateId: generationKind === 'product' ? null : current.selectedSpreadsheetTemplateId,
+        selectedSpreadsheetCategoryId: generationKind === 'product' ? null : current.selectedSpreadsheetCategoryId,
+        providerImageConfigs: shouldResetImageConfig ? Object.fromEntries(Object.keys(current.providerImageConfigs).map((provider: WizardState['provider']) => [
+          provider, createDefaultProviderImageConfig(provider),
+        ])) as WizardState['providerImageConfigs'] : current.providerImageConfigs,
+      });
+    });
+  }, [state.garments, toast]);
+
+  useEffect(() => {
+    setIsPromptDirty(false);
+    setArePromptBlocksDirty(false);
+  }, [state.generationKind]);
 
   const {
     clients,
@@ -331,7 +376,7 @@ export const useGenerateWizard = () => {
       targetStep,
       currentStep: state.step,
       maxStep: GENERATE_WIZARD_MAX_STEP,
-      isBusy: submit.isSubmitting || state.poseSuggestions.status === 'preparing',
+      isBusy: submit.isSubmitting || isAnalyzing,
       isStepComplete: (stepId) => isGenerateWizardStepComplete(state, stepId),
     });
 
@@ -402,20 +447,6 @@ export const useGenerateWizard = () => {
     }
   }, [lastAccessibleStep, state.step]);
 
-  const handleFiles = async (files: File[]) => {
-    try {
-      const nextGarments = await handleGarmentFiles(files, state.garments);
-      setState((current) => resetWizardGeneratedOutputs({
-        ...current,
-        garments: nextGarments,
-      }));
-      setFlowError(null);
-    } catch (uploadError) {
-      console.error(uploadError);
-      setFlowError(getErrorMessage(uploadError, 'No se pudieron preparar las prendas.'));
-    }
-  };
-
   const removeGarment = (garmentId: string) => {
     const garmentToRemove = state.garments.find((item) => item.id === garmentId);
     if (garmentToRemove) {
@@ -459,7 +490,7 @@ export const useGenerateWizard = () => {
       ...current,
       selectedClientId: clientId,
       selectedModelId: null,
-      outputModeChosen: current.generationKind === 'product',
+      outputModeChosen: true,
       selectedSpreadsheetTemplateId: null,
       selectedSpreadsheetCategoryId: null,
       sourceSpreadsheet: null,
@@ -468,33 +499,21 @@ export const useGenerateWizard = () => {
     }));
   };
 
-  const handleGenerationKindChange = async (generationKind: NonNullable<WizardState['generationKind']>) => {
-    if (generationKind === state.generationKind || submit.isSubmitting || state.poseSuggestions.status === 'preparing') return;
-    const hasConfiguration = state.garments.length > 0 || state.selectedModelId || state.sourceSpreadsheet
-      || isPromptDirty || arePromptBlocksDirty || areProductScenesDirty;
-    if (hasConfiguration && !await confirm({
-      title: 'Cambiar tipo de generación', tone: 'warning', confirmLabel: 'Cambiar y empezar de nuevo',
-      description: 'Se descartarán las fotos seleccionadas, el modelo, las escenas y los prompts de este recorrido.',
-    })) return;
-    revokeGarmentUrls(state.garments);
-    setDraftBatchId(null);
-    submit.resetDraftBatch();
+  const handleGenerationKindChange = (generationKind: NonNullable<WizardState['generationKind']>) => {
+    if (submit.isSubmitting || isAnalyzing) return;
+    setFlowError(null);
     setIsPromptDirty(false);
     setArePromptBlocksDirty(false);
-    setAreProductScenesDirty(false);
-    setFlowError(null);
-    setState((current) => ({
-      ...createInitialGenerateWizardState(), selectedClientId: current.selectedClientId, generationKind,
-      outputMode: generationKind === 'product' || !selectedClientHasSpreadsheetTemplates ? 'photos_only' : 'spreadsheet',
-      outputModeChosen: generationKind === 'product',
-      provider: current.provider,
-      providerImageConfigs: Object.fromEntries(Object.keys(current.providerImageConfigs).map((provider: WizardState['provider']) => [
-        provider, createLegacyProviderImageConfig(provider, generationKind === 'product' ? '1:1' : '3:4'),
-      ])) as WizardState['providerImageConfigs'],
-      prompt: generationKind === 'product' ? defaultProductPrompt : seedTryOnPrompt(resolvedPromptBase).general,
-      productScenes: defaultProductScenes.map((scene) => ({ ...scene })),
-      tryOnPromptBlocks: seedTryOnPrompt(resolvedPromptBase, null, systemConfig).blocks,
+    setState((current) => resetWizardGeneratedOutputs({
+      ...current,
+      garments: current.garments.map((garment) => ({ ...garment, itemKindOverride: generationKind })),
     }));
+  };
+
+  const handleRetryAnalysis = () => {
+    setFlowError(null);
+    setState((current) => ({ ...current, garments: current.garments.map((garment) =>
+      garment.analysisStatus === 'failed' ? { ...garment, analysisStatus: 'idle', analysisError: null } : garment) }));
   };
 
   const product = useProductGeneration({ state, setState, setFlowError, defaultScenes: defaultProductScenes,
@@ -624,7 +643,7 @@ export const useGenerateWizard = () => {
   };
 
   const handleProviderChange = (provider: WizardState['provider']) => {
-    setState((current) => ({ ...current, provider }));
+    setState((current) => selectGenerateWizardProvider(current, provider));
   };
 
   const handleProviderImageConfigChange = (imageConfig: WizardProviderImageConfig) => {
@@ -679,9 +698,12 @@ export const useGenerateWizard = () => {
     loadingSpreadsheetTemplates,
     loadingData: loadingData || systemConfigLoading,
     isSubmitting: submit.isSubmitting,
+    isAnalyzing,
+    excludedItemsNotice,
     error,
     stepperRef,
     selectedModel,
+    selectedClient,
     selectedSpreadsheetCategory,
     allPosesSelected,
     canAdvance,
@@ -694,7 +716,8 @@ export const useGenerateWizard = () => {
     goToStep,
     handleStepSelect,
     canSelectStep,
-    handleFiles,
+    handleFiles: product.handleFiles,
+    handleRetryAnalysis,
     removeGarment,
     handleSubmit: submit.handleSubmit,
     handleClientChange,

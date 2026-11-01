@@ -2,6 +2,7 @@ import { seedTryOnPrompt } from '../../../../shared/src/approvedTryOnPrompt';
 import { createDefaultProductScenes } from '../../../../shared/src/productGeneration';
 import {
   DEFAULT_TRY_ON_PROMPT,
+  DEFAULT_IMAGE_PROVIDER,
 } from '../../../../shared/src/domain';
 import { createDefaultProviderImageConfig } from '../../../../shared/src/providerImageConfig';
 import { WizardStepDefinition } from '../../wizard/types';
@@ -16,13 +17,12 @@ import {
 } from '../types';
 
 export const GENERATE_WIZARD_STEPS: WizardStepDefinition[] = [
-  { id: 1, name: 'Cliente, modelo y salida' },
-  { id: 2, name: 'Prendas' },
-  { id: 3, name: 'Poses sugeridas' },
-  { id: 4, name: 'Lote' },
+  { id: 1, name: 'Cliente y fotos' },
+  { id: 2, name: 'Preparar fotos' },
+  { id: 3, name: 'Revisar y generar' },
 ];
 
-export const GENERATE_WIZARD_MAX_STEP = GENERATE_WIZARD_STEPS[GENERATE_WIZARD_STEPS.length - 1]?.id ?? 4;
+export const GENERATE_WIZARD_MAX_STEP = 3;
 
 export const createInitialGenerateWizardState = (): WizardState => ({
   step: 1,
@@ -30,8 +30,8 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   productScenes: createDefaultProductScenes(),
   selectedClientId: null,
   selectedModelId: null,
-  outputMode: 'spreadsheet',
-  outputModeChosen: false,
+  outputMode: 'photos_only',
+  outputModeChosen: true,
   selectedSpreadsheetTemplateId: null,
   selectedSpreadsheetCategoryId: null,
   sourceSpreadsheet: null,
@@ -41,7 +41,7 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   poseSuggestions: createInitialPoseSuggestionState(),
   productDrafts: [],
   productDraftPreparation: createInitialProductDraftPreparationState(),
-  provider: 'fal-seedream',
+  provider: DEFAULT_IMAGE_PROVIDER,
   providerImageConfigs: {
     'fal-seedream': createDefaultProviderImageConfig('fal-seedream'),
     'fal-banana-pro': createDefaultProviderImageConfig('fal-banana-pro'),
@@ -60,6 +60,16 @@ export const createInitialGenerateWizardState = (): WizardState => ({
 });
 
 export const getSelectedProviderImageConfig = (state: WizardState) => state.providerImageConfigs[state.provider];
+
+export const selectGenerateWizardProvider = (state: WizardState, provider: WizardState['provider']): WizardState => {
+  const config = state.providerImageConfigs[provider];
+  const imageConfig = 'imageSize' in config
+    ? { ...config, imageSize: 'portrait_4_3' as const }
+    : 'aspectRatio' in config
+      ? { ...config, aspectRatio: '3:4' as const }
+      : config;
+  return { ...state, provider, providerImageConfigs: { ...state.providerImageConfigs, [provider]: imageConfig } };
+};
 
 export const createEmptyUploadSummary = (): UploadSummary => ({
   total: 0,
@@ -150,24 +160,17 @@ export const getGenerateWizardTotalJobs = (
 export const isGenerateWizardStepComplete = (state: WizardState, stepId: number): boolean => {
   switch (stepId) {
     case 1:
-      if (state.generationKind === 'product') return Boolean(state.selectedClientId);
       return Boolean(
-        state.generationKind === 'garment' &&
         state.selectedClientId
-        && state.selectedModelId
-        && (
-          state.outputMode === 'photos_only'
-          || state.selectedSpreadsheetTemplateId
-        ),
+        && state.generationKind
+        && resolveWizardGenerationKind(state.garments) === state.generationKind,
       );
     case 2:
-      return state.garments.length > 0;
-    case 3:
       return state.generationKind === 'product'
         ? state.productScenes.length > 0 && state.productScenes.every((scene) => Boolean(scene.prompt.trim()))
-        : state.selectedPoseIds.length > 0;
-    case 4:
-      return true;
+        : state.generationKind === 'garment' && Boolean(state.selectedModelId) && state.selectedPoseIds.length > 0;
+    case 3:
+      return state.outputMode === 'photos_only' || Boolean(state.selectedSpreadsheetTemplateId);
     default:
       return false;
   }
@@ -175,8 +178,9 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
 
 export const getGenerateWizardCanAdvance = (state: WizardState): boolean =>
   isGenerateWizardStepComplete(state, state.step)
-  && !(state.step === 3 && state.poseSuggestions.status === 'preparing')
-  && !(state.step === 4 && state.productDraftPreparation.status === 'preparing');
+  && !state.garments.some((garment) => garment.analysisStatus === 'preparing')
+  && !(state.step === 2 && state.poseSuggestions.status === 'preparing')
+  && !(state.step === 3 && state.productDraftPreparation.status === 'preparing');
 
 export const getGenerateWizardLastAccessibleStep = (
   state: WizardState,
@@ -223,6 +227,20 @@ export const getGenerateWizardSubmitButtonLabel = ({
   return 'Creando lote...';
 };
 
-export const getGenerateWizardSteps = (kind: WizardState['generationKind']): WizardStepDefinition[] => kind === 'product' ? [
-  { id: 1, name: 'Cliente y tipo' }, { id: 2, name: 'Objetos' }, { id: 3, name: 'Escenas' }, { id: 4, name: 'Lote' },
-] : GENERATE_WIZARD_STEPS;
+export const getGenerateWizardSteps = (_kind: WizardState['generationKind']): WizardStepDefinition[] => GENERATE_WIZARD_STEPS;
+
+export const getEffectiveItemKind = (garment: UploadedGarmentDraft): WizardState['generationKind'] =>
+  garment.itemKindOverride || ((garment.itemKindConfidence ?? 0) >= 0.65 ? garment.itemKind ?? null : null);
+
+export const resolveWizardGenerationKind = (garments: UploadedGarmentDraft[]): WizardState['generationKind'] => {
+  if (garments.length === 0 || garments.some((garment) => garment.analysisStatus !== 'ready')) return null;
+  const kinds = garments.map(getEffectiveItemKind);
+  return kinds[0] && kinds.every((kind) => kind === kinds[0]) ? kinds[0] : null;
+};
+
+export const resolveWizardMajorityKind = (garments: UploadedGarmentDraft[]): WizardState['generationKind'] => {
+  if (!garments.length || garments.some((garment) => garment.analysisStatus !== 'ready' || !getEffectiveItemKind(garment))) return null;
+  const garmentCount = garments.filter((garment) => getEffectiveItemKind(garment) === 'garment').length;
+  const productCount = garments.length - garmentCount;
+  return garmentCount === productCount ? null : garmentCount > productCount ? 'garment' : 'product';
+};

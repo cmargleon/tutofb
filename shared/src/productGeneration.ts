@@ -14,5 +14,9 @@ export const PRODUCT_SCENES = [
 
 export const createDefaultProductScenes = (config?: Partial<SystemConfig>): ProductSceneInput[] =>
   PRODUCT_SCENES.map(({ type, prompt }) => ({ type, prompt: config?.systemProductScenePrompts?.[type] ?? prompt }));
+export const createDefaultProductGeneration = (config?: Partial<SystemConfig>) => ({
+  prompt: config?.systemPromptProduct ?? DEFAULT_PRODUCT_PROMPT,
+  scenes: createDefaultProductScenes(config),
+});
 export const buildProductSceneInstructions = (general: string, scene: string): string => [general.trim(), scene.trim()].filter(Boolean).join('\n');
 export const buildProductPrompt = (general: string, scene: string): string => [PRODUCT_IDENTITY_RULES, buildProductSceneInstructions(general, scene)].filter(Boolean).join('\n');

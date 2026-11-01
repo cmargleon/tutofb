@@ -1,3 +1,1 @@
-import type { Provider } from '../../../shared/src/types';
-
-export const DEFAULT_AUTOMATION_PROVIDER: Provider = 'fal-seedream-5-pro';
+export { DEFAULT_IMAGE_PROVIDER as DEFAULT_AUTOMATION_PROVIDER } from '../../../shared/src/domain';

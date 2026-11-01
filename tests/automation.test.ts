@@ -38,11 +38,11 @@ test('product preset has bounded review and shares the six scenes used by the ob
   assert.deepEqual(PRODUCT_PRESETS.generic_product.scenes.map(({ type, prompt }) => ({ type, prompt })), createDefaultProductScenes());
   assert.equal(PRODUCT_PRESETS.generic_product.maxReviewAttempts, 3);
 });
-test('automation defaults to Seedream 5 Pro and preserves explicit provider and client presets', () => {
+test('automation defaults to GPT Image 2.5 Flare and preserves explicit provider and client presets', () => {
   for (const jobType of ['garment', 'product']) {
     const request = { ...payload, jobType, modelId: 'model' } as any;
     const name = jobType === 'product' ? 'generic_product' : 'standard';
-    assert.equal(resolveAutomationPreset(request, {} as any).config.provider, 'fal-seedream-5-pro');
+    assert.equal(resolveAutomationPreset(request, {} as any).config.provider, 'fal-gpt-image-2.5-flare');
     const client = { automation: { presets: { [name]: { provider: 'fal-banana-pro' } } } } as any;
     assert.equal(resolveAutomationPreset(request, client).config.provider, 'fal-banana-pro');
     assert.equal(resolveAutomationPreset({ ...request, provider: 'fal-nano-banana-2' }, client).config.provider, 'fal-nano-banana-2');

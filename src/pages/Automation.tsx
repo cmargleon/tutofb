@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Workflow } from 'lucide-react';
-import { PROVIDER_VALUES, PROVIDER_LABELS } from '../../shared/src/domain';
+import { DEFAULT_IMAGE_PROVIDER, PROVIDER_VALUES, PROVIDER_LABELS } from '../../shared/src/domain';
 import { AutomationJob, Provider } from '../../shared/src/types';
 import { PRODUCT_SCENES } from '../../shared/src/productGeneration';
 import { Button, ImageThumb, PageHeader, StatusBadge } from '../components/ui';
@@ -44,7 +44,7 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         {Object.keys(client?.automation?.presets || {}).filter((name) => name !== 'standard' && name !== 'generic_product').map((name) => <option key={name}>{name}</option>)}
       </select></label>
       <label className={labelClass}>Modelo de generación<select className={inputClass} value={state.provider} disabled={state.busy} onChange={(event) => state.setProvider(event.target.value as Provider | '')}>
-        <option value="">Usar el modelo del preset del cliente</option>
+        <option value="">Usar preset del cliente o {PROVIDER_LABELS[DEFAULT_IMAGE_PROVIDER]}</option>
         {PROVIDER_VALUES.map((provider) => <option key={provider} value={provider} disabled={state.disabledProviders.includes(provider)}>{PROVIDER_LABELS[provider]}{state.disabledProviders.includes(provider) ? ' (deshabilitado)' : ''}</option>)}
       </select></label>
       <label className={labelClass}>Imágenes<input className={inputClass} required={!resume} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={state.busy} onChange={(event) => state.changeFiles(Array.from(event.target.files || []))} /></label>

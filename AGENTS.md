@@ -33,6 +33,15 @@
 - Reuse `shared/src/domain.ts`, `shared/src/providerImageConfig.ts`, and `shared/src/constants/providerCosts.ts` for provider and domain behavior.
 - Use `src/features/storage/useStorageAssetUrl.ts` or `resolveStorageAssetUrl()` for image URLs; generated assets are routed through `publicGeneratedImage`.
 
+## Photo Generation Rules
+- The wizard starts with client and reference photos; Gemini detects clothing/accessories versus objects before model, pose, or scene selection. Keep the three steps: client/photos, photo setup, review/generate.
+- A generation batch must contain one kind of article. After analysis finishes, keep the strict majority by article count, not photo count, and exclude minority articles from the batch. Show a visible warning with the excluded count and names and the kind retained. Do not silently discard articles.
+- If detection is uncertain or counts are tied, require the operator to choose the photography type; do not automatically discard articles without a clear majority. Manual correction must preserve uploaded references.
+- Default to GPT Image 2.5 Flare (`fal-gpt-image-2.5-flare`) in the manual wizard and automation. Use the shared default; preserve explicitly selected providers and client preset overrides.
+- Default image framing to the vertical `portrait_4_3` preset (shown as "Portrait 4:3", equivalent to width:height `3:4`) when supported, for clothing and objects. Selecting a generation provider resets framing to this default while preserving quality/format settings. Automation uses `3:4` unless a client preset explicitly selects another ratio.
+- Object generation defaults to the same six scenes in manual and automated flows: four lifestyle photos and two with people using the product. Reuse shared scenes and global prompt configuration instead of maintaining separate defaults.
+- See `docs/PHOTO_GENERATION.md` for the flow and product decisions.
+
 ## Constraints
 - Do not edit generated output: `functions/lib/`, `dist/`, `coverage/`, `node_modules/`.
 - Do not hand-edit secrets in `.env*`; `.env.example` is documentation only.

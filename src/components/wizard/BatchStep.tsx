@@ -1,14 +1,17 @@
 import { ProductPromptField } from './ProductPromptField';
 import { ProviderCostEstimate } from './ProviderCostEstimate';
-import React, { useState } from 'react';
+import React from 'react';
 import { SourceSpreadsheetMatchSummary } from '../../../shared/src/types';
 import { WizardProviderImageConfig, WizardState } from '../../features/generate/types';
 import { TryOnPromptFields } from './TryOnPromptFields';
 import { composeApprovedTryOnPrompt, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { ProviderImageConfigSelection } from './ProviderImageConfigSelection';
 import { ProviderSelection } from './ProviderSelection';
+import { isGenerateWizardStepComplete } from '../../features/generate/wizard/state';
 
 interface Props {
+  clientName?: string;
+  modelName?: string;
   state: WizardState;
   isSubmitting: boolean;
   totalJobs: number;
@@ -29,6 +32,8 @@ interface Props {
 }
 
 export const BatchStep: React.FC<Props> = ({
+  clientName,
+  modelName,
   state,
   isSubmitting,
   totalJobs,
@@ -47,13 +52,6 @@ export const BatchStep: React.FC<Props> = ({
   onPromptBlocksChange,
   onSubmit,
 }) => {
-  const [providerChosen, setProviderChosen] = useState(false);
-
-  const handleProviderSelect = (provider: WizardState['provider']) => {
-    setProviderChosen(true);
-    onProviderChange(provider);
-  };
-
   const spreadsheetPreparationPending = (
     state.outputMode === 'spreadsheet'
     && (
@@ -73,11 +71,13 @@ export const BatchStep: React.FC<Props> = ({
     catch { return true; }
   });
   const isSubmitDisabled = (
+    ![1, 2, 3].every((step) => isGenerateWizardStepComplete(state, step)) ||
     invalidPrompt ||
     isSubmitting
     || totalJobs === 0
     || spreadsheetPreparationPending
     || spreadsheetPreparationFailed
+    || (state.outputMode === 'spreadsheet' && state.productDrafts.length !== state.garments.length)
     || sourceSpreadsheetPending
     || sourceSpreadsheetFailed
     || selectedProviderDisabled
@@ -85,10 +85,15 @@ export const BatchStep: React.FC<Props> = ({
 
   return (
     <fieldset disabled={isSubmitting} className="min-w-0 space-y-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <ProviderSelection provider={providerChosen ? state.provider : null} onChange={handleProviderSelect} disabledProviders={disabledProviders} />
-
-      {providerChosen && (
-        <>
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Revisar y generar</h2>
+          <p className="mt-1 text-sm text-slate-600">{clientName} · {state.garments.length} artículo(s){state.generationKind === 'garment' ? ` · ${modelName} · ${state.selectedPoseIds.length} poses seleccionadas` : ` · ${state.productScenes.length} escenas por artículo`}</p>
+          <p className="mt-1 text-xs text-slate-500">{state.outputMode === 'spreadsheet' ? 'Fotos + spreadsheet' : 'Solo fotos'}</p>
+        </div>
+        <p className="text-2xl font-semibold text-emerald-700">{totalJobs} <span className="text-sm font-normal">imágenes</span></p>
+      </div>
+      <ProviderSelection provider={state.provider} onChange={onProviderChange} disabledProviders={disabledProviders} />
           {selectedProviderDisabled ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Este modelo IA está deshabilitado en Configuración. Sigue visible para referencia, pero no se puede usar para crear nuevos lotes.
@@ -172,10 +177,16 @@ export const BatchStep: React.FC<Props> = ({
             {[...new Set(state.garments.map((item) => item.originalPhotos.length))].sort().map((references) => <ProviderCostEstimate key={references}
               config={state.providerImageConfigs[state.provider]} referenceCount={references}
               imageCount={state.garments.filter((item) => item.originalPhotos.length === references).length * state.productScenes.length} />)}
-            <ProductPromptField value={state.prompt} scenes={state.productScenes} defaultPrompt={defaultProductPrompt} disabled={isSubmitting} onChange={onPromptChange} />
+            <details className="rounded-2xl border border-slate-200 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">Ajustes avanzados · Instrucciones</summary>
+              <div className="mt-4"><ProductPromptField value={state.prompt} scenes={state.productScenes} defaultPrompt={defaultProductPrompt} disabled={isSubmitting} onChange={onPromptChange} /></div>
+            </details>
           </> : <>
             <ProviderCostEstimate config={state.providerImageConfigs[state.provider]} imageCount={totalJobs} referenceCount={2} />
-            <TryOnPromptFields state={state} onPromptChange={onPromptChange} onBlocksChange={onPromptBlocksChange} sourceLabel={promptSourceLabel} />
+            <details className="rounded-2xl border border-slate-200 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700">Ajustes avanzados · Instrucciones</summary>
+              <div className="mt-4"><TryOnPromptFields state={state} onPromptChange={onPromptChange} onBlocksChange={onPromptBlocksChange} sourceLabel={promptSourceLabel} /></div>
+            </details>
           </>}
 
           <button
@@ -186,8 +197,6 @@ export const BatchStep: React.FC<Props> = ({
           >
             {submitButtonLabel}
           </button>
-        </>
-      )}
     </fieldset>
   );
 };

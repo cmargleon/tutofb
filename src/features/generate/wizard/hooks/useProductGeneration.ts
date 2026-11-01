@@ -16,19 +16,19 @@ export const useProductGeneration = ({ state, setState, setFlowError, defaultSce
     let prepared: WizardState['garments'] = [];
     try {
       if (files.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) throw new Error('Usa fotografías JPEG, PNG o WebP.');
-      prepared = await handleGarmentFiles(files, []);
+      prepared = (await handleGarmentFiles(files, state.garments)).filter((item) => !state.garments.some((existing) => existing.id === item.id));
       if (sameItem && prepared.length > 0) {
         prepared = [{ ...prepared[0], files: prepared.flatMap((item) => item.files), originalFileNames: prepared.flatMap((item) => item.originalFileNames),
           originalPhotos: prepared.flatMap((item) => item.originalPhotos).map((photo, index) => ({ ...photo, sourceIndex: index })), isMultiAngle: files.length > 1 }];
       }
       const next = [...state.garments, ...prepared];
-      if (next.some((item) => item.originalPhotos.length > 4)) throw new Error('Cada objeto admite hasta 4 fotos de referencia.');
+      if (next.some((item) => item.originalPhotos.length > 4)) throw new Error('Cada artículo admite hasta 4 fotos de referencia.');
       if (next.reduce((sum, item) => sum + item.originalPhotos.length, 0) > 40) throw new Error('El lote admite hasta 40 fotos.');
-      setState((current) => resetWizardGeneratedOutputs({ ...current, garments: [...current.garments, ...prepared] }));
+      setState((current) => resetWizardGeneratedOutputs({ ...current, garments: [...current.garments, ...prepared.map((item) => ({ ...item, itemKindOverride: current.garments[0]?.itemKindOverride ?? null }))] }));
       setFlowError(null);
     } catch (error) {
       revokeGarmentUrls(prepared);
-      setFlowError(error instanceof Error ? error.message : 'No se pudieron preparar los objetos.');
+      setFlowError(error instanceof Error ? error.message : 'No se pudieron preparar las fotos.');
     }
   };
   const toggleScene = (type: ProductSceneType) => {

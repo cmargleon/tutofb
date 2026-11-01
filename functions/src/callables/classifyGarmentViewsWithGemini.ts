@@ -30,6 +30,10 @@ interface GeminiGarmentPhotoClassificationPayload {
 }
 
 interface GeminiGarmentClassificationPayload {
+  itemKind?: unknown;
+  itemKindConfidence?: unknown;
+  itemKindReasoning?: unknown;
+  itemLabel?: unknown;
   photos?: unknown;
   bodyArea?: unknown;
   accessoryType?: unknown;
@@ -44,6 +48,10 @@ interface GeminiGarmentClassificationPayload {
 const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
+    itemKind: { type: ['string', 'null'], enum: ['garment', 'product', null] },
+    itemKindConfidence: { type: 'number' },
+    itemKindReasoning: { type: 'string' },
+    itemLabel: { type: ['string', 'null'] },
     photos: {
       type: 'array',
       items: {
@@ -88,6 +96,10 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
     },
   },
   required: [
+    'itemKind',
+    'itemKindConfidence',
+    'itemKindReasoning',
+    'itemLabel',
     'photos',
     'bodyArea',
     'accessoryType',
@@ -348,7 +360,10 @@ export const classifyGarmentWithGemini = async ({
       });
 
   const prompt = [
-    'Clasifica una prenda para un workflow de catálogo y spreadsheet.',
+    'Analiza el artículo principal de las fotos para un workflow de fotografía de catálogo. Las fotos son referencias del mismo artículo.',
+    'Primero identifica itemKind: garment para ropa, calzado y accesorios que se visten o llevan sobre el cuerpo; product para los demás objetos. Si no puedes identificar el artículo principal, devuelve null. No clasifiques por la presencia de una persona o por el nombre del archivo.',
+    'Devuelve itemKindConfidence entre 0 y 1, itemKindReasoning explicando la detección e itemLabel con un nombre breve en español, como Camiseta, Mochila o Lámpara.',
+    'Para objetos product devuelve bodyArea y accessoryType null; no inventes un área del cuerpo. Para ropa y accesorios garment identifica el área del cuerpo y el accesorio.',
     'Devuelve la vista principal de cada foto (front/back/side), el área del cuerpo (upper_body/lower_body/footwear/head_accessory/full_body/carry_accessory), el tipo de accesorio si aplica, la categoría final más probable del spreadsheet y el color principal visible de la prenda.',
     'Usa head_accessory para gorras, gorros, sombreros, lentes, gafas, diademas y accesorios cuyo foco principal sea cabeza o rostro.',
     'Usa footwear para zapatos, tenis, botas, sandalias y productos cuyo foco principal sean pies o tobillos.',
@@ -420,7 +435,8 @@ export const classifyGarmentWithGemini = async ({
     };
   });
 
-  const garmentBodyArea = isGarmentBodyArea(parsed.bodyArea) ? parsed.bodyArea : null;
+  const itemKind = parsed.itemKind === 'garment' || parsed.itemKind === 'product' ? parsed.itemKind : null;
+  const garmentBodyArea = itemKind !== 'product' && isGarmentBodyArea(parsed.bodyArea) ? parsed.bodyArea : null;
   const garmentAccessoryType = normalizeGarmentAccessoryType(
     garmentBodyArea,
     parsed.accessoryType,
@@ -435,6 +451,10 @@ export const classifyGarmentWithGemini = async ({
     garmentBodyArea,
     garmentAccessoryType,
     usedGemini: true,
+    itemKind,
+    itemKindConfidence: clampConfidence(parsed.itemKindConfidence),
+    itemKindReasoning: normalizeText(parsed.itemKindReasoning),
+    itemLabel: normalizeText(parsed.itemLabel),
     matchedCategoryId: matchedCategory?.id || null,
     matchedCategoryLabel: matchedCategory?.label || null,
     matchedCategoryConfidence: clampConfidence(parsed.matchedCategoryConfidence),

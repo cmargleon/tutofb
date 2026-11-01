@@ -1,3 +1,4 @@
+import { seedTryOnPrompt } from '../../../../shared/src/approvedTryOnPrompt';
 import { createDefaultProductScenes } from '../../../../shared/src/productGeneration';
 import {
   DEFAULT_TRY_ON_PROMPT,
@@ -54,7 +55,8 @@ export const createInitialGenerateWizardState = (): WizardState => ({
     'fal-seedream-5-flash': createDefaultProviderImageConfig('fal-seedream-5-flash'),
     'fal-flux-2-edit': createDefaultProviderImageConfig('fal-flux-2-edit'),
   },
-  prompt: DEFAULT_TRY_ON_PROMPT,
+  prompt: seedTryOnPrompt(DEFAULT_TRY_ON_PROMPT).general,
+  tryOnPromptBlocks: seedTryOnPrompt(DEFAULT_TRY_ON_PROMPT).blocks,
 });
 
 export const getSelectedProviderImageConfig = (state: WizardState) => state.providerImageConfigs[state.provider];

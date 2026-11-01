@@ -2,6 +2,8 @@ import {
   DEFAULT_TRY_ON_PROMPT_CASES,
 } from '../../../shared/src/domain';
 import { Provider, SystemConfig } from '../../../shared/src/types';
+import { ADDITIONAL_SYSTEM_PROMPT_FIELDS, normalizeAdditionalSystemPrompts } from '../../../shared/src/systemPrompts';
+import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { getJobMaxRetries, getJobRetryDelayMs, getBatchMaxJobs, getGeminiImageReviewModel } from '../config/runtime';
@@ -19,10 +21,29 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   systemPromptFullOutfit: DEFAULT_TRY_ON_PROMPT_CASES.full_outfit,
   systemPromptTopOnly: DEFAULT_TRY_ON_PROMPT_CASES.top_only,
   systemPromptBottomOnly: DEFAULT_TRY_ON_PROMPT_CASES.bottom_only,
+  ...normalizeAdditionalSystemPrompts(),
 };
 
 const normalizePromptOverride = (value: unknown, fallback: string): string | null =>
   typeof value === 'string' && value.trim() ? value.trim() : fallback;
+
+export const assertValidAdditionalSystemPrompts = (input: Partial<SystemConfig>) => {
+  const validate = (value: unknown, label: string, maxLength: number) => {
+    if (value != null && (typeof value !== 'string' || value.length > maxLength || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))) {
+      throw new HttpsError('invalid-argument', `${label}: usa texto válido de hasta ${maxLength} caracteres.`);
+    }
+  };
+  for (const { key, label, maxLength } of ADDITIONAL_SYSTEM_PROMPT_FIELDS) validate(input[key], label, maxLength);
+  const scenes = input.systemProductScenePrompts;
+  if (scenes != null) {
+    if (typeof scenes !== 'object' || Array.isArray(scenes)) throw new HttpsError('invalid-argument', 'Prompts de escenas inválidos.');
+    for (const [type, value] of Object.entries(scenes)) {
+      const scene = PRODUCT_SCENES.find((preset) => preset.type === type);
+      if (!scene) throw new HttpsError('invalid-argument', 'Escena desconocida.');
+      validate(value, scene.label, 4000);
+    }
+  }
+};
 
 export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undefined): SystemConfig => ({
   jobMaxRetries: typeof input?.jobMaxRetries === 'number' && input.jobMaxRetries >= 0 ? Math.round(input.jobMaxRetries) : DEFAULT_SYSTEM_CONFIG.jobMaxRetries,
@@ -34,6 +55,7 @@ export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undef
   systemPromptFullOutfit: normalizePromptOverride(input?.systemPromptFullOutfit, DEFAULT_SYSTEM_CONFIG.systemPromptFullOutfit!),
   systemPromptTopOnly: normalizePromptOverride(input?.systemPromptTopOnly, DEFAULT_SYSTEM_CONFIG.systemPromptTopOnly!),
   systemPromptBottomOnly: normalizePromptOverride(input?.systemPromptBottomOnly, DEFAULT_SYSTEM_CONFIG.systemPromptBottomOnly!),
+  ...normalizeAdditionalSystemPrompts(input),
 });
 
 export const getSystemConfigDocRef = () =>

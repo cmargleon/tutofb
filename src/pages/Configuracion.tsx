@@ -7,6 +7,9 @@ import { useSystemConfig } from '../features/system/useSystemConfig';
 import { useRole } from '../features/auth/AuthProvider';
 import { useToast } from '../features/feedback/FeedbackProvider';
 import { DEFAULT_TRY_ON_PROMPT, DEFAULT_TRY_ON_PROMPT_CASES, PROVIDER_LABELS, PROVIDER_VALUES } from '../../shared/src/domain';
+import { ADDITIONAL_SYSTEM_PROMPT_FIELDS, normalizeAdditionalSystemPrompts, type AdditionalSystemPromptKey } from '../../shared/src/systemPrompts';
+import { createDefaultProductScenes, PRODUCT_SCENES } from '../../shared/src/productGeneration';
+import type { ProductSceneInput } from '../../shared/src/types';
 
 const KNOWN_GEMINI_MODELS = [
   { value: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (recomendado)' },
@@ -94,6 +97,9 @@ export const Configuracion: React.FC = () => {
   const [systemPromptFullOutfit, setSystemPromptFullOutfit] = useState('');
   const [systemPromptTopOnly, setSystemPromptTopOnly] = useState('');
   const [systemPromptBottomOnly, setSystemPromptBottomOnly] = useState('');
+  const [additionalPrompts, setAdditionalPrompts] = useState<Record<AdditionalSystemPromptKey, string>>(() =>
+    Object.fromEntries(ADDITIONAL_SYSTEM_PROMPT_FIELDS.map(({ key, defaultValue }) => [key, defaultValue])) as Record<AdditionalSystemPromptKey, string>);
+  const [productScenes, setProductScenes] = useState<ProductSceneInput[]>(createDefaultProductScenes);
 
   // Sync form state when systemConfig loads
   useEffect(() => {
@@ -116,6 +122,9 @@ export const Configuracion: React.FC = () => {
     setSystemPromptFullOutfit(systemConfig.systemPromptFullOutfit ?? DEFAULT_TRY_ON_PROMPT_CASES.full_outfit);
     setSystemPromptTopOnly(systemConfig.systemPromptTopOnly ?? DEFAULT_TRY_ON_PROMPT_CASES.top_only);
     setSystemPromptBottomOnly(systemConfig.systemPromptBottomOnly ?? DEFAULT_TRY_ON_PROMPT_CASES.bottom_only);
+    setAdditionalPrompts(Object.fromEntries(ADDITIONAL_SYSTEM_PROMPT_FIELDS.map(({ key, defaultValue }) =>
+      [key, systemConfig[key] ?? defaultValue])) as Record<AdditionalSystemPromptKey, string>);
+    setProductScenes(createDefaultProductScenes(systemConfig));
   }, [systemConfigLoading, systemConfig]);
 
   const saveSystemConfigSection = async (patch: Parameters<typeof updateSystemConfig>[0]) => {
@@ -155,6 +164,10 @@ export const Configuracion: React.FC = () => {
     const trimmedTopOnlyPrompt = systemPromptTopOnly.trim();
     const trimmedBottomOnlyPrompt = systemPromptBottomOnly.trim();
     void saveSystemConfigSection({
+      ...normalizeAdditionalSystemPrompts({
+        ...additionalPrompts,
+        systemProductScenePrompts: Object.fromEntries(productScenes.map(({ type, prompt }) => [type, prompt])),
+      }),
       systemPromptOverride:
         !trimmedPrompt || trimmedPrompt === DEFAULT_TRY_ON_PROMPT.trim() ? null : trimmedPrompt,
       systemPromptFullOutfit:
@@ -408,8 +421,9 @@ export const Configuracion: React.FC = () => {
         </div>
         <p className="text-sm text-slate-500 mb-6">
           El prompt base se usa en el wizard cuando el cliente seleccionado no tiene un prompt propio.
-          Los bloques A/B/C se agregan automáticamente al prompt final según el tipo de prenda detectado.
-          Si un campo queda igual al valor interno por defecto, se guarda sin override.
+          Los casos A/B/C se precargan como campos editables según la clasificación de cada prenda. El wizard muestra el texto completo para aprobarlo antes de enviarlo.
+          Los demás bloques y las escenas de producto también se precargan desde estos valores globales.
+          Un campo vacío o igual al valor interno por defecto restaura ese valor. Las ediciones del wizard se aplican solo a ese lote.
         </p>
         {systemConfigLoading ? (
           <LoadingBlock message="Cargando configuración..." />
@@ -447,6 +461,26 @@ export const Configuracion: React.FC = () => {
               disabled={!role.canManageUsers}
               placeholder="Reglas para prendas lower_body..."
             />
+            <p className="text-sm text-slate-500">Las instrucciones de identidad se completan con los rasgos de la modelo seleccionada. Puedes revisar y editar el bloque completo en el wizard.</p>
+            {ADDITIONAL_SYSTEM_PROMPT_FIELDS.map(({ key, label, maxLength }) => <div key={key}><PromptTextarea
+              label={label}
+              rows={6}
+              value={additionalPrompts[key]}
+              onChange={(value) => setAdditionalPrompts((current) => ({ ...current, [key]: value }))}
+              disabled={!role.canManageUsers}
+              maxLength={maxLength}
+              placeholder="Vacío: usar instrucciones originales"
+            /></div>)}
+            <h3 className="pt-4 text-sm font-semibold text-slate-900">Escenas de fotografía de producto</h3>
+            {productScenes.map((scene) => <div key={scene.type}><PromptTextarea
+              label={PRODUCT_SCENES.find((preset) => preset.type === scene.type)!.label}
+              rows={5}
+              value={scene.prompt}
+              onChange={(prompt) => setProductScenes((current) => current.map((entry) => entry.type === scene.type ? { ...entry, prompt } : entry))}
+              disabled={!role.canManageUsers}
+              maxLength={4000}
+              placeholder="Vacío: usar escena original"
+            /></div>)}
             {role.canManageUsers ? (
               <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
                 <button
@@ -471,6 +505,7 @@ function PromptTextarea({
   onChange,
   disabled,
   placeholder,
+  maxLength,
 }: {
   label: string;
   rows: number;
@@ -478,6 +513,7 @@ function PromptTextarea({
   onChange: (value: string) => void;
   disabled: boolean;
   placeholder: string;
+  maxLength?: number;
 }) {
   return (
     <label className="block">
@@ -488,6 +524,7 @@ function PromptTextarea({
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
         placeholder={placeholder}
+        maxLength={maxLength}
         className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400 resize-y"
       />
     </label>

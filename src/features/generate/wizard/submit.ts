@@ -1,3 +1,4 @@
+import { APPROVED_TRY_ON_PROMPT_FORMAT, composeApprovedTryOnPrompt } from '../../../../shared/src/approvedTryOnPrompt';
 import { CreateGenerationBatchRequest } from '../../../../shared/src/types';
 import { resolveAspectRatioForImageConfig } from '../../../../shared/src/providerImageConfig';
 import { UploadGarmentDraftsResult } from '../storage';
@@ -172,6 +173,12 @@ export const buildCreateGenerationBatchRequest = (
     productDrafts: state.outputMode === 'spreadsheet' ? state.productDrafts : [],
     provider: state.provider,
     promptBase: state.prompt,
+    promptFormat: APPROVED_TRY_ON_PROMPT_FORMAT,
+    approvedPrompts: garments.map((garment) => ({
+      garmentId: garment.id,
+      text: composeApprovedTryOnPrompt(state.prompt, state.tryOnPromptBlocks,
+        state.garments.find((draft) => draft.id === garment.id)?.garmentBodyArea),
+    })),
     aspectRatio: resolveAspectRatioForImageConfig(imageConfig),
     imageConfig,
   };

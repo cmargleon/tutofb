@@ -31,6 +31,7 @@ export interface BatchModelSnapshot {
 }
 
 export interface Batch {
+  promptFormat?: 'approved-try-on-v1';
   automationJobId?: string;
   generationKind?: 'garment' | 'product';
   productScenes?: ProductSceneInput[];
@@ -73,7 +74,14 @@ export interface Batch {
   notification?: BatchNotificationState | null;
 }
 
+export interface ApprovedGarmentPrompt {
+  garmentId: string;
+  text: string;
+}
+
 export interface CreateGenerationBatchRequest {
+  promptFormat?: 'approved-try-on-v1';
+  approvedPrompts?: ApprovedGarmentPrompt[];
   clientId: string;
   modelId: string;
   outputMode?: BatchOutputMode;

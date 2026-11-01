@@ -1,3 +1,4 @@
+import type { TryOnPromptBlocks } from '../../../shared/src/approvedTryOnPrompt';
 import {
   BatchOutputMode,
   Batch,
@@ -158,6 +159,7 @@ export interface WizardState {
   provider: Provider;
   providerImageConfigs: Record<Provider, ProviderImageConfig>;
   prompt: string;
+  tryOnPromptBlocks: TryOnPromptBlocks;
 }
 
 export type WizardProviderImageConfig = ProviderImageConfig;

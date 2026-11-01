@@ -54,6 +54,7 @@ export const Wizard: React.FC = () => {
     handleProviderChange,
     handleProviderImageConfigChange,
     handlePromptChange,
+    handlePromptBlocksChange,
     handleRetryPoseSuggestions,
     handleRetryProductDraftPreparation,
   } = useWizard();
@@ -136,7 +137,7 @@ export const Wizard: React.FC = () => {
       )}
 
       {state.step === 3 && state.generationKind === 'product' && <ProductScenesStep
-        scenes={state.productScenes} disabled={isWizardBusy} onToggle={product.toggleScene} onPromptChange={product.changeScenePrompt} />}
+        scenes={state.productScenes} defaultScenes={product.defaultScenes} disabled={isWizardBusy} onToggle={product.toggleScene} onPromptChange={product.changeScenePrompt} />}
 
       {state.step === 3 && state.generationKind === 'garment' && (
         <PoseSelectionStep
@@ -163,6 +164,7 @@ export const Wizard: React.FC = () => {
           promptSourceLabel={promptSourceLabel}
           submitButtonLabel={submitButtonLabel}
           disabledProviders={disabledProviders}
+          defaultProductPrompt={product.defaultPrompt}
           productDraftPreparationStatus={state.productDraftPreparation.status}
           productDraftPreparationError={state.productDraftPreparation.error}
           sourceSpreadsheet={state.sourceSpreadsheet}
@@ -171,6 +173,7 @@ export const Wizard: React.FC = () => {
           onProviderChange={handleProviderChange}
           onProviderImageConfigChange={handleProviderImageConfigChange}
           onPromptChange={handlePromptChange}
+          onPromptBlocksChange={handlePromptBlocksChange}
           onSubmit={handleSubmit}
         />
       )}

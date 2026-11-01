@@ -1,3 +1,4 @@
+import { APPROVED_TRY_ON_PROMPT_FORMAT, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   AspectRatio,
@@ -179,6 +180,8 @@ export const getPoseMap = (model: Model): Map<string, Pose> =>
   new Map(model.poses.map((pose) => [pose.id, pose]));
 
 export interface ValidatedCreateGenerationBatchInput {
+  promptFormat?: CreateGenerationBatchRequest['promptFormat'];
+  approvedPrompts?: CreateGenerationBatchRequest['approvedPrompts'];
   clientId: string;
   modelId: string;
   outputMode: BatchOutputMode;
@@ -306,6 +309,27 @@ export const validateCreateGenerationBatchInput = (
   }
 
   garments.forEach((garment) => ensureDraftOwnership(authUid, garment));
+  if (data?.promptFormat !== undefined && data.promptFormat !== APPROVED_TRY_ON_PROMPT_FORMAT) {
+    throw new HttpsError('invalid-argument', 'Formato de prompt no compatible.');
+  }
+  if (data?.approvedPrompts !== undefined && data.promptFormat !== APPROVED_TRY_ON_PROMPT_FORMAT) {
+    throw new HttpsError('invalid-argument', 'Falta el formato del prompt aprobado.');
+  }
+  let approvedPrompts: CreateGenerationBatchRequest['approvedPrompts'];
+  if (data?.promptFormat === APPROVED_TRY_ON_PROMPT_FORMAT) {
+    const prompts = data.approvedPrompts;
+    if (!Array.isArray(prompts) || prompts.length !== garments.length
+      || new Set(garments.map((garment) => garment.id)).size !== garments.length
+      || new Set(prompts.map((entry) => entry?.garmentId)).size !== garments.length) {
+      throw new HttpsError('invalid-argument', 'Debes aprobar exactamente un prompt completo por prenda.');
+    }
+    approvedPrompts = garments.map((garment) => {
+      const entry = prompts.find((prompt) => prompt?.garmentId === garment.id);
+      try { return { garmentId: garment.id, text: validateApprovedTryOnPrompt(entry?.text) }; }
+      catch (error) { throw new HttpsError('invalid-argument', error instanceof Error ? error.message : 'Prompt completo inválido.'); }
+    });
+  }
+
   const productDrafts = Array.isArray(data?.productDrafts) ? data.productDrafts.map(normalizeProductDraft) : [];
   if (outputMode === 'spreadsheet') {
     if (productDrafts.length !== garments.length) {
@@ -337,6 +361,7 @@ export const validateCreateGenerationBatchInput = (
     provider: provider!,
     imageConfig: normalizedImageConfig.imageConfig,
     promptBase,
+    ...(approvedPrompts ? { promptFormat: APPROVED_TRY_ON_PROMPT_FORMAT, approvedPrompts } : {}),
     aspectRatio: normalizedImageConfig.aspectRatio,
     totalJobs,
   };
@@ -421,14 +446,16 @@ export const buildJobDraft = (
   promptBase: string,
   modelIdentityTraitsSnapshot: Job['modelIdentityTraitsSnapshot'] = null,
   autoReviewMaxAttempts: number = 3,
+  approvedPrompt?: string,
 ) => ({
+  ...(approvedPrompt !== undefined ? { promptFormat: APPROVED_TRY_ON_PROMPT_FORMAT } : {}),
   modelIdentityTraitsSnapshot,
-  requestedPromptBase: promptBase.trim(),
+  requestedPromptBase: approvedPrompt ?? promptBase.trim(),
   provider,
-  promptBase,
+  promptBase: approvedPrompt ?? promptBase,
   promptCaseKey: job.promptCaseKey ?? null,
   promptCaseText: job.promptCaseText ?? null,
-  finalPrompt: buildFinalGenerationPrompt(
+  finalPrompt: approvedPrompt ?? buildFinalGenerationPrompt(
     promptBase,
     job.garmentReferenceImageType || (job.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
     job.promptCaseText,

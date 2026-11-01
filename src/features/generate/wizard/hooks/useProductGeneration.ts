@@ -1,14 +1,16 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { createDefaultProductScenes } from '../../../../../shared/src/productGeneration';
-import type { ProductSceneType } from '../../../../../shared/src/types';
+import type { ProductSceneInput, ProductSceneType } from '../../../../../shared/src/types';
 import { handleGarmentFiles, revokeGarmentUrls } from '../../garments';
 import { resetWizardGeneratedOutputs } from '../stateTransitions';
 import type { WizardState } from '../../types';
 
-export const useProductGeneration = ({ state, setState, setFlowError }: {
+export const useProductGeneration = ({ state, setState, setFlowError, defaultScenes, defaultPrompt, onScenesChange }: {
   state: WizardState;
   setState: Dispatch<SetStateAction<WizardState>>;
   setFlowError: (message: string | null) => void;
+  defaultScenes: ProductSceneInput[];
+  defaultPrompt: string;
+  onScenesChange: () => void;
 }) => {
   const handleFiles = async (files: File[], sameItem = false) => {
     let prepared: WizardState['garments'] = [];
@@ -29,13 +31,19 @@ export const useProductGeneration = ({ state, setState, setFlowError }: {
       setFlowError(error instanceof Error ? error.message : 'No se pudieron preparar los objetos.');
     }
   };
-  const toggleScene = (type: ProductSceneType) => setState((current) => ({ ...current,
-    productScenes: current.productScenes.some((scene) => scene.type === type)
-      ? current.productScenes.filter((scene) => scene.type !== type)
-      : [...current.productScenes, createDefaultProductScenes().find((scene) => scene.type === type)!],
-  }));
-  const changeScenePrompt = (type: ProductSceneType, prompt: string) => setState((current) => ({ ...current,
-    productScenes: current.productScenes.map((scene) => scene.type === type ? { ...scene, prompt } : scene),
-  }));
-  return { handleFiles, toggleScene, changeScenePrompt };
+  const toggleScene = (type: ProductSceneType) => {
+    onScenesChange();
+    setState((current) => ({ ...current,
+      productScenes: current.productScenes.some((scene) => scene.type === type)
+        ? current.productScenes.filter((scene) => scene.type !== type)
+        : [...current.productScenes, { ...defaultScenes.find((scene) => scene.type === type)! }],
+    }));
+  };
+  const changeScenePrompt = (type: ProductSceneType, prompt: string) => {
+    onScenesChange();
+    setState((current) => ({ ...current,
+      productScenes: current.productScenes.map((scene) => scene.type === type ? { ...scene, prompt } : scene),
+    }));
+  };
+  return { handleFiles, toggleScene, changeScenePrompt, defaultScenes, defaultPrompt };
 };

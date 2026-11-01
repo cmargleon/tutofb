@@ -9,7 +9,7 @@
 7. El mismo worker envía pose, prenda y resultado a Gemini para validar fondo, pose, fidelidad de prenda, logos y cumplimiento general.
 8. Si Gemini aprueba, `currentOutput` se actualiza al resultado vigente, el output anterior deja de ser `isCurrent` y el job pasa a `completed`.
 9. Si el job pertenece a un batch con spreadsheet, `onJobCompletedSquareCrop` sincroniza el square crop del output efectivo hacia `productDrafts`.
-10. Si Gemini rechaza y todavía no llegó al tope, el job vuelve a `pending` con un prompt refinado por Gemini para un nuevo intento.
+10. Si Gemini rechaza y todavía no llegó al tope, el job vuelve a `pending` y usa `revisedPrompt` en el siguiente intento, tanto en prendas como en productos. Los jobs `approved-try-on-v1` usan la corrección completa sin añadir bloques; los legacy y los productos conservan su composición histórica. El prompt original queda en `requestedPromptBase`; si no hay corrección, se mantiene el prompt actual.
 11. Si Gemini rechaza el último intento o la validación falla, el job queda en `failed`, pero la imagen generada sigue guardada en `outputs`.
 12. Si falla el provider antes de generar imagen, el worker registra `job_logs`, incrementa `retryCount` y reencola o falla según `maxRetries`.
 13. `requeueExpiredJobsOnSchedule` detecta jobs atascados por timeout/claim vencido y los recupera o reactiva para que `processJobOnActivation` los procese en una instancia separada.

@@ -140,6 +140,7 @@ export interface JobFailureInfo {
 }
 
 export interface JobOutput {
+  promptFormat?: 'approved-try-on-v1';
   id: string;
   jobId: string;
   batchId: string;
@@ -172,6 +173,7 @@ export interface JobOutput {
 }
 
 export interface Job {
+  promptFormat?: 'approved-try-on-v1';
   automationJobId?: string;
   generationKind?: 'garment' | 'product';
   productScene?: string;

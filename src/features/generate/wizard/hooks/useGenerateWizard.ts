@@ -1,3 +1,4 @@
+import { seedTryOnPrompt } from '../../../../../shared/src/approvedTryOnPrompt';
 import { createLegacyProviderImageConfig } from '../../../../../shared/src/providerImageConfig';
 import { DEFAULT_PRODUCT_PROMPT, createDefaultProductScenes } from '../../../../../shared/src/productGeneration';
 import { useConfirm } from '../../../feedback/FeedbackProvider';
@@ -118,8 +119,12 @@ export const useGenerateWizard = () => {
   const [flowError, setFlowError] = useState<string | null>(null);
   const [draftBatchId, setDraftBatchId] = useState<string | null>(null);
   const [isPromptDirty, setIsPromptDirty] = useState(false);
+  const [arePromptBlocksDirty, setArePromptBlocksDirty] = useState(false);
+  const [areProductScenesDirty, setAreProductScenesDirty] = useState(false);
 
-  const { config: systemConfig } = useSystemConfig();
+  const { config: systemConfig, loading: systemConfigLoading } = useSystemConfig();
+  const defaultProductPrompt = systemConfig.systemPromptProduct ?? DEFAULT_PRODUCT_PROMPT;
+  const defaultProductScenes = useMemo(() => createDefaultProductScenes(systemConfig), [systemConfig.systemProductScenePrompts]);
 
   const {
     clients,
@@ -154,16 +159,25 @@ export const useGenerateWizard = () => {
   }, [selectedClient?.generationPromptBase, selectedClient?.name, systemConfig.systemPromptOverride]);
 
   useEffect(() => {
-    if (isPromptDirty || state.generationKind === 'product') {
+    if (state.generationKind === 'product') {
+      if (!isPromptDirty) setState((current) => ({ ...current, prompt: defaultProductPrompt }));
       return;
     }
+    const seeded = seedTryOnPrompt(resolvedPromptBase, selectedModel?.identityTraits, systemConfig);
+    setState((current) => ({ ...current,
+      prompt: isPromptDirty ? current.prompt : seeded.general,
+      tryOnPromptBlocks: arePromptBlocksDirty ? current.tryOnPromptBlocks : seeded.blocks,
+    }));
+  }, [isPromptDirty, arePromptBlocksDirty, resolvedPromptBase, state.generationKind, selectedModel?.identityTraits,
+    defaultProductPrompt, systemConfig.systemPromptIdentity, systemConfig.systemPromptInternalLabels,
+    systemConfig.systemPromptAccessories, systemConfig.systemPromptCarryAccessory,
+    systemConfig.systemPromptFullOutfit, systemConfig.systemPromptTopOnly, systemConfig.systemPromptBottomOnly]);
 
-    setState((current) => (
-      current.prompt === resolvedPromptBase
-        ? current
-        : { ...current, prompt: resolvedPromptBase }
-    ));
-  }, [isPromptDirty, resolvedPromptBase, state.generationKind]);
+  useEffect(() => {
+    if (state.generationKind === 'product' && !areProductScenesDirty) {
+      setState((current) => ({ ...current, productScenes: defaultProductScenes.map((scene) => ({ ...scene })) }));
+    }
+  }, [state.generationKind, areProductScenesDirty, defaultProductScenes]);
 
   useEffect(() => {
     if (!state.selectedClientId || loadingSpreadsheetTemplates || selectedClientHasSpreadsheetTemplates) {
@@ -440,6 +454,7 @@ export const useGenerateWizard = () => {
     }
 
     setIsPromptDirty(false);
+    setArePromptBlocksDirty(false);
     setState((current) => resetWizardGeneratedOutputs({
       ...current,
       selectedClientId: clientId,
@@ -448,15 +463,15 @@ export const useGenerateWizard = () => {
       selectedSpreadsheetTemplateId: null,
       selectedSpreadsheetCategoryId: null,
       sourceSpreadsheet: null,
-      prompt: current.generationKind === 'product' ? DEFAULT_PRODUCT_PROMPT : nextPrompt,
+      prompt: current.generationKind === 'product' ? defaultProductPrompt : seedTryOnPrompt(nextPrompt).general,
+      tryOnPromptBlocks: seedTryOnPrompt(nextPrompt, null, systemConfig).blocks,
     }));
   };
 
   const handleGenerationKindChange = async (generationKind: NonNullable<WizardState['generationKind']>) => {
     if (generationKind === state.generationKind || submit.isSubmitting || state.poseSuggestions.status === 'preparing') return;
     const hasConfiguration = state.garments.length > 0 || state.selectedModelId || state.sourceSpreadsheet
-      || isPromptDirty || state.productScenes.some((scene) => scene.prompt !== createDefaultProductScenes().find((preset) => preset.type === scene.type)?.prompt)
-      || state.productScenes.length !== createDefaultProductScenes().length;
+      || isPromptDirty || arePromptBlocksDirty || areProductScenesDirty;
     if (hasConfiguration && !await confirm({
       title: 'Cambiar tipo de generación', tone: 'warning', confirmLabel: 'Cambiar y empezar de nuevo',
       description: 'Se descartarán las fotos seleccionadas, el modelo, las escenas y los prompts de este recorrido.',
@@ -465,6 +480,8 @@ export const useGenerateWizard = () => {
     setDraftBatchId(null);
     submit.resetDraftBatch();
     setIsPromptDirty(false);
+    setArePromptBlocksDirty(false);
+    setAreProductScenesDirty(false);
     setFlowError(null);
     setState((current) => ({
       ...createInitialGenerateWizardState(), selectedClientId: current.selectedClientId, generationKind,
@@ -474,16 +491,22 @@ export const useGenerateWizard = () => {
       providerImageConfigs: Object.fromEntries(Object.keys(current.providerImageConfigs).map((provider: WizardState['provider']) => [
         provider, createLegacyProviderImageConfig(provider, generationKind === 'product' ? '1:1' : '3:4'),
       ])) as WizardState['providerImageConfigs'],
-      prompt: generationKind === 'product' ? DEFAULT_PRODUCT_PROMPT : resolvedPromptBase,
+      prompt: generationKind === 'product' ? defaultProductPrompt : seedTryOnPrompt(resolvedPromptBase).general,
+      productScenes: defaultProductScenes.map((scene) => ({ ...scene })),
+      tryOnPromptBlocks: seedTryOnPrompt(resolvedPromptBase, null, systemConfig).blocks,
     }));
   };
 
-  const product = useProductGeneration({ state, setState, setFlowError });
+  const product = useProductGeneration({ state, setState, setFlowError, defaultScenes: defaultProductScenes,
+    defaultPrompt: defaultProductPrompt, onScenesChange: () => setAreProductScenesDirty(true) });
 
   const handleModelSelect = (modelId: string | null) => {
     setState((current) => resetWizardGeneratedOutputs({
       ...current,
       selectedModelId: modelId,
+      tryOnPromptBlocks: { ...current.tryOnPromptBlocks,
+        identity: seedTryOnPrompt(resolvedPromptBase, models.find((model) => model.id === modelId)?.identityTraits, systemConfig).blocks.identity,
+      },
     }));
   };
 
@@ -614,6 +637,11 @@ export const useGenerateWizard = () => {
     }));
   };
 
+  const handlePromptBlocksChange = (tryOnPromptBlocks: WizardState['tryOnPromptBlocks']) => {
+    setArePromptBlocksDirty(true);
+    setState((current) => ({ ...current, tryOnPromptBlocks }));
+  };
+
   const handlePromptChange = (prompt: string) => {
     setIsPromptDirty(true);
     setState((current) => ({ ...current, prompt }));
@@ -649,7 +677,7 @@ export const useGenerateWizard = () => {
     spreadsheetCategories,
     selectedClientHasSpreadsheetTemplates,
     loadingSpreadsheetTemplates,
-    loadingData,
+    loadingData: loadingData || systemConfigLoading,
     isSubmitting: submit.isSubmitting,
     error,
     stepperRef,
@@ -682,6 +710,7 @@ export const useGenerateWizard = () => {
     handleProviderChange,
     handleProviderImageConfigChange,
     handlePromptChange,
+    handlePromptBlocksChange,
     handleRetryPoseSuggestions,
     handleRetryProductDraftPreparation,
     handleProductDraftRowsChange,

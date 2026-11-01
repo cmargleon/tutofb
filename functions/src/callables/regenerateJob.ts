@@ -13,7 +13,7 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
 
   const jobId = typeof request.data?.jobId === 'string' ? request.data.jobId.trim() : '';
   const provider = request.data?.provider;
-  const prompt = typeof request.data?.prompt === 'string' ? request.data.prompt.trim() : '';
+  const prompt = typeof request.data?.prompt === 'string' ? request.data.prompt : '';
 
   if (!jobId) {
     throw new HttpsError('invalid-argument', 'Debes indicar un trabajo para regenerar.');

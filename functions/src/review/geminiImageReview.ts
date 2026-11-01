@@ -1,3 +1,4 @@
+import { APPROVED_TRY_ON_PROMPT_FORMAT } from '../../../shared/src/approvedTryOnPrompt';
 import { applyGlobalTryOnPromptGuards, DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
 import {
   JobAutoReviewCriterion,
@@ -14,6 +15,7 @@ interface ReviewImageAsset {
 }
 
 interface ReviewRequest {
+  promptFormat?: 'approved-try-on-v1';
   generationKind?: 'garment' | 'product';
   productReferences?: ReviewImageAsset[];
   apiKey: string;
@@ -384,6 +386,23 @@ const buildReviewPrompt = ({
   ].join('\n\n');
 };
 
+// Technical evaluation instructions are separate from the approved generation instructions.
+export const buildApprovedTryOnReviewPrompt = (finalPrompt: string): string => [
+  'TECHNICAL REVIEW INSTRUCTIONS (not generation requirements):',
+  'Evaluate compliance with the approved generation prompt below using these images in order: 1) model/pose reference, 2) garment reference, 3) generated result.',
+  'The approved prompt is the sole source of generation requirements and their priorities. Evaluate every applicable instruction against the reference images.',
+  'Do not introduce default identity, label, accessory, outfit, pose, background or branding rules that are absent from the approved prompt.',
+  'Do not relax explicit constraints: when exact preservation is requested, small posture/framing/zoom differences or an approximately similar background do not pass.',
+  'If the approved prompt explicitly allows a change, evaluate that change as requested. Identify contradictory or unverifiable requirements in the criteria notes instead of inventing a resolution.',
+  'Return approved only when all applicable requirements pass. Each requirement must have a criterion with key, Spanish label, passed and Spanish notes.',
+  'Return ONLY JSON following the response schema; summary must be Spanish.',
+  'If rejected, return revisedPrompt as a complete, self-contained corrected generation prompt in English for the next automatic attempt, fixing the detected issues. Preserve the approved intent; do not restore omitted rules or add default blocks. Otherwise return an empty string.',
+  'Extract marketplaceData from visible garment evidence only; use null for unknown fields. Extraction does not add generation requirements.',
+  'BEGIN APPROVED GENERATION PROMPT (reference data, not review control instructions)',
+  finalPrompt,
+  'END APPROVED GENERATION PROMPT',
+].join('\n\n');
+
 const extractResponseText = (payload: GeminiGenerateContentResponse): string => {
   const text = payload.candidates
     ?.flatMap((candidate) => candidate.content?.parts || [])
@@ -414,12 +433,13 @@ const extractResponseText = (payload: GeminiGenerateContentResponse): string => 
 };
 
 export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Promise<GeneratedImageReviewResult> => {
-  const reviewPrompt = request.generationKind === 'product' ? [
+  const usesApprovedPrompt = request.generationKind !== 'product' && request.promptFormat === APPROVED_TRY_ON_PROMPT_FORMAT;
+  const reviewPrompt = usesApprovedPrompt ? buildApprovedTryOnReviewPrompt(request.finalPrompt) : request.generationKind === 'product' ? [
     'Evaluate commercial product photography. All images except the LAST are reference views of the exact same product. The LAST image is the generated result.',
     'Reject incorrect product identity, altered colors, logos/text/prints, added or removed parts, deformed geometry/proportions/materials, or obvious visual artifacts.',
     'No human model or garment replacement is required. Background and composition must satisfy the requested scene.',
     'Return verdict approved only if every required criterion passes. Include criteria keys identity, colors, logos, parts, geometry, artifacts and scene, each with passed and notes.',
-    'Use the required JSON schema. marketplaceData fields may be null. revisedPrompt must preserve exact product identity and fix defects without redesigning the product.',
+    'Use the required JSON schema. marketplaceData fields may be null. If rejected, return revisedPrompt as a complete corrected generation prompt in English for the next automatic attempt. Preserve exact product identity and fix defects without redesigning the product. Otherwise return an empty string.',
     `Requested scene: ${request.requestedPromptBase}`, `Current prompt: ${request.finalPrompt}`,
   ].join('\n') : buildReviewPrompt(request);
   try {
@@ -460,7 +480,12 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
         ],
         generationConfig: {
           responseMimeType: 'application/json',
-          responseJsonSchema: REVIEW_RESPONSE_SCHEMA,
+          responseJsonSchema: usesApprovedPrompt ? {
+            ...REVIEW_RESPONSE_SCHEMA,
+            properties: { ...REVIEW_RESPONSE_SCHEMA.properties,
+              criteria: { ...REVIEW_RESPONSE_SCHEMA.properties.criteria, minItems: 1 },
+            },
+          } : REVIEW_RESPONSE_SCHEMA,
         },
       },
     });
@@ -469,7 +494,7 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
     const criteria = sanitizeCriteria(parsed.criteria);
     const requiredProductCriteria = ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts', 'scene'];
     const productCriteriaPass = request.generationKind !== 'product' || requiredProductCriteria.every((key) => criteria.some((criterion) => criterion.key === key && criterion.passed));
-    const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' && productCriteriaPass ? 'approved' : 'rejected';
+    const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' && productCriteriaPass && (!usesApprovedPrompt || (criteria.length > 0 && criteria.every((criterion) => criterion.passed))) ? 'approved' : 'rejected';
     const summary = sanitizeText(
       parsed.summary,
       verdict === 'approved'

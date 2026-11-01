@@ -1,3 +1,4 @@
+import { APPROVED_TRY_ON_PROMPT_FORMAT } from '../../../shared/src/approvedTryOnPrompt';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
@@ -136,6 +137,7 @@ export const createGenerationBatchCore = async (
       aspectRatio: validated.aspectRatio,
       imageConfig: validated.imageConfig,
       promptBase: validated.promptBase,
+      ...(validated.approvedPrompts ? { promptFormat: validated.promptFormat } : {}),
       poseIds: validated.poseIds,
       garmentCount: validated.garments.length,
       totalJobs: actualTotalJobs,
@@ -206,7 +208,10 @@ export const createGenerationBatchCore = async (
 
     for (const { garment, pose } of compatibleCombinations) {
       const selectedGarmentPhoto = resolveGarmentPhotoForPose(garment, pose);
-      const promptCase = resolveJobPromptCase(garment.garmentBodyArea ?? null, promptCases);
+      const approvedPrompt = validated.approvedPrompts?.find((entry) => entry.garmentId === garment.id)?.text;
+      const promptCase = approvedPrompt !== undefined
+        ? { promptCaseKey: null, promptCaseText: null }
+        : resolveJobPromptCase(garment.garmentBodyArea ?? null, promptCases);
       const jobRef = db.collection('jobs').doc();
       const jobDraft = buildJobDraft(
         {
@@ -219,6 +224,7 @@ export const createGenerationBatchCore = async (
         validated.promptBase,
         model.identityTraits || null,
         autoReviewMaxAttempts,
+        approvedPrompt,
       );
       const jobData: Omit<Job, 'id'> = {
         batchId: batchRef.id,
@@ -309,6 +315,11 @@ export const createGenerationBatchCore = async (
 export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promise<CreateGenerationBatchResponse>>(
   async (request) => {
     await assertCallableRoles(request, ['admin', 'operador']);
+    // Old stored jobs and the separate automation import keep the legacy path.
+    // Outdated wizard clients must reload instead of silently receiving hidden instructions.
+    if (request.data?.promptFormat !== APPROVED_TRY_ON_PROMPT_FORMAT) {
+      throw new HttpsError('failed-precondition', 'Actualiza la aplicación para revisar y aprobar el prompt completo antes de crear el lote.');
+    }
     return createGenerationBatchCore(request.data, request.auth!.uid);
   },
 );

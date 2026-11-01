@@ -1,4 +1,5 @@
 import type { TimestampLike, HealthStatus } from './common';
+import type { ProductSceneType } from './productGeneration';
 
 export type SystemAlertId =
   | 'daily_cost'
@@ -38,6 +39,12 @@ export interface SystemConfig {
   systemPromptFullOutfit: string | null;
   systemPromptTopOnly: string | null;
   systemPromptBottomOnly: string | null;
+  systemPromptIdentity: string | null;
+  systemPromptInternalLabels: string | null;
+  systemPromptAccessories: string | null;
+  systemPromptCarryAccessory: string | null;
+  systemPromptProduct: string | null;
+  systemProductScenePrompts: Partial<Record<ProductSceneType, string>> | null;
   updatedAt?: TimestampLike | null;
   updatedByUid?: string | null;
   updatedByDisplayName?: string | null;

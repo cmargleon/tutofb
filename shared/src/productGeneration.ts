@@ -1,4 +1,5 @@
 import type { ProductSceneInput } from './types/productGeneration';
+import type { SystemConfig } from './types/system';
 
 export const PRODUCT_IDENTITY_RULES = 'Preserve the exact referenced product: shape, geometry, proportions, colors, materials, logos, lettering, prints and every physical part. Do not redesign, add or remove pieces. References show the same product, not a person or pose. Photorealistic commercial product photography, no invented branding or text.';
 export const DEFAULT_PRODUCT_PROMPT = 'Photorealistic commercial product photography. Keep the product clearly visible, with realistic lighting and detailed materials.';
@@ -11,6 +12,7 @@ export const PRODUCT_SCENES = [
   { type: 'human_use_2', label: 'Persona usando el producto · otra vista', prompt: 'A person naturally using the exact referenced product for its intended purpose, with a different framing and viewpoint from the first human-use scene. Show a clear, believable interaction, not simply posing beside it. Use a relatively neutral, uncluttered background in muted tones. Keep the product prominent and clearly visible, with soft realistic lighting and anatomically correct hands and body. Do not invent functionality or attachments.' },
 ] as const;
 
-export const createDefaultProductScenes = (): ProductSceneInput[] => PRODUCT_SCENES.map(({ type, prompt }) => ({ type, prompt }));
+export const createDefaultProductScenes = (config?: Partial<SystemConfig>): ProductSceneInput[] =>
+  PRODUCT_SCENES.map(({ type, prompt }) => ({ type, prompt: config?.systemProductScenePrompts?.[type] ?? prompt }));
 export const buildProductSceneInstructions = (general: string, scene: string): string => [general.trim(), scene.trim()].filter(Boolean).join('\n');
 export const buildProductPrompt = (general: string, scene: string): string => [PRODUCT_IDENTITY_RULES, buildProductSceneInstructions(general, scene)].filter(Boolean).join('\n');

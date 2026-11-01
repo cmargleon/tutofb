@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 // Isolate the real wizard from Firebase: no live reads, uploads or paid generation.
 const previewUrl = process.env.WIZARD_TEST_URL || 'http://localhost:3000';
 const image = (name: string) => ({ name, mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=', 'base64') });
-async function openWizard(page: Page) {
+async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}) {
   page.on('pageerror', (error) => console.error(error.message));
   const hookModule = await (await page.request.get(`${previewUrl}/src/features/generate/wizard/hooks/useGenerateWizard.ts`)).text();
   const routerModule = hookModule.match(/from ["']([^"']*react-router-dom\.js[^"']*)["']/)?.[1];
@@ -19,7 +19,7 @@ async function openWizard(page: Page) {
       selectedClientHasSpreadsheetTemplates: false, loadingSpreadsheetTemplates: false, loadingData: false, error: null });
   ` }));
   await page.route('**/src/features/system/useSystemConfig.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `
-    const config = { disabledProviders: [], batchMaxJobs: 100, systemPromptOverride: null };
+    const config = { disabledProviders: [], batchMaxJobs: 100, systemPromptOverride: null, ...${JSON.stringify(promptConfig)} };
     export const useSystemConfig = () => ({ config, loading: false });
   ` }));
   await page.route('**/src/features/generate/storage.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `
@@ -124,7 +124,7 @@ test('mobile object wizard validates reference limits and restores original prom
   const scenePrompt = scene.getByRole('textbox', { name: 'Prompt de Lifestyle · entorno natural' });
   await scenePrompt.fill('');
   await expect(page.getByRole('button', { name: 'Continuar', exact: true })).toBeDisabled();
-  await scene.getByRole('button', { name: 'Restaurar escena original', exact: true }).click();
+  await scene.getByRole('button', { name: 'Restaurar escena global', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Continuar', exact: true })).toBeEnabled();
   await page.screenshot({ path: '/tmp/tutofb-wizard-product-scenes-mobile.png', fullPage: true });
   await page.getByRole('button', { name: 'Continuar', exact: true }).click();
@@ -132,7 +132,7 @@ test('mobile object wizard validates reference limits and restores original prom
   const prompt = page.getByRole('textbox', { name: 'Instrucciones generales de fotografía de producto' });
   const original = await prompt.inputValue();
   await prompt.fill('Custom instructions');
-  await page.getByRole('button', { name: 'Restaurar instrucciones originales', exact: true }).click();
+  await page.getByRole('button', { name: 'Restaurar instrucciones globales', exact: true }).click();
   await expect(prompt).toHaveValue(original);
   const overflow = await page.evaluate(() => Array.from(document.querySelectorAll('*')).filter(el => el.getBoundingClientRect().right > window.innerWidth + 1).map(el => ({ tag: el.tagName, classes: el.className, width: el.getBoundingClientRect().width })).slice(0, 8));
   expect(overflow).toEqual([]);
@@ -147,4 +147,40 @@ test('mobile object wizard validates reference limits and restores original prom
     expect(entry.prompt).toMatch(/person naturally using/i);
     expect(entry.prompt).toContain('relatively neutral, uncluttered background');
   }
+});
+
+test('global product defaults populate scenes, restore configured values and preserve local edits', async ({ page }) => {
+  await openWizard(page, { systemPromptProduct: 'Global warm lighting', systemProductScenePrompts: { clean: 'Global wooden table' } });
+  await page.getByRole('button', { name: 'Objetos / productos' }).click();
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+  await page.getByLabel('Fotos del mismo objeto').setInputFiles([image('front.png')]);
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+  const scene = page.locator('section').filter({ has: page.getByRole('checkbox', { name: /Lifestyle · entorno natural/ }) });
+  await scene.getByText('Editar instrucciones de la escena', { exact: true }).click();
+  const scenePrompt = scene.getByRole('textbox', { name: 'Prompt de Lifestyle · entorno natural' });
+  await expect(scenePrompt).toHaveValue('Global wooden table');
+  await scenePrompt.fill('Local table');
+  await scene.getByRole('button', { name: 'Restaurar escena global', exact: true }).click();
+  // Restoring collapses the unchanged scene editor.
+  await scene.getByText('Editar instrucciones de la escena', { exact: true }).click();
+  await expect(scenePrompt).toHaveValue('Global wooden table');
+  await scenePrompt.fill('Local table');
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+  await page.getByRole('button', { name: /Seedream v4\.5/ }).click();
+  const prompt = page.getByRole('textbox', { name: 'Instrucciones generales de fotografía de producto' });
+  await expect(prompt).toHaveValue('Global warm lighting');
+  await prompt.fill('Local lighting');
+  await page.getByRole('button', { name: 'Restaurar instrucciones globales', exact: true }).click();
+  await expect(prompt).toHaveValue('Global warm lighting');
+  await prompt.fill('Local lighting');
+  await page.getByRole('button', { name: 'Volver', exact: true }).click();
+  await expect(scenePrompt).toHaveValue('Local table');
+  await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+  await page.getByRole('button', { name: /Seedream v4\.5/ }).click();
+  await expect(prompt).toHaveValue('Local lighting');
+  await page.getByRole('button', { name: 'Crear lote y abrir evaluación (6)', exact: true }).click();
+  await expect(page).toHaveURL(/batchId=product-test/);
+  const request = await page.evaluate(() => (window as any).__productRequest);
+  expect(request.prompt).toBe('Local lighting');
+  expect(request.scenes.find((entry: { type: string }) => entry.type === 'clean').prompt).toBe('Local table');
 });

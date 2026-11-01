@@ -3,7 +3,8 @@ import { ProviderCostEstimate } from './ProviderCostEstimate';
 import React, { useState } from 'react';
 import { SourceSpreadsheetMatchSummary } from '../../../shared/src/types';
 import { WizardProviderImageConfig, WizardState } from '../../features/generate/types';
-import { PromptBaseField } from './PromptBaseField';
+import { TryOnPromptFields } from './TryOnPromptFields';
+import { composeApprovedTryOnPrompt, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { ProviderImageConfigSelection } from './ProviderImageConfigSelection';
 import { ProviderSelection } from './ProviderSelection';
 
@@ -14,6 +15,7 @@ interface Props {
   submitButtonLabel: string;
   promptSourceLabel: string;
   disabledProviders?: string[];
+  defaultProductPrompt?: string;
   productDraftPreparationStatus: WizardState['productDraftPreparation']['status'];
   productDraftPreparationError: string | null;
   sourceSpreadsheet: WizardState['sourceSpreadsheet'];
@@ -22,6 +24,7 @@ interface Props {
   onProviderChange: (provider: WizardState['provider']) => void;
   onProviderImageConfigChange: (config: WizardProviderImageConfig) => void;
   onPromptChange: (prompt: string) => void;
+  onPromptBlocksChange: (blocks: WizardState['tryOnPromptBlocks']) => void;
   onSubmit: () => void;
 }
 
@@ -32,6 +35,7 @@ export const BatchStep: React.FC<Props> = ({
   submitButtonLabel,
   promptSourceLabel,
   disabledProviders,
+  defaultProductPrompt,
   productDraftPreparationStatus,
   productDraftPreparationError,
   sourceSpreadsheet,
@@ -40,6 +44,7 @@ export const BatchStep: React.FC<Props> = ({
   onProviderChange,
   onProviderImageConfigChange,
   onPromptChange,
+  onPromptBlocksChange,
   onSubmit,
 }) => {
   const [providerChosen, setProviderChosen] = useState(false);
@@ -63,7 +68,12 @@ export const BatchStep: React.FC<Props> = ({
   const selectedProviderDisabled = Boolean(disabledProviders?.includes(state.provider));
   const sourceSpreadsheetPending = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'uploading';
   const sourceSpreadsheetFailed = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'failed';
+  const invalidPrompt = state.generationKind === 'garment' && state.garments.some((garment) => {
+    try { validateApprovedTryOnPrompt(composeApprovedTryOnPrompt(state.prompt, state.tryOnPromptBlocks, garment.garmentBodyArea)); return false; }
+    catch { return true; }
+  });
   const isSubmitDisabled = (
+    invalidPrompt ||
     isSubmitting
     || totalJobs === 0
     || spreadsheetPreparationPending
@@ -162,10 +172,10 @@ export const BatchStep: React.FC<Props> = ({
             {[...new Set(state.garments.map((item) => item.originalPhotos.length))].sort().map((references) => <ProviderCostEstimate key={references}
               config={state.providerImageConfigs[state.provider]} referenceCount={references}
               imageCount={state.garments.filter((item) => item.originalPhotos.length === references).length * state.productScenes.length} />)}
-            <ProductPromptField value={state.prompt} scenes={state.productScenes} disabled={isSubmitting} onChange={onPromptChange} />
+            <ProductPromptField value={state.prompt} scenes={state.productScenes} defaultPrompt={defaultProductPrompt} disabled={isSubmitting} onChange={onPromptChange} />
           </> : <>
             <ProviderCostEstimate config={state.providerImageConfigs[state.provider]} imageCount={totalJobs} referenceCount={2} />
-            <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={promptSourceLabel} />
+            <TryOnPromptFields state={state} onPromptChange={onPromptChange} onBlocksChange={onPromptBlocksChange} sourceLabel={promptSourceLabel} />
           </>}
 
           <button

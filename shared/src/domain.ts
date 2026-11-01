@@ -311,10 +311,10 @@ const buildModelIdentityTraitLines = (identityTraits?: ModelIdentityTraits | nul
     .filter((entry): entry is string => Boolean(entry));
 };
 
-export const buildModelIdentityPromptBlock = (identityTraits?: ModelIdentityTraits | null): string => {
+export const buildModelIdentityPromptBlock = (identityTraits?: ModelIdentityTraits | null, instructions?: string): string => {
   const traitLines = buildModelIdentityTraitLines(identityTraits);
 
-  return [
+  const base = instructions ?? [
     'IDENTITY PRESERVATION RULES (ABSOLUTE PRIORITY):',
     '- The generated person must remain the exact same individual shown in the selected pose/model reference image.',
     '- Treat the pose/model image as the source of truth for identity.',
@@ -323,6 +323,9 @@ export const buildModelIdentityPromptBlock = (identityTraits?: ModelIdentityTrai
     '- Do NOT swap to a different person, ethnicity, age group, face, or hairstyle.',
     '- Do NOT age up, age down, beautify, editorialize, or stylize the face in a way that changes who the model is.',
     '- Brand styling, mood, polish, and expression can be adjusted only if the selected model still reads as the same person.',
+  ].join('\n');
+  return [
+    base,
     ...(traitLines.length > 0
       ? [
           'IDENTITY ANCHORS FROM THE SELECTED MODEL:',

@@ -163,6 +163,12 @@ Lectura/escritura:
 - Functions la cachea desde `functions/src/admin/systemConfig.ts`
 - solo `admin` puede mutarla desde `/configuracion` o callables asociados
 
+### Prompts aprobados del wizard de prendas
+
+El último paso compone y previsualiza un prompt completo por prenda. Los trabajos con `promptFormat: approved-try-on-v1` guardan inicialmente ese texto exacto en `requestedPromptBase`, `promptBase` y `finalPrompt`; cada salida conserva también el texto usado. Functions valida el formato y hasta 30.000 caracteres por prompt, sin añadir bloques. Si Gemini rechaza una imagen y quedan intentos, su `revisedPrompt` se aplica automáticamente tanto en prendas como en productos. El prompt original se conserva en `requestedPromptBase`; si no hay corrección, se mantiene el prompt actual. Las correcciones también pueden cargarse en el editor para regenerar manualmente.
+
+La compatibilidad se limita a los trabajos sin `promptFormat` y al importador de automatizaciones existente, que conservan la composición y los reintentos históricos. No se migran documentos existentes. El callable del wizard rechaza clientes antiguos y pide actualizar la aplicación; nunca convierte una petición antigua silenciosamente al nuevo formato. El flujo de productos/objetos conserva sus reglas actuales.
+
 ## Auth y roles
 
 Roles soportados:

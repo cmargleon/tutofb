@@ -1,3 +1,4 @@
+import { ReviewPromptProposal } from './ReviewPromptProposal';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
 import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
@@ -454,6 +455,9 @@ export const JobEvaluationCard: React.FC<Props> = ({
               </div>
             ) : null}
 
+            {job.promptFormat === 'approved-try-on-v1' && role.canRegenerate ? <ReviewPromptProposal
+              text={activeReview?.revisedPrompt} disabled={controlsDisabled}
+              onEdit={(prompt) => onUpdateDraft({ provider: draft.provider, prompt })} /> : null}
             {/* Prompt textarea */}
             {role.canRegenerate ? (
               <div>
@@ -464,7 +468,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
                   disabled={controlsDisabled}
                   rows={3}
                   className="w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
-                  placeholder="Prompt base para regenerar..."
+                  placeholder="Prompt completo para regenerar..."
                 />
               </div>
             ) : null}

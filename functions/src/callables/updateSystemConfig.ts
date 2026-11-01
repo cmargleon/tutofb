@@ -3,11 +3,12 @@ import { onCall } from 'firebase-functions/v2/https';
 import { UpdateSystemConfigRequest, UpdateSystemConfigResponse } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { getSystemConfigDocRef, invalidateSystemConfigCache, sanitizeSystemConfig } from '../admin/systemConfig';
+import { assertValidAdditionalSystemPrompts, getSystemConfigDocRef, invalidateSystemConfigCache, sanitizeSystemConfig } from '../admin/systemConfig';
 
 export const updateSystemConfig = onCall<UpdateSystemConfigRequest, Promise<UpdateSystemConfigResponse>>(
   async (request) => {
     await assertCallableRoles(request, ['admin']);
+    assertValidAdditionalSystemPrompts(request.data);
     const db = getAppFirestore();
     const userSnapshot = await db.collection('users').doc(request.auth!.uid).get();
     const updatedByDisplayName =

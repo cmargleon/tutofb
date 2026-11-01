@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import sharp from 'sharp';
-import { buildFinalGenerationPrompt } from '../../../shared/src/domain';
 import { getProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { Job, JobAutoReview, JobLog, JobOutput, Provider } from '../../../shared/src/types';
 import { normalizeProviderImageConfig, summarizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
@@ -27,8 +26,7 @@ import {
 } from '../errors/jobFailure';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
-import { PRODUCT_IDENTITY_RULES } from '../automation/presets';
-import { shouldBackstopPendingJob } from './jobWorker.helpers';
+import { buildAutomaticRetryPromptPatch, shouldBackstopPendingJob } from './jobWorker.helpers';
 
 const db = getAppFirestore();
 const bucket = admin.storage().bucket();
@@ -274,6 +272,7 @@ const persistGeneratedAttempt = async ({
     garmentName: claimedJob.garmentName,
     provider: providerResult.provider,
     requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
+    ...(claimedJob.promptFormat ? { promptFormat: claimedJob.promptFormat } : {}),
     promptBase: claimedJob.promptBase,
     finalPrompt: claimedJob.finalPrompt,
     aspectRatio: normalizedImageConfig.aspectRatio,
@@ -292,7 +291,6 @@ const persistGeneratedAttempt = async ({
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
-  const resolvedPromptBase = typeof nextPromptBase === 'string' ? nextPromptBase.trim() : claimedJob.promptBase;
   const shouldResetForNextAttempt = nextStatus === 'pending' || nextStatus === 'failed';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const baseJobUpdate: Record<string, any> = {
@@ -336,13 +334,7 @@ const persistGeneratedAttempt = async ({
   }
 
   if (nextStatus === 'pending') {
-    baseJobUpdate.promptBase = resolvedPromptBase;
-    baseJobUpdate.finalPrompt = claimedJob.generationKind === 'product' ? `${PRODUCT_IDENTITY_RULES}\n${claimedJob.requestedPromptBase || claimedJob.promptBase}\nCorrection: ${resolvedPromptBase}` : buildFinalGenerationPrompt(
-      resolvedPromptBase,
-      claimedJob.garmentReferenceImageType || (claimedJob.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
-      claimedJob.promptCaseText,
-      claimedJob.modelIdentityTraitsSnapshot || null,
-    );
+    Object.assign(baseJobUpdate, buildAutomaticRetryPromptPatch(claimedJob, nextPromptBase));
   }
 
   const committed = await db.runTransaction(async (transaction) => {
@@ -723,6 +715,7 @@ export const processJob = async (
         garmentPhotoFileName: claimedJob.garmentPhotoFileName || null,
         garmentView: claimedJob.garmentView || null,
         requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
+        ...(claimedJob.promptFormat ? { promptFormat: claimedJob.promptFormat } : {}),
         promptBase: claimedJob.promptBase,
       },
     });
@@ -774,6 +767,7 @@ export const processJob = async (
         poseId: claimedJob.poseImageId,
         userUid: claimedJob.createdByUid,
         requestedPromptBase: claimedJob.requestedPromptBase || claimedJob.promptBase,
+        ...(claimedJob.promptFormat ? { promptFormat: claimedJob.promptFormat } : {}),
         promptBase: claimedJob.promptBase,
         finalPrompt: claimedJob.finalPrompt,
         modelIdentityTraitsSnapshot: claimedJob.modelIdentityTraitsSnapshot || null,
@@ -805,7 +799,6 @@ export const processJob = async (
       }
 
       if (generationAttempt < maxAutoReviewAttempts) {
-        const revisedPrompt = (review.revisedPrompt || claimedJob.promptBase).trim() || claimedJob.promptBase;
         const failureInfo = buildGeminiRejectedFailureInfo({
           summary: review.summary,
           attemptNumber: generationAttempt,
@@ -826,7 +819,7 @@ export const processJob = async (
           nextStatus: 'pending',
           autoReview: storedReview,
           failureInfo,
-          nextPromptBase: revisedPrompt,
+          nextPromptBase: review.revisedPrompt || undefined,
           lastError: toFailureSummary(failureInfo),
         });
         return;

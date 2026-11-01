@@ -19,7 +19,7 @@ export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<Rege
     .map((entry) => ({
       jobId: typeof entry?.jobId === 'string' ? entry.jobId.trim() : '',
       provider: typeof entry?.provider === 'string' ? entry.provider.trim() : '',
-      prompt: typeof entry?.prompt === 'string' ? entry.prompt.trim() : '',
+      prompt: typeof entry?.prompt === 'string' ? entry.prompt : undefined,
     }))
     .filter((entry) => entry.jobId);
 
@@ -60,7 +60,9 @@ export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<Rege
     }
 
     const provider = entry.provider || job.provider;
-    const prompt = entry.prompt || (job.promptBase || job.finalPrompt || '').trim();
+    const prompt = job.promptFormat === 'approved-try-on-v1' && job.generationKind !== 'product'
+      ? entry.prompt ?? job.promptBase
+      : entry.prompt?.trim() || (job.promptBase || job.finalPrompt || '').trim();
     if (!isProvider(provider) || isProviderDisabledInSystemConfig(provider, systemConfig)) {
       skippedJobIds.push(entry.jobId);
       continue;

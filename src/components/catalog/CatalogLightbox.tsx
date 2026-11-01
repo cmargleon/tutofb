@@ -1,3 +1,4 @@
+import { ReviewPromptProposal } from '../evaluation/ReviewPromptProposal';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AlertCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, RefreshCw, X } from 'lucide-react';
@@ -619,6 +620,9 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                 </div>
 
                 <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                  {job.promptFormat === 'approved-try-on-v1' ? <ReviewPromptProposal
+                    text={(displayedOutput?.autoReview || job.latestAutoReview)?.revisedPrompt}
+                    disabled={controlsDisabled} onEdit={(prompt) => job.id && updateDraft(job.id, { provider: draft.provider, prompt })} /> : null}
                   <label className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Prompt</label>
                   <textarea
                     value={draft.prompt}

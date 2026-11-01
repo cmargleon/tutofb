@@ -6,10 +6,12 @@ interface PromptBaseFieldProps {
   sourceLabel: string;
 }
 
-export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChange, sourceLabel }) => (
-  <div>
-    <label className="mb-2 block text-sm font-medium text-slate-700">Prompt base</label>
+export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChange, sourceLabel }) => {
+  const id = React.useId();
+  return <div>
+    <label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-700">Prompt general</label>
     <textarea
+      id={id}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       rows={5}
@@ -17,9 +19,8 @@ export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChang
       placeholder="Describe la instrucción base del try-on"
     />
     <p className="mt-2 text-xs text-slate-500">
-      Se precarga desde {sourceLabel} y puedes ajustarlo antes de crear el lote. Tambien se usa como base
-      directa del prompt final, suma el bloque A/B/C segun el tipo de prenda y agrega una nota extra
-      cuando la prenda es multiangulo.
+      Se precarga desde {sourceLabel}. Los bloques conocidos de etiquetas y accesorios se muestran
+      en campos separados. Revisa también las instrucciones personalizadas del prompt general.
     </p>
-  </div>
-);
+  </div>;
+};

@@ -1,3 +1,4 @@
+import { AutomationBudgetSettings } from '../components/automation/AutomationBudgetSettings';
 import React, { useEffect, useState } from 'react';
 import { Bell, Settings, Sliders, Cpu, ToggleLeft, FileText } from 'lucide-react';
 import { PageHeader, LoadingBlock } from '../components/ui';
@@ -268,6 +269,8 @@ export const Configuracion: React.FC = () => {
           </div>
         )}
       </div>
+
+      <AutomationBudgetSettings />
 
       {/* Section 2: Queue parameters */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

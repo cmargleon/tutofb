@@ -7,7 +7,7 @@ import { auth, db } from '../firebase';
 import { syncUserClaims } from '../features/auth/firebase';
 import { User as AppUser } from '../../shared/src/types';
 
-export const Login: React.FC = () => {
+export const Login: React.FC<{ redirectTo?: string }> = ({ redirectTo = '/' }) => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,7 +37,7 @@ export const Login: React.FC = () => {
 
       await syncUserClaims(user.uid);
       await user.getIdToken(true);
-      navigate('/');
+      navigate(redirectTo);
     } catch (submitError: any) {
       console.error(submitError);
       setError(submitError.message || 'No se pudo iniciar sesión.');

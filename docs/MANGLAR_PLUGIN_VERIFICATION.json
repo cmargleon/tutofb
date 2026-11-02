@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-11-02T20:55:55.907Z",
+  "resource": "https://tutofb-260320-1003.web.app/api/manglar/mcp",
+  "discoveryPassed": true,
+  "protocolInitializationPassed": true,
+  "tools": [
+    "manglar_capabilities",
+    "manglar_list_drive_files",
+    "manglar_list_models",
+    "manglar_prepare_plan",
+    "manglar_get_plan",
+    "manglar_execute_plan",
+    "manglar_get_job"
+  ],
+  "anonymousCallsRejected": true,
+  "invalidTokenExchangeRejected": true,
+  "realChatGPTMetadataVerified": true,
+  "consentPageServed": true,
+  "anonymousConsentRejected": true,
+  "nativeChatGPTLinkCompleted": false,
+  "pending": "User must add the private MCP plugin and sign in to authorize it in ChatGPT.",
+  "paidGeneration": false,
+  "credentialsPrinted": false
+}

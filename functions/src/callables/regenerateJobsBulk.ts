@@ -69,7 +69,7 @@ export const regenerateJobsBulk = onCall<RegenerateJobsBulkRequest, Promise<Rege
     }
 
     try {
-      const patch = buildRegenerateJobPatch(job, provider, prompt);
+      const patch = buildRegenerateJobPatch(job, provider, prompt, systemConfig.jobMaxRetries);
       const jobRef = db.collection('jobs').doc(job.id!);
 
       writeBatch.update(jobRef, {

@@ -1,0 +1,276 @@
+{
+  "verifiedAt": "2026-11-01T17:46:30.599729+02:00",
+  "baselineCommit": "051449a",
+  "behavior": "all_scenes_independent",
+  "manualWizardSourceUnchanged": true,
+  "validation": {
+    "frontendTypecheck": {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    "functionsTypecheck": {
+      "command": "npm --prefix functions run lint",
+      "status": "passed"
+    },
+    "functionsBuild": {
+      "command": "npm --prefix functions run build",
+      "status": "passed"
+    },
+    "frontendBuild": {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    "unitSuite": {
+      "command": "npm test",
+      "passed": 121,
+      "failed": 0,
+      "skipped": 2,
+      "skipReason": "The two emulator integration suites run separately."
+    },
+    "integration": {
+      "project": "demo-manglar-automation",
+      "command": "firebase emulators:exec --project demo-manglar-automation --only auth,firestore,storage 'node --import tsx --test --test-concurrency=1 tests/automation.integration.test.ts tests/automationAdvanced.integration.test.ts'",
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "providers": "simulated"
+    },
+    "browser": {
+      "specs": [
+        "e2e/automation-navigation.spec.ts",
+        "e2e/automation-settings.spec.ts",
+        "e2e/system-prompts.spec.ts",
+        "e2e/wizard-products.spec.ts"
+      ],
+      "passed": 13,
+      "failed": 0,
+      "firebase": "isolated by test stubs",
+      "providers": "simulated",
+      "baseURL": "http://localhost:3002"
+    },
+    "baselineObservation": "An intermittent inherited mobile overflow assertion also failed against a clean temporary copy of 051449a. The final 13-spec browser run passed without changing wizard source.",
+    "diffCheck": "passed"
+  },
+  "deployment": {
+    "project": "tutofb-260320-1003",
+    "region": "us-central1",
+    "status": "complete",
+    "functions": [
+      "automationApi",
+      "createAutomationJob",
+      "retryAutomationJob",
+      "createAutomationPlan",
+      "getAutomationPlan",
+      "executeAutomationPlanCallable",
+      "resumeAutomationJob",
+      "updateClientAutomation",
+      "automationIntakeWorker",
+      "automationGenerationProgress",
+      "recoverAutomationImports",
+      "createGenerationBatch",
+      "createProductGenerationBatch",
+      "processJobOnCreate",
+      "processJobOnRequeue",
+      "processJobOnActivation",
+      "requeueExpiredJobsOnSchedule",
+      "regenerateJob",
+      "regenerateJobsBulk",
+      "regenerateFailedBatchJobs",
+      "retryJobAutoReview",
+      "updateSystemConfig",
+      "getSystemConfig",
+      "onJobStatusChange"
+    ],
+    "functionCount": 24,
+    "firestoreRules": "deployed",
+    "hosting": "deployed",
+    "hostingURL": "https://tutofb-260320-1003.web.app",
+    "finalRefinementFunctions": [
+      "automationApi",
+      "createAutomationJob",
+      "retryAutomationJob",
+      "executeAutomationPlanCallable",
+      "automationIntakeWorker"
+    ],
+    "driveServiceAccountParameter": "disabled",
+    "parameterConfiguredBy": "Firebase CLI prompt; no secret edited",
+    "initialNonInteractiveAttempt": "Stopped before upload because Firebase required a value for the new Drive parameter; interactive retry and final non-interactive deployment completed."
+  },
+  "remoteReadOnlyVerification": {
+    "apiVersion": 2,
+    "anonymousStatus": 401,
+    "allowedClientIds": [
+      "automation-e2e-test"
+    ],
+    "automationBudget": {
+      "defaultBudgetUsd": 10,
+      "maxBudgetUsd": 100,
+      "maxReviewAttempts": 3,
+      "maxOperationalRetries": 2
+    },
+    "paidPlanning": false,
+    "explicitItemMappingRequired": true,
+    "removedControlsPresent": false,
+    "hostingMatchesBuild": true,
+    "productionGenerationExecuted": false
+  },
+  "identity": {
+    "principalId": "chatgpt-work",
+    "active": true,
+    "allowedClientIds": [
+      "automation-e2e-test"
+    ],
+    "scopes": [
+      "uploads:write",
+      "jobs:create",
+      "jobs:read"
+    ],
+    "permissionsExpanded": false
+  },
+  "productionPaidGenerationExecuted": false,
+  "gitCommitOrPushPerformed": false,
+  "dependenciesChanged": false,
+  "pendingExternalConfiguration": [
+    "Dedicated readonly Drive service account and folder sharing",
+    "Scoped IAM token issuance and enabled APIs",
+    "Real client folder/default settings and explicit principal authorization",
+    "External Work trusted HTTP tool and credential-store connection",
+    "Authoritative itemId to Drive file mapping"
+  ],
+  "modifiedFiles": [
+    "docs/AUTOMATION.md",
+    "docs/AUTOMATION_AUTH.md",
+    "docs/AUTOMATION_V2_IMPLEMENTATION.md",
+    "docs/AUTOMATION_V2_VERIFICATION.json",
+    "e2e/automation-navigation.spec.ts",
+    "e2e/automation-settings.spec.ts",
+    "e2e/system-prompts.spec.ts",
+    "firestore.rules",
+    "functions/src/admin/systemConfig.ts",
+    "functions/src/analytics/geminiUsage.ts",
+    "functions/src/automation/api.ts",
+    "functions/src/automation/budget.ts",
+    "functions/src/automation/clientConfig.ts",
+    "functions/src/automation/domain.ts",
+    "functions/src/automation/drive.ts",
+    "functions/src/automation/imports.ts",
+    "functions/src/automation/persistence.ts",
+    "functions/src/automation/pipelines.ts",
+    "functions/src/automation/plans.ts",
+    "functions/src/automation/presets.ts",
+    "functions/src/automation/recovery.ts",
+    "functions/src/automation/results.ts",
+    "functions/src/automation/worker.ts",
+    "functions/src/callables/classifyGarmentViewsWithGemini.ts",
+    "functions/src/callables/createGenerationBatch.ts",
+    "functions/src/callables/createProductGenerationBatch.ts",
+    "functions/src/callables/regenerateFailedBatchJobs.ts",
+    "functions/src/callables/regenerateJob.helpers.ts",
+    "functions/src/callables/regenerateJob.ts",
+    "functions/src/callables/regenerateJobsBulk.ts",
+    "functions/src/callables/retryJobAutoReview.ts",
+    "functions/src/callables/updateSystemConfig.ts",
+    "functions/src/index.ts",
+    "functions/src/review/geminiImageReview.ts",
+    "functions/src/triggers/onJobStatusChange.ts",
+    "functions/src/workers/jobWorker.helpers.ts",
+    "functions/src/workers/jobWorker.ts",
+    "scripts/automation-admin.mjs",
+    "scripts/manglar-work-client.mjs",
+    "shared/src/automationPolicy.ts",
+    "shared/src/types/automation.ts",
+    "shared/src/types/client.ts",
+    "shared/src/types/job.ts",
+    "shared/src/types/system.ts",
+    "src/components/automation/AutomationBudgetSettings.tsx",
+    "src/components/clients/ClientAutomationSection.tsx",
+    "src/components/clients/ClientListItem.tsx",
+    "src/features/automation/firebase.ts",
+    "src/features/automation/useAutomation.ts",
+    "src/features/automation/useAutomationBudgetSettings.ts",
+    "src/features/automation/useClientAutomationConfig.ts",
+    "src/features/clients/firebase.ts",
+    "src/features/queue/firebase.ts",
+    "src/features/system/useSystemConfig.ts",
+    "src/pages/Automation.tsx",
+    "src/pages/Catalogo.tsx",
+    "src/pages/Configuracion.tsx",
+    "tests/automation.integration.test.ts",
+    "tests/automationAdvanced.integration.test.ts",
+    "tests/automationMachineClient.test.ts",
+    "tests/automationPolicy.test.ts"
+  ],
+  "classificationIsolation": {
+    "verifiedAt": "2026-11-01T16:07:19.125900+00:00",
+    "behavior": "article_preparation_incidents_preserved_while_valid_articles_continue",
+    "scope": [
+      "automation pipelines and progress",
+      "item issue contract and API report",
+      "Automation issue display"
+    ],
+    "validation": {
+      "frontendTypecheck": "passed",
+      "functionsTypecheck": "passed",
+      "functionsBuild": "passed",
+      "frontendBuild": "passed",
+      "unitSuite": {
+        "passed": 121,
+        "failed": 0,
+        "skipped": 2
+      },
+      "integration": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0,
+        "project": "demo-manglar-automation",
+        "providers": "simulated"
+      },
+      "browser": {
+        "spec": "e2e/automation-item-incidents.spec.ts",
+        "passed": 1,
+        "failed": 0,
+        "firebase": "isolated by test stubs"
+      },
+      "coverage": [
+        "uncertain classification, wrong article kind, incompatible poses and classification transport failure isolate the affected article",
+        "valid articles finish with incident articles still visible in needs_attention and the API report",
+        "all invalid articles leave no empty batch; intake retries reuse cached analyses",
+        "budget exhaustion stops further paid classification and authorized resume reuses prior analyses",
+        "duplicate intake and generation calls create one batch and one generation per valid scene"
+      ]
+    },
+    "deployment": {
+      "project": "tutofb-260320-1003",
+      "status": "complete",
+      "hosting": "deployed",
+      "order": [
+        "automationApi and automationGenerationProgress",
+        "automationIntakeWorker and hosting"
+      ],
+      "functionStates": [
+        {
+          "name": "projects/tutofb-260320-1003/locations/us-central1/functions/automationApi",
+          "state": "ACTIVE",
+          "updateTime": "2026-11-01T16:03:07.057185702Z"
+        },
+        {
+          "name": "projects/tutofb-260320-1003/locations/us-central1/functions/automationGenerationProgress",
+          "state": "ACTIVE",
+          "updateTime": "2026-11-01T16:03:42.881362107Z"
+        },
+        {
+          "name": "projects/tutofb-260320-1003/locations/us-central1/functions/automationIntakeWorker",
+          "state": "ACTIVE",
+          "updateTime": "2026-11-01T16:06:09.557032737Z"
+        }
+      ]
+    },
+    "remoteReadOnlyVerification": {
+      "hostingMatchesBuild": true,
+      "anonymousCapabilitiesStatus": 401,
+      "productionPaidGenerationExecuted": false
+    },
+    "manualWizardSourceUnchanged": true,
+    "productionPaidGenerationExecuted": false
+  }
+}

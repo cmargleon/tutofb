@@ -1,3 +1,4 @@
+import { reserveAutomationOperation, settleAutomationOperation, GEMINI_OPERATION_HOLD_USD } from '../automation/budget';
 import * as admin from 'firebase-admin';
 import { GeminiUsageFeature, GeminiUsageRecord, GeminiUsageStatus } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
@@ -6,6 +7,7 @@ interface GeminiUsageMetadata {
   promptTokenCount?: unknown;
   candidatesTokenCount?: unknown;
   totalTokenCount?: unknown;
+  thoughtsTokenCount?: unknown;
 }
 
 interface GeminiUsagePayload {
@@ -13,6 +15,7 @@ interface GeminiUsagePayload {
 }
 
 export interface GeminiUsageContext {
+  automation?: { id: string; key: string; kind: 'classification' | 'review'; generation?: { id: string; claimToken: string | null } };
   feature: GeminiUsageFeature;
   model: string;
   batchId?: string | null;
@@ -69,9 +72,10 @@ const toSafeInteger = (value: unknown): number => {
 
 const normalizeUsage = (
   usageMetadata?: GeminiUsageMetadata,
+  includeThinking = false,
 ): CallGeminiGenerateContentResult<never>['usage'] => {
   const inputTokens = toSafeInteger(usageMetadata?.promptTokenCount);
-  const outputTokens = toSafeInteger(usageMetadata?.candidatesTokenCount);
+  const outputTokens = toSafeInteger(usageMetadata?.candidatesTokenCount) + (includeThinking ? toSafeInteger(usageMetadata?.thoughtsTokenCount) : 0);
   const reportedTotalTokens = toSafeInteger(usageMetadata?.totalTokenCount);
   const totalTokens = reportedTotalTokens || inputTokens + outputTokens;
   const estimatedCostUsd =
@@ -94,7 +98,7 @@ const persistGeminiUsage = async ({
   httpStatus,
   errorMessage,
 }: TrackGeminiUsageInput): Promise<void> => {
-  const usage = normalizeUsage(usageMetadata);
+  const usage = normalizeUsage(usageMetadata, Boolean(context.automation));
   const payload: Omit<GeminiUsageRecord, 'id'> = {
     provider: 'gemini',
     feature: context.feature,
@@ -171,6 +175,7 @@ export const callGeminiGenerateContent = async <TPayload>({
     model,
   };
 
+  const operation = context.automation ? await reserveAutomationOperation(context.automation.id, context.automation.key, context.automation.kind, GEMINI_OPERATION_HOLD_USD, context.automation.generation) : null;
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
@@ -235,11 +240,13 @@ export const callGeminiGenerateContent = async <TPayload>({
       console.error('No se pudo registrar el uso exitoso de Gemini.', trackingError);
     }
 
+    if (operation && context.automation) await settleAutomationOperation(context.automation.id, operation, normalizeUsage(parsedUsagePayload?.usageMetadata, Boolean(context.automation)).estimatedCostUsd);
     return {
       payload: parsed,
-      usage: normalizeUsage(parsedUsagePayload?.usageMetadata),
+      usage: normalizeUsage(parsedUsagePayload?.usageMetadata, Boolean(context.automation)),
     };
   } catch (error) {
+    if (operation && context.automation) await settleAutomationOperation(context.automation.id, operation, null);
     if (error instanceof Error && !loggedUsage) {
       const durationMs = Date.now() - startedAt;
       try {

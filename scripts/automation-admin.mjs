@@ -48,6 +48,30 @@ try {
         secretResource: `projects/${projectId}/secrets/${secretId}`, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     } else await ref.update({ secretHashes, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     console.log(JSON.stringify({ action, clientId: principalId, allowedClientIds: current.exists ? previous.allowedClientIds : [testClientId], secretVersion: version.name, credentialPrinted: false }));
+  } else if (action === 'enable-client') {
+    const [clientId, ...folders] = process.argv.slice(3);
+    if (!clientId || !/^[\w-]{1,200}$/.test(clientId)) throw new Error('Provide an explicit client ID.');
+    const client = (await db.collection('clients').doc(clientId).get()).data();
+    if (!client || client.status === 'archived') throw new Error('Client not available.');
+    if (folders.length) {
+      const email = execFileSync('gcloud', ['functions', 'describe', 'automationApi', '--gen2', '--region=us-central1', `--project=${projectId}`, '--format=value(serviceConfig.environmentVariables.AUTOMATION_DRIVE_SERVICE_ACCOUNT)'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      if (!/^[\w.-]+@[\w.-]+\.iam\.gserviceaccount\.com$/.test(email)) throw new Error('Dedicated Drive identity is not configured.');
+      process.env.AUTOMATION_DRIVE_SERVICE_ACCOUNT = email;
+    }
+    admin.initializeApp({ projectId, credential: { getAccessToken: async () => ({ access_token: cloudToken(), expires_in: 300 }) } });
+    // Use the backend's validation and transaction, with the operator's IAM-authenticated database.
+    // Never provision a human account, bypass validation, or pass this credential to Work.
+    const { saveClientAutomation } = require('../functions/lib/functions/src/automation/clientConfig.js');
+    const automation = await saveClientAutomation({ clientId, automation: { ...client.automation, enabled: true,
+      driveFolderIds: [...new Set([...(client.automation?.driveFolderIds || []), ...folders])] } }, db);
+    console.log(JSON.stringify({ action, clientId, automation, credentialsPrinted: false }));
+  } else if (action === 'set-clients') {
+    const ids = [...new Set(process.argv.slice(3))];
+    if (!ids.length || ids.some((id) => !/^[\w-]{1,200}$/.test(id))) throw new Error('Provide explicit client IDs; wildcards are not allowed.');
+    const clients = await db.getAll(...ids.map((id) => db.collection('clients').doc(id)));
+    if (clients.some((client) => !client.exists || client.data().status === 'archived' || client.data().automation?.enabled !== true)) throw new Error('Every client must exist, be active, and have automation explicitly enabled.');
+    await ref.update({ allowedClientIds: ids, version: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    console.log(JSON.stringify({ clientId: principalId, allowedClientIds: ids, previousTokensRevoked: true, credentialsPrinted: false }));
   } else if (action === 'revoke') {
     await ref.update({ active: false, version: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     console.log('Principal revoked; all access tokens immediately invalid. Secret retained in Secret Manager for audit.');
@@ -55,6 +79,6 @@ try {
     const snapshot = await ref.get();
     const data = snapshot.data();
     console.log(JSON.stringify({ exists: snapshot.exists, clientId: principalId, active: data?.active, allowedClientIds: data?.allowedClientIds, allowedJobTypes: data?.allowedJobTypes, scopes: data?.scopes, secretResource: data?.secretResource }));
-  } else throw new Error('Usage: node scripts/automation-admin.mjs provision|rotate|revoke|inspect');
+  } else throw new Error('Usage: node scripts/automation-admin.mjs provision|rotate|revoke|inspect|enable-client CLIENT_ID [FOLDER_ID...]|set-clients CLIENT_ID...');
 } catch (error) { console.error(error.message); process.exitCode = 1; }
 finally { await db.terminate(); }

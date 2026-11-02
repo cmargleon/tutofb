@@ -80,8 +80,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /automationPlans/{id} {
+      allow read: if isAdmin() || (isActiveUser() && currentRole() == 'operador' && resource.data.createdByUid == request.auth.uid);
+      allow write: if false;
+    }
+
     match /automationPrincipals/{id} { allow read, write: if false; }
     match /automationAccessTokens/{id} { allow read, write: if false; }
+    match /automationOAuth/{id} { allow read, write: if false; }
 
     match /automationKeys/{key} {
       allow read, write: if false;
@@ -100,7 +106,9 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow read: if canReview();
-      allow create, update, delete: if isAdmin();
+      allow create: if isAdmin() && !('automation' in request.resource.data);
+      allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['automation']);
+      allow delete: if isAdmin();
 
       match /spreadsheetTemplates/{templateId} {
         allow read: if canReview();

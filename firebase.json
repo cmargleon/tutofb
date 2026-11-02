@@ -12,6 +12,34 @@
     ],
     "rewrites": [
       {
+        "source": "/api/manglar/**",
+        "function": {
+          "functionId": "manglarMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/.well-known/oauth-protected-resource",
+        "function": {
+          "functionId": "manglarMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/.well-known/oauth-protected-resource/api/manglar/mcp",
+        "function": {
+          "functionId": "manglarMcp",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/.well-known/oauth-authorization-server",
+        "function": {
+          "functionId": "manglarMcp",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/automation/**",
         "function": {
           "functionId": "automationApi",
@@ -21,6 +49,21 @@
       {
         "source": "**",
         "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/automation/connect",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-store"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "no-referrer"
+          }
+        ]
       }
     ]
   },

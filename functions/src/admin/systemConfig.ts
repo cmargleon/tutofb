@@ -1,3 +1,4 @@
+import { DEFAULT_AUTOMATION_BUDGET, validateAutomationBudget } from '../../../shared/src/automationPolicy';
 import {
   DEFAULT_TRY_ON_PROMPT_CASES,
 } from '../../../shared/src/domain';
@@ -12,6 +13,7 @@ const CONFIG_COLLECTION = 'system_config';
 const CONFIG_DOC_ID = 'main';
 
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
+  automationBudget: DEFAULT_AUTOMATION_BUDGET,
   jobMaxRetries: getJobMaxRetries(),
   jobRetryDelayMs: getJobRetryDelayMs(),
   batchMaxJobs: getBatchMaxJobs(),
@@ -45,7 +47,14 @@ export const assertValidAdditionalSystemPrompts = (input: Partial<SystemConfig>)
   }
 };
 
+// A malformed automation-only document must not break the manual generation configuration.
+const readAutomationBudget = (input: SystemConfig['automationBudget']) => {
+  try { return validateAutomationBudget(input ?? DEFAULT_AUTOMATION_BUDGET); }
+  catch { return { ...DEFAULT_AUTOMATION_BUDGET }; }
+};
+
 export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undefined): SystemConfig => ({
+  automationBudget: readAutomationBudget(input?.automationBudget),
   jobMaxRetries: typeof input?.jobMaxRetries === 'number' && input.jobMaxRetries >= 0 ? Math.round(input.jobMaxRetries) : DEFAULT_SYSTEM_CONFIG.jobMaxRetries,
   jobRetryDelayMs: typeof input?.jobRetryDelayMs === 'number' && input.jobRetryDelayMs >= 0 ? Math.round(input.jobRetryDelayMs) : DEFAULT_SYSTEM_CONFIG.jobRetryDelayMs,
   batchMaxJobs: typeof input?.batchMaxJobs === 'number' && input.batchMaxJobs >= 1 ? Math.round(input.batchMaxJobs) : DEFAULT_SYSTEM_CONFIG.batchMaxJobs,

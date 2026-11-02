@@ -44,7 +44,7 @@ export const regenerateJob = onCall<RegenerateJobRequest, Promise<RegenerateJobR
       : null;
   try {
     await jobRef.update({
-      ...buildRegenerateJobPatch(job, provider || '', prompt),
+      ...buildRegenerateJobPatch(job, provider || '', prompt, systemConfig.jobMaxRetries),
       manualRegenerationCount: admin.firestore.FieldValue.increment(1),
       ...buildRegenerationReviewSignalsPatch({
         job,

@@ -217,5 +217,7 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "automationOAuth", "fieldPath": "expiresAt", "ttl": true, "indexes": [] }
+  ]
 }

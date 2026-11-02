@@ -7,6 +7,7 @@ import { lazyRoute } from './lazyRoute';
 
 const Layout = lazyRoute('layout', () => import('../components/Layout').then((module) => ({ default: module.Layout })));
 const Login = lazyRoute('login', () => import('../pages/Login').then((module) => ({ default: module.Login })));
+const ManglarConnect = lazyRoute('manglar-connect', () => import('../pages/ManglarConnect').then((module) => ({ default: module.ManglarConnect })));
 const Dashboard = lazyRoute('dashboard', () => import('../pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Users = lazyRoute('users', () => import('../pages/Users').then((module) => ({ default: module.Users })));
 const Clients = lazyRoute('clients', () => import('../pages/Clients').then((module) => ({ default: module.Clients })));
@@ -72,6 +73,7 @@ export const AppRouter: React.FC = () => {
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/automation/connect" element={<PageErrorBoundary><ManglarConnect /></PageErrorBoundary>} />
 
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<PageErrorBoundary><Dashboard /></PageErrorBoundary>} />

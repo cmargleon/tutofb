@@ -3,8 +3,8 @@ import { buildFinalGenerationPrompt } from '../../../shared/src/domain';
 import { PRODUCT_IDENTITY_RULES } from '../automation/presets';
 import { Job } from '../../../shared/src/types';
 
-export const shouldBackstopPendingJob = (job: Pick<Job, 'status' | 'retryNotBefore' | 'claimToken'>): boolean => {
-  if (job.status !== 'pending') {
+export const shouldBackstopPendingJob = (job: Pick<Job, 'status' | 'retryNotBefore' | 'claimToken' | 'automationManaged' | 'automationGate'>): boolean => {
+  if (job.status !== 'pending' || (job.automationManaged && job.automationGate)) {
     return false;
   }
 
@@ -17,7 +17,8 @@ export const shouldBackstopPendingJob = (job: Pick<Job, 'status' | 'retryNotBefo
 
 // Use Gemini's correction for the next attempt while retaining the original requested prompt.
 export const buildAutomaticRetryPromptPatch = (job: Job, nextPromptBase?: string): Partial<Job> => {
-  const promptBase = nextPromptBase?.trim();
+  const promptBase = job.automationManaged ? nextPromptBase : nextPromptBase?.trim();
+  if (job.automationManaged && promptBase?.trim()) return { promptBase, finalPrompt: promptBase };
   if (!promptBase) return {};
   return {
     promptBase,

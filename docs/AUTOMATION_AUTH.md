@@ -1,3 +1,5 @@
+> Actualización 2 de noviembre de 2026: por autorización del usuario, `chatgpt-work` ahora admite los cinco clientes con estado activo y el de pruebas. Drive está configurado para JISHOP. Se añadió un plugin MCP con OAuth PKCE y consentimiento administrativo que no utiliza el secreto HTTP anterior. La vinculación personal en ChatGPT sigue siendo un paso del usuario: [instalación y funcionamiento actuales](MANGLAR_CHATGPT_PLUGIN.md). Los apartados siguientes documentan el helper HTTP y las pruebas históricas anteriores a esta ampliación.
+
 # Identidad técnica de ChatGPT Work
 
 La autenticación máquina-a-máquina está separada de usuarios humanos y de Firebase Auth. Work no genera Firebase ID tokens. La API ofrece OAuth 2.0 `client_credentials`: la herramienta HTTP segura intercambia su credencial por un bearer opaco de 15 minutos y repite el intercambio automáticamente cuando necesita renovarlo. No utiliza refresh tokens de Firebase ni cuentas de servicio con acceso a datos de producción.

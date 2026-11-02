@@ -79,3 +79,24 @@ test('all terminal states stop immediately even after deadline; cancellation sto
   const controller = new AbortController(); controller.abort();
   await assert.rejects(client.waitForJob({ jobId: 'job', status: 'pending', createdAt: new Date().toISOString() }, { signal: controller.signal }), { name: 'AbortError' });
 });
+
+test('trusted tool prepares and executes a full plan, reads one compact job and downloads a manifest ZIP', async () => {
+  const { ManglarAutomationClient } = await import('../scripts/manglar-work-client.mjs');
+  const calls: string[] = [];
+  const planId = 'a'.repeat(64);
+  const client = new ManglarAutomationClient({ getClientSecret: async () => 'test-only-secret', fetchImpl: async (url: string, options: any) => {
+    calls.push(new URL(url).pathname);
+    if (url.endsWith('/token')) return Response.json({ access_token: 'test', token_type: 'Bearer', expires_in: 900 });
+    assert.equal(options.headers.Authorization, 'Bearer test');
+    if (url.endsWith('/plans')) { assert.equal(JSON.parse(options.body).clientId, 'client'); return Response.json({ planId }); }
+    if (url.endsWith('/execute')) return Response.json({ jobId: 'job', status: 'pending', createdAt: new Date().toISOString() });
+    if (url.endsWith('/download')) return new Response(new Uint8Array([80, 75, 3, 4]), { headers: { 'Content-Type': 'application/zip' } });
+    return Response.json({ jobId: 'job', status: 'completed', items: [{ itemId: 'item', scenes: [] }] });
+  } });
+  assert.equal((await client.preparePlan({ clientId: 'client', inputImages: [{ itemId: 'item', driveFile: { folderId: 'folder', fileId: 'file' } }] })).planId, planId);
+  const job = await client.executePlan(planId); assert.equal(job.jobId, 'job');
+  assert.equal((await client.getJob(job.jobId)).items[0].itemId, 'item');
+  assert.deepEqual([...new Uint8Array(await client.downloadResults(job.jobId))], [80, 75, 3, 4]);
+  assert.equal(calls.filter((path) => path.endsWith('/token')).length, 1);
+  assert.equal(calls.filter((path) => path.includes('/execute')).length, 1);
+});

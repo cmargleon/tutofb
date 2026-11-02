@@ -1,3 +1,5 @@
+import { validateAutomationBudget } from '../../../shared/src/automationPolicy';
+import { HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { onCall } from 'firebase-functions/v2/https';
 import { UpdateSystemConfigRequest, UpdateSystemConfigResponse } from '../../../shared/src/types';
@@ -9,6 +11,10 @@ export const updateSystemConfig = onCall<UpdateSystemConfigRequest, Promise<Upda
   async (request) => {
     await assertCallableRoles(request, ['admin']);
     assertValidAdditionalSystemPrompts(request.data);
+    if (request.data.automationBudget) {
+      try { validateAutomationBudget(request.data.automationBudget); }
+      catch (error) { throw new HttpsError('invalid-argument', (error as Error).message); }
+    }
     const db = getAppFirestore();
     const userSnapshot = await db.collection('users').doc(request.auth!.uid).get();
     const updatedByDisplayName =

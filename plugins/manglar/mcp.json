@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "manglar": {
+      "type": "streamable-http",
+      "url": "https://tutofb-260320-1003.web.app/api/manglar/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": { "mode": "cimd" },
+            "resource": "https://tutofb-260320-1003.web.app/api/manglar/mcp",
+            "baseScopes": ["jobs:read", "jobs:create"]
+          }
+        }
+      }
+    }
+  }
+}

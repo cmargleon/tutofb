@@ -221,3 +221,6 @@ export const permanentlyDeleteClient = async (id: string) => {
   );
   await callable({ id });
 };
+
+export const updateClientAutomation = async (data: import('../../../shared/src/types').UpdateClientAutomationRequest) =>
+  (await httpsCallable<import('../../../shared/src/types').UpdateClientAutomationRequest, { automation: import('../../../shared/src/types').ClientAutomationConfig }>(functions, 'updateClientAutomation')(data)).data;

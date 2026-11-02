@@ -1,3 +1,4 @@
+import type { GeminiUsageContext } from '../analytics/geminiUsage';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
@@ -321,8 +322,10 @@ export const classifyGarmentWithGemini = async ({
   garment,
   userUid,
   categories,
-  fallbackCategoryId,
+  fallbackCategoryId, automation, clientId,
 }: {
+  automation?: GeminiUsageContext['automation'];
+  clientId?: string;
   apiKey: string;
   model: string;
   garment: ClassifyGarmentViewsGarmentInput;
@@ -386,6 +389,7 @@ export const classifyGarmentWithGemini = async ({
     apiKey,
     model,
     context: {
+      ...(automation ? { automation, clientId } : {}),
       feature: 'garment_view_category_color_classification',
       garmentId: garment.garmentId,
       garmentName: garment.garmentName,
@@ -402,6 +406,7 @@ export const classifyGarmentWithGemini = async ({
         },
       ],
       generationConfig: {
+        ...(automation ? { maxOutputTokens: 4096 } : {}),
         responseMimeType: 'application/json',
         responseJsonSchema: GARMENT_CLASSIFICATION_RESPONSE_SCHEMA,
       },

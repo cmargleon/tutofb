@@ -1,5 +1,9 @@
 # Automatización de producción de Manglar
 
+## Actualización del 1 de noviembre de 2026
+
+La automatización incorpora planes, preferencias multicliente y Drive, presupuestos transaccionales y escenas independientes. Cada escena tiene tres intentos de calidad por defecto y no depende de la aprobación de otra. Contratos, precedencia, ejemplos, configuración externa, límites y validación: [implementación actual](AUTOMATION_V2_IMPLEMENTATION.md) y [registro de verificación](AUTOMATION_V2_VERIFICATION.json). Los apartados siguientes conservan contexto del intake original; la especificación actual prevalece en las capacidades ampliadas.
+
 ## Arquitectura encontrada
 
 La app existente es React 19 + Vite + TypeScript. Las páginas coordinan hooks de features y módulos `firebase.ts`; Firebase Auth y los roles `admin`, `operador`, `revisor` protegen las rutas. `src/firebase.ts` conecta servicios reales salvo que `VITE_USE_FIREBASE_EMULATORS=true`.
@@ -68,7 +72,7 @@ También se puede invocar directamente:
 
 `https://us-central1-tutofb-260320-1003.cloudfunctions.net/automationApi`
 
-Para ChatGPT Work se utiliza la identidad técnica **chatgpt-work** con OAuth `client_credentials`, token automático de 15 minutos y acceso únicamente a `automation-e2e-test`. No necesita generar Firebase ID tokens. Configuración exacta, credenciales, almacenamiento seguro, helper HTTP, rotación y prueba real: [AUTOMATION_AUTH.md](AUTOMATION_AUTH.md).
+Para ChatGPT Work se utiliza la identidad técnica **chatgpt-work**, autorizada explícitamente para los cinco clientes con estado activo y el de pruebas el 2 de noviembre de 2026. El [plugin nativo de Manglar](MANGLAR_CHATGPT_PLUGIN.md) añade OAuth PKCE, consentimiento administrativo y conexiones revocables. El helper HTTP conserva su OAuth `client_credentials` independiente: [AUTOMATION_AUTH.md](AUTOMATION_AUTH.md).
 
 El acceso interactivo existente conserva soporte de Firebase ID tokens y usuarios activos autorizados. Esa compatibilidad no concede roles humanos a la identidad técnica. Las rutas de negocio requieren bearer; `POST /token` requiere la credencial del cliente para emitirlo.
 
@@ -103,6 +107,7 @@ jq -n --arg path "$INPUT_PATH" \
   '{source:"gmail", externalId:"gmail:cuenta-cliente:pedido-2026-001",
     gmailMessageId:"ID_REAL_MENSAJE_GMAIL", clientId:$clientId,
     jobType:"garment", modelId:$modelId, preset:"standard",
+    allowEstimatedCosts:true, authorizeClassification:true,
     inputImages:[{itemId:"sku-001",fileName:"frente.jpg",storagePath:$path}],
     metadata:{orderReference:"pedido-2026-001"}}' > /tmp/manglar-job.json
 
@@ -148,7 +153,7 @@ curl --fail-with-body -sS -X POST "$MANGLAR_BASE/jobs/$JOB_ID/retry" \
 
 `pending → importing → processing/review → completed | needs_attention`.
 
-Errores de importación/validación operativa: `failed`. Configuración ausente, clasificación insegura, Drive pendiente o jobs agotados/rechazados: `needs_attention`. `review` indica un intento con resultado aún pendiente/rechazado mientras la cola trabaja. No implica una llamada síncrona de revisión dentro de GET.
+Errores de importación/validación operativa: `failed`. Configuración ausente, clasificación insegura, asociación incompleta de archivos Drive o jobs agotados/rechazados: `needs_attention`. `review` indica un intento con resultado aún pendiente/rechazado mientras la cola trabaja. No implica una llamada síncrona de revisión dentro de GET.
 
 `automationJobs/{id}` guarda IDs externos, fuente, Drive URL, cliente/tipo, estado y timestamps, inputs originales en `sourceImages`, inputs preparados en `inputImages`, outputs aprobados, `batchId`, `generationJobIds`, metadata, preset solicitado/resuelto, modelo y contador/reserva de intake. Los reintentos de generación siguen en `jobs.retryCount`, `generationAttemptCount`, `autoReviewMaxAttempts` y sus logs; no se confunden con los reintentos de intake.
 
@@ -218,13 +223,11 @@ Autenticación técnica: `MANGLAR_WORK_CLIENT_SECRET` está almacenado en Secret
 
 API e importador limitan la concurrencia a una request por instancia para acotar el uso de memoria al decodificar fotos. Los parámetros existentes de batch, timeout, retry y review se mantienen. El despliegue de Functions inyecta defaults de Firebase Params. No editar secretos en archivos versionados. Configurarlos mediante `firebase functions:secrets:set NOMBRE --project tutofb-260320-1003` cuando sea necesario. Requiere los permisos de firma de URL ya usados por el worker actual.
 
-## Drive y callbacks (P2)
+## Drive y callbacks
 
-Existe `functions/src/google/drive.ts`, pero sirve para **exportar spreadsheets** mediante cuenta de servicio/configuración de carpeta. No es prueba de acceso a carpetas entrantes de clientes. No se reutilizan sus credenciales para enumerar arbitrariamente enlaces externos.
+La importación autenticada con Drive API v3 está implementada mediante `inputImages[].driveFile`, con carpetas autorizadas por cliente y asociación explícita `itemId` → archivo/revisión. El enlace de carpeta por sí solo no define artículos. Consulta [configuración e instrucciones actuales](AUTOMATION_V2_IMPLEMENTATION.md#14-configuración-externa-pendiente).
 
-`DriveImportAdapter.importImages(driveUrl, job)` es la interfaz preparada. El adapter por defecto deja el trabajo en atención y permite el fallback manual. Para completarlo falta acordar una de estas autorizaciones: compartir las carpetas entrantes con una cuenta de servicio, o una integración OAuth Drive con consentimiento, almacenamiento/renovación de tokens y acceso mínimo a los archivos correspondientes. El adapter debe usar Drive API v3, listar con paginación/límites, descargar medios con autenticación, respetar shared drives y convertir cada vista a un `AutomationInput` autorizado. Debe definir cómo agrupar artículos, no inferirlo por scraping HTML. No hay credenciales personales ni scraping de links.
-
-`driveUrl` solo conserva contexto en esta versión. ChatGPT Work puede descargar mediante su integración de Drive y mandar bytes a `/uploads`; no necesita que Manglar tenga OAuth Drive. Callbacks no están implementados ni se aceptan como mecanismo funcional: usar polling. No se envían correos ni notificaciones externas.
+`driveUrl` se conserva como contexto para consumidores anteriores. `/uploads` sigue disponible. No se implementaron callbacks ni envío de correos; se conserva el polling existente.
 
 ## Pruebas locales
 

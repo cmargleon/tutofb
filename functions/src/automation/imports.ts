@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { importDriveImage } from './drive';
 import * as admin from 'firebase-admin';
 import { lookup } from 'node:dns/promises';
 import { get } from 'node:https';
@@ -15,7 +17,7 @@ export interface DriveImportAdapter {
 }
 export const pendingDriveAdapter: DriveImportAdapter = {
   async importImages() {
-    throw new AutomationAttentionError('Drive requiere un adapter con acceso autorizado a la carpeta. Sube los archivos mediante el intake y reintenta.');
+    throw new AutomationAttentionError('Una carpeta sola no permite asociar fotos a artículos. Indica itemId y driveFile por fotografía, o utiliza /uploads.');
   },
 };
 const blocked = new BlockList();
@@ -65,12 +67,13 @@ export const importImagesForAutomationJob = async (job: AutomationJob, drive: Dr
   const imported: AutomationInput[] = [];
   for (let index = 0; index < inputs.length; index += 1) {
     const image = inputs[index];
+    if (image.driveFile) { imported.push(await importDriveImage(job.clientId, job.createdByUid, image)); continue; }
     const storagePath = `garments/drafts/${job.createdByUid}/${job.id}/${image.itemId}/${index}.jpg`;
     // Existing wizard uploads are copied into the generation input set.
     const bytes = image.storagePath ? (await bucket.file(image.storagePath).download())[0] : await downloadUrl(image.url!);
     const normalized = await normalizeInputImage(bytes);
     await bucket.file(storagePath).save(normalized, { resumable: false, metadata: { contentType: 'image/jpeg' } });
-    imported.push({ itemId: image.itemId, fileName: image.fileName, storagePath });
+    imported.push({ itemId: image.itemId, fileName: image.fileName, storagePath, normalizedSha256: createHash('sha256').update(normalized).digest('hex') });
   }
   return imported;
 };

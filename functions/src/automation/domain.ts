@@ -47,8 +47,12 @@ export const validateAutomationInput = (value: unknown, uid: string): CreateAuto
       throw new HttpsError('invalid-argument', 'Imagen inválida.');
     }
     const entry = { itemId: id(image.itemId, 'itemId'), fileName: image.fileName } as NonNullable<CreateAutomationJobRequest['inputImages']>[number];
-    if (Boolean(image.storagePath) === Boolean(image.url)) throw new HttpsError('invalid-argument', 'Usa storagePath o url por imagen.');
-    if (image.storagePath) {
+    if ([image.storagePath, image.url, image.driveFile].filter(Boolean).length !== 1) throw new HttpsError('invalid-argument', 'Usa storagePath o url por imagen.');
+    if (image.driveFile) {
+      const drive = image.driveFile;
+      if (!drive || typeof drive !== 'object' || [drive.folderId, drive.fileId, ...(drive.revisionId !== undefined ? [drive.revisionId] : []), ...(drive.version !== undefined ? [drive.version] : [])].some((value) => typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(value))) throw new HttpsError('invalid-argument', 'Identificadores Drive inválidos.');
+      entry.driveFile = { folderId: drive.folderId, fileId: drive.fileId, ...(drive.revisionId ? { revisionId: drive.revisionId } : {}), ...(drive.version ? { version: drive.version } : {}) };
+    } else if (image.storagePath) {
       if (!image.storagePath.startsWith(`garments/drafts/${uid}/`) || image.storagePath.includes('..') || image.storagePath.length > 1024) {
         throw new HttpsError('permission-denied', 'La imagen no pertenece al caller.');
       }
@@ -62,6 +66,18 @@ export const validateAutomationInput = (value: unknown, uid: string): CreateAuto
     }
     return entry;
   });
+  for (const key of ['budgetUsd', 'maxReviewAttempts', 'maxOperationalRetries'] as const) {
+    if (data[key] !== undefined) {
+      if (typeof data[key] !== 'number' || !Number.isFinite(data[key])) throw new HttpsError('invalid-argument', `${key} inválido.`);
+      result[key] = data[key];
+    }
+  }
+  for (const key of ['authorizeClassification', 'allowEstimatedCosts'] as const) {
+    if (data[key] !== undefined) {
+      if (typeof data[key] !== 'boolean') throw new HttpsError('invalid-argument', `${key} inválido.`);
+      result[key] = data[key];
+    }
+  }
   const counts = new Map<string, number>();
   result.inputImages.forEach((image) => counts.set(image.itemId, (counts.get(image.itemId) || 0) + 1));
   if (result.inputImages.length > 40 || [...counts.values()].some((count) => count > 4)) throw new HttpsError('invalid-argument', 'Máximo 40 fotos y 4 vistas por artículo.');
@@ -77,10 +93,10 @@ export const summarizeAutomation = (jobs: Job[]): { status: AutomationStatus; pr
   const failed = jobs.filter((job) => job.status === 'failed');
   const done = jobs.length > 0 && completed.length + failed.length === jobs.length;
   return {
-    status: done ? (failed.length ? 'needs_attention' : 'completed') : jobs.some((job) => job.currentOutput && job.status !== 'completed') ? 'review' : 'processing',
+    status: done ? (failed.length ? 'needs_attention' : 'completed') : jobs.some((job) => job.currentOutput && job.status !== 'completed' && job.status !== 'failed') ? 'review' : 'processing',
     progress: { total: jobs.length, completed: completed.length, failed: failed.length },
     outputImages: completed.filter((job) => job.currentOutput?.autoReview?.verdict === 'approved').map((job) => ({
-      storagePath: job.currentOutput!.resultImagePath, jobId: job.id!, itemId: job.garmentId, type: job.productScene || 'garment',
+      storagePath: job.currentOutput!.resultImagePath, outputId: job.currentOutput!.id, jobId: job.id!, itemId: job.garmentId, type: job.productScene || 'garment',
     })),
   };
 };

@@ -4,7 +4,7 @@ import { normalizeProviderImageConfig } from '../../../shared/src/providerImageC
 import { PRODUCT_IDENTITY_RULES } from '../automation/presets';
 import { Job } from '../../../shared/src/types';
 
-export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: string) => {
+export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: string, manualMaxRetries = 3) => {
   if (!isProvider(provider)) {
     throw new Error('Proveedor inválido.');
   }
@@ -18,6 +18,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
   const { imageConfig, aspectRatio } = normalizeProviderImageConfig(provider, job.imageConfig, job.aspectRatio);
 
   return {
+    ...(job.automationJobId ? { automationManaged: false, automationReviewPending: false, automationGate: null, autoReviewMaxAttempts: 3, maxRetries: manualMaxRetries } : {}),
     provider,
     imageConfig,
     aspectRatio,
@@ -35,7 +36,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     queuePriority: 1,
     retryCount: 0,
     generationAttemptCount: 0,
-    autoReviewMaxAttempts: job.autoReviewMaxAttempts || 3,
+    autoReviewMaxAttempts: job.automationJobId ? 3 : job.autoReviewMaxAttempts || 3,
     latestAutoReview: null,
     claimToken: null,
     claimedBy: null,

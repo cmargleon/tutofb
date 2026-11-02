@@ -14,7 +14,7 @@ export const PRODUCT_PRESETS = {
 export const resolveAutomationPreset = (data: CreateAutomationJobRequest, client: Client): { name: string; config: AutomationPreset; modelId: string | null } => {
   const name = data.preset || client.automation?.defaultPreset || (data.jobType === 'product' ? 'generic_product' : 'standard');
   const configured = client.automation?.presets?.[name];
-  if (data.jobType === 'product' && name !== 'generic_product') throw new AutomationAttentionError('Preset de producto no disponible.');
+  if (data.jobType === 'product' && name !== 'generic_product' && !configured) throw new AutomationAttentionError('Preset de producto no disponible.');
   if (data.jobType === 'garment' && name !== 'standard' && !configured) throw new AutomationAttentionError('Preset del cliente no configurado.');
   const config = { ...configured, provider: data.provider || configured?.provider || DEFAULT_AUTOMATION_PROVIDER };
   const modelId = data.modelId || config.modelId || client.automation?.defaultModelId || null;

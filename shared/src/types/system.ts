@@ -30,6 +30,7 @@ export interface SystemAlertSettings {
 }
 
 export interface SystemConfig {
+  automationBudget?: import('./automation').AutomationBudgetConfig;
   jobMaxRetries: number;
   jobRetryDelayMs: number;
   batchMaxJobs: number;

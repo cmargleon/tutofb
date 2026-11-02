@@ -1,3 +1,5 @@
+import { automationScenePatch } from '../automation/recovery';
+import type { AutomationPolicy } from '../../../shared/src/types';
 import { APPROVED_TRY_ON_PROMPT_FORMAT } from '../../../shared/src/approvedTryOnPrompt';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -157,9 +159,11 @@ export const createGenerationBatchCore = async (
 
     return db.runTransaction(async (writeBatch) => {
     const automationRef = automation ? db.collection('automationJobs').doc(automation.id) : null;
+    let automationPolicy: AutomationPolicy | undefined;
     if (automationRef && automation) {
       const snapshot = await writeBatch.get(automationRef);
       const current = snapshot.data();
+      automationPolicy = current?.effectivePolicy;
       if (current?.batchId) return { batchId: current.batchId, createdJobs: current.generationJobIds.length };
       if (current?.leaseToken !== automation.leaseToken || current?.status !== 'importing') {
         throw new HttpsError('aborted', 'La importación ya no tiene una reserva activa.');
@@ -285,6 +289,8 @@ export const createGenerationBatchCore = async (
         failureInfo: null,
       };
 
+      Object.assign(jobData, automationScenePatch(automationPolicy),
+        ...(automationPolicy ? [{ automationReferencePaths: garment.photos?.map((p) => p.storagePath) || [garment.storagePath] }] : []));
       generationJobIds.push(jobRef.id);
       writeBatch.set(jobRef, { ...jobData, ...(automation ? { automationJobId: automation.id, generationKind: 'garment' } : {}) });
     }

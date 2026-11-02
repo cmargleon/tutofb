@@ -1,3 +1,4 @@
+import { DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -5,6 +6,7 @@ import { SystemConfig } from '../../../shared/src/types';
 import { normalizeAdditionalSystemPrompts } from '../../../shared/src/systemPrompts';
 
 const DEFAULT_CONFIG: SystemConfig = {
+  automationBudget: DEFAULT_AUTOMATION_BUDGET,
   jobMaxRetries: 3,
   jobRetryDelayMs: 300000,
   batchMaxJobs: 100,
@@ -27,6 +29,7 @@ export const useSystemConfig = () => {
       if (snap.exists()) {
         const data = snap.data() as Partial<SystemConfig>;
         setConfig({
+          automationBudget: data.automationBudget || DEFAULT_AUTOMATION_BUDGET,
           ...normalizeAdditionalSystemPrompts(data),
           jobMaxRetries: typeof data.jobMaxRetries === 'number' ? data.jobMaxRetries : DEFAULT_CONFIG.jobMaxRetries,
           jobRetryDelayMs: typeof data.jobRetryDelayMs === 'number' ? data.jobRetryDelayMs : DEFAULT_CONFIG.jobRetryDelayMs,

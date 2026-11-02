@@ -103,7 +103,7 @@ export const regenerateFailedBatchJobs = onCall<
     }
 
     try {
-      const patch = buildRegenerateJobPatch(job, targetProvider, prompt);
+      const patch = buildRegenerateJobPatch(job, targetProvider, prompt, systemConfig.jobMaxRetries);
       const jobRef = db.collection('jobs').doc(job.id!);
 
       writeBatch.update(jobRef, {

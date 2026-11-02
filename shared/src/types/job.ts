@@ -175,6 +175,10 @@ export interface JobOutput {
 export interface Job {
   promptFormat?: 'approved-try-on-v1';
   automationJobId?: string;
+  automationManaged?: boolean;
+  automationReviewPending?: boolean;
+  automationGate?: 'budget' | null;
+  automationReferencePaths?: string[];
   generationKind?: 'garment' | 'product';
   productScene?: string;
   productReferencePaths?: string[];

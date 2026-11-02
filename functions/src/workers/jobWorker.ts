@@ -1,3 +1,4 @@
+import { AutomationBudgetError, reserveAutomationOperation, settleAutomationOperation, estimateGenerationHold, pauseAutomationGeneration } from '../automation/budget';
 import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
@@ -151,11 +152,13 @@ const claimJob = async (jobId: string, workerId: string): Promise<Job | null> =>
     }
 
     const job = { id: snapshot.id, ...snapshot.data() } as Job;
-    if (job.status !== 'pending') {
+    const managedAutomation = Boolean(job.automationJobId) && job.automationManaged !== false;
+    if (job.status !== 'pending' || (managedAutomation && job.automationGate)) {
       return null;
     }
 
     transaction.update(jobRef, {
+      ...(managedAutomation ? { automationManaged: true } : {}),
       status: 'processing',
       claimToken,
       claimedBy: workerId,
@@ -172,6 +175,7 @@ const claimJob = async (jobId: string, workerId: string): Promise<Job | null> =>
 
     return {
       ...job,
+      ...(managedAutomation ? { automationManaged: true } : {}),
       status: 'processing',
       claimToken,
       claimedBy: workerId,
@@ -220,7 +224,7 @@ const persistGeneratedAttempt = async ({
   autoReview,
   failureInfo,
   lastError,
-  nextPromptBase,
+  nextPromptBase, automationGate,
 }: {
   claimedJob: Job;
   providerResult: Awaited<ReturnType<typeof generateWithProvider>>;
@@ -231,10 +235,12 @@ const persistGeneratedAttempt = async ({
   failureInfo: Job['failureInfo'] | null;
   lastError: string | null;
   nextPromptBase?: string;
+  automationGate?: Job['automationGate'];
 }): Promise<boolean> => {
   const jobId = claimedJob.id!;
   const jobRef = db.collection('jobs').doc(jobId);
-  const outputRef = jobRef.collection('outputs').doc();
+  const reuseOutput = Boolean(claimedJob.automationManaged && claimedJob.automationReviewPending && claimedJob.currentOutputId);
+  const outputRef = reuseOutput ? jobRef.collection('outputs').doc(claimedJob.currentOutputId!) : jobRef.collection('outputs').doc();
   const outputId = outputRef.id;
   const normalizedImageConfig = normalizeProviderImageConfig(
     claimedJob.provider as Provider,
@@ -246,9 +252,9 @@ const persistGeneratedAttempt = async ({
     contentType: providerResult.contentType,
   });
   const extension = extensionForContentType(storedImage.contentType);
-  const destinationPath = `generated/${claimedJob.clientId}/${claimedJob.batchId}/${jobId}/${outputId}.${extension}`;
+  const destinationPath = reuseOutput ? claimedJob.currentOutput!.resultImagePath : `generated/${claimedJob.clientId}/${claimedJob.batchId}/${jobId}/${outputId}.${extension}`;
 
-  await bucket.file(destinationPath).save(storedImage.bytes, {
+  if (!reuseOutput) await bucket.file(destinationPath).save(storedImage.bytes, {
     resumable: false,
     metadata: {
       contentType: storedImage.contentType,
@@ -256,7 +262,7 @@ const persistGeneratedAttempt = async ({
     },
   });
 
-  const costUsd = getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
+  const costUsd = reuseOutput ? 0 : getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
   const persistedFailureInfo = withFailureOutputId(failureInfo, outputId);
 
   const currentOutput: JobOutput = {
@@ -281,19 +287,22 @@ const persistGeneratedAttempt = async ({
     contentType: storedImage.contentType,
     remoteUrl: providerResult.remoteUrl,
     requestId: providerResult.requestId,
-    costUsd,
-    durationSeconds,
+    costUsd: reuseOutput ? claimedJob.currentOutput!.costUsd : costUsd,
+    durationSeconds: reuseOutput ? claimedJob.currentOutput!.durationSeconds : durationSeconds,
     providerResponseSummary: providerResult.responseSummary,
     generationAttempt,
     autoReview,
     failureInfo: persistedFailureInfo,
     isCurrent: true,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: reuseOutput ? claimedJob.currentOutput!.createdAt : admin.firestore.FieldValue.serverTimestamp(),
   };
 
   const shouldResetForNextAttempt = nextStatus === 'pending' || nextStatus === 'failed';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const baseJobUpdate: Record<string, any> = {
+    ...(automationGate !== undefined ? { automationGate } : {}),
+    ...(claimedJob.automationManaged ? { automationReviewPending: autoReview === null,
+      ...(autoReview === null && automationGate !== 'budget' ? { retryCount: (claimedJob.retryCount || 0) + 1 } : {}) } : {}),
     provider: providerResult.provider,
     aspectRatio: normalizedImageConfig.aspectRatio,
     imageConfig: normalizedImageConfig.imageConfig,
@@ -307,13 +316,13 @@ const persistGeneratedAttempt = async ({
     latestOutputCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
     currentOutputId: outputId,
     currentOutput,
-    completedOutputCount: admin.firestore.FieldValue.increment(1),
+    completedOutputCount: admin.firestore.FieldValue.increment(reuseOutput ? 0 : 1),
     totalCostUsd: admin.firestore.FieldValue.increment(costUsd),
-    totalDurationSeconds: admin.firestore.FieldValue.increment(durationSeconds || 0),
-    [`providerUsage.${providerResult.provider}.completedOutputs`]: admin.firestore.FieldValue.increment(1),
+    totalDurationSeconds: admin.firestore.FieldValue.increment(reuseOutput ? 0 : durationSeconds || 0),
+    [`providerUsage.${providerResult.provider}.completedOutputs`]: admin.firestore.FieldValue.increment(reuseOutput ? 0 : 1),
     [`providerUsage.${providerResult.provider}.totalCostUsd`]: admin.firestore.FieldValue.increment(costUsd),
     [`providerUsage.${providerResult.provider}.totalDurationSeconds`]: admin.firestore.FieldValue.increment(
-      durationSeconds || 0,
+      reuseOutput ? 0 : durationSeconds || 0,
     ),
     generationAttemptCount: generationAttempt,
     latestAutoReview: autoReview,
@@ -350,7 +359,7 @@ const persistGeneratedAttempt = async ({
 
     transaction.set(outputRef, currentOutput);
 
-    if (latestJob.currentOutputId) {
+    if (latestJob.currentOutputId && !reuseOutput) {
       transaction.set(
         jobRef.collection('outputs').doc(latestJob.currentOutputId),
         {
@@ -363,9 +372,9 @@ const persistGeneratedAttempt = async ({
     transaction.update(jobRef, baseJobUpdate);
 
     transaction.set(jobRef.collection('logs').doc(), {
-      type: 'provider_response',
+      type: reuseOutput ? 'quality_review' : 'provider_response',
       level: 'info',
-      message: 'Proveedor completó la generación y el resultado fue guardado.',
+      message: reuseOutput ? 'Se actualizó la revisión del output existente sin duplicar generación ni costos.' : 'Proveedor completó la generación y el resultado fue guardado.',
       outputId,
       payload: {
         provider: providerResult.provider,
@@ -427,7 +436,7 @@ const persistGeneratedAttempt = async ({
     return true;
   });
 
-  if (!committed) {
+  if (!committed && !reuseOutput) {
     try {
       await bucket.file(destinationPath).delete();
     } catch (cleanupError) {
@@ -462,7 +471,8 @@ const failGeneratedAttemptAfterReviewError = async ({
     providerResult,
     durationSeconds,
     generationAttempt,
-    nextStatus: 'failed',
+    nextStatus: claimedJob.automationManaged && !(error instanceof AutomationBudgetError) && (claimedJob.retryCount || 0) < claimedJob.maxRetries ? 'pending' : 'failed',
+    ...(error instanceof AutomationBudgetError ? { automationGate: 'budget' as const } : {}),
     autoReview: null,
     failureInfo,
     lastError: toFailureSummary(failureInfo),
@@ -700,10 +710,11 @@ export const processJob = async (
       getSignedUrl(claimedJob.garmentFilePath),
     ]);
 
+    const resumeReview = Boolean(claimedJob.automationManaged && claimedJob.automationReviewPending && claimedJob.currentOutput);
     await createLog(jobId, {
-      type: 'provider_request',
+      type: resumeReview ? 'quality_review' : 'provider_request',
       level: 'info',
-      message: 'Se enviaron los insumos al proveedor.',
+      message: resumeReview ? 'Se reanudó la revisión del output existente sin otra generación.' : 'Se enviaron los insumos al proveedor.',
       payload: {
         provider: claimedJob.provider,
         aspectRatio: normalizedImageConfig.aspectRatio,
@@ -720,7 +731,16 @@ export const processJob = async (
       },
     });
 
-    const providerResult = await generateWithProvider(
+    const generationHold = estimateGenerationHold(claimedJob.provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
+    const budgetOperation = !resumeReview && claimedJob.automationManaged && claimedJob.automationJobId
+      ? await reserveAutomationOperation(claimedJob.automationJobId, `generation:${jobId}:${claimedJob.claimToken}`, 'generation', generationHold.holdUsd, { id: jobId, claimToken: claimedJob.claimToken }) : null;
+    let providerResult: Awaited<ReturnType<typeof generateWithProvider>>;
+    try {
+    providerResult = resumeReview ? {
+      provider: claimedJob.currentOutput!.provider, imageBytes: (await downloadStorageImage(claimedJob.currentOutput!.resultImagePath)).bytes,
+      contentType: claimedJob.currentOutput!.contentType, remoteUrl: claimedJob.currentOutput!.remoteUrl,
+      requestId: claimedJob.currentOutput!.requestId, responseSummary: claimedJob.currentOutput!.providerResponseSummary || {},
+    } : await generateWithProvider(
       claimedJob.provider as Provider,
       {
         poseImageUrl,
@@ -735,13 +755,19 @@ export const processJob = async (
       },
     );
 
+    } catch (error) {
+      if (budgetOperation) await settleAutomationOperation(claimedJob.automationJobId!, budgetOperation, null);
+      throw error;
+    }
+    if (budgetOperation) await settleAutomationOperation(claimedJob.automationJobId!, budgetOperation, generationHold.estimateUsd, generationHold.fixed);
+
     if (!(await isClaimStillActive(jobId, claimedJob.claimToken))) {
       return;
     }
 
     const startedAtMs = toMillis(claimedJob.lastAttemptStartedAt) || Date.now();
     const durationSeconds = Math.max(0, Math.round((Date.now() - startedAtMs) / 1000));
-    const generationAttempt = (claimedJob.generationAttemptCount || 0) + 1;
+    const generationAttempt = resumeReview ? claimedJob.generationAttemptCount || 1 : (claimedJob.generationAttemptCount || 0) + 1;
     const maxAutoReviewAttempts = claimedJob.autoReviewMaxAttempts || getJobAutoReviewMaxAttempts();
 
     try {
@@ -752,6 +778,11 @@ export const processJob = async (
 
       const jobSystemConfig = await getSystemConfigCached();
       const review = await reviewGeneratedImageWithGemini({
+        ...(claimedJob.automationManaged && claimedJob.automationJobId ? {
+          exactAutomationPrompt: true,
+          automation: { id: claimedJob.automationJobId, key: `review:${jobId}:${claimedJob.claimToken}`, kind: 'review' as const, generation: { id: jobId, claimToken: claimedJob.claimToken } },
+          ...(claimedJob.generationKind !== 'product' ? { productReferences: [poseReference, ...await Promise.all((claimedJob.automationReferencePaths || [claimedJob.garmentFilePath]).map(downloadStorageImage))] } : {}),
+        } : {}),
         generationKind: claimedJob.generationKind,
         ...(claimedJob.generationKind === 'product' ? { productReferences: await Promise.all((claimedJob.productReferencePaths || [claimedJob.poseImagePath]).map(downloadStorageImage)) } : {}),
         apiKey: GEMINI_API_KEY.value(),
@@ -857,7 +888,8 @@ export const processJob = async (
       });
     }
   } catch (error) {
-    await retryOrFailJob(claimedJob, error);
+    if (error instanceof AutomationBudgetError && claimedJob.automationManaged) await pauseAutomationGeneration(claimedJob, error.message);
+    else await retryOrFailJob(claimedJob, error);
   } finally {
     clearTimeout(timeoutHandle);
   }

@@ -54,8 +54,15 @@ export class ManglarAutomationClient {
     const response = await this.#fetch(`${this.baseUrl}${path}`, { ...options, headers: { ...options.headers, Authorization: `Bearer ${tokenUsed}` }, signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000) });
     if (response.status === 401 && !refreshed) { if (this.#token === tokenUsed) await this.#authorize(true, options.signal); return this.#request(path, options, true); }
     if (!response.ok) throw new Error(`Manglar request failed (HTTP ${response.status}); inspect non-sensitive operation details in Manglar.`);
-    return response.json();
+    return options.responseType === 'binary' ? response.arrayBuffer() : response.json();
   }
+  capabilities() { return this.#request('/capabilities'); }
+  preparePlan(payload) { return this.#request('/plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+  getPlan(planId) { if (!/^[a-f0-9]{64}$/.test(planId)) throw new Error('Invalid planId.'); return this.#request(`/plans/${planId}`); }
+  executePlan(planId) { if (!/^[a-f0-9]{64}$/.test(planId)) throw new Error('Invalid planId.'); return this.#request(`/plans/${planId}/execute`, { method: 'POST' }); }
+  resumeJob(jobId, budgetUsd) { if (!/^[\w-]{1,200}$/.test(jobId)) throw new Error('Invalid jobId.'); return this.#request(`/jobs/${jobId}/resume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ budgetUsd }) }); }
+  downloadResults(jobId) { if (!/^[\w-]{1,200}$/.test(jobId)) throw new Error('Invalid jobId.'); return this.#request(`/jobs/${jobId}/download`, { responseType: 'binary' }); }
+  listDriveFiles(clientId, folderId) { if (![clientId, folderId].every((id) => /^[\w-]{1,200}$/.test(id))) throw new Error('Invalid Drive/client ID.'); return this.#request(`/clients/${clientId}/drive/${folderId}`); }
   upload(bytes, contentType = 'image/jpeg') { return this.#request('/uploads', { method: 'POST', headers: { 'Content-Type': contentType }, body: bytes }); }
   createJob(payload) { return this.#request('/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
   /** For a persistent tool process; durable schedulers can instead use getPollingPlan. */

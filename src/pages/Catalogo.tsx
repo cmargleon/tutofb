@@ -38,9 +38,11 @@ export const Catalogo: React.FC = () => {
   const confirm = useConfirm();
   const role = useRole();
   const { config: systemConfig } = useSystemConfig();
+  const [requestedBatch, setRequestedBatch] = useState<Batch | null>(null);
+  const [batchLinkError, setBatchLinkError] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>(urlClientId);
-  const [selectedBatchId, setSelectedBatchId] = useState<string>(urlBatchId);
+  const selectedClientId = urlClientId;
+  const selectedBatchId = urlBatchId;
   const [pageSize, setPageSize] = useState<number>(25);
   const [sortOrder, setSortOrder] = useState<CatalogSortOrder>('desc');
   const [lightbox, setLightbox] = useState<{ garmentIndex: number; jobIndex: number; jobId: string } | null>(null);
@@ -73,13 +75,25 @@ export const Catalogo: React.FC = () => {
     sortOrder,
   });
 
+  useEffect(() => {
+    setRequestedBatch(null); setBatchLinkError(null);
+    if (!selectedBatchId) return;
+    return onSnapshot(doc(db, 'batches', selectedBatchId), (snapshot) => {
+      if (!snapshot.exists()) { setBatchLinkError('El lote solicitado no está disponible.'); return; }
+      const batch = { ...snapshot.data(), id: snapshot.id } as Batch;
+      if (selectedClientId && batch.clientId !== selectedClientId) { setBatchLinkError('El lote solicitado pertenece a otro cliente.'); return; }
+      setRequestedBatch(batch);
+      if (!selectedClientId) setSearchParams((current) => { const next = new URLSearchParams(current); next.set('clientId', batch.clientId); return next; }, { replace: true });
+    }, () => setBatchLinkError('No se pudo cargar el lote solicitado.'));
+  }, [selectedBatchId, selectedClientId, setSearchParams]);
+
   const batchOptions = useMemo(
-    () => batches.filter((batch): batch is Batch & { id: string } => Boolean(batch.id)),
-    [batches],
+    () => [...(requestedBatch && !batches.some((batch) => batch.id === requestedBatch.id) ? [requestedBatch] : []), ...batches].filter((batch): batch is Batch & { id: string } => Boolean(batch.id) && batch.clientId === selectedClientId),
+    [batches, requestedBatch, selectedClientId],
   );
   const selectedBatch = useMemo(
-    () => (selectedBatchId ? batchOptions.find((batch) => batch.id === selectedBatchId) || null : null),
-    [batchOptions, selectedBatchId],
+    () => (selectedBatchId ? (requestedBatch?.id === selectedBatchId ? requestedBatch : batchOptions.find((batch) => batch.id === selectedBatchId) || null) : null),
+    [batchOptions, selectedBatchId, requestedBatch],
   );
   // Use counters only — the status field can be stale after bulk cancels due to trigger race
   // conditions, but counters are always set correctly by the cancel callables.
@@ -88,20 +102,8 @@ export const Catalogo: React.FC = () => {
     && (selectedBatch.pendingJobs > 0 || selectedBatch.processingJobs > 0),
   );
 
-  // Auto-heal: if the batch status says active but counters are 0, the status field is stale.
-  // Calling cancelBatchProcessing with no active jobs recomputes and corrects the status.
   useEffect(() => {
-    if (!selectedBatch?.id) return;
-    const statusIsStuck =
-      (selectedBatch.status === 'pending' || selectedBatch.status === 'processing')
-      && selectedBatch.pendingJobs === 0
-      && selectedBatch.processingJobs === 0;
-    if (!statusIsStuck) return;
-    void cancelBatchProcessing(selectedBatch.id).catch(() => { /* silent */ });
-  }, [selectedBatch?.id, selectedBatch?.status, selectedBatch?.pendingJobs, selectedBatch?.processingJobs]);
-
-  useEffect(() => {
-    if (!selectedBatchId || !selectedBatchIsGenerating) {
+    if (!selectedBatchId) {
       setGeneratingJobs([]);
       return undefined;
     }
@@ -125,7 +127,7 @@ export const Catalogo: React.FC = () => {
     );
 
     return () => unsubscribe();
-  }, [selectedBatchId, selectedBatchIsGenerating, sortOrder]);
+  }, [selectedBatchId, sortOrder]);
 
   const displayGarmentGroups = useMemo(() => {
     if (generatingJobs.length === 0 && Object.keys(pendingRegenerations).length === 0) {
@@ -231,61 +233,16 @@ export const Catalogo: React.FC = () => {
     return found ? `${formatDateTimeLong(found.createdAt)} · ${found.id}` : selectedBatchId;
   }, [batchOptions, selectedBatchId]);
 
+  useEffect(() => subscribeToClients(setClients, (error) => setBatchLinkError(error.message)), []);
+
   useEffect(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (selectedClientId) {
-        next.set('clientId', selectedClientId);
-      } else {
-        next.delete('clientId');
-      }
-      if (selectedBatchId) {
-        next.set('batchId', selectedBatchId);
-      } else {
-        next.delete('batchId');
-      }
-      return next;
+    if (!selectedClientId || selectedBatchId || !batchOptions.length) return;
+    // Only choose a default when the URL does not request a specific batch.
+    setSearchParams((current) => {
+      if (current.get('batchId') || current.get('clientId') !== selectedClientId) return current;
+      const next = new URLSearchParams(current); next.set('batchId', batchOptions[0].id); return next;
     }, { replace: true });
-  }, [selectedClientId, selectedBatchId, setSearchParams]);
-
-  useEffect(() => {
-    const unsub = subscribeToClients((c) => setClients(c), () => {});
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    setSelectedClientId((currentClientId) => (
-      currentClientId === urlClientId ? currentClientId : urlClientId
-    ));
-  }, [urlClientId]);
-
-  useEffect(() => {
-    setSelectedBatchId((currentBatchId) => (
-      currentBatchId === urlBatchId ? currentBatchId : urlBatchId
-    ));
-  }, [urlBatchId]);
-
-  useEffect(() => {
-    if (!selectedClientId) {
-      return;
-    }
-
-    setSelectedBatchId((currentBatchId) => {
-      if (!batchOptions.length) {
-        return '';
-      }
-
-      const currentBatchStillExists = currentBatchId
-        ? batchOptions.some((batch) => batch.id === currentBatchId)
-        : false;
-
-      if (currentBatchStillExists) {
-        return currentBatchId;
-      }
-
-      return batchOptions[0].id;
-    });
-  }, [batchOptions, selectedClientId]);
+  }, [batchOptions, selectedClientId, selectedBatchId, setSearchParams]);
 
   useEffect(() => {
     setLightbox(null);
@@ -547,8 +504,9 @@ export const Catalogo: React.FC = () => {
                 id="catalog-client"
                 value={selectedClientId}
                 onChange={(e) => {
-                  setSelectedClientId(e.target.value);
-                  setSelectedBatchId('');
+                  const next = new URLSearchParams(searchParams);
+                  if (e.target.value) next.set('clientId', e.target.value); else next.delete('clientId');
+                  next.delete('batchId'); setSearchParams(next);
                 }}
                 className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
@@ -563,7 +521,7 @@ export const Catalogo: React.FC = () => {
               <span className="mb-1.5 block text-xs font-medium text-gray-600">Lote</span>
               <select
                 value={selectedBatchId}
-                onChange={(e) => setSelectedBatchId(e.target.value)}
+                onChange={(e) => { const next = new URLSearchParams(searchParams); next.set('batchId', e.target.value); setSearchParams(next); }}
                 disabled={!selectedClientId || batchOptions.length === 0}
                 className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
               >
@@ -733,8 +691,8 @@ export const Catalogo: React.FC = () => {
           </div>
         )}
 
-        {selectedClientId && !loading && error && (
-          <div className="text-center py-16 text-red-500 text-sm">{error}</div>
+        {!loading && (error || batchLinkError) && (
+          <div className="text-center py-16 text-red-500 text-sm">{error || batchLinkError}</div>
         )}
 
         {selectedClientId && !loading && !error && displayGarmentGroups.length === 0 && (

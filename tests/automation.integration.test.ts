@@ -40,7 +40,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
   const pipeline = require('../functions/lib/functions/src/automation/pipelines.js');
   const worker = require('../functions/lib/functions/src/automation/worker.js');
   const classifier = require('../functions/lib/functions/src/callables/classifyGarmentViewsWithGemini.js');
-  const base = { source: 'api', externalId: 'initial', clientId: 'client', jobType: 'garment', modelId: 'model', inputImages: [{ itemId: 'sku', fileName: 'front.jpg', storagePath: inputPath }] };
+  const base = { allowEstimatedCosts: true, authorizeClassification: true, maxOperationalRetries: 1, source: 'api', externalId: 'initial', clientId: 'client', jobType: 'garment', modelId: 'model', inputImages: [{ itemId: 'sku', fileName: 'front.jpg', storagePath: inputPath }] };
   const http = async (method: string, path: string, body?: any, token: string | null = idToken, rawBody?: Buffer) => {
     let status = 200, data: any;
     const response = { set: () => response, status: (value: number) => { status = value; return response; }, json: (value: any) => { data = value; return response; } };
@@ -129,7 +129,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     await assert.rejects(() => persistence.createAutomation(payload, 'other-user', 'operador'), { code: 'permission-denied' });
   });
   await db.collection('models').doc('model').set({ clientId: 'client', name: 'Model', status: 'active', poseCount: 1, poses: [{ id: 'front', storagePath: inputPath, fileName: 'front.jpg', aiClassification: { usableForGarmentViews: ['front'], orientationGroup: 'front', orientationDetail: 'front', framing: 'full_body', bodyFocus: 'full_body' } }] });
-  classifier.classifyGarmentWithGemini = async ({ garment }: any) => ({ ...garment, photos: garment.photos.map((photo: any) => ({ ...photo, view: 'front', confidence: 0.99, classifiedBy: 'gemini' })), garmentBodyArea: 'full_body', garmentAccessoryType: null });
+  classifier.classifyGarmentWithGemini = async ({ garment }: any) => ({ ...garment, itemKind: 'garment', itemKindConfidence: 0.99, photos: garment.photos.map((photo: any) => ({ ...photo, view: 'front', confidence: 0.99, classifiedBy: 'gemini' })), garmentBodyArea: 'full_body', garmentAccessoryType: null });
   await t.test('garment dispatch reuses core; duplicate worker delivery creates one batch', async () => {
     await Promise.all([worker.processAutomation(garmentId), worker.processAutomation(garmentId)]);
     const job = (await db.collection('automationJobs').doc(garmentId).get()).data();
@@ -142,7 +142,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     const { createGenerationBatch } = require('../functions/lib/functions/src/callables/createGenerationBatch.js');
     const result = await createGenerationBatch.run({ auth: { uid, token: { role: 'operador' } }, data: {
       clientId: 'client', modelId: 'model', outputMode: 'photos_only', poseIds: ['front'],
-      provider: 'fal-nano-banana-2', promptBase: '', productDrafts: [], garments: [{
+      provider: 'fal-nano-banana-2', promptFormat: 'approved-try-on-v1', approvedPrompts: [{ garmentId: 'manual-sku', text: 'Preserve the exact garment and model identity.' }], promptBase: '', productDrafts: [], garments: [{
         id: 'manual-sku', name: 'Manual', storagePath: inputPath, isMultiAngle: false, sourceType: 'single', garmentBodyArea: 'full_body',
         photos: [{ id: 'front', fileName: 'front.jpg', storagePath: inputPath, sourceIndex: 0, view: 'front', classifiedBy: 'gemini' }],
       }],
@@ -180,7 +180,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     }
   });
   await t.test('missing model requires attention; intake retries are limited', async () => {
-    const { jobId } = await persistence.createAutomation({ ...base, modelId: undefined, externalId: randomUUID() }, uid, 'operador');
+    const { jobId } = await persistence.createAutomation({ ...base, modelId: undefined, maxOperationalRetries: 2, externalId: randomUUID() }, uid, 'operador');
     for (let attempt = 0; attempt < 3; attempt++) {
       await worker.processAutomation(jobId);
       assert.equal((await db.collection('automationJobs').doc(jobId).get()).data().status, 'needs_attention');
@@ -196,7 +196,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     assert.equal(failed.error.code, 'processing-failed');
   });
   await t.test('expired intake leases recover with bounded retries and reject stale writers', async () => {
-    const { jobId } = await persistence.createAutomation({ ...base, externalId: randomUUID() }, uid, 'operador');
+    const { jobId } = await persistence.createAutomation({ ...base, maxOperationalRetries: 2, externalId: randomUUID() }, uid, 'operador');
     const ref = db.collection('automationJobs').doc(jobId);
     for (let retryCount = 0; retryCount < 3; retryCount++) {
       await ref.update({ status: 'importing', leaseToken: 'expired', leaseExpiresAt: admin.firestore.Timestamp.fromMillis(1), retryCount });
@@ -268,7 +268,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
       assert.equal(current.status, attempt === 3 ? 'failed' : 'pending', JSON.stringify({ lastError: current.lastError, failure: current.failureInfo }));
       assert.equal(current.generationAttemptCount, attempt);
       assert.ok(current.totalCostUsd > 0);
-      assert.match(current.finalPrompt, /exact referenced product/);
+      assert.equal(current.finalPrompt, 'Preserve exact product and logo');
     }
     approve = true;
     for (const id of product.generationJobIds.slice(1)) await generation.processJob(id, 'create', { skipBacklogSweep: true });

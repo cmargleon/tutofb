@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "manglar",
+  "version": "1.0.0",
+  "description": "Prepara y ejecuta planes de fotografía de Manglar con referencias de Drive, presupuestos autorizados y resultados revisados."
+}

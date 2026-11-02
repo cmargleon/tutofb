@@ -97,6 +97,8 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
 
       const systemConfig = await getSystemConfigCached();
       const review = await reviewGeneratedImageWithGemini({
+        ...(job.automationManaged ? { exactAutomationPrompt: true,
+          ...(job.generationKind !== 'product' ? { productReferences: [poseReference, ...await Promise.all((job.automationReferencePaths || [job.garmentFilePath]).map(downloadStorageImage))] } : {}) } : {}),
         generationKind: job.generationKind,
         ...(job.generationKind === 'product' ? { productReferences: await Promise.all((job.productReferencePaths || [job.poseImagePath]).map(downloadStorageImage)) } : {}),
         apiKey: GEMINI_API_KEY.value(),
@@ -114,7 +116,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
         requestedPromptBase: job.requestedPromptBase || job.promptBase,
         promptFormat: output.promptFormat ?? job.promptFormat,
         promptBase: job.promptBase,
-        finalPrompt: output.promptFormat === 'approved-try-on-v1' ? output.finalPrompt : job.finalPrompt,
+        finalPrompt: job.automationManaged || output.promptFormat === 'approved-try-on-v1' ? output.finalPrompt : job.finalPrompt,
         modelIdentityTraitsSnapshot: job.modelIdentityTraitsSnapshot || null,
         attemptNumber,
         maxAttempts,

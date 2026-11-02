@@ -1,3 +1,4 @@
+import { ClientAutomationSection } from './ClientAutomationSection';
 import React from 'react';
 import { Check, ChevronDown, ChevronUp, Edit2, Trash2, X } from 'lucide-react';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
@@ -123,6 +124,8 @@ export const ClientListItem: React.FC<ClientListItemProps> = ({
               onCategoryChange={onTemplateCategoryChange}
               onDelete={onTemplateDelete}
             />
+
+            {!isArchivedCatalogEntity(client) && <ClientAutomationSection client={client} />}
 
             {/* Mobile layout */}
             <div className="md:hidden">

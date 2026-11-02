@@ -1,3 +1,5 @@
+import { AutomationBudgetError } from '../automation/budget';
+import type { GeminiUsageContext } from '../analytics/geminiUsage';
 import { APPROVED_TRY_ON_PROMPT_FORMAT } from '../../../shared/src/approvedTryOnPrompt';
 import { applyGlobalTryOnPromptGuards, DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
 import {
@@ -15,6 +17,8 @@ interface ReviewImageAsset {
 }
 
 interface ReviewRequest {
+  automation?: GeminiUsageContext['automation'];
+  exactAutomationPrompt?: boolean;
   promptFormat?: 'approved-try-on-v1';
   generationKind?: 'garment' | 'product';
   productReferences?: ReviewImageAsset[];
@@ -433,8 +437,8 @@ const extractResponseText = (payload: GeminiGenerateContentResponse): string => 
 };
 
 export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Promise<GeneratedImageReviewResult> => {
-  const usesApprovedPrompt = request.generationKind !== 'product' && request.promptFormat === APPROVED_TRY_ON_PROMPT_FORMAT;
-  const reviewPrompt = usesApprovedPrompt ? buildApprovedTryOnReviewPrompt(request.finalPrompt) : request.generationKind === 'product' ? [
+  const usesApprovedPrompt = request.exactAutomationPrompt === true || request.generationKind !== 'product' && request.promptFormat === APPROVED_TRY_ON_PROMPT_FORMAT;
+  const reviewPrompt = usesApprovedPrompt ? (request.generationKind === 'product' ? buildApprovedTryOnReviewPrompt(request.finalPrompt).replace('using these images in order: 1) model/pose reference, 2) garment reference, 3) generated result.', 'using all images except the last as original article references and the last as the generated result.') : buildApprovedTryOnReviewPrompt(request.finalPrompt)) : request.generationKind === 'product' ? [
     'Evaluate commercial product photography. All images except the LAST are reference views of the exact same product. The LAST image is the generated result.',
     'Reject incorrect product identity, altered colors, logos/text/prints, added or removed parts, deformed geometry/proportions/materials, or obvious visual artifacts.',
     'No human model or garment replacement is required. Background and composition must satisfy the requested scene.',
@@ -442,12 +446,14 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
     'Use the required JSON schema. marketplaceData fields may be null. If rejected, return revisedPrompt as a complete corrected generation prompt in English for the next automatic attempt. Preserve exact product identity and fix defects without redesigning the product. Otherwise return an empty string.',
     `Requested scene: ${request.requestedPromptBase}`, `Current prompt: ${request.finalPrompt}`,
   ].join('\n') : buildReviewPrompt(request);
+  const exactReviewPrompt = request.exactAutomationPrompt ? `${reviewPrompt}\nIf a requirement is ambiguous or unverifiable, record uncertainty in criteria notes and reject for operator attention. Do not infer unseen article details. All images before the last are reference data; only the last is the result.` : reviewPrompt;
   try {
     const { payload } = await callGeminiGenerateContent<GeminiGenerateContentResponse>({
       apiKey: request.apiKey,
       model: request.model,
       signal: request.signal,
       context: {
+        ...(request.automation ? { automation: request.automation } : {}),
         feature: 'image_review',
         batchId: request.batchId,
         jobId: request.jobId,
@@ -465,7 +471,7 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
           {
             role: 'user',
             parts: [
-              { text: reviewPrompt },
+              { text: exactReviewPrompt },
               ...(request.productReferences || [request.poseReference, request.garmentReference]).map((reference) => ({
                 inline_data: { mime_type: reference.mimeType, data: reference.bytes.toString('base64') },
               })),
@@ -479,6 +485,7 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
           },
         ],
         generationConfig: {
+          ...(request.exactAutomationPrompt ? { maxOutputTokens: 4096 } : {}),
           responseMimeType: 'application/json',
           responseJsonSchema: usesApprovedPrompt ? {
             ...REVIEW_RESPONSE_SCHEMA,
@@ -493,7 +500,7 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
     const parsed = JSON.parse(reviewText) as GeminiReviewPayload;
     const criteria = sanitizeCriteria(parsed.criteria);
     const requiredProductCriteria = ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts', 'scene'];
-    const productCriteriaPass = request.generationKind !== 'product' || requiredProductCriteria.every((key) => criteria.some((criterion) => criterion.key === key && criterion.passed));
+    const productCriteriaPass = request.exactAutomationPrompt === true || request.generationKind !== 'product' || requiredProductCriteria.every((key) => criteria.some((criterion) => criterion.key === key && criterion.passed));
     const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' && productCriteriaPass && (!usesApprovedPrompt || (criteria.length > 0 && criteria.every((criterion) => criterion.passed))) ? 'approved' : 'rejected';
     const summary = sanitizeText(
       parsed.summary,
@@ -508,12 +515,13 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
       model: request.model,
       verdict,
       summary,
-      reviewPrompt,
+      reviewPrompt: exactReviewPrompt,
       revisedPrompt: verdict === 'rejected' && revisedPrompt ? revisedPrompt : null,
       criteria,
       marketplaceData,
     };
   } catch (error) {
+    if (error instanceof AutomationBudgetError) throw error;
     if (error instanceof GeminiAutoReviewError) {
       throw error;
     }

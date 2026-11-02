@@ -70,3 +70,7 @@ export * from './triggers/financeTriggers';
 // Automation intake and existing generation queue integration.
 export * from './automation/api';
 export * from './automation/worker';
+
+export { updateClientAutomation } from './automation/clientConfig';
+export { manglarMcp } from './automation/mcp';
+export { getManglarConnectionRequest, decideManglarConnection, listManglarConnections, revokeManglarConnection } from './automation/mcpOAuth';

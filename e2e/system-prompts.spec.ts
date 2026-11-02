@@ -56,6 +56,7 @@ test('configuration edits, saves, reloads and resets every additional global pro
   for (const label of scenes) await page.getByRole('textbox', { name: label, exact: true }).fill('');
   await savePrompts.click();
   await expect(page.getByText('Cambios aplicados.', { exact: true })).toBeVisible();
+  await expect.poll(() => saved.systemPromptIdentity).toBeNull();
   await page.reload();
   for (const [label, key] of fields) {
     expect(saved[key]).toBeNull();

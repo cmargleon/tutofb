@@ -1,3 +1,4 @@
+import { automationScenePatch } from '../automation/recovery';
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -35,9 +36,11 @@ export const createProductGenerationBatchCore = async (
     const client = clientSnapshot.data() as Client | undefined;
     if (!client || !isActiveCatalogEntity(client)) throw new HttpsError('not-found', 'El cliente no está disponible.');
     const automationRef = automation ? db.collection('automationJobs').doc(automation.id) : null;
+    let automationPolicy: AutomationJob['effectivePolicy'];
     if (automationRef) {
       const current = (await tx.get(automationRef)).data() as AutomationJob | undefined;
       if (!current || current.leaseToken !== automation!.leaseToken || current.status !== 'importing') throw new HttpsError('aborted', 'Reserva expirada.');
+      automationPolicy = current.effectivePolicy;
     }
     const jobs: Array<{ id: string; data: Omit<Job, 'id'> }> = [];
     for (const item of data.items) {
@@ -55,6 +58,7 @@ export const createProductGenerationBatchCore = async (
           maxRetries: system.jobMaxRetries, completedAt: null, currentOutputId: null, currentOutput: null,
           completedOutputCount: 0, totalCostUsd: 0, totalDurationSeconds: 0, manualRegenerationCount: 0,
           createdAt: now, updatedAt: now, createdByUid: uid,
+          ...automationScenePatch(automationPolicy),
         } });
       }
     }

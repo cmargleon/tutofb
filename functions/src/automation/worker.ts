@@ -1,3 +1,4 @@
+import { DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
 import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
@@ -33,10 +34,11 @@ export const processAutomation = async (jobId: string): Promise<void> => {
       if (job.createdByUid !== `automation-${job.automationPrincipalId}`) throw new Error('Identidad técnica inconsistente.');
       await authorizeMachineJob(job.createdByUid, job.clientId, job.jobType);
     } else await assertUserRoles(job.createdByUid, undefined, ['admin', 'operador']);
+    if (!job.effectivePolicy || !job.budget) throw new AutomationAttentionError('Este trabajo anterior no tiene un presupuesto autorizado. Prepara un nuevo plan; los lotes existentes conservan su recuperación manual desde Catálogo.');
     const clientSnapshot = await db.collection('clients').doc(job.clientId).get();
     const client = clientSnapshot.data() as Client | undefined;
     if (!client || client.status === 'archived') throw new AutomationAttentionError('Cliente no disponible.');
-    const preset = resolveAutomationPreset(job, client);
+    const preset = job.resolvedPreset ? { name: job.requestedPreset, config: job.resolvedPreset, modelId: job.modelId || null } : resolveAutomationPreset(job, client);
     const inputImages = await importImagesForAutomationJob(job);
     const stillActive = await db.runTransaction(async (tx) => {
       const snapshot = await tx.get(ref);
@@ -50,6 +52,7 @@ export const processAutomation = async (jobId: string): Promise<void> => {
     logger.info('automation generation started', { jobId, jobType: job.jobType });
     if (job.jobType === 'garment') await dispatchGarment(prepared, client, preset.config, preset.modelId!);
     else await dispatchProduct(prepared, client, preset.config);
+    await refreshAutomation(jobId);
   } catch (error) {
     const attention = error instanceof AutomationAttentionError;
     await db.runTransaction(async (tx) => {
@@ -75,17 +78,26 @@ export const refreshAutomation = async (jobId: string): Promise<AutomationJob | 
     if (!job.batchId || !job.generationJobIds.length) return job;
     const snapshots = await tx.getAll(...job.generationJobIds.map((id) => db.collection('jobs').doc(id)));
     const jobs = snapshots.filter((snap) => snap.exists).map((snap) => ({ ...snap.data(), id: snap.id } as Job));
-    const missing = jobs.length !== job.generationJobIds.length;
+    const itemIssues = (job.items || []).filter((item) => item.issue);
+    const items = [...itemIssues, ...[...new Set(jobs.map((scene) => scene.garmentId))].map((itemId) => {
+      const scenes = jobs.filter((scene) => scene.garmentId === itemId);
+      return { itemId, status: scenes.every((scene) => scene.status === 'completed') ? 'completed' as const : scenes.some((scene) => scene.status === 'failed') ? 'needs_attention' as const : 'processing' as const,
+        scenes: scenes.map((scene) => ({ jobId: scene.id!, scene: scene.productScene || scene.poseImageId,
+          status: scene.automationGate || scene.status, attempts: scene.generationAttemptCount || 0, verdict: scene.latestAutoReview?.verdict || null, reason: scene.lastError || null })) };
+    })];
+    const missing = jobs.length !== job.generationJobIds.length || jobs.some((scene) => scene.clientId !== job.clientId || scene.automationJobId !== job.id || scene.batchId !== job.batchId);
     const summary = missing ? { status: 'needs_attention' as const, progress: job.progress, outputImages: [] } : summarizeAutomation(jobs);
+    if (summary.status === 'completed' && itemIssues.length) summary.status = 'needs_attention';
     const error = missing ? { code: 'missing-generation-job', message: 'Un job de generación fue eliminado.' }
-      : summary.progress.failed ? { code: 'generation-review-failed', message: 'Hay imágenes fallidas o rechazadas. Revisa los jobs y sus intentos en el batch.' } : null;
-    const changed = job.status !== summary.status || JSON.stringify(job.progress) !== JSON.stringify(summary.progress) || JSON.stringify(job.outputImages) !== JSON.stringify(summary.outputImages);
+      : summary.progress.failed ? { code: jobs.some((scene) => scene.automationGate === 'budget') ? 'automation-budget-paused' : 'generation-review-failed', message: jobs.find((scene) => scene.automationGate === 'budget')?.lastError || 'Hay imágenes fallidas o rechazadas. Revisa los jobs y sus intentos en el batch.' }
+      : itemIssues.length ? { code: 'item-preparation-failed', message: `${itemIssues.length} artículo(s) requieren atención. Los demás continúan normalmente; revisa las incidencias por artículo.` } : null;
+    const changed = job.status !== summary.status || JSON.stringify(job.error) !== JSON.stringify(error) || JSON.stringify(job.progress) !== JSON.stringify(summary.progress) || JSON.stringify(job.outputImages) !== JSON.stringify(summary.outputImages) || JSON.stringify(job.items) !== JSON.stringify(items);
     if (changed) tx.update(ref, {
-      ...summary, error, updatedAt: FieldValue.serverTimestamp(),
+      ...summary, items, error, updatedAt: FieldValue.serverTimestamp(),
       completedAt: summary.status === 'completed' ? FieldValue.serverTimestamp() : null,
       failedAt: summary.status === 'needs_attention' ? FieldValue.serverTimestamp() : null,
     });
-    return { ...job, ...summary, error };
+    return { ...job, ...summary, items, error };
   });
   return result;
 };
@@ -122,7 +134,9 @@ export const recoverAutomation = async (): Promise<void> => {
         tx.update(snapshot.ref, { updatedAt: FieldValue.serverTimestamp() });
       } else if (job.status === 'importing' && job.leaseExpiresAt?.toMillis() <= Date.now() && !job.batchId) {
         const retryCount = job.retryCount + 1;
-        const exhausted = retryCount >= MAX_INTAKE_ATTEMPTS;
+        const system = await tx.get(db.collection('system_config').doc('main'));
+        const global = system.data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET;
+        const exhausted = retryCount > Math.min(job.effectivePolicy?.maxOperationalRetries ?? MAX_INTAKE_ATTEMPTS - 1, global.maxOperationalRetries);
         tx.update(snapshot.ref, {
           status: exhausted ? 'failed' : 'pending', retryCount, leaseToken: null, leaseExpiresAt: null,
           error: exhausted ? { code: 'import-timeout', message: 'Se agotaron los intentos de importación.' } : null,

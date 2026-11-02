@@ -1,0 +1,356 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
+const require = createRequire(import.meta.url);
+const enabled = process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST && process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+
+test('automation plans, Drive, concurrent budgets, independent scenes and manual isolation (emulators and simulated providers)', { skip: !enabled }, async (t) => {
+  assert.match(process.env.FIRESTORE_EMULATOR_HOST!, /^(127\.0\.0\.1|localhost):/);
+  process.env.GCLOUD_PROJECT = 'demo-manglar-automation';
+  process.env.GEMINI_API_KEY = 'test-only'; process.env.FAL_KEY = 'test-only'; process.env.JOB_AUTO_REVIEW_MAX_ATTEMPTS = '3';
+  const admin = require('../functions/node_modules/firebase-admin');
+  admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT, storageBucket: `${process.env.GCLOUD_PROJECT}.appspot.com` });
+  const db = admin.firestore(); const bucket = admin.storage().bucket();
+  const uid = 'advanced-operator'; const adminUid = 'advanced-admin';
+  await db.collection('users').doc(uid).set({ uid, active: true, role: 'operador' });
+  await db.collection('users').doc(adminUid).set({ uid: adminUid, active: true, role: 'admin' });
+  const { DEFAULT_AUTOMATION_BUDGET } = require('../functions/lib/shared/src/automationPolicy.js');
+  const systemRef = db.collection('system_config').doc('main');
+  await systemRef.set({ automationBudget: DEFAULT_AUTOMATION_BUDGET, batchMaxJobs: 100, jobMaxRetries: 1, jobRetryDelayMs: 0, geminiImageReviewModel: 'test' });
+  const system = require('../functions/lib/functions/src/admin/systemConfig.js'); system.invalidateSystemConfigCache();
+  const sharp = require('../functions/node_modules/sharp');
+  const bytes = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#226644' } }).jpeg().toBuffer();
+  const inputPath = `garments/drafts/${uid}/inputs/reference.jpg`; await bucket.file(inputPath).save(bytes, { metadata: { contentType: 'image/jpeg' } });
+  const inputPathB = `garments/drafts/${uid}/client-b/reference.jpg`; await bucket.file(inputPathB).save(bytes, { metadata: { contentType: 'image/jpeg' } });
+  const clientA = 'advanced-a'; const clientB = 'advanced-b';
+  for (const [id, folder] of [[clientA, 'folder-a'], [clientB, 'folder-b']]) await db.collection('clients').doc(id).set({ name: id, status: 'active', batchCount: 0, automation: { enabled: true, driveFolderIds: [folder] } });
+  const drive = require('../functions/lib/functions/src/automation/drive.js');
+  let driveVersion = '1', downloads = 0, inaccessible = false;
+  drive.googleDrive.metadata = async (id: string) => {
+    if (inaccessible) throw new Error('Simulated inaccessible file');
+    if (id.startsWith('folder-')) return { id, name: 'Same misleading folder name', mimeType: 'application/vnd.google-apps.folder' };
+    return { id, name: 'arbitrary-no-skc.jpg', mimeType: 'image/jpeg', parents: [id === 'file-b' ? 'folder-b' : 'folder-a'], version: driveVersion, headRevisionId: `r${driveVersion}`, size: String(bytes.length) };
+  };
+  drive.googleDrive.download = async () => { downloads++; return bytes; };
+  drive.googleDrive.list = async () => [await drive.googleDrive.metadata('file-a')];
+  const { File } = require('../functions/node_modules/@google-cloud/storage'); File.prototype.getSignedUrl = async () => ['https://test.invalid/signed'];
+  const persistence = require('../functions/lib/functions/src/automation/persistence.js');
+  const plans = require('../functions/lib/functions/src/automation/plans.js');
+  const worker = require('../functions/lib/functions/src/automation/worker.js');
+  const generation = require('../functions/lib/functions/src/workers/jobWorker.js');
+  const budgets = require('../functions/lib/functions/src/automation/budget.js');
+  const recovery = require('../functions/lib/functions/src/automation/recovery.js');
+  const results = require('../functions/lib/functions/src/automation/results.js');
+  const base = { source: 'api', clientId: clientA, jobType: 'product', allowEstimatedCosts: true, inputImages: [{ itemId: 'a', fileName: 'photo.jpg', storagePath: inputPath }], provider: 'fal-seedream-5-flash' };
+  const providers = require('../functions/lib/functions/src/providers/index.js');
+  const requestedPrompts: string[] = [];
+  let classificationCalls = 0;
+  let providerCalls = 0, rejectArticle = '', rejectCount = 0, reviewTransportFailures = 0;
+  providers.generateWithProvider = async (provider: string, request: any) => { providerCalls++; requestedPrompts.push(request.prompt); return { provider, imageBytes: bytes, contentType: 'image/jpeg', remoteUrl: null, requestId: `request-${providerCalls}`, responseSummary: {} }; };
+  const originalFetch = globalThis.fetch;
+  const reviewedPrompts: string[] = [];
+  globalThis.fetch = async (url: any, options: any) => {
+    const target = String(url);
+    if (!target.startsWith('https://generativelanguage.googleapis.com/')) {
+      if (/^http:\/\/(localhost|127\.0\.0\.1):/.test(target)) return originalFetch(url, options);
+      throw new Error(`Unexpected external request in isolated test: ${new URL(target).hostname}`);
+    }
+    if (reviewTransportFailures-- > 0) return Response.json({ error: { message: 'Simulated temporary review failure' } }, { status: 503 });
+    const body = JSON.parse(options.body);
+    if (body.generationConfig.responseJsonSchema.required.includes('itemKind')) {
+      classificationCalls++;
+      const prompt = body.contents[0].parts[0].text;
+      const photoId = prompt.match(/Fotos recibidas: 1:([^:]+):/)?.[1] || 'shirt-0';
+      if (photoId.startsWith('transport-error-')) return Response.json({ error: { message: 'Simulated classification failure' } }, { status: 503 });
+      const uncertain = photoId.startsWith('uncertain-');
+      return Response.json({ usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 100, thoughtsTokenCount: 50 }, candidates: [{ content: { parts: [{ text: JSON.stringify({ itemKind: photoId.startsWith('wrong-kind-') ? 'product' : 'garment', itemKindConfidence: photoId.startsWith('uncertain-kind-') ? 0.2 : 0.99, itemKindReasoning: 'Original photo', itemLabel: 'Camiseta', bodyArea: 'upper_body', photos: [{ photoId, view: photoId.startsWith('incompatible-') ? 'back' : 'front', confidence: uncertain ? 0.2 : 0.99, reasoning: 'Original reference' }] }) }] } }] });
+    }
+    const reviewPrompt = body.contents[0].parts[0].text;
+    reviewedPrompts.push(reviewPrompt);
+    assert.ok(body.contents[0].parts.length >= 3);
+    const rejected = rejectArticle && reviewPrompt.includes(rejectArticle) && rejectCount-- > 0;
+    return Response.json({ usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 100, totalTokenCount: 200 }, candidates: [{ content: { parts: [{ text: JSON.stringify({ verdict: rejected ? 'rejected' : 'approved', summary: rejected ? 'Incumple el prompt de este intento' : 'Cumple el prompt', revisedPrompt: rejected ? `${rejectArticle}: corrected full scene, freely change background` : '', criteria: ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts', 'scene', 'explicit_prompt'].map((key) => ({ key, label: 'Prompt aplicable', passed: !rejected, notes: 'Evidence from original reference and exact prompt' })), marketplaceData: {} }) }] } }] });
+  };
+  try {
+    await t.test('System config persists automation-only limits and denies operators', async () => {
+      const callable = require('../functions/lib/functions/src/callables/updateSystemConfig.js').updateSystemConfig;
+      await assert.rejects(() => callable.run({ data: { automationBudget: DEFAULT_AUTOMATION_BUDGET }, auth: { uid, token: { role: 'operador' } } }), { code: 'permission-denied' });
+      const changed = { ...DEFAULT_AUTOMATION_BUDGET, defaultBudgetUsd: 7 };
+      await callable.run({ data: { automationBudget: changed }, auth: { uid: adminUid, token: { role: 'admin' } } });
+      assert.deepEqual((await systemRef.get()).data().automationBudget, changed);
+      assert.equal((await systemRef.get()).data().jobMaxRetries, 1);
+      await assert.rejects(() => callable.run({ data: { automationBudget: { ...changed, defaultBudgetUsd: 101 } }, auth: { uid: adminUid, token: { role: 'admin' } } }), { code: 'invalid-argument' });
+    });
+    await t.test('new clients configure folders dynamically with access validation and model isolation', async () => {
+      const config = require('../functions/lib/functions/src/automation/clientConfig.js');
+      await config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, driveFolderIds: ['https://drive.google.com/drive/folders/folder-a'], defaultBudgetUsd: 5 } });
+      assert.deepEqual((await db.collection('clients').doc(clientA).get()).data().automation.driveFolderIds, ['folder-a']);
+      await assert.rejects(() => config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, defaultModelId: 'foreign-model' } }), { code: 'invalid-argument' });
+      await assert.rejects(() => config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, defaultBudgetUsd: 101 } }), { code: 'invalid-argument' });
+    });
+    await t.test('Drive permissions use IDs and current membership; normalized revisions are cached by client', async () => {
+      const input = { itemId: 'explicit-item', fileName: 'arbitrary.jpg', driveFile: { folderId: 'folder-a', fileId: 'file-a' } };
+      const one = await drive.importDriveImage(clientA, uid, input);
+      const again = await drive.importDriveImage(clientA, uid, input);
+      assert.equal(downloads, 1); assert.equal(one.storagePath, again.storagePath); assert.equal(one.itemId, 'explicit-item');
+      await assert.rejects(() => drive.importDriveImage(clientB, uid, input), { code: 'permission-denied' });
+      await assert.rejects(() => drive.importDriveImage(clientA, uid, { ...input, driveFile: { folderId: 'folder-a', fileId: 'file-b' } }), { code: 'permission-denied' });
+      driveVersion = '2'; const changed = await drive.importDriveImage(clientA, uid, input); assert.notEqual(changed.storagePath, one.storagePath); assert.equal(downloads, 2);
+      await assert.rejects(() => drive.importDriveImage(clientA, uid, { ...input, driveFile: { ...input.driveFile, version: '1' } }), { code: 'failed-precondition' });
+      inaccessible = true; await assert.rejects(() => drive.importDriveImage(clientA, uid, input)); inaccessible = false;
+    });
+    await t.test('planning is free, pins Drive revisions, and execute is atomic under concurrent calls', async () => {
+      const before = providerCalls; const beforeReviews = reviewedPrompts.length;
+      const input = { ...base, externalId: `plan-${randomUUID()}`, inputImages: [{ itemId: 'mapped', fileName: 'reference.jpg', driveFile: { folderId: 'folder-a', fileId: 'file-a' } }] };
+      const prepared = await Promise.all(Array.from({ length: 5 }, () => plans.prepareAutomationPlan(input, uid, 'operador')));
+      assert.equal(new Set(prepared.map((p: any) => p.id)).size, 1); assert.equal(providerCalls, before); assert.equal(reviewedPrompts.length, beforeReviews);
+      assert.equal(prepared[0].request.inputImages[0].driveFile.version, '2');
+      assert.equal(plans.publicAutomationPlan(prepared[0]).imageCount, 6);
+      const execution = await Promise.all(Array.from({ length: 5 }, () => plans.executeAutomationPlan(prepared[0].id, uid, 'operador')));
+      assert.equal(new Set(execution.map((r: any) => r.jobId)).size, 1); assert.ok(execution[0].createdAt);
+      await worker.processAutomation(execution[0].jobId);
+      const job = (await db.collection('automationJobs').doc(execution[0].jobId).get()).data();
+      assert.equal(job.generationJobIds.length, 6);
+      assert.equal((await plans.executeAutomationPlan(prepared[0].id, uid, 'operador')).jobId, job.id);
+      await assert.rejects(() => plans.readAutomationPlan(prepared[0].id, 'another-user', 'operador'), { code: 'not-found' });
+    });
+    await t.test('unknown cost authorization is explicit and planning never hides paid classification', async () => {
+      const plan = await plans.prepareAutomationPlan({ ...base, externalId: randomUUID(), allowEstimatedCosts: false }, uid, 'operador');
+      await assert.rejects(() => plans.executeAutomationPlan(plan.id, uid, 'operador'), { code: 'failed-precondition' });
+      assert.equal((await db.collection('automationJobs').where('planId', '==', plan.id).get()).size, 0);
+    });
+    await t.test('budget reservations serialize concurrent spending and reconcile exactly once', async () => {
+      const created = await persistence.createAutomation({ ...base, budgetUsd: 1, externalId: randomUUID() }, uid, 'operador');
+      const holds = await Promise.allSettled(Array.from({ length: 8 }, (_, i) => budgets.reserveAutomationOperation(created.jobId, `operation-${i}`, 'generation', 0.3)));
+      assert.equal(holds.filter((r: any) => r.status === 'fulfilled').length, 3);
+      let job = (await db.collection('automationJobs').doc(created.jobId).get()).data(); assert.equal(job.budget.reservedUsd, 0.9);
+      const successfulIndex = holds.findIndex((r: any) => r.status === 'fulfilled');
+      const id = (holds[successfulIndex] as PromiseFulfilledResult<string>).value;
+      await Promise.all(Array.from({ length: 5 }, () => budgets.settleAutomationOperation(created.jobId, id, 0.1, true)));
+      job = (await db.collection('automationJobs').doc(created.jobId).get()).data(); assert.equal(job.budget.reservedUsd, 0.6); assert.equal(job.budget.spentUsd, 0.1); assert.equal(job.budget.recordedUsd, 0.1);
+      await assert.rejects(() => budgets.reserveAutomationOperation(created.jobId, `operation-${successfulIndex}`, 'generation', 0.3));
+      await assert.rejects(() => persistence.createAutomation({ ...base, clientId: clientB, externalId: randomUUID() }, uid, 'operador'), { code: 'permission-denied' });
+      const other = await persistence.createAutomation({ ...base, clientId: clientB, inputImages: [{ itemId: 'b', fileName: 'reference.jpg', storagePath: inputPathB }], budgetUsd: 1, externalId: randomUUID() }, uid, 'operador');
+      assert.ok(await budgets.reserveAutomationOperation(other.jobId, 'separate-client', 'generation', 0.9));
+    });
+    await t.test('global edits apply to the next paid operation without deployment or cache expiry', async () => {
+      const created = await persistence.createAutomation({ ...base, budgetUsd: 3, externalId: randomUUID() }, uid, 'operador');
+      await systemRef.update({ automationBudget: { ...DEFAULT_AUTOMATION_BUDGET, defaultBudgetUsd: 0.1, maxBudgetUsd: 0.2 } });
+      await assert.rejects(() => budgets.reserveAutomationOperation(created.jobId, 'after-limit-change', 'generation', 0.3), { code: 'resource-exhausted' });
+      await systemRef.update({ automationBudget: DEFAULT_AUTOMATION_BUDGET }); system.invalidateSystemConfigCache();
+    });
+    await t.test('paid garment analysis requires explicit authorization and survives intake retry without reanalysis', async () => {
+      await db.collection('models').doc('advanced-model').set({ clientId: clientA, name: 'Modelo autorizado', status: 'active', poseCount: 1, poses: [{ id: 'front', storagePath: inputPath, fileName: 'front.jpg', aiClassification: { usableForGarmentViews: ['front'], orientationGroup: 'front', orientationDetail: 'front', framing: 'full_body', bodyFocus: 'full_body' } }] });
+      const garment = { ...base, jobType: 'garment', modelId: 'advanced-model', inputImages: [{ itemId: 'shirt', fileName: 'reference.jpg', storagePath: inputPath }] };
+      const denied = await persistence.createAutomation({ ...garment, externalId: randomUUID() }, uid, 'operador');
+      await worker.processAutomation(denied.jobId); assert.equal(classificationCalls, 0);
+      assert.equal((await db.collection('automationJobs').doc(denied.jobId).get()).data().status, 'failed');
+      const core = require('../functions/lib/functions/src/callables/createGenerationBatch.js'); const original = core.createGenerationBatchCore;
+      const created = await persistence.createAutomation({ ...garment, authorizeClassification: true, externalId: randomUUID() }, uid, 'operador');
+      try {
+        core.createGenerationBatchCore = async () => { throw new Error('Simulated interruption after paid analysis'); };
+        await worker.processAutomation(created.jobId);
+      } finally { core.createGenerationBatchCore = original; }
+      const partial = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      assert.equal(partial.status, 'failed'); assert.equal(classificationCalls, 1); assert.equal(Object.keys(partial.analysisCache).length, 1);
+      assert.equal(partial.budget.spentUsd, 0.05); assert.ok(partial.budget.recordedUsd > 0);
+      await persistence.retryAutomation({ jobId: created.jobId }, uid, 'operador');
+      await worker.processAutomation(created.jobId);
+      const done = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      assert.equal(done.status, 'processing'); assert.equal(classificationCalls, 1); assert.equal(done.generationJobIds.length, 1);
+      assert.equal(done.budget.recordedUsd, partial.budget.recordedUsd);
+    });
+    await t.test('classification incidents stay attached to their articles while valid siblings finish without duplicate work', async () => {
+      const itemIds = ['uncertain-first', 'valid-middle', 'incompatible-pose', 'wrong-kind-object', 'transport-error-article', 'valid-last'];
+      const beforeClassification = classificationCalls;
+      const created = await persistence.createAutomation({ ...base, jobType: 'garment', modelId: 'advanced-model', authorizeClassification: true, externalId: randomUUID(), inputImages: itemIds.map((itemId) => ({ itemId, fileName: `${itemId}.jpg`, storagePath: inputPath })) }, uid, 'operador');
+      await Promise.all([worker.processAutomation(created.jobId), worker.processAutomation(created.jobId)]);
+      let job = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      assert.equal(classificationCalls - beforeClassification, itemIds.length);
+      assert.equal(job.status, 'processing'); assert.equal(job.generationJobIds.length, 2);
+      assert.equal(job.items.filter((item: any) => item.issue).length, 4);
+      assert.equal(job.items.find((item: any) => item.itemId === 'uncertain-first').issue.code, 'classification-required');
+      assert.equal(job.items.find((item: any) => item.itemId === 'incompatible-pose').issue.code, 'no-compatible-poses');
+      assert.equal(job.items.find((item: any) => item.itemId === 'transport-error-article').issue.code, 'classification-failed');
+      const scenes = await db.getAll(...job.generationJobIds.map((id: string) => db.collection('jobs').doc(id)));
+      assert.deepEqual(scenes.map((scene: any) => scene.data().garmentId).sort(), ['valid-last', 'valid-middle']);
+      const beforeProvider = providerCalls;
+      for (const scene of scenes) await Promise.all([generation.processJob(scene.id, 'create', { skipBacklogSweep: true }), generation.processJob(scene.id, 'create', { skipBacklogSweep: true })]);
+      job = await worker.refreshAutomation(job.id);
+      assert.equal(job.status, 'needs_attention'); assert.equal(job.outputImages.length, 2);
+      assert.deepEqual(job.progress, { total: 2, completed: 2, failed: 0 });
+      assert.equal(job.items.length, 6); assert.equal(job.items.filter((item: any) => item.status === 'completed').length, 2);
+      assert.equal(results.automationReport(job).issues.filter((issue: any) => issue.itemId).length, 4);
+      const refreshed = await worker.refreshAutomation(job.id);
+      assert.deepEqual(refreshed.items, job.items);
+      await worker.processAutomation(job.id);
+      for (const scene of scenes) await generation.processJob(scene.id, 'create', { skipBacklogSweep: true });
+      assert.equal(providerCalls - beforeProvider, 2); assert.equal(classificationCalls - beforeClassification, itemIds.length);
+      assert.equal((await db.collection('batches').where('automationJobId', '==', job.id).get()).size, 1);
+      assert.equal(job.inputImages.length, itemIds.length);
+    });
+    await t.test('when every article needs classification attention no empty batch is created and retry reuses paid analysis', async () => {
+      const created = await persistence.createAutomation({ ...base, jobType: 'garment', modelId: 'advanced-model', authorizeClassification: true, externalId: randomUUID(), inputImages: ['uncertain-only', 'incompatible-only'].map((itemId) => ({ itemId, fileName: `${itemId}.jpg`, storagePath: inputPath })) }, uid, 'operador');
+      const before = classificationCalls;
+      await worker.processAutomation(created.jobId);
+      let job = await worker.refreshAutomation(created.jobId);
+      assert.equal(job.status, 'needs_attention'); assert.equal(job.batchId, null); assert.equal(job.leaseToken, null);
+      assert.deepEqual(job.generationJobIds, []); assert.equal(job.items.length, 2);
+      assert.equal((await db.collection('batches').where('automationJobId', '==', job.id).get()).size, 0);
+      await persistence.retryAutomation({ jobId: job.id }, uid, 'operador');
+      await worker.processAutomation(job.id);
+      job = await worker.refreshAutomation(job.id);
+      assert.equal(job.items.length, 2); assert.equal(job.status, 'needs_attention'); assert.equal(classificationCalls - before, 2);
+    });
+    await t.test('an article incident never bypasses a later budget pause or duplicates classification on resume', async () => {
+      const created = await persistence.createAutomation({ ...base, budgetUsd: 0.05, jobType: 'garment', modelId: 'advanced-model', authorizeClassification: true, externalId: randomUUID(), inputImages: ['uncertain-budget', 'valid-after-budget'].map((itemId) => ({ itemId, fileName: `${itemId}.jpg`, storagePath: inputPath })) }, uid, 'operador');
+      const before = classificationCalls;
+      await worker.processAutomation(created.jobId);
+      let job = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      assert.equal(job.spendingPaused, true); assert.equal(classificationCalls - before, 1);
+      assert.equal(job.items[0].issue.code, 'classification-required'); assert.equal(job.batchId, null);
+      await recovery.resumeAutomation({ jobId: job.id, budgetUsd: 1 }, uid, 'operador');
+      await worker.processAutomation(job.id);
+      job = await worker.refreshAutomation(job.id);
+      assert.equal(job.status, 'processing'); assert.equal(job.items.length, 2); assert.equal(job.generationJobIds.length, 1);
+      assert.equal(classificationCalls - before, 2);
+    });
+    let productionJob: any;
+    await t.test('all six scenes per article start independently; a rejected scene cannot block siblings or other articles', async () => {
+      const created = await persistence.createAutomation({ ...base, externalId: randomUUID(), inputImages: ['A','B','C'].map((itemId) => ({ itemId, fileName: `${itemId}.jpg`, storagePath: inputPath })) }, uid, 'operador');
+      await worker.processAutomation(created.jobId);
+      productionJob = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      const snapshots = await db.getAll(...productionJob.generationJobIds.map((id: string) => db.collection('jobs').doc(id)));
+      assert.equal(snapshots.length, 18);
+      assert.equal(snapshots.filter((s: any) => !s.data().automationGate && s.data().status === 'pending').length, 18);
+      for (const snap of snapshots) await snap.ref.update({ finalPrompt: `${snap.data().garmentId}: ${snap.data().finalPrompt}` });
+      const failedScene = snapshots.find((scene: any) => scene.data().garmentId === 'B');
+      rejectArticle = 'B:'; rejectCount = 3;
+      for (let attempt = 0; attempt < 3; attempt++) await generation.processJob(failedScene.id, 'create', { skipBacklogSweep: true });
+      rejectArticle = '';
+      const partial = await worker.refreshAutomation(productionJob.id);
+      assert.equal(partial.status, 'processing');
+      const b = partial.items.find((item: any) => item.itemId === 'B');
+      assert.equal(b.scenes.filter((scene: any) => scene.status === 'failed').length, 1);
+      assert.equal(b.scenes.filter((scene: any) => scene.status === 'pending').length, 5);
+      assert.equal(b.scenes.find((scene: any) => scene.jobId === failedScene.id).attempts, 3);
+      for (const scene of snapshots.filter((scene: any) => scene.id !== failedScene.id)) {
+        await Promise.all([generation.processJob(scene.id, 'create', { skipBacklogSweep: true }), generation.processJob(scene.id, 'create', { skipBacklogSweep: true })]);
+      }
+      const done = await worker.refreshAutomation(productionJob.id); assert.equal(done.status, 'needs_attention'); assert.equal(done.outputImages.length, 17);
+      assert.equal(done.items.find((item: any) => item.itemId === 'B').scenes.filter((scene: any) => scene.status === 'completed').length, 5);
+      const beforeDuplicate = providerCalls;
+      await worker.processAutomation(productionJob.id);
+      await Promise.all(snapshots.map((scene: any) => generation.processJob(scene.id, 'create', { skipBacklogSweep: true })));
+      assert.equal(providerCalls, beforeDuplicate);
+      assert.equal((await failedScene.ref.collection('outputs').get()).size, 3);
+      assert.deepEqual((await db.collection('automationJobs').doc(productionJob.id).get()).data().generationJobIds, productionJob.generationJobIds);
+    });
+    await t.test('reviews use the exact attempt prompt and originals, and corrections are never rewrapped', async () => {
+      assert.ok(reviewedPrompts.some((prompt) => prompt.includes('B:: corrected full scene, freely change background')));
+      assert.ok(requestedPrompts.includes('B:: corrected full scene, freely change background'));
+      assert.ok(reviewedPrompts.every((prompt) => !prompt.includes('Approximate similarity (~70%)')));
+      const usage = await db.collection('analytics_gemini_usage').where('clientId', '==', clientA).get();
+      assert.ok(usage.size >= 20); assert.ok(usage.docs.filter((s: any) => s.data().status === 'success').every((s: any) => s.data().estimatedCostUsd > 0));
+      assert.ok(usage.docs.some((s: any) => s.data().status === 'error' && s.data().feature === 'garment_view_category_color_classification'));
+    });
+    await t.test('approved downloads reuse Catalog assets and include an explicit manifest excluding rejects', async () => {
+      const JSZip = require('../functions/node_modules/jszip');
+      const current = await worker.refreshAutomation(productionJob.id);
+      const archive = await JSZip.loadAsync(await results.automationResultsZip(current));
+      const manifest = JSON.parse(await archive.file('manifest.json').async('string'));
+      assert.equal(manifest.images.length, 17); assert.ok(manifest.images.every((image: any) => image.clientId === clientA && image.reviewStatus === 'approved' && image.outputId && image.jobId));
+    });
+    await t.test('exhaustion preserves outputs and safely resumes the same scenes after authorized budget increase', async () => {
+      const created = await persistence.createAutomation({ ...base, externalId: randomUUID(), budgetUsd: 0.06 }, uid, 'operador');
+      await worker.processAutomation(created.jobId);
+      let current = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      const snapshots = await db.getAll(...current.generationJobIds.map((id: string) => db.collection('jobs').doc(id)));
+      const first = snapshots[0];
+      await generation.processJob(first.id, 'create', { skipBacklogSweep: true });
+      const failed = (await first.ref.get()).data(); assert.equal(failed.automationGate, 'budget'); assert.ok(failed.currentOutput); assert.equal(failed.currentOutput.autoReview, null);
+      const paidBeforeBudgetStops = providerCalls;
+      for (const scene of snapshots.slice(1)) await generation.processJob(scene.id, 'create', { skipBacklogSweep: true });
+      assert.equal(providerCalls, paidBeforeBudgetStops);
+      current = await worker.refreshAutomation(created.jobId); assert.equal(current.status, 'needs_attention');
+      const ids = current.generationJobIds;
+      await recovery.resumeAutomation({ jobId: current.id, budgetUsd: 2 }, uid, 'operador');
+      const beforeResume = providerCalls;
+      await generation.processJob(first.id, 'requeue', { skipBacklogSweep: true });
+      assert.equal(providerCalls, beforeResume);
+      const resumed = (await first.ref.get()).data(); assert.equal(resumed.status, 'completed');
+      assert.equal(resumed.generationAttemptCount, 1);
+      assert.deepEqual((await db.collection('automationJobs').doc(current.id).get()).data().generationJobIds, ids);
+      assert.equal((await first.ref.collection('outputs').get()).size, 1);
+    });
+    await t.test('operational review retry reuses the generated output and keeps quality attempts separate', async () => {
+      const created = await persistence.createAutomation({ ...base, externalId: randomUUID(), budgetUsd: 2 }, uid, 'operador');
+      await worker.processAutomation(created.jobId);
+      const job = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      const first = db.collection('jobs').doc(job.generationJobIds[0]);
+      const before = providerCalls; reviewTransportFailures = 1;
+      await generation.processJob(first.id, 'create', { skipBacklogSweep: true });
+      const partial = (await first.get()).data(); assert.equal(partial.status, 'pending'); assert.equal(partial.automationReviewPending, true); assert.equal(partial.retryCount, 1);
+      await generation.processJob(first.id, 'requeue', { skipBacklogSweep: true });
+      const done = (await first.get()).data(); assert.equal(done.status, 'completed'); assert.equal(done.generationAttemptCount, 1); assert.equal(providerCalls, before + 1);
+      assert.equal(done.currentOutputId, partial.currentOutputId); assert.equal(done.completedOutputCount, 1); assert.equal((await first.collection('outputs').get()).size, 1);
+    });
+    await t.test('machine API authorizes multiple configured clients and scopes every plan, job and download', async () => {
+      const machineAuth = require('../functions/lib/functions/src/automation/machineAuth.js');
+      const api = require('../functions/lib/functions/src/automation/api.js');
+      const secret = 'test-machine-secret-with-sufficient-entropy-placeholder';
+      await db.collection('automationPrincipals').doc('advanced-machine').set({ active: true, version: 1, allowedClientIds: [clientA, clientB], allowedJobTypes: ['product'], scopes: ['jobs:create', 'jobs:read'], secretHashes: [{ hash: machineAuth.credentialHash(secret), expiresAt: null }] });
+      const issued = await machineAuth.issueMachineToken('advanced-machine', secret);
+      const http = async (method: string, path: string, body?: any, token = issued.access_token) => {
+        let status = 200, data: any;
+        const response = { set: () => response, status: (value: number) => { status = value; return response; }, json: (value: any) => { data = value; return response; }, send: (value: any) => { data = value; return response; } };
+        await api.automationHttpHandler({ method, path, body, query: {}, headers: { authorization: `Bearer ${token}` } }, response);
+        return { status, data };
+      };
+      const caps = await http('GET', '/capabilities'); assert.equal(caps.status, 200); assert.equal(caps.data.clients.length, 2); assert.equal(JSON.stringify(caps.data).includes('secretHashes'), false);
+      for (const [clientId, folderId, fileId] of [[clientA, 'folder-a', 'file-a'], [clientB, 'folder-b', 'file-b']]) {
+        const prepared = await http('POST', '/plans', { ...base, clientId, externalId: randomUUID(), inputImages: [{ itemId: 'mapped-item', fileName: 'photo.jpg', driveFile: { folderId, fileId } }] });
+        assert.equal(prepared.status, 200); const planId = prepared.data.planId;
+        assert.equal((await http('GET', `/plans/${planId}`)).data.clientId, clientId);
+        const executed = await http('POST', `/plans/${planId}/execute`); assert.equal(executed.status, 202); assert.ok(executed.data.createdAt);
+        assert.equal((await http('GET', `/jobs/${executed.data.jobId}`)).data.clientId, clientId);
+        assert.equal((await http('POST', `/jobs/${executed.data.jobId}/resume`, {})).status, 403);
+      }
+      const foreign = await http('POST', '/plans', { ...base, clientId: 'not-authorized', externalId: randomUUID() }); assert.equal(foreign.status, 403);
+      assert.equal((await http('GET', `/jobs/${productionJob.id}/download`)).status, 404);
+      const readOnly = await machineAuth.issueMachineToken('advanced-machine', secret, 'jobs:read');
+      assert.equal((await http('POST', '/plans', base, readOnly.access_token)).status, 403);
+    });
+    await t.test('legacy automation without an authorized budget is held before any new paid generation', async () => {
+      const intake = await persistence.createAutomation({ ...base, externalId: randomUUID() }, uid, 'operador');
+      await db.collection('automationJobs').doc(intake.jobId).update({ effectivePolicy: admin.firestore.FieldValue.delete(), budget: admin.firestore.FieldValue.delete() });
+      const beforeAnalysis = classificationCalls;
+      await worker.processAutomation(intake.jobId);
+      assert.equal((await db.collection('automationJobs').doc(intake.jobId).get()).data().status, 'needs_attention');
+      assert.equal(classificationCalls, beforeAnalysis);
+      const current = (await db.collection('jobs').doc(productionJob.generationJobIds[0]).get()).data();
+      const legacy = { ...current, automationJobId: 'legacy-without-budget', status: 'pending', currentOutput: null, currentOutputId: null, generationAttemptCount: 0, claimToken: null, automationGate: null };
+      delete legacy.automationManaged;
+      const ref = db.collection('jobs').doc(); await ref.set(legacy);
+      const before = providerCalls;
+      await generation.processJob(ref.id, 'create', { skipBacklogSweep: true });
+      assert.equal(providerCalls, before); assert.equal((await ref.get()).data().automationGate, 'budget');
+      const { buildRegenerateJobPatch } = require('../functions/lib/functions/src/callables/regenerateJob.helpers.js');
+      assert.equal(buildRegenerateJobPatch(legacy, 'fal-seedream-5-flash', 'Explicit manual recovery').automationManaged, false);
+    });
+    await t.test('manual regeneration keeps traceability and bypasses automation limits', async () => {
+      const { buildRegenerateJobPatch } = require('../functions/lib/functions/src/callables/regenerateJob.helpers.js');
+      const current = (await db.collection('automationJobs').doc(productionJob.id).get()).data();
+      const ref = db.collection('jobs').doc(current.generationJobIds[0]); const old = (await ref.get()).data();
+      const history = (await ref.collection('outputs').get()).size;
+      await ref.update(buildRegenerateJobPatch(old, 'fal-seedream-5-flash', 'Manual catalog regeneration'));
+      await systemRef.update({ automationBudget: { ...DEFAULT_AUTOMATION_BUDGET, defaultBudgetUsd: 0.01, maxBudgetUsd: 0.01, maxReviewAttempts: 1, maxOperationalRetries: 0 } });
+      const budgetBefore = (await db.collection('automationJobs').doc(current.id).get()).data().budget;
+      await generation.processJob(ref.id, 'requeue', { skipBacklogSweep: true });
+      const after = (await ref.get()).data(); assert.equal(after.status, 'completed'); assert.equal(after.automationJobId, current.id); assert.equal(after.automationManaged, false); assert.equal(after.autoReviewMaxAttempts, 3);
+      assert.equal((await ref.collection('outputs').get()).size, history + 1);
+      assert.deepEqual((await db.collection('automationJobs').doc(current.id).get()).data().budget, budgetBefore);
+    });
+  } finally { globalThis.fetch = originalFetch; await admin.app().delete(); }
+});

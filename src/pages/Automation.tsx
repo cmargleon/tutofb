@@ -1,3 +1,4 @@
+import { remainingAutomationBudget } from '../../shared/src/automationPolicy';
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Workflow } from 'lucide-react';
@@ -17,8 +18,8 @@ const timestamps = (job: AutomationJob) => [
 export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) => {
   const [search] = useSearchParams();
   const resume = search.get('resume') || undefined;
-  const state = useAutomation(resume);
-  const selected = state.jobs.find((job) => job.id === search.get('job'));
+  const state = useAutomation(resume, search.get('job') || undefined);
+  const selected = state.selectedJob || state.jobs.find((job) => job.id === search.get('job'));
   const client = state.clients.find((entry) => entry.id === state.clientId);
   return <div className="mx-auto max-w-6xl space-y-6">
     <PageHeader title="Automatización" description="Producción de imágenes desde una entrada mínima o un sistema externo." icon={Workflow} />
@@ -47,10 +48,34 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         <option value="">Usar preset del cliente o {PROVIDER_LABELS[DEFAULT_IMAGE_PROVIDER]}</option>
         {PROVIDER_VALUES.map((provider) => <option key={provider} value={provider} disabled={state.disabledProviders.includes(provider)}>{PROVIDER_LABELS[provider]}{state.disabledProviders.includes(provider) ? ' (deshabilitado)' : ''}</option>)}
       </select></label>
-      <label className={labelClass}>Imágenes<input className={inputClass} required={!resume} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={state.busy} onChange={(event) => state.changeFiles(Array.from(event.target.files || []))} /></label>
+      <label className={labelClass}>Origen de fotografías<select className={inputClass} value={state.inputSource} disabled={state.busy} onChange={(e) => state.setInputSource(e.target.value as 'uploads' | 'drive')}><option value="uploads">Subir fotografías</option><option value="drive">Google Drive autorizado</option></select></label>
+      {state.inputSource === 'uploads' && <><label className={labelClass}>Imágenes<input className={inputClass} required={!resume} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={state.busy} onChange={(event) => state.changeFiles(Array.from(event.target.files || []))} /></label>
       <label className="flex gap-2 text-sm text-slate-600"><input type="checkbox" checked={state.sameItem} disabled={state.busy} onChange={(event) => { state.setSameItem(event.target.checked); state.changeFiles(state.files); }} />Todas las fotos muestran el mismo artículo (hasta 4 vistas)</label>
       <p className="text-xs text-slate-500">{state.files.length} fotos. Sin agrupar, cada foto es un artículo independiente.</p>
-      <Button type="submit" loading={state.busy} disabled={!resume && !state.files.length}>{resume ? 'Reintentar AutomationJob' : 'Crear AutomationJob'}</Button>
+      </>}
+      {state.inputSource === 'drive' && <div className="space-y-3"><p className="text-sm text-slate-600">Asocia cada fotografía a su artículo. Varias filas pueden compartir el mismo artículo.</p>
+        {state.driveRows.map((row, index) => <fieldset disabled={state.busy} key={index} className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
+          <label className={labelClass}>Artículo<input required className={inputClass} value={row.itemId} onChange={(e) => state.setDriveRows(state.driveRows.map((r, i) => i === index ? { ...r, itemId: e.target.value } : r))} /></label>
+          <label className={labelClass}>ID del archivo<input required className={inputClass} value={row.fileId} onChange={(e) => state.setDriveRows(state.driveRows.map((r, i) => i === index ? { ...r, fileId: e.target.value } : r))} /></label>
+          <label className={labelClass}>Carpeta autorizada<select required className={inputClass} value={row.folderId} onChange={(e) => state.setDriveRows(state.driveRows.map((r, i) => i === index ? { ...r, folderId: e.target.value } : r))}><option value="">Seleccionar carpeta</option>{client?.automation?.driveFolderIds?.map((id) => <option key={id}>{id}</option>)}</select></label>
+          <label className={labelClass}>Revisión (opcional)<input className={inputClass} value={row.revisionId} onChange={(e) => state.setDriveRows(state.driveRows.map((r, i) => i === index ? { ...r, revisionId: e.target.value } : r))} /></label>
+          {state.driveRows.length > 1 && <Button type="button" variant="ghost" onClick={() => state.setDriveRows(state.driveRows.filter((_, i) => i !== index))}>Quitar fotografía del pedido</Button>}
+        </fieldset>)}
+        <Button type="button" variant="secondary" disabled={state.busy || state.driveRows.length >= 40} onClick={() => state.setDriveRows([...state.driveRows, { itemId: '', fileId: '', folderId: '', revisionId: '' }])}>Añadir fotografía</Button>
+      </div>}
+      {!resume && <>
+        <label className={labelClass}>Presupuesto del pedido (USD)<input type="number" min="0.01" step="0.01" className={inputClass} value={state.budgetUsd} placeholder="Usar presupuesto del cliente / Sistema" onChange={(e) => state.setBudgetUsd(e.target.value)} /></label>
+        <label className="flex gap-2 text-sm text-slate-700"><input type="checkbox" checked={state.allowEstimatedCosts} onChange={(e) => state.setAllowEstimatedCosts(e.target.checked)} />Autorizo operaciones con tarifas estimadas. El presupuesto controla reservas; no garantiza un máximo contractual de cobro del proveedor.</label>
+        {state.jobType === 'garment' && <label className="flex gap-2 text-sm text-slate-700"><input type="checkbox" checked={state.authorizeClassification} onChange={(e) => state.setAuthorizeClassification(e.target.checked)} />Autorizar la clasificación pagada de referencias al ejecutar.</label>}
+      </>}
+      <Button type="submit" loading={state.busy} disabled={!resume && state.inputSource === 'uploads' && !state.files.length}>{resume ? 'Reintentar entrada' : 'Preparar plan sin generar'}</Button>
+      {state.preparedPlan && <section className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4" aria-label="Plan preparado">
+        <h3 className="font-semibold">Plan preparado · {state.preparedPlan.clientName}</h3>
+        <p className="text-sm">{state.preparedPlan.items.length} artículos · {state.preparedPlan.imageCount} imágenes · escenas independientes · {state.preparedPlan.policy.maxReviewAttempts} intentos por imagen.</p>
+        <p className="text-sm">Costo estimado USD {state.preparedPlan.estimatedCostUsd.toFixed(3)} · presupuesto USD {state.preparedPlan.policy.budgetUsd.toFixed(2)}. Las reservas conservadoras pueden detener el trabajo antes de completar todas las escenas.</p>
+        {state.preparedPlan.classificationRequired && <p className="text-xs">La clasificación se realizará al ejecutar; las poses incompatibles se excluirán después del análisis.</p>}
+        <Button type="button" loading={state.busy} disabled={!state.preparedPlan.policy.allowEstimatedCosts || (state.preparedPlan.classificationRequired && !state.preparedPlan.policy.authorizeClassification)} onClick={() => void state.execute()}>Ejecutar plan</Button>
+      </section>}
     </form> : <>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm"><thead className="border-b bg-slate-50 text-slate-600"><tr>{['Fecha / cliente', 'Origen / tipo', 'Estado', 'Imágenes', 'Reintentos', 'Detalle'].map((label) => <th className="p-4" key={label}>{label}</th>)}</tr></thead>
@@ -74,6 +99,15 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
           <Link className="px-3 py-2 text-sm text-indigo-600" to={`/automation/intake?resume=${selected.id}`}>Completar modelo / sustituir imágenes</Link>
         </div>}
         <dl className="grid gap-3 text-xs text-slate-600 sm:grid-cols-3">{timestamps(selected).map(([label, value]) => <div key={label}><dt>{label}</dt><dd className="mt-1 font-medium">{date(value)}</dd></div>)}</dl>
+        {state.selectedPlan && <details className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold">Plan guardado · {state.selectedPlan.preset}</summary><div className="mt-3 space-y-2 text-sm"><p>Proveedor: {state.selectedPlan.provider} · modelo humano: {state.selectedPlan.modelId || 'No aplica'}</p><p>{state.selectedPlan.imageCount} imágenes · costo estimado USD {state.selectedPlan.estimatedCostUsd.toFixed(3)}</p>{state.selectedPlan.items.map((item) => <p key={item.itemId}><strong>{item.itemId}</strong>: {item.sceneIds.join(', ')} · USD {item.estimatedCostUsd.toFixed(3)}</p>)}</div></details>}
+        {selected.effectivePolicy && <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
+          <p>Escenas independientes</p><p>Calidad: {selected.effectivePolicy.maxReviewAttempts} intentos</p><p>Reintentos operativos: {selected.effectivePolicy.maxOperationalRetries}</p>
+          {selected.budget && <><p>Presupuesto USD {selected.budget.limitUsd.toFixed(2)}</p><p>Registrado USD {selected.budget.recordedUsd.toFixed(4)}</p><p>Disponible USD {remainingAutomationBudget(selected.budget).toFixed(4)}</p><p>Comprometido USD {selected.budget.spentUsd.toFixed(4)}</p><p>Reservado USD {selected.budget.reservedUsd.toFixed(4)}</p><p>Tarifas estimadas; cobros del proveedor sin confirmar.</p></>}
+          {selected.planId && <p className="break-all text-xs sm:col-span-3">Plan: {selected.planId}</p>}
+        </div>}
+        {selected.items?.map((item) => <div key={item.itemId} className="overflow-auto rounded-xl border border-slate-200"><div className="flex justify-between bg-slate-50 p-3 text-sm"><strong>{item.itemId}</strong><span>{item.status}</span></div>{item.issue && <p className="bg-amber-50 p-3 text-sm text-amber-900">{item.issue.code}: {item.issue.message}</p>}<table className="w-full text-left text-xs"><thead><tr>{['Escena', 'Estado', 'Intentos', 'Gemini / incidencia'].map((label) => <th className="p-3" key={label}>{label}</th>)}</tr></thead><tbody>{item.scenes.map((scene) => <tr key={scene.jobId} className="border-t"><td className="p-3">{scene.scene}</td><td className="p-3">{scene.status}</td><td className="p-3">{scene.attempts}</td><td className="p-3">{scene.verdict || '—'}<p>{scene.reason}</p></td></tr>)}</tbody></table></div>)}
+        {state.canCreate && (selected.spendingPaused || selected.items?.some((item) => item.scenes.some((scene) => scene.status === 'budget'))) && <div className="flex flex-wrap items-center gap-3"><label className={labelClass}>Presupuesto autorizado (USD)<input className={inputClass} type="number" min="0.01" step="0.01" placeholder={String(selected.budget?.limitUsd || '')} value={state.resumeBudgetUsd} onChange={(e) => state.setResumeBudgetUsd(e.target.value)} /></label><Button loading={state.busy} variant="secondary" onClick={() => void state.resume(selected)}>Reanudar con límites vigentes</Button></div>}
+        {selected.outputImages.length > 0 && <Button loading={state.busy} variant="secondary" onClick={() => void state.download(selected)}>Descargar aprobadas + manifiesto ZIP</Button>}
         <h3 className="font-medium">Entradas</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-6">{selected.inputImages.map((image, index) => <figure key={index}><div className="aspect-square"><ImageThumb storagePath={image.storagePath} alt={image.fileName} fit="contain" /></div><figcaption className="mt-1 truncate text-xs">{image.fileName}</figcaption></figure>)}</div>
         <h3 className="font-medium">Resultados aprobados</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{selected.outputImages.map((image) => <figure key={image.jobId}><div className="aspect-square"><ImageThumb storagePath={image.storagePath} alt={image.type} fit="contain" /></div><figcaption className="mt-1 text-xs">{image.type}</figcaption></figure>)}</div>
         {selected.batchId && <p className="text-xs text-slate-500">Abre el batch para revisar intentos, costos y reintentar jobs de generación.</p>}

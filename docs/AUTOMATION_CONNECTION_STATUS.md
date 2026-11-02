@@ -27,7 +27,9 @@ Despliegue completado de `manglarMcp`, las cuatro callables de consentimiento/li
 
 Verificación autenticada del helper HTTP en producción: los seis clientes aparecen habilitados; JISHOP lista dieciocho fotografías reales en FOTOGRAFIAS SHEIN. Intentar consultar esa misma carpeta para Barbie devuelve HTTP 403. No se enviaron pedidos ni se generaron imágenes durante estas comprobaciones.
 
-**Único paso externo pendiente:** añadir el servidor como plugin privado en ChatGPT e iniciar sesión para autorizarlo. El intento de controlar la aplicación ChatGPT en la laptop fue rechazado explícitamente por Computer Use por motivos de seguridad. No se marca esa vinculación como completada.
+**Vinculación personal completada y verificada:** el usuario añadió y autorizó el plugin. Firestore confirma una concesión activa de administrador para el recurso y la versión vigentes, y credenciales de acceso y renovación válidas. Los logs de producción confirman el intercambio OAuth de OpenAI con HTTP 200 y las llamadas posteriores de su cliente MCP con respuestas correctas. No hubo errores de servidor en los treinta minutos revisados. Evidencia sin credenciales: `MANGLAR_NATIVE_LINK_VERIFICATION.json`.
+
+La comprobación de la vinculación usa los registros reales de autorización y del servidor. No se efectuó desde este chat una llamada de negocio con las credenciales del plugin ni se inició una generación pagada. Las pruebas anteriores de clientes y Drive se conservan por separado. El informe `MANGLAR_PLUGIN_VERIFICATION.json` corresponde al smoke test histórico previo a la vinculación; el informe nativo posterior registra su finalización.
 
 ## Validación local
 

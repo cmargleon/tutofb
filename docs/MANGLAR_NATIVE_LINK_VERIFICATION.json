@@ -1,0 +1,25 @@
+{
+  "checkedAt": "2026-11-02T21:02:34.508Z",
+  "resource": "https://tutofb-260320-1003.web.app/api/manglar/mcp",
+  "nativeChatGPTLinkCompleted": true,
+  "authorizationActive": true,
+  "ownerIsActiveAdmin": true,
+  "principalActive": true,
+  "principalVersionMatches": true,
+  "authorizedBusinessClientCount": 6,
+  "scopes": [
+    "jobs:read",
+    "jobs:create"
+  ],
+  "authorizationCreatedAt": "2026-11-02T20:59:42.370Z",
+  "oauthTokenExchangeSucceededAt": "2026-11-02T21:00:00.266154Z",
+  "oauthClientAgent": "openai-connectors-oauth/1.0",
+  "mcpClientAgent": "openai-mcp/1.0.0 (Codex)",
+  "mcpClientRequestsSucceededAt": "2026-11-02T21:00:04.102681Z",
+  "accessCredentialValidAtVerification": true,
+  "refreshCredentialValidAtVerification": true,
+  "serverErrorsDuringLast30Minutes": 0,
+  "authenticatedBusinessCallPerformedFromThisChat": false,
+  "paidGeneration": false,
+  "credentialsPrinted": false
+}

@@ -43,6 +43,8 @@ node scripts/verify-manglar-plugin.mjs
 
 El resultado queda en `docs/MANGLAR_PLUGIN_VERIFICATION.json`. Ese registro distingue las pruebas del servidor de la vinculación efectiva en ChatGPT; no marca la conexión del usuario como completada.
 
+El usuario completó después la vinculación. La comprobación de la concesión activa y las llamadas reales del cliente de OpenAI queda en `docs/MANGLAR_NATIVE_LINK_VERIFICATION.json`; es independiente del smoke test anterior y no contiene credenciales.
+
 Configuración por operador autorizado, después de compilar Functions:
 
 ```bash

@@ -1,3 +1,6 @@
+import { loadManglarUser, loadManglarAccess } from '../manglar/access';
+import type { DelegatedCaller } from '../manglar/context';
+import type { Role } from '../../../shared/src/types';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { DecideManglarConnectionRequest, ManglarConnection, ManglarConnectionDetails, ManglarConnectionRedirect, ManglarConnectionRequest } from '../../../shared/src/types';
@@ -14,6 +17,7 @@ const current = (value: { expiresAt: Timestamp } | undefined): boolean => Boolea
 interface Pending extends OAuthAuthorization { kind: 'request'; expiresAt: Timestamp; used: boolean }
 interface Grant {
   id: string; kind: 'grant'; ownerUid: string; clientId: string; resource: string; scopes: string[];
+  authorizationModel?: 'user-v1'; role?: Role; allowedClientIds?: string[] | null; accessVersion?: number;
   principalVersion: number; active: boolean; createdAt: Timestamp; expiresAt: Timestamp;
 }
 interface Code { kind: 'code'; grantId: string; redirectUri: string; challenge: string; clientId: string; expiresAt: Timestamp; used: boolean }
@@ -33,28 +37,35 @@ const readPending = async (requestId: string): Promise<Pending> => {
   return data!;
 };
 export const manglarConnectionDetails = async (requestId: string, uid: string): Promise<ManglarConnectionDetails> => {
-  await requireAdmin(uid);
-  const [request, principal] = await Promise.all([readPending(requestId), loadAutomationPrincipal('chatgpt-work')]);
-  if (request.scopes.some((scope) => !principal.scopes.includes(scope as MachineScope))) throw new HttpsError('permission-denied', 'Permisos de conexión no disponibles.');
-  const clients = principal.allowedClientIds.length ? await getAppFirestore().getAll(...principal.allowedClientIds.map((id) => getAppFirestore().collection('clients').doc(id))) : [];
-  return { application: 'ChatGPT', scopes: request.scopes, expiresAt: request.expiresAt.toDate().toISOString(),
-    clients: clients.filter((client) => client.exists && client.data()?.status !== 'archived' && client.data()?.automation?.enabled === true).map((client) => ({ id: client.id, name: client.data()!.name })) };
+  const user = await loadManglarUser(uid);
+  const access = await loadManglarAccess(uid, user.role);
+  if (!access.enabled) throw new HttpsError('permission-denied', 'Un administrador debe habilitar tu acceso MCP y asignar clientes.');
+  const request = await readPending(requestId);
+  const clients = access.clientIds === null
+    ? (await getAppFirestore().collection('clients').limit(500).get()).docs
+    : access.clientIds.length ? await getAppFirestore().getAll(...access.clientIds.map((id) => getAppFirestore().collection('clients').doc(id))) : [];
+  return { application: 'ChatGPT', scopes: request.scopes, role: user.role, unrestrictedClients: access.clientIds === null,
+    expiresAt: request.expiresAt.toDate().toISOString(),
+    clients: clients.filter((client) => client.exists && client.data()?.status !== 'archived').map((client) => ({ id: client.id, name: client.data()!.name })) };
 };
 export const decideManglarAuthorization = async (input: DecideManglarConnectionRequest, uid: string): Promise<ManglarConnectionRedirect> => {
-  await requireAdmin(uid);
+  const user = await loadManglarUser(uid);
+  const access = await loadManglarAccess(uid, user.role);
+  if (!access.enabled) throw new HttpsError('permission-denied', 'Acceso MCP deshabilitado.');
   validateRequestId(input?.requestId);
   if (typeof input.approve !== 'boolean') throw new HttpsError('invalid-argument', 'Decisión inválida.');
-  const principal = await loadAutomationPrincipal('chatgpt-work');
   const grantId = opaqueValue(); const code = opaqueValue();
   return getAppFirestore().runTransaction(async (tx) => {
     const requestRef = ref('request', input.requestId);
     const request = (await tx.get(requestRef)).data() as Pending | undefined;
     if (!current(request) || request!.kind !== 'request' || request!.used) throw new HttpsError('failed-precondition', 'La solicitud venció o ya fue utilizada.');
-    if (request!.scopes.some((scope) => !principal.scopes.includes(scope as MachineScope))) throw new HttpsError('permission-denied', 'Permisos revocados.');
+    const [userSnapshot, accessSnapshot] = await tx.getAll(getAppFirestore().collection('users').doc(uid), getAppFirestore().collection('manglarAccess').doc(uid));
+    if (userSnapshot.data()?.active !== true || userSnapshot.data()?.status === 'archived' || userSnapshot.data()?.role !== user.role
+      || (accessSnapshot.data()?.version ?? 0) !== access.version || accessSnapshot.data()?.enabled === false) throw new HttpsError('permission-denied', 'Permisos revocados.');
     tx.update(requestRef, { used: true });
     if (!input.approve) return { redirectUrl: oauthRedirect(request!, { error: 'access_denied' }) };
     tx.create(ref('grant', grantId), { id: grantId, kind: 'grant', ownerUid: uid, clientId: request!.clientId, resource: request!.resource,
-      scopes: request!.scopes, principalVersion: principal.version, active: true, createdAt: Timestamp.now(), expiresAt: future(GRANT_MS) } satisfies Grant);
+      scopes: request!.scopes, authorizationModel: 'user-v1', role: user.role, allowedClientIds: access.clientIds, accessVersion: access.version, principalVersion: 0, active: true, createdAt: Timestamp.now(), expiresAt: future(GRANT_MS) } satisfies Grant);
     tx.create(ref('code', code), { kind: 'code', grantId, clientId: request!.clientId, redirectUri: request!.redirectUri,
       challenge: request!.challenge, used: false, expiresAt: future(120_000) } satisfies Code);
     return { redirectUrl: oauthRedirect(request!, { code }) };
@@ -63,6 +74,14 @@ export const decideManglarAuthorization = async (input: DecideManglarConnectionR
 const readGrant = async (id: string): Promise<Grant> => {
   const grant = (await ref('grant', id).get()).data() as Grant | undefined;
   if (!current(grant) || grant!.kind !== 'grant' || !grant!.active || grant!.resource !== MANGLAR_MCP_RESOURCE) throw new OAuthError('invalid_grant', 'Conexión vencida o revocada.');
+  if (grant!.authorizationModel === 'user-v1') {
+    try {
+      const user = await loadManglarUser(grant!.ownerUid);
+      const access = await loadManglarAccess(grant!.ownerUid, user.role);
+      if (!access.enabled || user.role !== grant!.role || access.version !== grant!.accessVersion) throw new Error('revoked');
+    } catch { throw new OAuthError('invalid_grant', 'Permisos individuales revocados; vuelve a conectar.'); }
+    return grant!;
+  }
   let principal;
   try {
     await requireAdmin(grant!.ownerUid);
@@ -74,6 +93,7 @@ const readGrant = async (id: string): Promise<Grant> => {
   if (principal.version !== grant!.principalVersion || grant!.scopes.some((scope) => !principal.scopes.includes(scope as MachineScope))) throw new OAuthError('invalid_grant', 'Permisos revocados.');
   return grant!;
 };
+export const isManglarConnectionActive = async (id: string): Promise<boolean> => { try { await readGrant(id); return true; } catch { return false; } };
 export const exchangeManglarToken = async (body: Record<string, unknown>) => {
   if (body.resource !== MANGLAR_MCP_RESOURCE) throw new OAuthError('invalid_target', 'Recurso OAuth inválido.');
   const clientId = requireOAuthString(body.client_id);
@@ -112,7 +132,7 @@ export const exchangeManglarToken = async (body: Record<string, unknown>) => {
   const { replayed: _, ...response } = result;
   return response;
 };
-export const verifyManglarMcpToken = async (authorization: string | undefined): Promise<MachineCaller> => {
+export const verifyManglarMcpToken = async (authorization: string | undefined): Promise<MachineCaller | DelegatedCaller> => {
   const bearer = authorization?.match(/^Bearer (manglar_mcp_[A-Za-z0-9_-]{43})$/)?.[1];
   if (!bearer) throw new HttpsError('unauthenticated', 'Conecta Manglar con ChatGPT.');
   const access = (await ref('access', bearer).get()).data() as Token | undefined;
@@ -120,29 +140,35 @@ export const verifyManglarMcpToken = async (authorization: string | undefined): 
   let grant: Grant;
   try { grant = await readGrant(access!.grantId); }
   catch { throw new HttpsError('unauthenticated', 'Conexión vencida o revocada.'); }
+  if (grant.authorizationModel === 'user-v1') {
+    return { uid: grant.ownerUid, role: grant.role!, connectionId: grant.id, scopes: grant.scopes,
+      allowedClientIds: grant.allowedClientIds ?? null, accessVersion: grant.accessVersion! };
+  }
   const principal = await loadAutomationPrincipal('chatgpt-work');
   if (principal.version !== grant.principalVersion) throw new HttpsError('unauthenticated', 'Permisos revocados.');
   return { uid: machineUid('chatgpt-work'), role: 'automation', principalId: 'chatgpt-work', principal, scopes: grant.scopes as MachineScope[] };
 };
 export const getManglarConnectionRequest = onCall<ManglarConnectionRequest, Promise<ManglarConnectionDetails>>(async (request) => {
-  await assertCallableRoles(request, ['admin']);
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
   return manglarConnectionDetails(request.data?.requestId, request.auth!.uid);
 });
 export const decideManglarConnection = onCall<DecideManglarConnectionRequest, Promise<ManglarConnectionRedirect>>(async (request) => {
-  await assertCallableRoles(request, ['admin']);
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
+  if (request.data?.approve === true && request.data.authorizationModel !== 'user-v1') throw new HttpsError('failed-precondition', 'Actualiza la página de Manglar para revisar y autorizar los permisos individuales antes de conectar.');
   return decideManglarAuthorization(request.data, request.auth!.uid);
 });
 export const listManglarConnections = onCall<Record<string, never>, Promise<{ connections: ManglarConnection[] }>>(async (request) => {
-  await assertCallableRoles(request, ['admin']); await requireAdmin(request.auth!.uid);
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']); await loadManglarUser(request.auth!.uid);
   const grants = await getAppFirestore().collection('automationOAuth').where('ownerUid', '==', request.auth!.uid).limit(100).get();
-  const principal = await loadAutomationPrincipal('chatgpt-work');
+  const awaitGrantActive = new Set<string>();
+  await Promise.all(grants.docs.filter((doc) => doc.data().kind === 'grant').map(async (doc) => { try { await readGrant(doc.data().id); awaitGrantActive.add(doc.data().id); } catch { /* expired/revoked */ } }));
   return { connections: grants.docs.filter((doc) => doc.data().kind === 'grant').map((doc) => {
     const grant = doc.data() as Grant & { id: string };
-    return { id: grant.id, application: 'ChatGPT', createdAt: grant.createdAt.toDate().toISOString(), expiresAt: grant.expiresAt.toDate().toISOString(), active: grant.active && current(grant) && principal.version === grant.principalVersion };
+    return { id: grant.id, application: 'ChatGPT', createdAt: grant.createdAt.toDate().toISOString(), expiresAt: grant.expiresAt.toDate().toISOString(), active: grant.active && current(grant) && awaitGrantActive.has(grant.id) };
   }) };
 });
 export const revokeManglarConnection = onCall<{ connectionId: string }, Promise<{ revoked: true }>>(async (request) => {
-  await assertCallableRoles(request, ['admin']); await requireAdmin(request.auth!.uid);
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']); await loadManglarUser(request.auth!.uid);
   const id = validateRequestId(request.data?.connectionId);
   await getAppFirestore().runTransaction(async (tx) => {
     const target = ref('grant', id); const grant = (await tx.get(target)).data() as Grant | undefined;

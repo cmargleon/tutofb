@@ -24,7 +24,7 @@ export const useManglarConnection = (requestId: string | null, enabled: boolean)
     if (!requestId || busy) return;
     setBusy(true);
     try {
-      const { redirectUrl } = await decideManglarConnection({ requestId, approve });
+      const { redirectUrl } = await decideManglarConnection({ requestId, approve, authorizationModel: 'user-v1' });
       if (!/^https:\/\/chatgpt\.com\/(?:connector_platform_oauth_redirect|connector\/oauth\/[A-Za-z0-9_-]{1,200})\?/.test(redirectUrl)) throw new Error('La dirección de regreso a ChatGPT no es válida.');
       window.location.assign(redirectUrl);
     } catch (failure) {

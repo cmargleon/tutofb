@@ -10,7 +10,7 @@ import { normalizeProviderImageConfig } from '../../../shared/src/providerImageC
 import { getAppFirestore } from '../firebase/appFirestore';
 import { assertProviderEnabledInSystemConfig, sanitizeSystemConfig } from '../admin/systemConfig';
 import { canReadAutomation, validateAutomationInput } from './domain';
-import { resolveAutomationPreset } from './presets';
+import { resolveAutomationPreset, resolveAutomationPoseIds } from './presets';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 import { authorizeDriveFile, googleDrive, validateDriveFolder } from './drive';
 import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from './budget';
@@ -45,8 +45,8 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   if (data.jobType === 'garment') {
     const model = (await db.collection('models').doc(resolved.modelId!).get()).data() as Model | undefined;
     if (!model || model.clientId !== data.clientId || model.status === 'archived') throw new HttpsError('failed-precondition', 'Modelo no disponible para el cliente.');
-    sceneIds = preset.poseIds || model.poses.map((pose) => pose.id);
-    if (!sceneIds.length || sceneIds.some((id) => !model.poses.some((pose) => pose.id === id))) throw new HttpsError('failed-precondition', 'Poses no disponibles.');
+    try { sceneIds = resolveAutomationPoseIds(model, preset.poseIds); }
+    catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
     preset.poseIds = sceneIds;
   } else sceneIds = preset.scenes!.map((scene) => scene.type);
   const inputs: NonNullable<CreateAutomationJobRequest['inputImages']> = [];

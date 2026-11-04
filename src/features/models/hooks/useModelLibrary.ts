@@ -6,6 +6,7 @@ import {
 } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Model, ModelIdentityTraits, ModelPhotoProvider, Pose } from '../../../../shared/src/types';
+import { isPoseActive } from '../../../../shared/src/domain';
 import { useConfirm, useConfirmByName, useToast } from '../../feedback/FeedbackProvider';
 import { createEmptyModelIdentityTraits, normalizeModelIdentityTraits } from '../identityTraits';
 import {
@@ -16,6 +17,7 @@ import {
   permanentlyDeleteModel,
   replaceModelPoseWithGeneratedPhoto,
   restoreModel,
+  setModelPoseActive,
   updateModel,
 } from '../firebase';
 import { MODEL_POSE_RECIPES_BY_ID } from '../constants';
@@ -41,11 +43,13 @@ export interface UseModelLibraryResult {
   isImportingBundle: boolean;
   exportingModelId: string | null;
   regeneratingPoseIds: Set<string>;
+  updatingPoseIds: Set<string>;
   handleStartEdit: (model: Model) => void;
   handleCancelEdit: () => void;
   handleEditFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   handleRemovePendingEditFile: (indexToRemove: number) => void;
   handleTogglePoseRemoval: (poseId: string) => void;
+  handleTogglePoseActive: (model: Model, pose: Pose) => Promise<void>;
   handleRegeneratePoseFromReference: (model: Model, pose: Pose) => Promise<void>;
   getPoseRegenerationAvailability: (
     model: Model,
@@ -177,6 +181,7 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
   const [isImportingBundle, setIsImportingBundle] = useState(false);
   const [exportingModelId, setExportingModelId] = useState<string | null>(null);
   const [regeneratingPoseIds, setRegeneratingPoseIds] = useState<Set<string>>(new Set());
+  const [updatingPoseIds, setUpdatingPoseIds] = useState<Set<string>>(new Set());
 
   const handleStartEdit = (model: Model) => {
     setEditingId(model.id ?? null);
@@ -214,6 +219,35 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
         ? current.filter((currentPoseId) => currentPoseId !== poseId)
         : [...current, poseId],
     );
+  };
+
+  const handleTogglePoseActive = async (model: Model, pose: Pose) => {
+    if (!model.id || updatingPoseIds.has(pose.id)) return;
+    const active = !isPoseActive(pose);
+    setUpdatingPoseIds((current) => new Set(current).add(pose.id));
+    try {
+      await setModelPoseActive({ modelId: model.id, poseId: pose.id, active });
+      onOptimisticUpdate?.((models) => models.map((current) => current.id === model.id
+        ? { ...current, poses: current.poses.map((item) => item.id === pose.id ? { ...item, active } : item) }
+        : current));
+      toast({
+        tone: 'success',
+        title: active ? 'Pose activada' : 'Pose desactivada',
+        description: active ? 'Disponible para nuevas generaciones compatibles.' : 'Se guardó el cambio. No aparecerá en el wizard ni se usará en nuevas generaciones automáticas.',
+      });
+    } catch (error) {
+      toast({
+        tone: 'error',
+        title: 'No pudimos cambiar el estado de la pose',
+        description: error instanceof Error ? error.message : 'Inténtalo nuevamente.',
+      });
+    } finally {
+      setUpdatingPoseIds((current) => {
+        const next = new Set(current);
+        next.delete(pose.id);
+        return next;
+      });
+    }
   };
 
   const getPoseRegenerationAvailability = (model: Model, pose: Pose) => {
@@ -522,11 +556,13 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     isImportingBundle,
     exportingModelId,
     regeneratingPoseIds,
+    updatingPoseIds,
     handleStartEdit,
     handleCancelEdit,
     handleEditFileChange,
     handleRemovePendingEditFile,
     handleTogglePoseRemoval,
+    handleTogglePoseActive,
     handleRegeneratePoseFromReference,
     getPoseRegenerationAvailability,
     handleSaveEdit,

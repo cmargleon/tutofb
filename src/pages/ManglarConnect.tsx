@@ -7,13 +7,13 @@ import { useManglarConnection } from '../features/automation/useManglarConnectio
 import { Login } from './Login';
 
 export const ManglarConnect: React.FC = () => {
-  const { user, loading: authLoading } = useAuth(); const { isAdmin, isActive } = useRole();
+  const { user, loading: authLoading } = useAuth(); const { isActive } = useRole();
   const [params] = useSearchParams(); const location = useLocation();
   const requestId = params.get('request');
-  const state = useManglarConnection(requestId, Boolean(user && isAdmin && isActive));
+  const state = useManglarConnection(requestId, Boolean(user && isActive));
   if (authLoading) return <LoadingBlock message="Comprobando acceso…" />;
   if (!user) return <Login redirectTo={`${location.pathname}${location.search}`} />;
-  if (!isAdmin || !isActive) return <main className="mx-auto max-w-lg p-8"><h1 className="text-xl font-semibold">Se necesita una cuenta de administrador</h1><p className="mt-3 text-slate-600">Inicia esta conexión con un administrador activo de Manglar.</p><Link className="mt-5 inline-block text-indigo-600" to="/">Volver a Manglar</Link></main>;
+  if (!isActive) return <main className="mx-auto max-w-lg p-8"><h1 className="text-xl font-semibold">Se necesita una cuenta activa</h1><p className="mt-3 text-slate-600">Inicia esta conexión con tu usuario activo de Manglar.</p><Link className="mt-5 inline-block text-indigo-600" to="/">Volver a Manglar</Link></main>;
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-12 sm:py-20">
       <div className="mx-auto max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
@@ -25,11 +25,12 @@ export const ManglarConnect: React.FC = () => {
         <div className="space-y-6 p-7 sm:p-9">
           {state.loading ? <LoadingBlock message="Consultando conexión…" /> : state.error ? <div role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{state.error}</div> : <>
             {state.details && <section aria-label="Acceso solicitado" className="space-y-5">
-              <p className="text-sm leading-6 text-slate-600">ChatGPT podrá consultar los siguientes clientes{state.details.scopes.includes('jobs:create') ? ', preparar pedidos y generar fotografías con los presupuestos que autorices' : ''}.</p>
+              <p className="text-sm leading-6 text-slate-600">ChatGPT actuará con tu usuario y tu rol ({state.details.role || 'admin'}). Podrá operar las funciones autorizadas de Tuto para los siguientes clientes{state.details.scopes.includes('jobs:create') ? ', preparar pedidos y generar fotografías con los presupuestos que autorices' : ''}.</p>
               <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 px-4">{state.details.clients.map((client) => <li key={client.id} className="py-3 text-sm font-medium text-slate-800">{client.name}</li>)}</ul>
-              {!state.details.clients.length && <p className="text-sm text-amber-700">No hay clientes habilitados. Configura los clientes antes de autorizar.</p>}
+              {state.details.unrestrictedClients && <p className="text-sm text-slate-600">Tu cuenta de administrador permite gestionar todos los clientes y la configuración del sistema.</p>}
+              {!state.details.clients.length && !state.details.unrestrictedClients && <p className="text-sm text-amber-700">No hay clientes habilitados. Configura los clientes antes de autorizar.</p>}
               <p className="text-sm leading-6 text-slate-600">La conexión dura hasta 30 días. Puedes revocarla desde esta página. Autorizar la conexión no inicia ninguna generación.</p>
-              <div className="flex flex-wrap gap-3"><Button loading={state.busy} disabled={!state.details.clients.length} icon={Link2} onClick={() => state.decide(true)}>Autorizar ChatGPT</Button><Button variant="secondary" disabled={state.busy} onClick={() => state.decide(false)}>Rechazar</Button></div>
+              <div className="flex flex-wrap gap-3"><Button loading={state.busy} disabled={!state.details.clients.length && !state.details.unrestrictedClients} icon={Link2} onClick={() => state.decide(true)}>Autorizar ChatGPT</Button><Button variant="secondary" disabled={state.busy} onClick={() => state.decide(false)}>Rechazar</Button></div>
             </section>}
             {!requestId && <section aria-label="Conexiones autorizadas" className="space-y-4">
               {!state.connections.length && <p className="text-sm text-slate-600">Todavía no autorizaste ninguna conexión. Añade el plugin Manglar en ChatGPT para empezar.</p>}

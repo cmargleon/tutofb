@@ -1,3 +1,4 @@
+import { effectiveItemKind, majorityItemKind } from '../../../../shared/src/itemKind';
 import { seedTryOnPrompt } from '../../../../shared/src/approvedTryOnPrompt';
 import { createDefaultProductScenes } from '../../../../shared/src/productGeneration';
 import {
@@ -230,7 +231,7 @@ export const getGenerateWizardSubmitButtonLabel = ({
 export const getGenerateWizardSteps = (_kind: WizardState['generationKind']): WizardStepDefinition[] => GENERATE_WIZARD_STEPS;
 
 export const getEffectiveItemKind = (garment: UploadedGarmentDraft): WizardState['generationKind'] =>
-  garment.itemKindOverride || ((garment.itemKindConfidence ?? 0) >= 0.65 ? garment.itemKind ?? null : null);
+  effectiveItemKind(garment);
 
 export const resolveWizardGenerationKind = (garments: UploadedGarmentDraft[]): WizardState['generationKind'] => {
   if (garments.length === 0 || garments.some((garment) => garment.analysisStatus !== 'ready')) return null;
@@ -239,8 +240,5 @@ export const resolveWizardGenerationKind = (garments: UploadedGarmentDraft[]): W
 };
 
 export const resolveWizardMajorityKind = (garments: UploadedGarmentDraft[]): WizardState['generationKind'] => {
-  if (!garments.length || garments.some((garment) => garment.analysisStatus !== 'ready' || !getEffectiveItemKind(garment))) return null;
-  const garmentCount = garments.filter((garment) => getEffectiveItemKind(garment) === 'garment').length;
-  const productCount = garments.length - garmentCount;
-  return garmentCount === productCount ? null : garmentCount > productCount ? 'garment' : 'product';
+  return majorityItemKind(garments);
 };

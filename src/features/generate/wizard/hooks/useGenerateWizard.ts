@@ -320,6 +320,17 @@ export const useGenerateWizard = () => {
 
   const compatiblePoseIdSet = useMemo(() => new Set(compatiblePoseIds), [compatiblePoseIds]);
 
+  // Catalog changes can deactivate a pose while this wizard is already open.
+  useEffect(() => {
+    if (!selectedModel) return;
+    const availableIds = new Set(selectedModel.poses.map((pose) => pose.id));
+    setState((current) => {
+      const selectedPoseIds = current.selectedPoseIds.filter((id) => availableIds.has(id));
+      if (selectedPoseIds.length === current.selectedPoseIds.length) return current;
+      return { ...resetWizardGeneratedOutputs(current), selectedPoseIds };
+    });
+  }, [selectedModel]);
+
   const uploadSummary = useMemo(() => buildGarmentUploadSummary(state.garments), [state.garments]);
   const allPosesSelected = useMemo(
     () =>
@@ -332,12 +343,13 @@ export const useGenerateWizard = () => {
   const canAdvance = useMemo(() => getGenerateWizardCanAdvance(state), [state]);
   const lastAccessibleStep = useMemo(() => getGenerateWizardLastAccessibleStep(state), [state]);
   const suggestionSignature = useMemo(
-    () => buildGarmentSuggestionSignature(state.selectedModelId, state.garments, {
+    () => JSON.stringify([selectedModel?.poses, buildGarmentSuggestionSignature(state.selectedModelId, state.garments, {
       outputMode: state.outputMode,
       selectedSpreadsheetCategoryId: state.selectedSpreadsheetCategoryId,
       selectedSpreadsheetCategoryLabel: selectedSpreadsheetCategory?.label ?? null,
-    }),
+    })]),
     [
+      selectedModel?.poses,
       selectedSpreadsheetCategory?.label,
       state.garments,
       state.outputMode,

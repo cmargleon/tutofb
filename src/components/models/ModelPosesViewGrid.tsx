@@ -1,5 +1,6 @@
 import React from 'react';
 import { Model } from '../../../shared/src/types';
+import { isPoseActive } from '../../../shared/src/domain';
 import { formatPoseClassificationLabel } from '../../../shared/src/utils/poseAiClassification';
 import { ImageThumb } from '../ui';
 
@@ -16,6 +17,7 @@ export const ModelPosesViewGrid: React.FC<{ model: Model }> = ({ model }) => (
         >
           <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} />
           <div className="absolute inset-x-0 bottom-0 rounded-b-md bg-gradient-to-t from-black/80 to-transparent px-2 py-2">
+            {!isPoseActive(pose) && <p className="mb-1 text-[10px] font-semibold text-amber-200">Inactiva</p>}
             <p className="truncate text-[11px] text-white">{pose.fileName}</p>
             <p className="mt-1 inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white">
               {formatPoseClassificationLabel(pose.aiClassification)}

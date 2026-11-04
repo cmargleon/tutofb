@@ -1,3 +1,4 @@
+import { withManglarJobBudget } from '../manglar/budget';
 import { AutomationBudgetError, reserveAutomationOperation, settleAutomationOperation, estimateGenerationHold, pauseAutomationGeneration } from '../automation/budget';
 import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
@@ -670,7 +671,7 @@ export const requeueExpiredJobs = async (): Promise<number> => {
   return stuckSnapshot.size + deferredSnapshot.size + orphanPendingDocs.length;
 };
 
-export const processJob = async (
+const processJobCore = async (
   jobId: string,
   source: 'create' | 'requeue',
   options?: { skipBacklogSweep?: boolean },
@@ -894,3 +895,6 @@ export const processJob = async (
     clearTimeout(timeoutHandle);
   }
 };
+
+export const processJob: typeof processJobCore = (jobId, source, options) =>
+  withManglarJobBudget(jobId, () => processJobCore(jobId, source, options));

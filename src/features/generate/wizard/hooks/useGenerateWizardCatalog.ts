@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BatchOutputMode, Client, Model, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../../../../../shared/src/types';
-import { isActiveCatalogEntity } from '../../../../../shared/src/domain';
+import { isActiveCatalogEntity, isPoseActive } from '../../../../../shared/src/domain';
 import {
   subscribeToClientSpreadsheetTemplates,
   subscribeToClients,
@@ -71,7 +71,13 @@ export const useGenerateWizardCatalog = ({
 
     const unsubscribe = subscribeToModels(
       (nextModels) => {
-        setModels(nextModels.filter((model) => model.clientId === selectedClientId && isActiveCatalogEntity(model)));
+        setModels(nextModels
+          .filter((model) => model.clientId === selectedClientId && isActiveCatalogEntity(model))
+          .map((model) => {
+            const poses = model.poses.filter(isPoseActive);
+            const coverPose = poses.find((pose) => pose.id === model.coverPoseId) || poses[0];
+            return { ...model, poses, poseCount: poses.length, coverPoseId: coverPose?.id ?? null, coverPosePath: coverPose?.storagePath ?? null };
+          }));
       },
       (loadError) => {
         console.error(loadError);

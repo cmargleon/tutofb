@@ -39,6 +39,7 @@ export interface ModelIdentityTraits {
 
 export interface Pose {
   id: string;
+  active?: boolean;
   storagePath: string;
   fileName: string;
   previewStoragePath?: string | null;
@@ -48,7 +49,18 @@ export interface Pose {
   createdAt: TimestampLike;
 }
 
+export interface SetModelPoseActiveRequest {
+  modelId: string;
+  poseId: string;
+  active: boolean;
+}
+
+export interface SetModelPoseActiveResponse extends SetModelPoseActiveRequest {
+  success: boolean;
+}
+
 export interface Model {
+  manglarBudgetId?: string;
   id?: string;
   clientId: string;
   clientNameSnapshot: string;
@@ -71,6 +83,7 @@ export interface Model {
 
 export interface ModelBundlePoseManifestEntry {
   id: string;
+  active?: boolean;
   archivePath: string;
   fileName: string;
   contentType: string;

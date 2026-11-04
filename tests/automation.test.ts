@@ -4,8 +4,22 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const domain = require('../functions/lib/functions/src/automation/domain.js') as typeof import('../functions/src/automation/domain');
 const { resolveAutomationPreset, PRODUCT_PRESETS } = require('../functions/lib/functions/src/automation/presets.js') as typeof import('../functions/src/automation/presets');
+const { resolveAutomationPoseIds } = require('../functions/lib/functions/src/automation/presets.js') as typeof import('../functions/src/automation/presets');
 const { assertImportUrl } = require('../functions/lib/functions/src/automation/imports.js') as typeof import('../functions/src/automation/imports');
 const payload = { source: 'api', externalId: 'order-1', clientId: 'client-1', jobType: 'garment', inputImages: [{ itemId: 'sku-1', fileName: 'front.jpg', storagePath: 'garments/drafts/user/draft/sku/front.jpg' }] };
+
+test('automation excludes inactive poses from defaults and presets without replacing explicit selections', () => {
+  const model = { poses: [
+    { id: 'legacy' }, { id: 'active', active: true }, { id: 'inactive', active: false },
+  ] } as any;
+  assert.deepEqual(resolveAutomationPoseIds(model), ['legacy', 'active']);
+  assert.deepEqual(resolveAutomationPoseIds(model, ['inactive', 'active']), ['active']);
+  assert.throws(() => resolveAutomationPoseIds(model, ['inactive']), /No hay poses activas/);
+  assert.throws(() => resolveAutomationPoseIds(model, ['missing']), /no disponibles/);
+  assert.throws(() => resolveAutomationPoseIds({ poses: [] }), /No hay poses activas/);
+  model.poses[1].active = false;
+  assert.throws(() => resolveAutomationPoseIds(model, ['active']), /No hay poses activas/);
+});
 
 test('automation validates payload and storage ownership', () => {
   assert.equal(domain.validateAutomationInput(payload, 'user').externalId, 'order-1');

@@ -1,3 +1,4 @@
+import { getManglarContext } from '../manglar/context';
 import * as admin from 'firebase-admin';
 import JSZip from 'jszip';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -118,6 +119,7 @@ const buildImportedPose = async (
     storagePath,
     pose: {
       id: poseId,
+      active: entry.active !== false,
       storagePath,
       fileName,
       width: typeof entry.width === 'number' ? entry.width : null,
@@ -180,6 +182,7 @@ export const importModelBundle = onCall<
     const coverPose = poses[0] || null;
     const now = admin.firestore.FieldValue.serverTimestamp();
     const modelData: Omit<Model, 'id'> = {
+      ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
       clientId,
       clientNameSnapshot: client.name,
       name: modelName,

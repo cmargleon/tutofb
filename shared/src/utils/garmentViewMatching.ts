@@ -14,6 +14,7 @@ import {
   deriveAccessoryDisplaySlots,
   normalizeAccessoryDisplaySlots,
 } from './accessoryMatching';
+import { isPoseActive } from '../domain';
 
 const GARMENT_VIEW_ORDER: GarmentView[] = ['front', 'back', 'side'];
 
@@ -146,7 +147,7 @@ export const isPoseCompatibleWithGarmentViews = (
 };
 
 export const getSuggestedPoseIdsForGarments = <
-  TPose extends Pick<Pose, 'id' | 'aiClassification'>,
+  TPose extends Pick<Pose, 'id' | 'active' | 'aiClassification'>,
   TGarment extends {
     availableViews: readonly GarmentView[];
     garmentBodyArea?: GarmentBodyArea | null;
@@ -161,6 +162,7 @@ export const getSuggestedPoseIdsForGarments = <
   }
 
   return poses
+    .filter(isPoseActive)
     .filter((pose) =>
       garments.some((garment) =>
         isPoseSuggestedForGarmentViews(
@@ -197,7 +199,7 @@ export const countCompatibleGarmentsForPose = <
   ).length;
 
 export const countCompatiblePoseMatchesForGarments = <
-  TPose extends Pick<Pose, 'id' | 'aiClassification'>,
+  TPose extends Pick<Pose, 'id' | 'active' | 'aiClassification'>,
   TGarment extends {
     availableViews: readonly GarmentView[];
     garmentBodyArea?: GarmentBodyArea | null;
@@ -212,7 +214,7 @@ export const countCompatiblePoseMatchesForGarments = <
 
   return garments.reduce((total, garment) => {
     const compatiblePoseCount = poses.filter((pose) => {
-      if (selectedPoseIdSet && !selectedPoseIdSet.has(pose.id)) {
+      if (!isPoseActive(pose) || (selectedPoseIdSet && !selectedPoseIdSet.has(pose.id))) {
         return false;
       }
 

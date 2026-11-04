@@ -1,3 +1,5 @@
+import { runManglarPaid } from '../manglar/budget';
+import { estimateGenerationHold } from '../automation/budget';
 import { isNewFalProvider, NewFalImageConfig } from '../providers/falModels';
 import { generateModelPhotoWithNewFalModel } from '../providers/textToImage';
 import {
@@ -26,7 +28,7 @@ import {
 
 export { mapModelPhotoProviderToProvider };
 
-const runProvider = (
+const runProviderCore = (
   provider: ModelPhotoProvider,
   prompt: string,
   imageConfig: ProviderImageConfig,
@@ -68,6 +70,10 @@ const runProvider = (
       throw new Error(`Proveedor de foto de modelo no reconocido: ${provider}`);
   }
 };
+
+const runProvider: typeof runProviderCore = (provider, prompt, imageConfig, falKey, referenceImageUrl) =>
+  runManglarPaid(estimateGenerationHold(mapModelPhotoProviderToProvider(provider), imageConfig, referenceImageUrl ? 1 : 0).holdUsd,
+    () => runProviderCore(provider, prompt, imageConfig, falKey, referenceImageUrl));
 
 export const generateSingleModelPhoto = async ({
   provider, prompt, imageConfig, falKey, referenceImageUrl = null,

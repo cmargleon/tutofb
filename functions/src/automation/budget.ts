@@ -1,3 +1,4 @@
+import { assertDelegatedStamp } from '../manglar/access';
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -31,6 +32,7 @@ export const reserveAutomationOperation = async (
   const snapshot = await ref.get();
   const owner = snapshot.data() as AutomationJob | undefined;
   if (owner?.automationPrincipalId) await authorizeMachineJob(owner.createdByUid, owner.clientId, owner.jobType);
+  if (owner?.manglarAuthorization) await assertDelegatedStamp(owner.manglarAuthorization, owner.clientId);
   const reserved = await db.runTransaction(async (tx) => {
     const [jobSnap, existing, systemSnap] = await tx.getAll(ref, op, db.collection('system_config').doc('main'));
     const job = jobSnap.data() as AutomationJob | undefined;

@@ -89,6 +89,36 @@ export const downloadModelBundle = onRequest(
         throw new HttpsError('invalid-argument', 'Debes indicar el modelo que quieres exportar.');
       }
 
+      response.status(200).json(await buildModelBundleDownload(modelId));
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        response.status(400).json({ message: 'El cuerpo de la solicitud no es JSON válido.' });
+        return;
+      }
+
+      if (error instanceof HttpsError) {
+        const statusCode =
+          error.code === 'unauthenticated'
+            ? 401
+            : error.code === 'permission-denied'
+              ? 403
+              : error.code === 'not-found'
+                ? 404
+                : error.code === 'failed-precondition' || error.code === 'invalid-argument'
+                  ? 400
+                  : 500;
+
+        response.status(statusCode).json({ message: error.message });
+        return;
+      }
+
+      console.error('Error preparing model bundle ZIP:', error);
+      response.status(500).json({ message: 'No se pudo preparar la descarga del modelo.' });
+    }
+  },
+);
+
+export const buildModelBundleDownload = async (modelId: string) => {
       const modelSnapshot = await db.collection('models').doc(modelId).get();
       if (!modelSnapshot.exists) {
         throw new HttpsError('not-found', 'Modelo no encontrado.');
@@ -110,6 +140,7 @@ export const downloadModelBundle = onRequest(
         zip.file(archivePath, asset.bytes);
         manifestPoses.push({
           id: pose.id,
+          active: pose.active !== false,
           archivePath,
           fileName: pose.fileName,
           contentType: asset.contentType,
@@ -156,31 +187,5 @@ export const downloadModelBundle = onRequest(
         version: 'v4',
       });
 
-      response.status(200).json({ downloadUrl: signedUrl, filename });
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        response.status(400).json({ message: 'El cuerpo de la solicitud no es JSON válido.' });
-        return;
-      }
-
-      if (error instanceof HttpsError) {
-        const statusCode =
-          error.code === 'unauthenticated'
-            ? 401
-            : error.code === 'permission-denied'
-              ? 403
-              : error.code === 'not-found'
-                ? 404
-                : error.code === 'failed-precondition' || error.code === 'invalid-argument'
-                  ? 400
-                  : 500;
-
-        response.status(statusCode).json({ message: error.message });
-        return;
-      }
-
-      console.error('Error preparing model bundle ZIP:', error);
-      response.status(500).json({ message: 'No se pudo preparar la descarga del modelo.' });
-    }
-  },
-);
+  return { downloadUrl: signedUrl, filename };
+};

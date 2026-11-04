@@ -40,6 +40,7 @@ export interface CreateAutomationJobRequest {
   allowEstimatedCosts?: boolean;
 }
 export interface AutomationJob extends CreateAutomationJobRequest {
+  manglarAuthorization?: { uid: string; connectionId: string; role: import('./common').Role; accessVersion: number };
   id: string;
   createdByUid: string;
   automationPrincipalId?: string;

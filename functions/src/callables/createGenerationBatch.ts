@@ -1,3 +1,4 @@
+import { getManglarContext } from '../manglar/context';
 import { automationScenePatch } from '../automation/recovery';
 import type { AutomationPolicy } from '../../../shared/src/types';
 import { APPROVED_TRY_ON_PROMPT_FORMAT } from '../../../shared/src/approvedTryOnPrompt';
@@ -231,6 +232,7 @@ export const createGenerationBatchCore = async (
         approvedPrompt,
       );
       const jobData: Omit<Job, 'id'> = {
+        ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
         batchId: batchRef.id,
         clientId: client.id!,
         clientNameSnapshot: client.name,

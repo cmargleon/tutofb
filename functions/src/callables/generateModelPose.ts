@@ -1,3 +1,4 @@
+import { assertCallableRoles } from '../auth/roles';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { FAL_KEY } from '../config/runtime';
@@ -22,6 +23,7 @@ export const generateModelPose = onCall(
       throw new HttpsError('unauthenticated', 'Debes iniciar sesión para usar esta función.');
     }
 
+    await assertCallableRoles(request, ['admin']);
     const data = request.data as GenerateModelPhotoRequest;
     const {
       prompt,

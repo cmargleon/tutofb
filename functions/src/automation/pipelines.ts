@@ -7,7 +7,7 @@ import { createGenerationBatchCore } from '../callables/createGenerationBatch';
 import { getCompatibleGarmentPoseCombinations } from '../callables/createGenerationBatch.helpers';
 import { classifyGarmentWithGemini } from '../callables/classifyGarmentViewsWithGemini';
 import { GEMINI_API_KEY, getGeminiGarmentViewClassificationModel } from '../config/runtime';
-import { PRODUCT_PRESETS } from './presets';
+import { PRODUCT_PRESETS, resolveAutomationPoseIds } from './presets';
 import { createProductGenerationBatchCore } from '../callables/createProductGenerationBatch';
 import { AutomationAttentionError } from './imports';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
@@ -24,8 +24,7 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
   const snapshot = await getAppFirestore().collection('models').doc(modelId).get();
   const model = snapshot.data() as Model | undefined;
   if (!model || model.status === 'archived' || model.clientId !== job.clientId) throw new AutomationAttentionError('El modelo no está disponible para este cliente.');
-  const poseIds = config.poseIds || model.poses.map((pose) => pose.id);
-  if (poseIds.some((id) => !model.poses.some((pose) => pose.id === id))) throw new AutomationAttentionError('Hay poses no disponibles en el modelo/preset.');
+  const poseIds = resolveAutomationPoseIds(model, config.poseIds);
   const selectedPoses = model.poses.filter((pose) => poseIds.includes(pose.id));
   const garments: UploadedGarmentInput[] = [];
   const items: AutomationItemState[] = [];

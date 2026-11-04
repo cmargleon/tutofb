@@ -1,3 +1,4 @@
+import { getManglarContext } from '../manglar/context';
 import { APPROVED_TRY_ON_PROMPT_FORMAT, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { buildFinalGenerationPrompt, isProvider } from '../../../shared/src/domain';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
@@ -18,6 +19,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
   const { imageConfig, aspectRatio } = normalizeProviderImageConfig(provider, job.imageConfig, job.aspectRatio);
 
   return {
+    ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
     ...(job.automationJobId ? { automationManaged: false, automationReviewPending: false, automationGate: null, autoReviewMaxAttempts: 3, maxRetries: manualMaxRetries } : {}),
     provider,
     imageConfig,

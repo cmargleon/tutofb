@@ -1,3 +1,5 @@
+> MCP v2: la API de automatización y sus presupuestos se conservan. El acceso individual y las herramientas de todos los dominios están documentados en [MANGLAR_CHATGPT_PLUGIN.md](MANGLAR_CHATGPT_PLUGIN.md) y su [inventario](MANGLAR_TOOL_INVENTORY.md).
+
 # Automatización de producción de Manglar
 
 ## Actualización del 1 de noviembre de 2026

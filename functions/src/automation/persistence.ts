@@ -1,3 +1,5 @@
+import { getManglarContext } from '../manglar/context';
+import { delegatedStamp } from '../manglar/access';
 import { createHash } from 'node:crypto';
 import { DEFAULT_AUTOMATION_BUDGET, resolveAutomationPolicy } from '../../../shared/src/automationPolicy';
 import type { AutomationPlan, Client } from '../../../shared/src/types';
@@ -47,6 +49,7 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     const uploadBindings = await readUploadBindings(tx, data);
     const now = FieldValue.serverTimestamp();
     const job: AutomationJob = {
+      ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
       ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy, budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, providerConfirmedUsd: null },
       ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || '', createdByUid: uid, status: 'pending',
       inputImages: data.inputImages || [], sourceImages: data.inputImages || [], outputImages: [], generationJobIds: [], batchId: null,
@@ -83,6 +86,7 @@ export const retryAutomation = async (input: RetryAutomationJobRequest, uid: str
     const uploadBindings = await readUploadBindings(tx, data);
     uploadBindings.forEach((binding) => tx.create(binding, { inputClientId: data.clientId }));
     tx.update(ref, {
+      ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
       ...((input.preset || input.provider || input.modelId) ? { resolvedPreset: FieldValue.delete() } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       modelId: data.modelId || null, requestedPreset: data.preset || '', preset: data.preset || null,

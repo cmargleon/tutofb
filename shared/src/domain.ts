@@ -9,6 +9,7 @@ import {
   ModelIdentityTraits,
   ModelPhotoProvider,
   Provider,
+  Pose,
   Role,
   TryOnPromptCaseKey,
 } from './types';
@@ -285,6 +286,8 @@ export const isArchivedCatalogEntity = (value: { status?: CatalogEntityStatus | 
   value?.status === 'archived';
 export const isActiveCatalogEntity = (value: { status?: CatalogEntityStatus | null } | null | undefined): boolean =>
   !isArchivedCatalogEntity(value);
+// Older poses without an explicit state remain available.
+export const isPoseActive = (pose: Pick<Pose, 'active'>): boolean => pose.active !== false;
 export const resolveApprovedJobOutput = (job: Pick<Job, 'userSelectedOutput' | 'currentOutput'>): JobOutput | null =>
   job.userSelectedOutput || job.currentOutput || null;
 
@@ -390,6 +393,7 @@ export default {
   isCatalogEntityStatus,
   isArchivedCatalogEntity,
   isActiveCatalogEntity,
+  isPoseActive,
   resolveApprovedJobOutput,
   buildModelIdentityPromptBlock,
   applyGlobalTryOnPromptGuards,

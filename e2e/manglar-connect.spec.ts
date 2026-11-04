@@ -26,7 +26,7 @@ test('Manglar consent shows the exact clients, returns to ChatGPT, and connectio
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.getByRole('button', { name: 'Autorizar ChatGPT' }).click();
   await expect(page.getByRole('heading', { name: 'Regreso a ChatGPT' })).toBeVisible();
-  expect(decisions).toEqual([{ requestId: 'test-request', approve: true }]);
+  expect(decisions).toEqual([{ requestId: 'test-request', approve: true, authorizationModel: 'user-v1' }]);
   await page.goto('/manglar-consent-preview');
   await expect(page.getByRole('heading', { name: 'Conexiones con ChatGPT' })).toBeVisible();
   await page.getByRole('button', { name: 'Revocar', exact: true }).click();

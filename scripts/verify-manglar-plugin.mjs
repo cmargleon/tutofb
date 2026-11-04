@@ -35,7 +35,8 @@ assert.equal((await initialized.json()).result.serverInfo.name, 'manglar');
 const list = await rpc('tools/list');
 assert.equal(list.status, 200);
 const tools = (await list.json()).result.tools;
-assert.equal(tools.length, 7);
+assert.equal(tools.length, 23);
+for (const name of ['manglar_describe','manglar_prepare_action','manglar_operation_status','manglar_clients','manglar_models','manglar_wizard','manglar_catalog','manglar_finance','manglar_users']) assert.ok(tools.some(tool=>tool.name===name));
 assert.ok(tools.every((tool) => tool.securitySchemes[0].type === 'oauth2'));
 assert.equal(tools.find((tool) => tool.name === 'manglar_execute_plan').annotations.readOnlyHint, false);
 const unauthorized = await rpc('tools/call', { name: 'manglar_capabilities', arguments: {} });
@@ -65,6 +66,6 @@ await deniedCallable.arrayBuffer();
 const report = { checkedAt: new Date().toISOString(), resource, discoveryPassed: true, protocolInitializationPassed: true,
   tools: tools.map((tool) => tool.name), anonymousCallsRejected: true, invalidTokenExchangeRejected: true,
   realChatGPTMetadataVerified: true, consentPageServed: true, anonymousConsentRejected: true,
-  nativeChatGPTLinkCompleted: false, pending: 'User must add the private MCP plugin and sign in to authorize it in ChatGPT.', paidGeneration: false, credentialsPrinted: false };
-await writeFile(new URL('../docs/MANGLAR_PLUGIN_VERIFICATION.json', import.meta.url), `${JSON.stringify(report, null, 2)}\n`);
+  nativeChatGPTLinkCompleted: false, pending: 'Refresh the existing plugin and reconnect for delegated user access. A second real ChatGPT account requires its own Tuto consent; backend verification does not prove that link.', paidGeneration: false, credentialsPrinted: false };
+await writeFile(new URL('../docs/MANGLAR_V2_VERIFICATION.json', import.meta.url), `${JSON.stringify(report, null, 2)}\n`);
 console.log(JSON.stringify(report));

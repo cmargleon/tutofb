@@ -1,3 +1,5 @@
+> MCP v2 (3 de noviembre de 2026): las nuevas conexiones OAuth usan al usuario real de Tuto y permisos por cliente. Las concesiones anteriores conservan su alcance técnico sin ampliarse. Esta página mantiene la API máquina-a-máquina y su historial; la autorización interactiva actual se documenta en [MANGLAR_CHATGPT_PLUGIN.md](MANGLAR_CHATGPT_PLUGIN.md).
+
 > Actualización 2 de noviembre de 2026: por autorización del usuario, `chatgpt-work` ahora admite los cinco clientes con estado activo y el de pruebas. Drive está configurado para JISHOP. Se añadió un plugin MCP con OAuth PKCE y consentimiento administrativo que no utiliza el secreto HTTP anterior. La vinculación personal en ChatGPT sigue siendo un paso del usuario: [instalación y funcionamiento actuales](MANGLAR_CHATGPT_PLUGIN.md). Los apartados siguientes documentan el helper HTTP y las pruebas históricas anteriores a esta ampliación.
 
 # Identidad técnica de ChatGPT Work

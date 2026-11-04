@@ -1,5 +1,5 @@
 import { db, auth, storage } from '../../firebase';
-import { collection, collectionGroup, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, where } from 'firebase/firestore';
+import { collection, collectionGroup, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { ref, uploadBytes, deleteObject } from 'firebase/storage';
 import {
   Client,
@@ -19,11 +19,6 @@ import { PermanentDeleteCatalogEntityRequest, PermanentDeleteCatalogEntityRespon
 interface SubscribeClientsOptions {
   includeArchived?: boolean;
 }
-
-const normalizeClientGenerationPrompt = (prompt: string): string | null => {
-  const trimmed = prompt.trim();
-  return trimmed ? trimmed : null;
-};
 
 export const subscribeToClients = (
   callback: (clients: Client[]) => void,
@@ -87,33 +82,13 @@ export const subscribeToSpreadsheetTemplateCategories = (
 export const createClient = async (name: string, generationPromptBase: string = '') => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
   
-  const newClientRef = doc(collection(db, 'clients'));
-  const clientData: Omit<Client, 'id'> = {
-    name: name.trim(),
-    generationPromptBase: normalizeClientGenerationPrompt(generationPromptBase),
-    status: 'active',
-    archivedAt: null,
-    archivedByUid: null,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    batchCount: 0,
-    lastBatchCreatedAt: null,
-    createdByUid: auth.currentUser.uid
-  };
-  
-  await setDoc(newClientRef, clientData);
-  return newClientRef.id;
+  return (await httpsCallable<import('../../../shared/src/types').ManglarClientSaveRequest, { id: string }>(functions, 'saveClient')({ name, generationPromptBase })).data.id;
 };
 
 export const updateClient = async (id: string, name: string, generationPromptBase: string = '') => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
   
-  const clientRef = doc(db, 'clients', id);
-  await updateDoc(clientRef, {
-    name: name.trim(),
-    generationPromptBase: normalizeClientGenerationPrompt(generationPromptBase),
-    updatedAt: serverTimestamp()
-  });
+  await httpsCallable<import('../../../shared/src/types').ManglarClientSaveRequest, { id: string }>(functions, 'saveClient')({ id, name, generationPromptBase });
 };
 
 const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -191,25 +166,13 @@ export const deleteClientSpreadsheetTemplate = async (
 export const archiveClient = async (id: string) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
-  const clientRef = doc(db, 'clients', id);
-  await updateDoc(clientRef, {
-    status: 'archived',
-    archivedAt: serverTimestamp(),
-    archivedByUid: auth.currentUser.uid,
-    updatedAt: serverTimestamp()
-  });
+  await httpsCallable<{ id: string; archived: boolean }, unknown>(functions, 'setClientArchived')({ id, archived: true });
 };
 
 export const restoreClient = async (id: string) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
-  const clientRef = doc(db, 'clients', id);
-  await updateDoc(clientRef, {
-    status: 'active',
-    archivedAt: null,
-    archivedByUid: null,
-    updatedAt: serverTimestamp()
-  });
+  await httpsCallable<{ id: string; archived: boolean }, unknown>(functions, 'setClientArchived')({ id, archived: false });
 };
 
 export const permanentlyDeleteClient = async (id: string) => {

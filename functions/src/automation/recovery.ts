@@ -1,3 +1,5 @@
+import { getManglarContext } from '../manglar/context';
+import { delegatedStamp } from '../manglar/access';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { AutomationJob, AutomationPolicy, Job, ResumeAutomationRequest } from '../../../shared/src/types';
@@ -27,7 +29,7 @@ export const resumeAutomation = async (input: ResumeAutomationRequest, uid: stri
     if (policy.budgetUsd < job.budget.spentUsd + job.budget.reservedUsd) throw new HttpsError('failed-precondition', 'El presupuesto no puede ser menor que el gasto comprometido.');
     if (!job.batchId) {
       if (!job.spendingPaused || !['failed', 'needs_attention'].includes(job.status)) throw new HttpsError('failed-precondition', 'La entrada no está detenida por presupuesto.');
-      tx.update(ref, { effectivePolicy: policy, spendingPaused: false, 'budget.limitUsd': policy.budgetUsd, status: 'pending', error: null, leaseToken: null, leaseExpiresAt: null, updatedAt: FieldValue.serverTimestamp() });
+      tx.update(ref, { ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}), effectivePolicy: policy, spendingPaused: false, 'budget.limitUsd': policy.budgetUsd, status: 'pending', error: null, leaseToken: null, leaseExpiresAt: null, updatedAt: FieldValue.serverTimestamp() });
       return { jobId: job.id, resumedScenes: 0 };
     }
     const scenes = await tx.getAll(...job.generationJobIds.map((id) => db.collection('jobs').doc(id)));
@@ -39,7 +41,7 @@ export const resumeAutomation = async (input: ResumeAutomationRequest, uid: stri
         tx.update(scene.ref, { status: 'pending', automationGate: null, lastError: null, updatedAt: FieldValue.serverTimestamp() }); count++;
       }
     }
-    tx.update(ref, { effectivePolicy: policy, spendingPaused: false, 'budget.limitUsd': policy.budgetUsd, status: 'processing', error: null, updatedAt: FieldValue.serverTimestamp() });
+    tx.update(ref, { ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}), effectivePolicy: policy, spendingPaused: false, 'budget.limitUsd': policy.budgetUsd, status: 'processing', error: null, updatedAt: FieldValue.serverTimestamp() });
     return { jobId: job.id, resumedScenes: count };
   });
 };

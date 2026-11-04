@@ -1,3 +1,4 @@
+import { getManglarContext } from '../manglar/context';
 import { automationScenePatch } from '../automation/recovery';
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -47,6 +48,7 @@ export const createProductGenerationBatchCore = async (
       for (const scene of data.scenes) {
         const instructions = buildProductSceneInstructions(data.prompt, scene.prompt);
         jobs.push({ id: db.collection('jobs').doc().id, data: {
+          ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
           ...buildJobDraft({ garmentIsMultiAngle: item.referencePaths.length > 1 }, data.provider, instructions, null, Math.max(1, Math.min(3, getJobAutoReviewMaxAttempts() || 3))),
           ...(automation ? { automationJobId: automation.id } : {}), generationKind: 'product', productScene: scene.type,
           productReferencePaths: item.referencePaths, batchId, clientId: data.clientId, clientNameSnapshot: client.name,

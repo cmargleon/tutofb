@@ -96,7 +96,7 @@ export const ProviderSelection: React.FC<ProviderSelectionProps> = ({ provider, 
               disabled={disabled}
               aria-pressed={selected}
               onClick={() => onChange(option)}
-              className={`rounded-3xl border px-5 py-4 text-left transition ${
+              className={`min-w-0 rounded-3xl border px-5 py-4 text-left transition ${
                 disabled
                   ? selected
                     ? 'border-amber-200 bg-amber-50 text-slate-900'
@@ -111,7 +111,7 @@ export const ProviderSelection: React.FC<ProviderSelectionProps> = ({ provider, 
                   <ProviderLogo provider={option} selected={selected} disabled={disabled} />
                   <div className="min-w-0">
                     <p className="truncate text-lg font-semibold">{PROVIDER_LABELS[option]}</p>
-                    <p className={`mt-1 text-sm font-medium ${
+                    <p className={`mt-1 break-words text-sm font-medium ${
                       disabled ? 'text-slate-500' : selected ? 'text-emerald-100' : 'text-slate-500'
                     }`}>
                       {PROVIDER_PRICE_LABELS[option]}

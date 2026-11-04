@@ -173,6 +173,7 @@ export interface JobOutput {
 }
 
 export interface Job {
+  manglarBudgetId?: string;
   promptFormat?: 'approved-try-on-v1';
   automationJobId?: string;
   automationManaged?: boolean;

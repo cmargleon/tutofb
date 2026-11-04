@@ -1,7 +1,7 @@
 import FileSaver from 'file-saver';
 import { db, auth, storage } from '../../firebase';
-import { collection, doc, setDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc, where } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject, getBytes } from 'firebase/storage';
+import { collection, doc, onSnapshot, query, orderBy, getDoc, where } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   Model,
   ImportModelBundleRequest,
@@ -15,6 +15,8 @@ import {
   GenerateModelPhotoRequest,
   GenerateModelPhotoResponse,
   GeneratedModelPhoto,
+  SetModelPoseActiveRequest,
+  SetModelPoseActiveResponse,
 } from '../../../shared/src/types';
 import { v4 as uuidv4 } from 'uuid';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
@@ -104,7 +106,6 @@ export const createModel = async (
   if (!clientSnap.exists()) throw new Error('Cliente no encontrado');
   const client = clientSnap.data() as Client;
   if (isArchivedCatalogEntity(client)) throw new Error('No puedes crear modelos para un cliente archivado.');
-  const clientName = client.name;
 
   const newModelRef = doc(collection(db, 'models'));
   const modelId = newModelRef.id;
@@ -139,26 +140,9 @@ export const createModel = async (
       });
     }
 
-    const modelData: Omit<Model, 'id'> = {
-      clientId,
-      clientNameSnapshot: clientName,
-      name: name.trim(),
-      status: 'active',
-      archivedAt: null,
-      archivedByUid: null,
-      storageRootPath,
-      poses,
-      poseCount: poses.length,
-      coverPoseId: poses[0]?.id || null,
-      coverPosePath: poses[0]?.storagePath || null,
-      generatedPhotoCount: 0,
-      generatedPhotoCostUsd: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      createdByUid: auth.currentUser.uid
-    };
-
-    await setDoc(newModelRef, modelData);
+    await httpsCallable<import('../../../shared/src/types').ManglarModelSaveRequest, { id: string }>(functions, 'saveModel')({
+      id: modelId, clientId, name, posesToAdd: poses.map((pose) => ({ storagePath: pose.storagePath, fileName: pose.fileName, aiClassification: pose.aiClassification })),
+    });
     return modelId;
   } catch (error) {
     console.error('Error in createModel:', error);
@@ -203,7 +187,6 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
   if (isArchivedCatalogEntity(client)) {
     throw new Error('No puedes mover un modelo a un cliente archivado.');
   }
-  const clientNameSnapshot = client.name;
   const storageRootPath = getModelStorageRootPath(id, model.clientId, model.storageRootPath);
   const filesToAdd = input.filesToAdd || [];
   const poseIdsToRemove = new Set(input.poseIdsToRemove || []);
@@ -233,31 +216,12 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
       });
     }
 
-    const nextPoses = [...keptPoses, ...addedPoses];
-    const coverPose = nextPoses[0] || null;
-
-    await updateDoc(modelRef, {
-      clientId: input.clientId,
-      clientNameSnapshot,
-      name: trimmedName,
-      identityTraits: input.identityTraits || null,
-      status: model.status ?? 'active',
-      storageRootPath,
-      poses: nextPoses,
-      poseCount: nextPoses.length,
-      coverPoseId: coverPose?.id || null,
-      coverPosePath: coverPose?.storagePath || null,
-      updatedAt: serverTimestamp(),
+    await httpsCallable<import('../../../shared/src/types').ManglarModelSaveRequest, { id: string }>(functions, 'saveModel')({
+      id, clientId: input.clientId, name: trimmedName, identityTraits: input.identityTraits || null,
+      posesToAdd: addedPoses.map((pose) => ({ storagePath: pose.storagePath, fileName: pose.fileName })), poseIdsToRemove: [...poseIdsToRemove],
     });
 
-    const posesToDelete = poses.filter((pose) => poseIdsToRemove.has(pose.id));
-    await Promise.allSettled(
-      posesToDelete.flatMap((pose) =>
-        [pose.storagePath, pose.previewStoragePath]
-          .filter((value): value is string => Boolean(value))
-          .map((storagePath) => deleteObject(ref(storage, storagePath))),
-      ),
-    );
+
   } catch (error) {
     await Promise.allSettled(uploadedRefs.map(({ storageRef }) => deleteObject(storageRef)));
     throw error;
@@ -267,25 +231,18 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
 export const archiveModel = async (id: string) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
-  const modelRef = doc(db, 'models', id);
-  await updateDoc(modelRef, {
-    status: 'archived',
-    archivedAt: serverTimestamp(),
-    archivedByUid: auth.currentUser.uid,
-    updatedAt: serverTimestamp(),
-  });
+  await httpsCallable<{ id: string; archived: boolean }, unknown>(functions, 'setModelArchived')({ id, archived: true });
+};
+
+export const setModelPoseActive = async (input: SetModelPoseActiveRequest): Promise<SetModelPoseActiveResponse> => {
+  const callable = httpsCallable<SetModelPoseActiveRequest, SetModelPoseActiveResponse>(functions, 'setModelPoseActive');
+  return (await callable(input)).data;
 };
 
 export const restoreModel = async (id: string) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
-  const modelRef = doc(db, 'models', id);
-  await updateDoc(modelRef, {
-    status: 'active',
-    archivedAt: null,
-    archivedByUid: null,
-    updatedAt: serverTimestamp(),
-  });
+  await httpsCallable<{ id: string; archived: boolean }, unknown>(functions, 'setModelArchived')({ id, archived: false });
 };
 
 export const permanentlyDeleteModel = async (id: string) => {
@@ -414,57 +371,9 @@ export const replaceModelPoseWithGeneratedPhoto = async (
     throw new Error('La pose a regenerar ya no existe en el modelo.');
   }
 
-  const modelRef = doc(db, 'models', model.id);
-  const storageRootPath = getModelStorageRootPath(model.id, model.clientId, model.storageRootPath);
-  const sourceRef = ref(storage, generatedPhoto.storagePath);
-  const imageBytes = await getBytes(sourceRef);
-  const imageBlob = new Blob([imageBytes], { type: generatedPhoto.contentType || 'image/png' });
-  const extension = generatedPhoto.contentType.includes('jpeg') || generatedPhoto.contentType.includes('jpg')
-    ? 'jpg'
-    : 'png';
-  const replacementStoragePath = `${storageRootPath}/poses/${poseId}-regen-${Date.now()}.${extension}`;
-  const replacementRef = ref(storage, replacementStoragePath);
-
-  try {
-    await uploadBytes(replacementRef, imageBlob, {
-      contentType: generatedPhoto.contentType || imageBlob.type || 'image/png',
-    });
-
-    const nextPoses = (model.poses || []).map((pose) =>
-      pose.id === poseId
-        ? {
-            ...pose,
-            storagePath: replacementStoragePath,
-            fileName: replacementStoragePath.split('/').pop() ?? pose.fileName,
-            previewStoragePath: null,
-            aiClassification: nextAiClassification ?? pose.aiClassification ?? null,
-          }
-        : pose,
-    );
-
-    await updateDoc(modelRef, {
-      poses: nextPoses,
-      coverPosePath:
-        model.coverPoseId === poseId
-          ? replacementStoragePath
-          : model.coverPosePath || nextPoses[0]?.storagePath || null,
-      generatedPhotoCount: (model.generatedPhotoCount || 0) + 1,
-      generatedPhotoCostUsd: Number(model.generatedPhotoCostUsd || 0) + Number(estimatedCostUsd || 0),
-      updatedAt: serverTimestamp(),
-    });
-
-    await Promise.allSettled(
-      [targetPose.storagePath, targetPose.previewStoragePath, generatedPhoto.storagePath]
-        .filter((value): value is string => Boolean(value))
-        .map((storagePath) => deleteObject(ref(storage, storagePath))),
-    );
-  } catch (error) {
-    await Promise.allSettled([
-      deleteObject(replacementRef),
-      deleteObject(ref(storage, generatedPhoto.storagePath)),
-    ]);
-    throw error;
-  }
+  await httpsCallable<import('../../../shared/src/types').ManglarPoseReplaceRequest, unknown>(functions, 'replaceModelPose')({
+    modelId: model.id, poseId, storagePath: generatedPhoto.storagePath, aiClassification: nextAiClassification, estimatedCostUsd,
+  });
 };
 
 export const uploadModelReferenceFile = async (
@@ -499,48 +408,11 @@ export const createModelFromPaths = async (
 ): Promise<string> => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
-  const clientRef = doc(db, 'clients', clientId);
-  const clientSnap = await getDoc(clientRef);
-  if (!clientSnap.exists()) throw new Error('Cliente no encontrado');
-  const client = clientSnap.data() as Client;
-  if (isArchivedCatalogEntity(client)) throw new Error('No puedes crear modelos para un cliente archivado.');
-
-  const newModelRef = options.modelId
-    ? doc(collection(db, 'models'), options.modelId)
-    : doc(collection(db, 'models'));
-  const modelId = newModelRef.id;
-  const storageRootPath = getModelStorageRootPath(modelId, clientId);
-
-  const poseEntries: Pose[] = poses.map(({ storagePath, contentType: _ct, aiClassification }, i) => ({
-    id: uuidv4(),
-    storagePath,
-    fileName: storagePath.split('/').pop() ?? `pose_${i}`,
-    aiClassification: aiClassification ?? null,
-    createdAt: new Date().toISOString(),
-  }));
-
-  const modelData: Omit<Model, 'id'> = {
-    clientId,
-    clientNameSnapshot: client.name,
-    name: name.trim(),
-    identityTraits: options.identityTraits || null,
-    status: 'active',
-    archivedAt: null,
-    archivedByUid: null,
-    storageRootPath,
-    poses: poseEntries,
-    poseCount: poseEntries.length,
-    coverPoseId: poseEntries[0]?.id ?? null,
-    coverPosePath: poseEntries[0]?.storagePath ?? null,
-    generatedPhotoCount: options.generatedPhotoCount ?? 0,
-    generatedPhotoCostUsd: options.generatedPhotoCostUsd ?? 0,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    createdByUid: auth.currentUser.uid,
-  };
-
-  await setDoc(newModelRef, modelData);
-  return modelId;
+  return (await httpsCallable<import('../../../shared/src/types').ManglarModelSaveRequest, { id: string }>(functions, 'saveModel')({
+    ...(options.modelId ? { id: options.modelId } : {}), clientId, name, identityTraits: options.identityTraits,
+    posesToAdd: poses.map((pose, index) => ({ storagePath: pose.storagePath, fileName: pose.storagePath.split('/').pop() || `pose_${index}`, aiClassification: pose.aiClassification })),
+    generatedPhotoCount: options.generatedPhotoCount, generatedPhotoCostUsd: options.generatedPhotoCostUsd,
+  })).data.id;
 };
 
 export const getImageUrl = async (storagePath: string): Promise<string> => {

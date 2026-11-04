@@ -42,6 +42,7 @@ test('Manglar OAuth and MCP authorization against emulators', { skip: !enabled }
   const uid = 'mcp-admin'; const otherUid = 'mcp-other-admin';
   await db.collection('users').doc(uid).set({ role: 'admin', active: true });
   await db.collection('users').doc(otherUid).set({ role: 'admin', active: true });
+  await db.collection('manglarAccess').doc(uid).set({ enabled: true, clientIds: ['mcp-client'], version: 1 });
   await db.collection('clients').doc('mcp-client').set({ name: 'MCP Client', status: 'active', automation: { enabled: true, driveFolderIds: ['mcp-folder'] } });
   await principalRef.set({ active: true, version: 1, allowedClientIds: ['mcp-client'], allowedJobTypes: ['garment', 'product'], scopes: ['jobs:read', 'jobs:create'], secretHashes: [] });
   const nativeFetch = globalThis.fetch;
@@ -74,7 +75,8 @@ test('Manglar OAuth and MCP authorization against emulators', { skip: !enabled }
       const initialize = await http('POST', '/mcp', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', clientInfo: { name: 'test', version: '1' }, capabilities: {} } });
       assert.equal(initialize.data.result.protocolVersion, '2025-06-18');
       const list = await http('POST', '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' });
-      assert.equal(list.data.result.tools.length, 7);
+      assert.ok(list.data.result.tools.length > 7);
+      for (const name of ['manglar_capabilities','manglar_prepare_plan','manglar_execute_plan','manglar_get_job']) assert.ok(list.data.result.tools.some((tool:any)=>tool.name===name));
       assert.equal(JSON.stringify(list.data).includes('MCP Client'), false);
       assert.equal((await http('GET', '/mcp')).status, 405);
       assert.equal((await http('POST', '/mcp', [], undefined, 'https://evil.test')).status, 403);
@@ -86,9 +88,11 @@ test('Manglar OAuth and MCP authorization against emulators', { skip: !enabled }
     await t.test('only current active admins can authorize; denial preserves state and issuer without issuing a code', async () => {
       const requestId = await pending();
       await db.collection('users').doc(uid).update({ role: 'operador' });
+      await db.collection('manglarAccess').doc(uid).update({ enabled:false });
       await assert.rejects(() => oauth.manglarConnectionDetails(requestId, uid), { code: 'permission-denied' });
       await assert.rejects(() => oauth.decideManglarAuthorization({ requestId, approve: true }, uid), { code: 'permission-denied' });
       await db.collection('users').doc(uid).update({ role: 'admin' });
+      await db.collection('manglarAccess').doc(uid).update({ enabled:true });
       const details = await oauth.manglarConnectionDetails(requestId, uid);
       assert.deepEqual(details.clients, [{ id: 'mcp-client', name: 'MCP Client' }]);
       const denied = new URL((await oauth.decideManglarAuthorization({ requestId, approve: false }, uid)).redirectUrl);
@@ -97,6 +101,12 @@ test('Manglar OAuth and MCP authorization against emulators', { skip: !enabled }
       assert.equal(denied.searchParams.get('iss'), helpers.MANGLAR_ORIGIN);
       assert.equal(denied.searchParams.has('code'), false);
       await assert.rejects(() => oauth.decideManglarAuthorization({ requestId, approve: true }, uid));
+    });
+    await t.test('stale consent clients cannot silently approve the expanded user permissions',async()=>{
+      const requestId=await pending();
+      await assert.rejects(()=>oauth.decideManglarConnection.run({data:{requestId,approve:true},auth:{uid,token:{role:'admin'}}}),{code:'failed-precondition'});
+      const approved=await oauth.decideManglarConnection.run({data:{requestId,approve:true,authorizationModel:'user-v1'},auth:{uid,token:{role:'admin'}}});
+      assert.ok(new URL(approved.redirectUrl).searchParams.get('code'));
     });
     await t.test('code exchange requires PKCE, exact client, callback and audience; raw tokens never persist', async () => {
       const { body, tokens } = await connect();
@@ -152,14 +162,17 @@ test('Manglar OAuth and MCP authorization against emulators', { skip: !enabled }
       await db.collection('users').doc(uid).update({ role: 'operador' });
       await assert.rejects(() => oauth.verifyManglarMcpToken(`Bearer ${next.tokens.access_token}`), { code: 'unauthenticated' });
       await db.collection('users').doc(uid).update({ role: 'admin' });
+      const independent = await connect();
       await principalRef.update({ version: 2 });
-      await assert.rejects(() => oauth.verifyManglarMcpToken(`Bearer ${next.tokens.access_token}`), { code: 'unauthenticated' });
+      assert.equal((await oauth.verifyManglarMcpToken(`Bearer ${independent.tokens.access_token}`)).uid, uid);
+      await db.collection('manglarAccess').doc(uid).update({ version: 2 });
+      await assert.rejects(() => oauth.verifyManglarMcpToken(`Bearer ${independent.tokens.access_token}`), { code: 'unauthenticated' });
       const expired = await connect();
       await db.collection('automationOAuth').doc(`access-${helpers.oauthHash(expired.tokens.access_token)}`).update({ expiresAt: Timestamp.fromMillis(0) });
       await assert.rejects(() => oauth.verifyManglarMcpToken(`Bearer ${expired.tokens.access_token}`), { code: 'unauthenticated' });
     });
     await t.test('Firestore client rules deny reads of all OAuth records even to an authenticated user', async () => {
-      const response = await nativeFetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'mcp-rules@example.test', password: 'emulator-password', returnSecureToken: true }) });
+      const response = await nativeFetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `mcp-rules-${Date.now()}@example.test`, password: 'emulator-password', returnSecureToken: true }) });
       const { idToken } = await response.json() as any;
       assert.ok(idToken);
       const record = (await db.collection('automationOAuth').limit(1).get()).docs[0].id;

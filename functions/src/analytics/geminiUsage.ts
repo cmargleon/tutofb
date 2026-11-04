@@ -1,3 +1,4 @@
+import { runManglarPaid } from '../manglar/budget';
 import { reserveAutomationOperation, settleAutomationOperation, GEMINI_OPERATION_HOLD_USD } from '../automation/budget';
 import * as admin from 'firebase-admin';
 import { GeminiUsageFeature, GeminiUsageRecord, GeminiUsageStatus } from '../../../shared/src/types';
@@ -161,7 +162,7 @@ const extractErrorMessage = (value: unknown, fallback: string): string => {
   return fallback;
 };
 
-export const callGeminiGenerateContent = async <TPayload>({
+const callGeminiGenerateContentCore = async <TPayload>({
   apiKey,
   model,
   body,
@@ -264,3 +265,6 @@ export const callGeminiGenerateContent = async <TPayload>({
     throw error;
   }
 };
+
+export const callGeminiGenerateContent: typeof callGeminiGenerateContentCore = (request) =>
+  runManglarPaid(GEMINI_OPERATION_HOLD_USD, () => callGeminiGenerateContentCore(request));

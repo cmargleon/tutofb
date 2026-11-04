@@ -329,6 +329,17 @@ test('assertModelOwnershipAndPoses rechaza poses ajenas o modelos de otro client
   );
 });
 
+test('el backend rechaza poses desactivadas y conserva el acceso a poses anteriores sin estado', () => {
+  const client = { id: 'client-1' } as Client;
+  const model = { ...baseModel, poses: baseModel.poses.map((pose, index) => ({ ...pose, ...(index === 1 ? { active: false } : {}) })) };
+  assert.doesNotThrow(() => assertModelOwnershipAndPoses(client, model, ['pose-1']));
+  assert.throws(() => assertModelOwnershipAndPoses(client, model, ['pose-2']), { code: 'failed-precondition' });
+  assert.deepEqual(getCompatibleGarmentPoseCombinations([{
+    id: 'garment', name: 'Prenda', storagePath: 'front.jpg', isMultiAngle: false,
+    photos: [{ id: 'front', fileName: 'front.jpg', storagePath: 'front.jpg', view: 'front', sourceIndex: 0, classifiedBy: 'gemini' }],
+  }], [{ ...model.poses[1], aiClassification: { usableForGarmentViews: ['front'], bodyFocus: 'full_body' } as any }]), []);
+});
+
 test('resolveGarmentPhotoForPose prioriza la vista principal y cae a front si hace falta', () => {
   const selectedFrontThreeQuarter = resolveGarmentPhotoForPose(
     {

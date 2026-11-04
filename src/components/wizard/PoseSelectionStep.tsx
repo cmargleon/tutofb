@@ -125,6 +125,11 @@ export const PoseSelectionStep: React.FC<Props> = ({
           </button>
         </div>
 
+        {selectedModel.poses.length === 0 && (
+          <p role="status" className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Este modelo no tiene poses activas. Activa alguna desde Modelos → Catálogo o elige otro modelo.
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
           {selectedModel.poses.map((pose) => {
             const selected = selectedPoseIds.includes(pose.id);

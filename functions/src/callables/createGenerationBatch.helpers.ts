@@ -1,5 +1,6 @@
 import { APPROVED_TRY_ON_PROMPT_FORMAT, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { isPoseActive } from '../../../shared/src/domain';
 import {
   AspectRatio,
   BatchOutputMode,
@@ -389,6 +390,9 @@ export const assertModelOwnershipAndPoses = (
     if (!poseMap.has(poseId)) {
       throw new HttpsError('invalid-argument', `La pose ${poseId} no pertenece al modelo seleccionado.`);
     }
+    if (!isPoseActive(poseMap.get(poseId)!)) {
+      throw new HttpsError('failed-precondition', 'Una pose seleccionada está inactiva. Actualiza las poses antes de generar.');
+    }
   });
 
   return poseMap;
@@ -418,9 +422,9 @@ export const getGarmentAvailableViews = (garment: UploadedGarmentInput) =>
 
 export const canGeneratePoseForGarment = (
   garment: UploadedGarmentInput,
-  pose: Pick<Pose, 'aiClassification'>,
+  pose: Pick<Pose, 'active' | 'aiClassification'>,
 ): boolean =>
-  isPoseCompatibleWithGarmentViews(
+  isPoseActive(pose) && isPoseCompatibleWithGarmentViews(
     pose.aiClassification,
     getGarmentAvailableViews(garment),
     garment.garmentBodyArea ?? null,
@@ -429,7 +433,7 @@ export const canGeneratePoseForGarment = (
 
 export const getCompatibleGarmentPoseCombinations = (
   garments: UploadedGarmentInput[],
-  poses: Array<Pick<Pose, 'id' | 'fileName' | 'aiClassification' | 'storagePath'>>,
+  poses: Array<Pick<Pose, 'id' | 'active' | 'fileName' | 'aiClassification' | 'storagePath'>>,
 ): Array<{
   garment: UploadedGarmentInput;
   pose: Pick<Pose, 'id' | 'fileName' | 'aiClassification' | 'storagePath'>;

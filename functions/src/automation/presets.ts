@@ -1,4 +1,5 @@
-import { AutomationPreset, Client, CreateAutomationJobRequest } from '../../../shared/src/types';
+import { AutomationPreset, Client, CreateAutomationJobRequest, Model } from '../../../shared/src/types';
+import { isPoseActive } from '../../../shared/src/domain';
 import { AutomationAttentionError } from './imports';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 
@@ -11,6 +12,20 @@ export const PRODUCT_PRESETS = {
     qualityRules: ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts'],
   },
 } as const;
+
+export const resolveAutomationPoseIds = (model: Pick<Model, 'poses'>, requestedPoseIds?: string[]): string[] => {
+  const poseMap = new Map(model.poses.map((pose) => [pose.id, pose]));
+  if (requestedPoseIds?.some((id) => !poseMap.has(id))) {
+    throw new AutomationAttentionError('Hay poses no disponibles en el modelo/preset.');
+  }
+  const poseIds = [...new Set(requestedPoseIds ?? model.poses.map((pose) => pose.id))]
+    .filter((id) => isPoseActive(poseMap.get(id)!));
+  if (!poseIds.length) {
+    throw new AutomationAttentionError('No hay poses activas en el modelo/preset. Activa alguna pose o cambia el preset.');
+  }
+  return poseIds;
+};
+
 export const resolveAutomationPreset = (data: CreateAutomationJobRequest, client: Client): { name: string; config: AutomationPreset; modelId: string | null } => {
   const name = data.preset || client.automation?.defaultPreset || (data.jobType === 'product' ? 'generic_product' : 'standard');
   const configured = client.automation?.presets?.[name];

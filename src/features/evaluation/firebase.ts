@@ -1,7 +1,5 @@
 import { functions } from '../../firebase';
-import { db } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import {
   CancelBatchProcessingRequest,
   CancelBatchProcessingResponse,
@@ -170,16 +168,9 @@ export const selectJobOutput = async (
 export const setJobManualFlag = async (
   jobId: string,
   flagged: boolean,
-  userUid: string | null,
+  _userUid: string | null,
 ) => {
-  const jobRef = doc(db, 'jobs', jobId);
-
-  await updateDoc(jobRef, {
-    manuallyFlagged: flagged,
-    manuallyFlaggedAt: flagged ? serverTimestamp() : null,
-    manuallyFlaggedByUid: flagged ? userUid : null,
-    updatedAt: serverTimestamp(),
-  });
+  await httpsCallable<import('../../../shared/src/types').ManglarJobFlagRequest, unknown>(functions, 'setJobManualFlag')({ jobId, flagged });
 };
 
 export const exportBatchSpreadsheet = async (

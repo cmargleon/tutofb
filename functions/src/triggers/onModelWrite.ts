@@ -1,3 +1,4 @@
+import { withManglarContext } from '../manglar/context';
 import * as admin from 'firebase-admin';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { Model } from '../../../shared/src/types';
@@ -45,7 +46,7 @@ export const onModelWrite = onDocumentWritten(
 
     for (const pose of unclassifiedPoses) {
       try {
-        const result = await classifyPoseWithGemini({
+        const result = await withManglarContext({ budgetId: (model as Model & { manglarBudgetId?: string }).manglarBudgetId }, () => classifyPoseWithGemini({
           apiKey,
           model: geminiModel,
           pose,
@@ -54,7 +55,7 @@ export const onModelWrite = onDocumentWritten(
           modelId: model.id,
           modelName: model.name,
           userUid: null,
-        });
+        }));
 
         const aiClassification = buildPoseAiClassification({
           orientationDetail: result.orientationDetail,
@@ -81,9 +82,19 @@ export const onModelWrite = onDocumentWritten(
 
     if (classifiedCount === 0) return;
 
-    await getAppFirestore().collection('models').doc(model.id!).update({
-      poses: updatedPoses,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    const db = getAppFirestore();
+    const modelRef = db.collection('models').doc(model.id!);
+    await db.runTransaction(async (tx) => {
+      const current = (await tx.get(modelRef)).data() as Model | undefined;
+      if (!current) return;
+      let changed = false;
+      const poses = current.poses.map((pose) => {
+        const classified = updatedPoses.find((item) => item.id === pose.id && item.storagePath === pose.storagePath);
+        if (pose.aiClassification || !classified?.aiClassification) return pose;
+        changed = true;
+        return { ...pose, aiClassification: classified.aiClassification };
+      });
+      if (changed) tx.update(modelRef, { poses, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     });
 
     console.log(

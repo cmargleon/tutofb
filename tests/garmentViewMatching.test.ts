@@ -90,6 +90,19 @@ test('selectBestGarmentPhotoForPose respeta el orden de usableForGarmentViews y 
   assert.equal(fallbackToFront?.id, 'front-photo');
 });
 
+test('las poses inactivas quedan fuera de sugerencias y conteos aunque sean compatibles o estén seleccionadas', () => {
+  const poses = [
+    { id: 'legacy', aiClassification: buildAiClassification(['front']) },
+    { id: 'active', active: true, aiClassification: buildAiClassification(['front']) },
+    { id: 'inactive', active: false, aiClassification: buildAiClassification(['front']) },
+  ];
+  const garments = [{ availableViews: ['front'] as GarmentView[] }];
+  assert.deepEqual(getSuggestedPoseIdsForGarments(poses, garments), ['legacy', 'active']);
+  assert.equal(countCompatiblePoseMatchesForGarments(poses, garments), 2);
+  assert.equal(countCompatiblePoseMatchesForGarments(poses, garments, ['inactive']), 0);
+  assert.deepEqual(getSuggestedPoseIdsForGarments([poses[2]], garments), []);
+});
+
 test('countCompatiblePoseMatchesForGarments cuenta solo las combinaciones pose-prenda realmente generables', () => {
   const count = countCompatiblePoseMatchesForGarments(
     [

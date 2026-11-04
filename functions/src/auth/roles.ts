@@ -1,6 +1,7 @@
 import { CallableRequest, HttpsError } from 'firebase-functions/v2/https';
 import { Role, User } from '../../../shared/src/types';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
+import { getManglarContext } from '../manglar/context';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 const loadUserDoc = async (uid: string): Promise<User | null> => {
@@ -41,7 +42,12 @@ export const assertCallableRoles = async (
     throw new HttpsError('unauthenticated', 'Debes iniciar sesión para continuar.');
   }
 
-  const role = await getRequestRole(request);
+  const delegated = getManglarContext();
+  if (delegated?.caller) {
+    if (request.auth.uid !== delegated.caller.uid) throw new HttpsError('permission-denied', 'Identidad delegada incorrecta.');
+    await delegated.authorize?.(request.data);
+  }
+  const role = delegated?.caller ? await getUserRole(request.auth.uid) : await getRequestRole(request);
   if (!role || !allowedRoles.includes(role)) {
     throw new HttpsError('permission-denied', 'No tienes permisos para ejecutar esta acción.');
   }

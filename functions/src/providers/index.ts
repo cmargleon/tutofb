@@ -1,3 +1,5 @@
+import { runManglarPaid } from '../manglar/budget';
+import { estimateGenerationHold } from '../automation/budget';
 import { Provider } from '../../../shared/src/types';
 import { ProviderGenerationError } from '../errors/jobFailure';
 import { generateWithNewFalModel, generateWithFalBananaPro, generateWithFalGPTImage2, generateWithFalNanoBanana2, generateWithFalSeedream, generateWithFalSeedream5 } from './fal';
@@ -8,7 +10,7 @@ export interface ProviderSecrets {
   falKey?: string;
 }
 
-export const generateWithProvider = async (
+const generateWithProviderCore = async (
   provider: Provider,
   request: ProviderRequest,
   secrets: ProviderSecrets,
@@ -74,3 +76,6 @@ export const generateWithProvider = async (
       throw new Error(`Proveedor no soportado: ${provider satisfies never}`);
   }
 };
+
+export const generateWithProvider = (provider: Provider, request: ProviderRequest, secrets: ProviderSecrets): Promise<ProviderResponse> =>
+  runManglarPaid(estimateGenerationHold(provider, request.imageConfig, request.referenceImageUrls?.length || 2).holdUsd, () => generateWithProviderCore(provider, request, secrets));

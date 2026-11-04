@@ -191,8 +191,7 @@ test('mobile wizard validates reference limits and generates all six scenes with
   await expect(next(page)).toBeDisabled();
   await scene.getByRole('button', { name: 'Restaurar escena global', exact: true }).click();
   await next(page).click();
-  const overflow = await page.evaluate(() => Array.from(document.querySelectorAll('*')).filter(el => el.getBoundingClientRect().right > window.innerWidth + 1).map(el => el.tagName).slice(0, 8));
-  expect(overflow).toEqual([]);
+  await expect.poll(() => page.evaluate(() => Array.from(document.querySelectorAll('*')).filter(el => el.getBoundingClientRect().right > window.innerWidth + 1).map(el => el.tagName).slice(0, 8))).toEqual([]);
   await expect(page.getByRole('button', { name: /GPT Image 2.5 Flare/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('textbox', { name: 'Instrucciones generales de fotografía de producto' })).not.toBeVisible();
   await page.screenshot({ path: '/tmp/tutofb-wizard-product-scenes-mobile.png', fullPage: true });

@@ -54,7 +54,17 @@ export const saveModelService = async (input: ManglarModelSaveRequest, uid: stri
         const [metadata] = await admin.storage().bucket().file(pose.storagePath).getMetadata();
         if (!metadata.contentType?.startsWith('image/') || Number(metadata.size) >= 10 * 1024 * 1024)
             throw new HttpsError('invalid-argument', 'Fotografía inválida.');
-        nextPoses.push({ id: randomUUID(), storagePath: pose.storagePath, fileName: nameValue(pose.fileName), aiClassification: pose.aiClassification || null, createdAt: new Date().toISOString() });
+        const id = randomUUID();
+        const fileName = nameValue(pose.fileName);
+        let storagePath = pose.storagePath;
+        if (storagePath.startsWith(`garments/drafts/${uid}/`)) {
+            storagePath = `${originalRoot || `models/${input.clientId}/${ref.id}`}/poses/${id}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 180)}`;
+            // Copy before committing the model. A concurrent discard either wins before
+            // this copy (save fails), or removes only the temporary source afterwards.
+            // Pin the validated generation so an overwritten upload cannot slip through.
+            await admin.storage().bucket().file(pose.storagePath, { generation: metadata.generation }).copy(admin.storage().bucket().file(storagePath));
+        }
+        nextPoses.push({ id, storagePath, fileName, aiClassification: pose.aiClassification || null, createdAt: new Date().toISOString() });
     }
     let removed: Pose[] = [];
     await db.runTransaction(async (tx) => {
@@ -68,7 +78,7 @@ export const saveModelService = async (input: ManglarModelSaveRequest, uid: stri
         if (!poses.length)
             throw new HttpsError('invalid-argument', 'Conserva al menos una pose.');
         const now = FieldValue.serverTimestamp();
-        tx.set(ref, { name, clientId: input.clientId, clientNameSnapshot: client.data()!.name, identityTraits: input.identityTraits ?? model?.identityTraits ?? null,
+        tx.set(ref, { name, clientId: input.clientId, clientNameSnapshot: client.data()!.name, identityTraits: input.identityTraits === undefined ? model?.identityTraits ?? null : input.identityTraits,
             storageRootPath: model?.storageRootPath || `models/${input.clientId}/${ref.id}`, poses, poseCount: poses.length,
             coverPoseId: poses[0].id, coverPosePath: poses[0].storagePath, updatedAt: now,
             ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),

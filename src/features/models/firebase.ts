@@ -217,7 +217,8 @@ export const updateModel = async (id: string, input: UpdateModelInput) => {
     }
 
     await httpsCallable<import('../../../shared/src/types').ManglarModelSaveRequest, { id: string }>(functions, 'saveModel')({
-      id, clientId: input.clientId, name: trimmedName, identityTraits: input.identityTraits || null,
+      id, clientId: input.clientId, name: trimmedName,
+      ...(input.identityTraits !== undefined ? { identityTraits: input.identityTraits } : {}),
       posesToAdd: addedPoses.map((pose) => ({ storagePath: pose.storagePath, fileName: pose.fileName })), poseIdsToRemove: [...poseIdsToRemove],
     });
 

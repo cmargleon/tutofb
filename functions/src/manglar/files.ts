@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
-import type { ManglarUploadRequest, ManglarDriveImportRequest } from '../../../shared/src/types';
+import type { ManglarUploadRequest, ManglarDriveImportRequest, Model } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { signedAsset } from '../http/downloadAssets.service';
 import { assertClientAccess, assertResourceAccess, assertStorageAccess, validId } from './access';
@@ -51,6 +51,19 @@ export const discardTemporaryFile = async (path: string, caller: DelegatedCaller
         if (!(await getAppFirestore().collection('jobs').where(field, 'array-contains', path).limit(1).get()).empty)
             throw new HttpsError('failed-precondition', 'La referencia ya está asociada a una producción.');
     }
+    // Historical models may still refer to drafts, including non-cover poses and
+    // previews. Firestore cannot query a nested field inside an array of maps.
+    // Bound this compatibility check and fail closed if the catalog is larger;
+    // never delete on the assumption that an unchecked model is unreferenced.
+    const maximumModels = 500;
+    const models = await getAppFirestore().collection('models').select('poses', 'coverPosePath').limit(maximumModels + 1).get();
+    if (models.size > maximumModels)
+        throw new HttpsError('failed-precondition', 'No se puede comprobar de forma acotada si el archivo está utilizado por un modelo. Conserva el temporal.');
+    if (models.docs.some((doc) => {
+        const model = doc.data() as Pick<Model, 'poses' | 'coverPosePath'>;
+        return model.coverPosePath === path || model.poses?.some((pose) => pose.storagePath === path || pose.previewStoragePath === path);
+    }))
+        throw new HttpsError('failed-precondition', 'La referencia ya está asociada a un modelo.');
     await admin.storage().bucket().file(path).delete({ ignoreNotFound: true });
     return { discarded: true };
 };

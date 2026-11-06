@@ -51,6 +51,7 @@
 - Avoid dependency or lockfile churn unless the task explicitly requires it.
 
 ## Project Structure
+- Capability map, public boundaries, and minimal agent context examples: [ARCHITECTURE.md](ARCHITECTURE.md).
 - Routing and protected pages: `src/app/AppRouter.tsx`
 - App providers: `src/app/App.tsx`
 - Firebase client setup: `src/firebase.ts` and `firebase-applet-config.json`

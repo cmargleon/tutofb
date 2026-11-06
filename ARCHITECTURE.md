@@ -1,133 +1,260 @@
-# Architecture
+# Arquitectura de Tuto
 
-## Core Flow
-- Auth flow:
-  - `src/features/auth/AuthProvider.tsx` loads Firebase auth plus `users/{uid}`.
-  - Frontend route access is gated in `src/app/AppRouter.tsx` by active user doc and role.
-  - Backend callables re-check roles through `functions/src/auth/roles.ts`; frontend role checks are not authority.
-- Catalog setup flow:
-  - Admins manage `clients` and `models`; most simple catalog edits are direct Firestore writes allowed by rules.
-  - Spreadsheet template import uploads XLS/XLSX to `client_spreadsheets/{clientId}/...`, then `importClientSpreadsheetTemplate` parses and writes `clients/{clientId}/spreadsheetTemplates/{templateId}` plus `categories`.
-  - Model bundle import reads a ZIP manifest and writes model poses under `models/{clientId}/{modelId}/poses/...`.
-- Generation flow:
-  - Wizard uploads garment drafts to `garments/drafts/{uid}/{draftBatchId}/{garmentId}/...`.
-  - Optional Gemini helpers classify garment views and preview product drafts before submission.
-  - `createGenerationBatch` validates role, `system_config/main`, provider availability, client/model ownership, template/categories, pose compatibility, draft ownership, and job limit.
-  - The callable writes one `batches/{batchId}` document, optional `batches/{batchId}/productDrafts/{garmentId}`, and one `jobs/{jobId}` per compatible garment-photo/pose pair.
-- Job processing flow:
-  - `processJobOnCreate`, `processJobOnRequeue`, and `processJobOnActivation` wake `functions/src/workers/jobWorker.ts`.
-  - Worker claims pending jobs transactionally using `claimToken`, builds signed URLs for pose and garment images, calls `generateWithProvider`, compresses output if needed, and stores it under `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`.
-  - Worker writes `jobs/{jobId}/outputs/{outputId}`, updates `jobs/{jobId}.currentOutput`, writes `jobs/{jobId}/logs`, and sends pose/garment/result to Gemini auto-review.
-  - Approved review sets job `completed`; rejected review requeues with revised prompt until `autoReviewMaxAttempts`; provider errors retry until `maxRetries`.
-- Post-processing flow:
-  - `onJobStatusChange` recomputes batch counters from all jobs in the batch; it does not trust deltas.
-  - `onJobCompletedSquareCrop` syncs the approved output crop into spreadsheet product drafts.
-  - Catalog/queue/evaluation pages read `batches`, `jobs`, `outputs`, `logs`, and `productDrafts` through realtime subscriptions and callables.
-- Derived data flow:
-  - Analytics docs are trigger-maintained from `jobs` and `jobs/*/outputs`; `rebuildAnalytics` can rebuild snapshots.
-  - Finance events are trigger-maintained from job outputs, Gemini usage, model-generation logs, human intervention, and terminal batches; finance snapshots are callable-built.
+Mapa de la estructura **actual**, contrastado con el repositorio el 6 de noviembre de 2026. Orden de autoridad: código → pruebas → documentación. Las evidencias de despliegues anteriores no acreditan el estado remoto de hoy; esta revisión es local. El [destino propuesto](#destino-propuesto) queda separado de las capacidades implementadas.
 
-## Components
-- `src/app/`
-  - App shell, providers, route protection, lazy page wiring.
-- `src/pages/`
-  - Page orchestration only; feature hooks own state/actions.
-- `src/features/*/firebase.ts`
-  - Frontend data boundary: typed `httpsCallable` wrappers, Firestore subscriptions, and narrowly allowed direct writes.
-- `src/features/generate/`
-  - Wizard state, garment upload/compression, product draft preview, request assembly for batch creation.
-- `src/features/evaluation/`
-  - Job output history, manual output selection, regeneration/cancel/retry callables, product draft editing/export.
-- `src/features/storage/assets.ts`
-  - Central resolver for Storage URLs; generated outputs route through `publicGeneratedImage`.
-- `shared/src/`
-  - Shared contracts, provider IDs/config normalization, domain enums, prompt construction, review metrics, pose/garment matching.
-- `functions/src/callables/`
-  - Privileged mutations and long-running operations invoked from the frontend.
-- `functions/src/workers/jobWorker.ts`
-  - Job claim/retry lifecycle, provider execution, output persistence, Gemini review, logging.
-- `functions/src/providers/`
-  - Adapter dispatch for `fal-seedream`, `fal-banana-pro`, `fal-nano-banana-2`, `fal-seedream-5`, and `openai-gpt-image-1.5`.
-- `functions/src/review/`
-  - Gemini image review and review signal patches.
-- `functions/src/spreadsheets/`
-  - Template parsing, product draft inference/matching, spreadsheet export, square crop sync.
-- `functions/src/triggers/`
-  - Job processing triggers, batch counter sync, analytics, finance, claims sync, model/client delete cleanup, storage cleanup.
-- `functions/src/admin/`
-  - System config, system health, analytics rebuild, model pose backfill/tagging.
-- `functions/src/http/`
-  - Download endpoints and `publicGeneratedImage` proxy for generated image paths.
+## Índice por capacidad
 
-## Data & Source of Truth
-- Primary Firestore collections:
-  - `users`: app user profile, active state, role; synced to auth claims by trigger/callable.
-  - `clients`: client catalog root and generation prompt defaults.
-  - `clients/{clientId}/spreadsheetTemplates/{templateId}` and `/categories/{categoryId}`: spreadsheet schema source for product drafts/exports.
-  - `models`: model catalog; poses are embedded in the model doc and point to Storage paths.
-  - `batches`: aggregate generation request, snapshots, counters, output mode, provider/config.
-  - `batches/{batchId}/productDrafts/{draftId}`: spreadsheet-mode draft rows and generated crop/image sync.
-  - `jobs`: operational job state and current approved/selected output.
-  - `jobs/{jobId}/outputs`: immutable-ish generated attempts and cost/duration/provider metadata.
-  - `jobs/{jobId}/logs`: worker/provider/review traceability.
-  - `system_config/main`: runtime limits, prompt cases, disabled providers, Gemini review model.
-  - `analytics_*`: derived read models; do not hand-write except rebuild/admin logic.
-  - `finance_*`: finance settings, events, and snapshots; mutations go through finance callables/triggers.
-- Storage paths:
-  - Model poses: `models/{clientId}/{modelId}/poses/{fileName}`.
-  - Wizard garment drafts: `garments/drafts/{uid}/{draftBatchId}/{garmentId}/{fileName}`.
-  - Source spreadsheets: `wizard_source_spreadsheets/{uid}/{uploadId}/{fileName}`.
-  - Client templates: `client_spreadsheets/{clientId}/{templateId}/{fileName}`.
-  - Generated outputs: `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`.
-  - Generated square crops: `generated/{clientId}/{batchId}/{jobId}/square_crops/{outputId}.jpg`.
-  - Model generation temp outputs: `model_generations/{clientId}/...`.
-- Source of truth rules:
-  - `shared/src/types` and `shared/src/domain.ts` define stable enum/status/provider contracts.
-  - `shared/src/providerImageConfig.ts` owns provider image config validation/defaults/legacy mapping.
-  - `functions/src/admin/systemConfig.ts` owns defaults and cache for `system_config/main`.
-  - `getAppFirestore()` is the backend Firestore entry point so `FIRESTORE_DATABASE_ID` is honored.
-  - `firestore.rules` and `storage.rules` are the permission source of truth for frontend direct access.
+| Necesidad | Entrada al contexto |
+| --- | --- |
+| Sesión, roles y usuarios | [Identidad y autorización](#identidad-y-autorizacion) |
+| Clientes, modelos y poses | [Catálogos administrativos](#catalogos-administrativos) |
+| Ajustes de Amazon y otros canales | [Marketplaces administrativos](#marketplaces-administrativos) → [ejemplo mínimo Amazon](#ejemplo-amazon) |
+| Crear fotografías de prendas u objetos | [Generación manual](#generacion-manual) |
+| Cambiar una transformación image-to-image | [Ejecución de jobs e imágenes](#jobs-e-imagenes) → [ejemplo mínimo de imagen](#ejemplo-imagen) |
+| Revisar, regenerar y descargar resultados | [Cola y catálogo de resultados](#cola-y-catalogo) |
+| Plantillas, borradores y exportación de productos | [Spreadsheets](#spreadsheets) |
+| Intake, planes y producción automática | [Automation](#automation) |
+| Operar Tuto desde un agente | [Manglar](#manglar) |
+| Organizar fuentes de Drive | [Organizador](#organizador) |
+| Proteger y restaurar archivos | [Respaldos y espacio de trabajo](#respaldos) |
+| Métricas, costos y ajustes globales | [Analítica, finanzas y sistema](#analitica-finanzas-sistema) |
+| Rastrear escrituras y eventos entre capacidades | [Flujos por Firestore](#flujos-firestore) |
+| Distinguir los accesos de Google Drive | [Matriz de permisos Drive](#permisos-drive) |
+| Ampliaciones aún no implementadas | [Destino propuesto](#destino-propuesto) |
+| Reproducir la comprobación de esta guía | [Verificación y discrepancias](#verificacion) |
 
-## Integrations
-- Firebase Auth:
-  - Auth identity plus custom claims; `users/{uid}` remains the fallback/readable app profile.
-- Firestore:
-  - Realtime UI reads, trigger source, operational job queue, derived analytics/finance stores.
-- Firebase Storage:
-  - User uploads, model poses, generated images, spreadsheets, download/export artifacts.
-- Cloud Functions callables:
-  - Privileged writes, batch creation, user management, regeneration/cancel/select/export, system/finance admin.
-- Cloud Functions triggers:
-  - Firestore-driven job execution, counters, analytics, finance, claims sync, cleanup.
-- HTTP functions:
-  - Batch/job/model downloads and public generated image serving.
-- Image providers:
-  - fal.ai and OpenAI adapters via `functions/src/providers`.
-- Gemini:
-  - Garment view classification, model pose tagging, product draft inference, generated-image review, usage logging.
-- Spreadsheet parsing/export:
-  - Server-side workbook parsing and product draft export through `functions/src/spreadsheets`.
+## Estructura actual: entradas y fronteras
 
-## Critical Paths
-- Batch creation must go through `createGenerationBatch`; do not create `batches`/`jobs` directly from frontend.
-- Job state transitions must preserve `pending -> processing -> completed|failed` semantics, claim tokens, retry fields, and logs.
-- `onJobStatusChange` must continue recomputing batch counters from actual jobs to avoid concurrent delta races.
-- Provider additions require coordinated changes in shared provider enums/config/costs, UI selection, backend adapter dispatch, system config availability, tests, and rules if paths change.
-- Job output selection uses `resolveApprovedJobOutput(job)`: manual `userSelectedOutput` overrides `currentOutput`.
-- Generated image display must use `resolveStorageAssetUrl()`/`useStorageAssetUrl()` so `generated/` paths route through `publicGeneratedImage`.
-- Spreadsheet mode depends on one product draft per garment and category/template schema from `clients/{clientId}/spreadsheetTemplates`.
-- Analytics and finance are derived from job/output/Gemini/model-generation/batch events; direct writes break dashboards.
-- Auth/roles must be updated together across `shared/src/domain.ts`, frontend route gates, backend `assertCallableRoles`, Firestore rules, Storage rules, and tests.
-- Storage path formats are part of authorization and worker assumptions; changing them requires rules, validators, cleanup, downloads, and tests.
+El frontend React/Vite usa páginas para orquestar, hooks de feature para estado/acciones y módulos `firebase.ts` para suscripciones y callables tipados. Las suscripciones deben devolver unsubscribe y recibir callback de error. Feedback y confirmaciones se centralizan en [FeedbackProvider](src/features/feedback/FeedbackProvider.tsx) y se reutilizan los [componentes UI](src/components/ui.tsx).
 
-## Constraints
-- Do not edit generated output: `functions/lib/`, `dist/`, `coverage/`, `node_modules/`.
-- Do not bypass Cloud Functions for privileged operations; frontend direct writes are intentionally narrow.
-- Use typed callable wrappers with request/response contracts in `shared/src/types`.
-- Use `assertCallableRoles`/`assertUserRoles` in backend privileged entry points.
-- Use `useAuth`/route role gates for frontend visibility only; never treat frontend gates as security.
-- Use `getAppFirestore()` in Functions instead of direct `getFirestore()`.
-- Keep shared changes compatible with both frontend and Functions.
-- Do not change provider IDs, job statuses, batch statuses, roles, or Storage paths without updating shared contracts, validation, backend logic, rules, and tests together.
-- Do not mutate `system_config/main`, analytics, finance events/snapshots, `jobs/*/outputs`, or `batches/*/productDrafts` directly from frontend.
-- If touching `functions/src/` or `shared/src/`, build Functions before tests that import compiled JS.
+- [AppRouter.tsx](src/app/AppRouter.tsx) es el inventario de rutas y visibilidad por rol; [App.tsx](src/app/App.tsx) compone los proveedores. El servidor vuelve a autorizar cada operación.
+- [functions/src/index.ts](functions/src/index.ts) es la superficie exportada de Functions. Un helper exportado desde un módulo no equivale a un endpoint desplegable; comprobar el handler y su exportación desde este índice.
+- [firebase.json](firebase.json) configura Hosting desde `dist`, Functions Node 22, reglas e [índices Firestore](firestore.indexes.json). Hosting dirige `/api/manglar/**` y los tres documentos de descubrimiento OAuth a `manglarMcp`, `/api/automation/**` a `automationApi`, y el resto a la SPA. No hay un rewrite universal para los callables o las descargas.
+- [src/firebase.ts](src/firebase.ts), [firebase-applet-config.json](firebase-applet-config.json) y [.firebaserc](.firebaserc) determinan el entorno. `localhost:3000` usa Firebase real salvo `VITE_USE_FIREBASE_EMULATORS=true`; la configuración de emuladores en `firebase.json` no los activa por sí sola.
+- Functions accede mediante `getAppFirestore()` en [appFirestore.ts](functions/src/firebase/appFirestore.ts). El ID de base configurable no implica que todos los triggers lo declaren: Automation y Respaldos usan explícitamente `APP_FIRESTORE_DATABASE_ID`; varios triggers anteriores conservan la base implícita. Revisar cada declaración antes de cambiar de base.
+- [firestore.rules](firestore.rules) y [storage.rules](storage.rules) gobiernan el SDK cliente. Admin SDK las omite: los servicios deben autorizar rol, recurso, propietario y cliente. Los contratos compartidos se exportan desde [types/index.ts](shared/src/types/index.ts); [domain.ts](shared/src/domain.ts), [providerImageConfig.ts](shared/src/providerImageConfig.ts) y [providerCosts.ts](shared/src/constants/providerCosts.ts) centralizan dominio, normalización y tarifas.
+- [config/runtime.ts](functions/src/config/runtime.ts) declara parámetros y bindings de secretos; `system_config/main` conserva ajustes operativos sin convertirlos en configuración de despliegue. Los valores de credenciales permanecen fuera de contratos, documentación y frontend.
+
+Invariantes conservadas: los cambios en `shared/src/` deben funcionar en frontend y Functions; añadir proveedores o cambiar roles, estados o paths exige actualizar contratos, validadores, dispatch, costos, permisos y pruebas conjuntamente según corresponda. Los resultados compilados (`functions/lib/`, `dist/`, `coverage/`, `node_modules/`) no se editan a mano. La creación privilegiada pasa por servicios/callables y los agregados se reconstruyen desde sus fuentes, no con patches del navegador.
+
+Aquí «contrato público» significa frontera usada por web, HTTP, MCP u otra capacidad, aunque requiera autenticación. «Zona privada» identifica detalles de ejecución o datos sin acceso directo del navegador; no significa que todos los archivos de esa zona sean secretos.
+
+<a id="identidad-y-autorizacion"></a>
+### Identidad y autorización
+
+- **Entrada web/servidor:** `/login`, `/users/crear`, `/users/lista` (usuarios solo admin). [AuthProvider](src/features/auth/AuthProvider.tsx) carga Auth y el documento de usuario. [users/firebase.ts](src/features/users/firebase.ts) llama, entre otros, a `createAppUser`, `updateAppUser`, `archiveAppUser`, `restoreAppUser` y `syncUserClaims`, exportados por el índice de Functions.
+- **Escribe / consumidores:** Firebase Auth, `users/{uid}` y claims; `syncClaimsOnUserWrite` propaga cambios. Los consumen rutas, reglas, callables y servicios de Manglar. Las reglas permiten algunas escrituras administrativas en `users`; el flujo de gestión usa callables para coordinar Auth y Firestore.
+- **Contratos / zona privada:** [user.ts](shared/src/types/user.ts), `Role` en [common.ts](shared/src/types/common.ts); autoridad de servidor en [roles.ts](functions/src/auth/roles.ts). El helper acepta un claim de rol válido antes de consultar el documento; no asumir que todos los callables revalidan actividad del documento con la misma política. Automation, Manglar y Respaldos añaden comprobaciones actuales. Storage exige claims de rol/actividad; Firestore exige documento activo y permite fallback de rol al documento.
+- **Prueba mínima:** [clientMarketplace.test.ts](tests/clientMarketplace.test.ts) comprueba rechazo anónimo y de operador/revisor en un callable administrativo; [manglarExpanded.test.ts](tests/manglarExpanded.test.ts) cubre delegación por rol/cliente con emuladores. La primera no demuestra sincronización completa de claims.
+
+<a id="catalogos-administrativos"></a>
+### Catálogos administrativos
+
+- **Entrada web/servidor:** `/clients/crear`, `/clients/lista`, `/clients/:clientId`, `/models`, `/models/generar`, `/models/catalogo/:modelId?`, solo admin. [ClientDetail](src/pages/ClientDetail.tsx) separa resumen, productos, marketplaces, fuentes, automatizaciones, configuración e historial. [clients/firebase.ts](src/features/clients/firebase.ts) y [models/firebase.ts](src/features/models/firebase.ts) contienen el acceso; `saveClient`, `saveModel`, `setClientArchived`, `setModelArchived`, `replaceModelPose`, `setModelActive` y `setModelPoseActive` ofrecen entradas de servidor.
+- **Escribe / consumidores:** `clients`, `models` con poses embebidas y rutas Storage `models/{clientId}/{modelId}/poses/{fileName}`; la generación de modelos usa `model_generations/...` y `model_generation_logs`. Wizard, Automation y Organizador consumen los catálogos; Cola/Analítica conservan snapshots históricos. Archivar y desactivar son decisiones diferentes; poses sin `active` conservan compatibilidad como activas.
+- **Contratos / zona privada:** [client.ts](shared/src/types/client.ts), [model.ts](shared/src/types/model.ts), [manglar.ts](shared/src/types/manglar.ts). Los CRUD simples de clientes/modelos pueden usar escrituras directas administrativas permitidas; **`clients.automation` y `clients.marketplaces` están excluidos de esas escrituras**, incluso al crear. [catalogService.ts](functions/src/manglar/catalogService.ts) coordina las mutaciones de servidor. Limpieza y borrado permanente deben respetar las dependencias, no borrar documentos para reiniciar trabajos.
+- **Prueba mínima:** [modelPoseActivation.test.ts](tests/modelPoseActivation.test.ts) (permisos, activación y conservación de assets); [deletePlans.test.ts](tests/deletePlans.test.ts) para alcance de borrado; [clients-redesign.spec.ts](e2e/clients-redesign.spec.ts) para ficha y navegación.
+
+<a id="marketplaces-administrativos"></a>
+### Marketplaces administrativos
+
+- **Entrada web/servidor:** `/clients/:clientId?tab=marketplaces` → [ClientMarketplaces](src/components/clients/ClientMarketplaces.tsx) → [useClientMarketplace](src/features/clients/useClientMarketplace.ts) → wrapper `updateClientMarketplace` en el acceso de clientes → [callable del mismo nombre](functions/src/callables/updateClientMarketplace.ts), solo admin.
+- **Escribe / consumidores:** actualiza transaccionalmente **solo** `clients/{clientId}.marketplaces.{marketplaceId}` y `updatedAt`; conserva otros canales, ajustes previos y campos futuros. Lo leen ficha, resumen y lista de clientes. Ausencia de entrada significa deshabilitado, sin migración. Guardar ajustes no habilita el canal.
+- **Contratos / zona privada:** [marketplaces.ts](shared/src/marketplaces.ts) registra `amazon`, `shein`, `tiktok-shop`, `mercado-libre`. [marketplace.ts](shared/src/types/marketplace.ts) define `ClientMarketplaceConfig`, `UpdateClientMarketplaceRequest` y `UpdateClientMarketplaceResponse`: `enabled`, `settings.region`, `settings.sellerId`, fecha. `saveClientMarketplace` es el helper transaccional, no otro callable. Se rechazan campos desconocidos y credenciales; el navegador no escribe el mapa. El registro de operaciones de Manglar no expone esta mutación.
+- **Límite funcional:** habilitar Amazon administrativamente no autentica una cuenta de vendedor, no concede scopes de publicación y no sincroniza productos, inventario, precios ni pedidos. Tampoco `JobAutoReview.marketplaceData`, las filas de spreadsheet o las variantes comerciales del Organizador son conectores comerciales. Esos nombres describen datos de catálogo; no conexiones con APIs de marketplaces.
+- **Prueba mínima:** [clientMarketplace.test.ts](tests/clientMarketplace.test.ts) verifica patches, aislamiento, defaults, validación y roles; [clientMarketplace.integration.test.ts](tests/clientMarketplace.integration.test.ts) comprueba persistencia y reglas reales con Auth/Firestore locales. Recorrido completo: [ejemplo Amazon](#ejemplo-amazon).
+
+<a id="generacion-manual"></a>
+### Generación manual
+
+- **Entrada web/servidor:** `/generate`, admin/operador → [useGenerateWizard](src/features/generate/wizard/hooks/useGenerateWizard.ts), [state.ts](src/features/generate/wizard/state.ts), [submit.ts](src/features/generate/wizard/submit.ts) → [generate/firebase.ts](src/features/generate/firebase.ts). `classifyGarmentViewsWithGemini` analiza; [createGenerationBatch](functions/src/callables/createGenerationBatch.ts) crea prendas y [createProductGenerationBatch](functions/src/callables/createProductGenerationBatch.ts) objetos.
+- **Escribe / consumidores:** referencias privadas `garments/drafts/{uid}/{draftBatchId}/{garmentId}/{fileName}`; un `batches/{batchId}`, sus `jobs` compatibles y, en modo spreadsheet, `productDrafts` bajo el batch. Los consumen worker, Cola, Catálogo, exportación, métricas y finanzas. La creación valida usuario, dueño del draft, cliente/modelo/poses, proveedor habilitado, plantilla/categorías y límites antes de persistir.
+- **Contratos / zona privada:** `CreateGenerationBatchRequest/Response` en [batch.ts](shared/src/types/batch.ts), `CreateProductGenerationBatchRequest` en [productGeneration.ts](shared/src/types/productGeneration.ts), referencias en [garment.ts](shared/src/types/garment.ts); validación y combinaciones en [createGenerationBatch.helpers.ts](functions/src/callables/createGenerationBatch.helpers.ts). No crear batches/jobs desde el navegador ni duplicar prompts o enums.
+- **Decisiones vigentes:** tres pasos: cliente/fotos → preparar fotos → revisar/generar. Gemini detecta tipo antes de modelo/poses/escenas. Un solo tipo por lote, mayoría estricta por **artículos**, advertencia visible de nombres/cantidad excluidos; empate o incertidumbre exige elección humana conservando referencias. Default compartido Flare (`fal-gpt-image-2.5-flare`), framing `portrait_4_3` = ancho:alto `3:4`; seleccionar proveedor restablece framing soportado y conserva calidad/formato. Se respetan proveedor explícito y overrides de preset. Objetos: seis escenas compartidas, cuatro lifestyle y dos con uso humano, en [productGeneration.ts](shared/src/productGeneration.ts). Prompts globales y por género, formato de prompt aprobado y poses activas siguen siendo parte del contrato.
+- **Prueba mínima:** [photoGenerationFlow.test.ts](tests/photoGenerationFlow.test.ts), [createGenerationBatch.test.ts](tests/createGenerationBatch.test.ts), [productGeneration.test.ts](tests/productGeneration.test.ts) y [approvedTryOnPrompt.test.ts](tests/approvedTryOnPrompt.test.ts). Decisiones ampliadas: [PHOTO_GENERATION.md](docs/PHOTO_GENERATION.md).
+
+<a id="jobs-e-imagenes"></a>
+### Ejecución de jobs e imágenes
+
+- **Entrada web/servidor:** no tiene una página propia; recibe `jobs` de generación manual o Automation. [processJobOnCreate](functions/src/triggers/processJobOnCreate.ts), [processJobOnRequeue](functions/src/triggers/processJobOnRequeue.ts), [processJobOnActivation](functions/src/triggers/processJobOnActivation.ts) llaman a [jobWorker.ts](functions/src/workers/jobWorker.ts). [requeueExpiredJobsOnSchedule](functions/src/triggers/requeueExpiredJobs.ts) escribe activaciones; no ejecuta proveedores dentro del barrido.
+- **Escribe / consumidores:** reclama `pending → processing` con `claimToken`/caducidad; firma referencias, llama al proveedor, revisa con Gemini y persiste intentos en `jobs/{jobId}/outputs/{outputId}`, trazas en `logs`, selección actual, costos, reviews y estado. Guarda bytes en `generated/{clientId}/{batchId}/{jobId}/{outputId}.{ext}`. Rechazos pueden volver a `pending` hasta el límite; errores operativos usan sus propios reintentos. Claims impiden que un worker obsoleto cierre otro intento. Los consumidores son revisión, UI, descargas, Automation, analítica y finanzas.
+- **Contratos / zona privada:** `Job`, `JobOutput`, `JobFailureInfo` en [job.ts](shared/src/types/job.ts), `ProviderImageConfig` en [provider.ts](shared/src/types/provider.ts); frontera interna entre worker/adapters `ProviderRequest/ProviderResponse` en [providers/types.ts](functions/src/providers/types.ts). [providers/index.ts](functions/src/providers/index.ts) es el dispatch actual: generación activa por fal.ai, incluidos modelos GPT vía fal. El ID histórico `openai-gpt-image-1.5` sigue legible en tipos, pero se rechaza para generar; la existencia de [openai.ts](functions/src/providers/openai.ts) no significa que siga habilitado.
+- **Tres transformaciones distintas:** image-to-image remota en [fal.ts](functions/src/providers/fal.ts)/[falModels.ts](functions/src/providers/falModels.ts); compresión local privada `compressGeneratedImageIfNeeded` dentro del worker, al persistir (intenta reducir outputs mayores de 3 MiB, ajustando JPEG/tamaño; no es una garantía absoluta de tamaño); recorte derivado de spreadsheet en [squareCrop.ts](functions/src/spreadsheets/squareCrop.ts). La revisión inicial recibe los bytes del proveedor antes de la compresión de almacenamiento. El crop escribe `generated/{clientId}/{batchId}/{jobId}/square_crops/{outputId}.jpg` y admite el path legacy `square_crop.jpg` para reconocimiento.
+- **Prueba mínima:** [falImageModels.test.ts](tests/falImageModels.test.ts) ejecuta los adapters con HTTP simulado y comprueba endpoint edit, referencias, framing y respuesta; [providers.test.ts](tests/providers.test.ts) prueba normalización y errores previos a red; [jobWorker.test.ts](tests/jobWorker.test.ts) solo cubre recuperación de pendientes. No atribuirle cobertura de compresión/crop ni del ciclo completo. Recorrido acotado y ejecutable: [ejemplo imagen](#ejemplo-imagen).
+
+<a id="cola-y-catalogo"></a>
+### Cola y catálogo de resultados
+
+- **Entrada web/servidor:** `/cola`, `/catalogo`, admin/operador/revisor. [queue/firebase.ts](src/features/queue/firebase.ts), [useCatalogJobs](src/features/catalog/useCatalogJobs.ts) y [evaluation/firebase.ts](src/features/evaluation/firebase.ts) leen lotes/jobs e invocan `regenerateJob`, `retryJobAutoReview`, `selectJobOutput`, `cancelJobGeneration` y operaciones de lote. El permiso concreto varía por handler: no deducirlo de que el rol pueda abrir la página.
+- **Escribe / consumidores:** callables actualizan `jobs`, outputs/reviews, logs y borradores relacionados; regenerar conserva historial. `onJobStatusChange` recalcula contadores del batch desde los jobs reales en transacción, sin deltas. El output efectivo usa `resolveApprovedJobOutput(job)` en dominio: selección humana por encima de `currentOutput`. UI, exportación y descargas deben respetar esa precedencia.
+- **Contratos / zona privada:** solicitudes de job y lote en sus contratos enlazados arriba. Las reglas permiten al navegador únicamente selección y flags manuales acotados de job, no transiciones arbitrarias ni escribir outputs/logs. [assets.ts](src/features/storage/assets.ts) y [useStorageAssetUrl](src/features/storage/useStorageAssetUrl.ts) centralizan URLs; `generated/` se sirve mediante [publicGeneratedImage](functions/src/http/publicGeneratedImage.ts). Outputs generados son públicos según las rutas de Storage permitidas y el proxy; las referencias de entrada no heredan esa política. API Automation devuelve además URLs temporales de resultados aprobados.
+- **Prueba mínima:** [regeneration.test.ts](tests/regeneration.test.ts), [downloads.test.ts](tests/downloads.test.ts), [notificationBatches.test.ts](tests/notificationBatches.test.ts); para recorrido de servidor con proveedores simulados, [automation.integration.test.ts](tests/automation.integration.test.ts) bajo emuladores.
+
+<a id="spreadsheets"></a>
+### Spreadsheets
+
+- **Entrada web/servidor:** fuentes del cliente, último paso del wizard y edición/exportación de resultados. `importClientSpreadsheetTemplate`, `previewProductDrafts`, `updateBatchProductDraft`, `exportBatchSpreadsheet` y `editBatchSpreadsheet` son fronteras del índice de Functions. [templateWorkbook.ts](functions/src/spreadsheets/templateWorkbook.ts), [productDrafts.ts](functions/src/spreadsheets/productDrafts.ts) y [batchSpreadsheetExport.ts](functions/src/spreadsheets/batchSpreadsheetExport.ts) contienen parsing, inferencia y exportación.
+- **Escribe / consumidores:** `clients/{clientId}/spreadsheetTemplates/{templateId}/categories/{categoryId}` y documento de plantilla; `batches/{batchId}/productDrafts/{draftId}` por artículo; metadatos de exportación en batch y artefactos Storage/Google Sheets. Las imágenes seleccionadas alimentan columnas del draft mediante [syncProductDraftImages.ts](functions/src/spreadsheets/syncProductDraftImages.ts). [onJobCompletedSquareCrop](functions/src/triggers/onJobCompletedSquareCrop.ts) observa cambios del output efectivo; la selección manual sincroniza desde el callable. No asumir que cualquier cambio de estado genera un crop.
+- **Contratos / zona privada:** [spreadsheet.ts](shared/src/types/spreadsheet.ts) y requests de exportación/edición en batch. Plantillas, categorías y drafts son solo escritura servidor. Uploads existentes: `client_spreadsheets/{clientId}/{templateId}/{fileName}`, `wizard_source_spreadsheets/{uid}/{uploadId}/{fileName}`; exportaciones: `client_spreadsheet_exports/{clientId}/{batchId}/{fileName}`. La exportación a Google Sheets usa la integración heredada de Drive, no la identidad lectora de Automation.
+- **Prueba mínima:** [productDraftSpreadsheetEnums.test.ts](tests/productDraftSpreadsheetEnums.test.ts) y [sourceSpreadsheetMatching.test.ts](tests/sourceSpreadsheetMatching.test.ts). No son pruebas visuales del crop ni integración real de Google Sheets.
+
+<a id="automation"></a>
+### Automation
+
+- **Entrada web/servidor:** `/automation`, `/automation/intake`, admin/operador → [automation/firebase.ts](src/features/automation/firebase.ts). [api.ts](functions/src/automation/api.ts) publica `automationApi` y callables `createAutomationJob`, `retryAutomationJob`, `createAutomationPlan`, `getAutomationPlan`, `executeAutomationPlanCallable`, `resumeAutomationJob`. `updateClientAutomation` vive en [clientConfig.ts](functions/src/automation/clientConfig.ts); modifica fuentes y ajustes por secciones sin pisar la otra sección.
+- **Contrato HTTP:** bajo `/api/automation`: `POST /token`, `GET /capabilities`, `GET /clients/:clientId/drive/:folderId`, `POST /uploads`, `POST /plans`, `GET /plans/:id`, `POST /plans/:id/execute`, `POST /jobs`, `GET /jobs/:id`, `POST /jobs/:id/retry`, `POST /jobs/:id/resume`, `GET /jobs/:id/download`. Firebase ID tokens para usuarios habilitados y bearer técnico independiente mediante `client_credentials`; scopes y clientes/tipos técnicos se verifican en [machineAuth.ts](functions/src/automation/machineAuth.ts). No confundir ese acceso con OAuth individual de Manglar.
+- **Escribe / consumidores:** `automationPlans`, `automationJobs`, `automationKeys`, reservas en `automationJobs/{id}/operations`; configuración en `clients.automation` y `system_config/main.automationBudget`. [persistence.ts](functions/src/automation/persistence.ts) deduplica por identificadores externos y Gmail; [worker.ts](functions/src/automation/worker.ts) importa y entrega a [pipelines.ts](functions/src/automation/pipelines.ts), que crea batches/jobs mediante el core existente. `batchIds` permite varios modelos por pedido; `batchId` conserva el primero. Resultados, polling y ZIP agregan todos los lotes. Panel admin lee todos; operador solo los propios.
+- **Contratos / zona privada:** [automation.ts](shared/src/types/automation.ts), [plans.ts](functions/src/automation/plans.ts), [budget.ts](functions/src/automation/budget.ts), [recovery.ts](functions/src/automation/recovery.ts). `automationKeys`, `automationPrincipals`, `automationAccessTokens`, `automationOAuth` no son legibles/escribibles desde navegador. Repetir un ID devuelve el pedido original aunque cambie el payload; no generar un ID nuevo para sortear un timeout. Lease de importación y vinculación transaccional evitan batches duplicados. No existe garantía universal de cobro exactamente una vez ante respuesta perdida del proveedor.
+- **Decisiones vigentes:** planes sin generación pagada; autorización de clasificación y aceptación de costos estimados explícitas; reservas transaccionales antes de gasto, escenas independientes, hasta tres intentos de calidad por defecto y retries operativos separados. Reanudar review puede reutilizar output sin generar otra imagen. Selección de modelo por género preserva explícitos/presets, evidencia y fallback; defaults de fotos compartidos con wizard. Polling [automationPolling.json](shared/src/automationPolling.json): 20 s durante cinco minutos, luego 60 s, seguimiento máximo 30 minutos; agotarlo no cancela el job. El scheduler externo de Gmail no vive en Tuto.
+- **Prueba mínima:** [automation.test.ts](tests/automation.test.ts), [automationPolicy.test.ts](tests/automationPolicy.test.ts), [automationModels.test.ts](tests/automationModels.test.ts); [automationAdvanced.integration.test.ts](tests/automationAdvanced.integration.test.ts) para presupuesto/reanudación/idempotencia con emuladores. Contexto operativo: [AUTOMATION.md](docs/AUTOMATION.md), [AUTOMATION_V2_IMPLEMENTATION.md](docs/AUTOMATION_V2_IMPLEMENTATION.md), [AUTOMATION_AUTH.md](docs/AUTOMATION_AUTH.md), [AUTOMATION_CONNECTION_STATUS.md](docs/AUTOMATION_CONNECTION_STATUS.md); los dos últimos contienen estados históricos, no listas actuales de permisos.
+
+<a id="manglar"></a>
+### Manglar
+
+- **Entrada web/servidor:** `/automation/connect` muestra consentimiento fuera del layout protegido y gestiona su autenticación; [ManglarConnect](src/pages/ManglarConnect.tsx). [mcp.ts](functions/src/automation/mcp.ts) publica `manglarMcp` en `/api/manglar/mcp` y discovery OAuth por los rewrites. [mcpOAuth.ts](functions/src/automation/mcpOAuth.ts) ofrece OAuth PKCE/CIMD y `getManglarConnectionRequest`, `decideManglarConnection`, `listManglarConnections`, `revokeManglarConnection`.
+- **Escribe / consumidores:** `automationOAuth` guarda solicitudes/concesiones/tokens; `manglarAccess` asignación explícita de clientes; `manglarOperations` preparación, autorización exacta, ejecución, pagos y resultados idempotentes; `manglarDrafts` referencias/análisis del wizard. Los servicios de cada capacidad escriben sus propios datos. Consumidores: cliente MCP, consentimiento web, workers con presupuesto delegado y auditoría del servidor.
+- **Contratos / zona privada:** [manglar.ts](shared/src/types/manglar.ts), [manglarConnection.ts](shared/src/types/manglarConnection.ts); [registry.ts](functions/src/manglar/registry.ts), [operations.ts](functions/src/manglar/operations.ts) y [contracts.json](functions/src/manglar/contracts.json) determinan acciones/esquemas; [tools.ts](functions/src/manglar/tools.ts) construye herramientas por dominio. Descubrir mediante `manglar_describe`; acciones sensibles usan `manglar_prepare_action` y estado `manglar_operation_status`. [execution.ts](functions/src/manglar/execution.ts), [access.ts](functions/src/manglar/access.ts) y [context.ts](functions/src/manglar/context.ts) son mecanismos privados de confirmación, idempotencia y autorización por request. No se exponen queries, patches o ejecución de código arbitrarios. Las colecciones privadas sin match en reglas quedan denegadas al cliente.
+- **Compatibilidad:** identidad individual ligada a usuario activo, rol y clientes; operador/revisor necesitan asignación, admin puede tener acceso global o restringido. Cambiar acceso invalida conexiones; cambiar rol exige reconectar. Las siete herramientas históricas siguen acotadas al principal técnico para concesiones legacy. El catálogo actual añade también `manglar_organizer_read` y `manglar_organizer_manage` fuera del registro por dominios: no usar la cifra histórica de 23 como inventario completo. `agentDriveWorkspace` y administración de respaldos no están publicados en ese catálogo; tampoco `updateClientMarketplace`.
+- **Prueba mínima:** [manglarMcp.test.ts](tests/manglarMcp.test.ts), [manglarExpanded.test.ts](tests/manglarExpanded.test.ts), [manglarModelPersistence.test.ts](tests/manglarModelPersistence.test.ts) y [manglarSerialization.test.ts](tests/manglarSerialization.test.ts); las de integración requieren emuladores. Documentación: [MANGLAR_CHATGPT_PLUGIN.md](docs/MANGLAR_CHATGPT_PLUGIN.md), [MANGLAR_COVERAGE.md](docs/MANGLAR_COVERAGE.md), [MANGLAR_TOOL_INVENTORY.md](docs/MANGLAR_TOOL_INVENTORY.md), [MANGLAR_IMPLEMENTATION_RESULT.md](docs/MANGLAR_IMPLEMENTATION_RESULT.md), [auditoría del 3 de noviembre](docs/MANGLAR_AUDIT_2026-11-03.md). Inventarios e informes fechados no sustituyen al registro actual ni prueban una segunda cuenta real consentida.
+
+<a id="organizador"></a>
+### Organizador
+
+- **Entrada web/servidor:** `/organizador`, admin/operador/revisor → [organizer/firebase.ts](src/features/organizer/firebase.ts) → `organizerAction` en [api.ts](functions/src/organizer/api.ts). Manglar llama al mismo servicio con las dos herramientas específicas. `organizerScheduler` en [worker.ts](functions/src/organizer/worker.ts) avanza ejecuciones y vigilancia a las 12 y 18 h de `America/Mexico_City`; no asumir ejecución continua ni confundir `debounceMinutes` con frecuencia del scheduler.
+- **Escribe / consumidores:** `organizers/{clientId}` guarda configuración/vigilancia/ejecución; subcolecciones de fuentes, manifiestos, libros, pestañas, productos base, variantes, `commercial`, fotos, decisiones, historial y caché. `runs/{runId}` guarda inventario/plan/ledger/reportes, fases y cursores. Drive recibe copias y reportes en zona administrada, sin alterar originales. UI, MCP, importación al wizard y [automation.ts](functions/src/organizer/automation.ts) consumen asociaciones y referencias. El piloto `organizerPilots` de [run.ts](scripts/organizer/run.ts) y validaciones `organizerValidations` de [validate-hybrid.ts](scripts/organizer/validate-hybrid.ts) son recorridos distintos, no la cola productiva.
+- **Contratos / zona privada:** `OrganizerRequest/Response`, `OrganizerSettings`, `OrganizerRun` en [organizer.ts](shared/src/types/organizer.ts). [store.ts](functions/src/organizer/store.ts) guarda leases, huellas, intentos y estado privado que no sale en la respuesta pública. No hay acceso directo del SDK cliente a `organizers`; todo pasa por servidor. Configurar exige admin; los demás roles necesitan estar en `operatorUids` y, por MCP, respetar scopes/clientes delegados.
+- **Decisiones vigentes:** modo `dry_run` persiste simulación y lee Drive; `classify`/`sync` requieren presupuesto exacto y, para ejecución completa, simulación revisada vigente. Evidencia determinista + interpretación/visión Gemini, celdas/fórmulas/procedencia conservadas, incertidumbre visible, decisiones humanas que caducan si cambia evidencia. Identidad visual, SKU/talla comercial, calidad y aprobación de referencia permanecen separadas. Copias versionadas/idempotentes, reconciliación ante escritura incierta. Si `organizerAutoGenerationEnabled` global está activo, fotos nuevas/actualizadas pueden pasar a Automation sin coincidencia Excel, agrupadas por artículo y versión; no exige la aprobación de referencias usada por la importación manual al wizard ni reenvía automáticamente todo el histórico.
+- **Prueba mínima:** [organizer.test.ts](tests/organizer.test.ts), [organizerHybrid.test.ts](tests/organizerHybrid.test.ts), [organizerAutomation.test.ts](tests/organizerAutomation.test.ts) y [organizer.integration.test.ts](tests/organizer.integration.test.ts). Contexto: [ORGANIZADOR_INTELIGENTE.md](docs/ORGANIZADOR_INTELIGENTE.md), [ORGANIZER_PILOT.md](docs/ORGANIZER_PILOT.md), [ORGANIZER_VALIDATION_2026-11-05.md](docs/ORGANIZER_VALIDATION_2026-11-05.md). No extrapolar una muestra validada a precisión global ni confundir un plan de migración con migración aplicada.
+
+<a id="respaldos"></a>
+### Respaldos y espacio de trabajo
+
+- **Entrada web/servidor:** `/seguridad-respaldos`, admin → [backups/firebase.ts](src/features/backups/firebase.ts) → `manageDriveBackup` (`configure`, `sync`, `restore`). [functions.ts](functions/src/backups/functions.ts) exporta además `scheduledDriveBackup`, `driveBackupWorker` y `agentDriveWorkspace` (`list`, `read`, `create`, `update`, `trash`). Este último es una capacidad autenticada de trabajo, sin pantalla ni herramienta MCP dedicada actualmente.
+- **Escribe / consumidores:** `driveBackups/{clientId}` y `entries`, `versions`, `intents`, `runs`, `restores`, `audit`, `workspaceIntents`, `workspaceAudit`; `driveBackupQueue` despierta al worker, `driveBackupControl` serializa configuración. Drive conserva espejo/versiones y restauraciones **aditivas** en trabajo. Lo consumen panel administrativo, motor de restauración y clientes autorizados del endpoint de trabajo. El motor no usa IA, no propaga borrados ni elimina versiones porque desaparezca el origen.
+- **Contratos / zona privada:** [backups.ts](shared/src/types/backups.ts), motor [engine.ts](functions/src/backups/engine.ts), restauración [restore.ts](functions/src/backups/restore.ts), [isolation.ts](functions/src/backups/isolation.ts) y [runtime.ts](functions/src/backups/runtime.ts). Solo admin lee el estado/historial Firestore; nadie lo escribe directamente. Cola/control son privados incluso para navegador admin. `manageDriveBackup` comprueba usuario activo/admin y rechaza contexto de agente delegado; `agentDriveWorkspace` admite admin activo u operador asignado, respeta cliente delegado y verifica ascendencia de cada recurso. No permite elegir identidad ni raíz desde la solicitud, ni destruir la raíz.
+- **Estado y límites:** default `DRIVE_BACKUPS_ENABLED=false`; el informe fechado registra entrega desactivada y activación/prueba real entre cuentas pendiente. Tener código, scheduler o panel no significa protección efectiva de clientes. El cron de [policy.ts](functions/src/backups/policy.ts) son siete horarios de lunes a sábado, 9–21 h cada dos horas, zona configurable; solo trabaja si se habilita. Transferencias hasta 100 MiB; archivos Workspace exportados no conservan todo el formato/ACL/historial nativo. No es WORM frente al administrador; restaurar no sobrescribe trabajo.
+- **Prueba mínima:** [driveBackups.test.ts](tests/driveBackups.test.ts), [driveBackups.integration.test.ts](tests/driveBackups.integration.test.ts) y [drive-backups.spec.ts](e2e/drive-backups.spec.ts). Son datos sintéticos/Drive simulado; no acreditan ACL reales. Operación: [DRIVE_SECURITY_BACKUPS.md](docs/DRIVE_SECURITY_BACKUPS.md), [DRIVE_BACKUPS_VERIFICATION.md](docs/DRIVE_BACKUPS_VERIFICATION.md).
+
+<a id="analitica-finanzas-sistema"></a>
+### Analítica, finanzas y sistema
+
+- **Entrada web/servidor:** `/` para usuarios activos; `/analytics` admin/revisor; `/finanzas` y `/configuracion` admin. [useAnalyticsDashboard](src/features/analytics/useAnalyticsDashboard.ts), [finance/firebase.ts](src/features/finance/firebase.ts), [system/firebase.ts](src/features/system/firebase.ts). Fronteras: `rebuildAnalytics`, `getFinanceDashboard`, `updateFinanceSettings`, `upsertFinanceClientPricing`, `createFinanceManualEvent`, `rebuildFinanceSnapshots`, `getSystemConfig`, `updateSystemConfig`, `getSystemHealth` y `updateSystemAlertSettings`.
+- **Escribe / consumidores:** [analyticsTriggers.ts](functions/src/triggers/analyticsTriggers.ts) deriva `analytics_summary`, `analytics_daily`, `analytics_clients`, `analytics_providers`, `analytics_client_providers`, `analytics_client_models` de jobs/outputs. [financeTriggers.ts](functions/src/triggers/financeTriggers.ts) deriva `finance_events` desde outputs, `analytics_gemini_usage`, `model_generation_logs`, intervención humana y cierre de batches; las callables construyen `finance_snapshots_*` y ajustes/tarifas. Los consumen dashboards, alertas, administración y lecturas MCP autorizadas.
+- **Contratos / zona privada:** [analytics.ts](shared/src/types/analytics.ts), [finance.ts](shared/src/types/finance.ts), [system.ts](shared/src/types/system.ts). [systemConfig.ts](functions/src/admin/systemConfig.ts) define defaults/cache de `system_config/main`; el servidor guarda configuración y `system_alert_settings`. Escritura de agregados/config solo servidor, lectura según dominio. Tarifas y reservas de exposición estimadas no equivalen a facturas confirmadas; los outputs rechazados también pueden costar. [backfillModelPoses.ts](functions/src/admin/backfillModelPoses.ts) encola `adminOperations`; no hay consumidor en este repositorio que permita afirmar finalización del backfill.
+- **Prueba mínima:** [analytics.test.ts](tests/analytics.test.ts), [providerCosts.test.ts](tests/providerCosts.test.ts), [systemPrompts.test.ts](tests/systemPrompts.test.ts), [systemHealth.test.ts](tests/systemHealth.test.ts); [manglarExpanded.test.ts](tests/manglarExpanded.test.ts) para acceso financiero delegado en emuladores. Estas unitarias no verifican la entrega real de todos los triggers.
+
+<a id="flujos-firestore"></a>
+## Flujos por Firestore
+
+Las flechas describen productores y consumidores existentes, no llamadas síncronas garantizadas. Un write no significa que el trabajo esté terminado; observar estado y conservar IDs ante reintentos.
+
+```text
+Wizard / Manglar wizard ── callables de generación ──┐
+Automation HTTP / callables / planes                 │
+  → automationKeys + automationPlans + automationJobs│
+  → automationIntakeWorker → importación + pipelines ├→ batches + jobs(pending)
+Organizador → runs → generationHandoffs → Automation┘
+  jobs → processJobOnCreate / Requeue / Activation → claim transaccional
+       → proveedor → Gemini → Storage + outputs + logs + estado del job
+       ├→ onJobStatusChange → contadores de batches
+       ├→ onJobCompletedSquareCrop → productDrafts + crop derivado
+       ├→ automationGenerationProgress → resumen de automationJobs
+       ├→ triggers analíticos → analytics_*
+       └→ triggers financieros → finance_events → snapshots por callable
+```
+
+La creación automática vincula pedido/batches/jobs con la reserva vigente; `recoverAutomationImports` recupera intake cada cinco minutos. Los gates/presupuestos de Automation siguen respetándose en el worker. Revisión y retry no son otra cola independiente. Los estados de `Job`, `Batch` y `AutomationStatus` son contratos distintos; no trasladar un estado entre ellos por similitud del nombre.
+
+```text
+organizerAction → organizers/{clientId}/runs/{runId}
+  → organizerScheduler → inventario / interpretación / copias / visión / layout / reportes
+  → manifiestos, catálogo, decisiones, ledger, cursores
+  → handoff versionado a automationJobs si está habilitado
+
+manageDriveBackup / scheduledDriveBackup → driveBackupQueue/{clientId}
+  → driveBackupWorker → lease + inventario/cambios → espejo/versiones en Drive
+  → driveBackups/{clientId}/entries, versions, intents, runs, audit
+  → restores → reconstrucción aditiva en workspace
+agentDriveWorkspace → solo raíz de trabajo configurada + workspaceAudit
+```
+
+`users` alimenta claims; `clients` y `models` alimentan validación/snapshots de todas las entradas de generación. Los borrados usan [deletePlans.ts](functions/src/triggers/deletePlans.ts), [onClientDelete.ts](functions/src/triggers/onClientDelete.ts), [onModelDelete.ts](functions/src/triggers/onModelDelete.ts) y [storageCleanupSchedule.ts](functions/src/triggers/storageCleanupSchedule.ts). Cambiar paths afecta autorización, workers, limpieza y descargas conjuntamente.
+
+<a id="permisos-drive"></a>
+## Permisos Drive: capacidades diferentes
+
+Una carpeta autorizada en `clients.automation.driveFolderIds` es una restricción de negocio; no concede ACL Google. OAuth de Manglar autoriza acciones de Tuto; no es un token Drive del usuario. Ningún scope de lectura convierte una integración en motor de escritura.
+
+| Capacidad actual | Identidad y permisos | Frontera de datos / escritura |
+| --- | --- | --- |
+| Importar fotos Automation/Manglar | [automation/drive.ts](functions/src/automation/drive.ts): impersonación IAM de `AUTOMATION_DRIVE_SERVICE_ACCOUNT`, token corto `drive.readonly`, sin clave ni delegación de usuario | Carpeta explícita del cliente, hijos directos y versión comprobada; copia bytes normalizados a Storage. No escribe Drive. Subcarpetas se autorizan explícitamente. |
+| Exportar/editar Google Sheets | [google/drive.ts](functions/src/google/drive.ts): integración heredada con clave de servidor y posible delegación Workspace; scope `drive` | Crea/actualiza hojas en destino configurado y puede compartir con editor. No usa la SA lectora anterior. [legacyGuard.ts](functions/src/backups/legacyGuard.ts) bloquea destinos originales/de respaldo protegidos. |
+| Organizador productivo | [organizer/drive.ts](functions/src/organizer/drive.ts): reutiliza credenciales heredadas; `drive.readonly` para lecturas, `drive` para copias/escrituras | Prueba unidad, ascendencia y marcadores. Crea copias/reportes fuera de fuentes y solo mueve copias administradas. `allowInheritedAccess` permite herencia de ACL del destino; no crea un destino físicamente aislado. Misma guarda de destinos protegidos. |
+| Piloto manual | [ORGANIZER_PILOT.md](docs/ORGANIZER_PILOT.md): lector dedicado para origen y escritura por token entregado al runtime o adaptador MCP | Prueba de una ejecución con plan/diario; no sustituye permisos ni transporte del organizador productivo. |
+| Leer originales para respaldo | [backups/drive.ts](functions/src/backups/drive.ts): identidad lectora separada por cliente, scope `drive.readonly` | Solo origen. Validación de aislamiento impide acceso cruzado a respaldo/trabajo. |
+| Espejo/versiones y restauración | Identidades escritoras separadas de respaldo y trabajo, tokens IAM cortos y scope `drive`; runtimes separados | Respaldo solo motor/custodios; motor conserva versiones y no propaga borrados. Restauración lee respaldo y crea en trabajo. Las ACL deben verificarse en alta; el scope por sí solo no aísla. |
+| Trabajo para agentes | `agentDriveWorkspace`, runtime e identidad de trabajo separados; `WorkspaceDrive` | Solo descendientes de raíz configurada; list/read/create/update/trash y auditoría. Sin acceso a originales/respaldo ni tokens Google entregados al agente. Aún sin integración automática en MCP/Organizador. |
+
+La activación de respaldos requiere unidades/identidades y custodios externos a los agentes, revisión de ACL heredadas y primera sincronización verificada. Las guardas de aplicación no revocan privilegios heredados ni delegación de dominio. Los límites y configuración manual están en la documentación de respaldos; no ejecutar su alta o migración como parte de una edición documental.
+
+<a id="destino-propuesto"></a>
+## Destino propuesto, separado de lo implementado
+
+Estas son direcciones de evolución, **no endpoints, colecciones ni garantías existentes**:
+
+- Mantener este índice por capacidades y sus contratos; localizar una tarea con su prueba antes de ampliar contexto. La distribución física actual por capas no exige crear un documento o servicio por carpeta ni mover módulos para parecerse al índice.
+- Si se implementan conectores comerciales, diseñar por separado autorización del vendedor, credenciales de servidor, scopes, publicación/sincronización, idempotencia y auditoría. Los switches administrativos actuales seguirían describiendo habilitación; no presumir que hoy conceden conexión o publicación.
+- Migrar herramientas de agentes y escrituras heredadas hacia la capacidad de trabajo aislada tras revisar dependencias y ACL. Actualmente Organizador/exportaciones conservan el transporte heredado; `agentDriveWorkspace` no las reemplaza ni está expuesto como herramienta Manglar. No tratar la protección como activa antes del alta y prueba real entre cuentas.
+- Añadir cobertura de píxeles para compresión/crop cuando una tarea cambie esos algoritmos; los tests de proveedor existentes solo validan la transformación remota y su contrato. Streaming de respaldos grandes, retención/WORM, notificaciones externas y consumidor del backfill necesitan trabajo específico; no constan como capacidades completas.
+
+<a id="ejemplo-amazon"></a>
+## Contexto mínimo para agentes: ajustes administrativos de Amazon
+
+**Tarea de ejemplo:** cambiar el comportamiento de guardado de región/identificador de vendedor de Amazon, conservando los demás canales y ajustes del cliente. Este ejemplo orienta una futura tarea de código; la revisión actual solo modifica documentación.
+
+1. Desde el [índice](#índice-por-capacidad), abrir [Marketplaces administrativos](#marketplaces-administrativos). Leer únicamente [ClientDetail.tsx](src/pages/ClientDetail.tsx), [ClientMarketplaces.tsx](src/components/clients/ClientMarketplaces.tsx) y [useClientMarketplace.ts](src/features/clients/useClientMarketplace.ts) para localizar `tab=marketplaces`, `MarketplaceCard` y el draft por cliente/canal.
+2. Seguir `updateClientMarketplace` en [clients/firebase.ts](src/features/clients/firebase.ts) hasta [updateClientMarketplace.ts](functions/src/callables/updateClientMarketplace.ts). Distinguir callable autorizado de `saveClientMarketplace`, que aplica el patch. Verificar exportación en [index.ts](functions/src/index.ts).
+3. Leer [marketplaces.ts](shared/src/marketplaces.ts), [marketplace.ts](shared/src/types/marketplace.ts) y el match de clientes en [firestore.rules](firestore.rules). Frontera: `UpdateClientMarketplaceRequest/Response`; datos: `clients/{clientId}.marketplaces.amazon`; solo `enabled`, región/vendedor y timestamps, sin nuevas credenciales. Preservar canales, metadata futura, `automation` y prompt base. No tocar Automation, providers ni diseñar un conector comercial para esta tarea.
+4. Llegar a la prueba real [clientMarketplace.test.ts](tests/clientMarketplace.test.ts): `marketplace patches preserve other channels, settings, future metadata and client operations; target only requested client`. También prueba que settings no habilitan y que roles/campos indebidos se rechazan. Reproducción local, sin Firebase remoto:
+
+   ```sh
+   npm --prefix functions run build
+   node --import tsx --test tests/clientMarketplace.test.ts
+   ```
+
+5. Si cambia autorización o persistencia, ampliar a [clientMarketplace.integration.test.ts](tests/clientMarketplace.integration.test.ts), **con emuladores Auth/Firestore y proyecto demo**. Esta prueba se omite si no detecta ambos hosts locales: una omisión no acredita reglas. Para UI, [clients-redesign.spec.ts](e2e/clients-redesign.spec.ts). No cargar por defecto el worker de imágenes, finanzas o todos los docs de Manglar.
+
+<a id="ejemplo-imagen"></a>
+## Contexto mínimo para agentes: transformación de imagen de un job
+
+**Tarea de ejemplo:** ajustar el payload de la transformación **image-to-image** de un job que usa Flare (referencias y framing/formato enviados al endpoint edit). Elegir esta frontera evita confundir generación remota con compresión del output o crop de spreadsheet.
+
+1. Desde el [índice](#índice-por-capacidad), abrir [Jobs e imágenes](#jobs-e-imagenes). Leer `Job.imageConfig`, `finalPrompt` y referencias en [job.ts](shared/src/types/job.ts), `ProviderImageConfig` en [provider.ts](shared/src/types/provider.ts) y normalización en [providerImageConfig.ts](shared/src/providerImageConfig.ts). Los defaults compartidos permanecen Flare y `portrait_4_3`/`3:4`, con overrides explícitos respetados.
+2. En [jobWorker.ts](functions/src/workers/jobWorker.ts), seguir `processJobCore` → `generateWithProvider`: referencias firmadas, prompt final y configuración normalizada. Abrir [providers/index.ts](functions/src/providers/index.ts) → `generateWithNewFalModel` en [fal.ts](functions/src/providers/fal.ts) → `buildNewFalRequest`/`NEW_FAL_ENDPOINTS` en [falModels.ts](functions/src/providers/falModels.ts). Contrato acotado: [ProviderRequest/ProviderResponse](functions/src/providers/types.ts); para Flare con referencias se elige `openai/gpt-image-2.5/flare/edit` vía fal.ai.
+3. Consumidores a preservar: Gemini revisa contra referencias/prompt; `persistGeneratedAttempt` almacena bytes, MIME/extensión y metadata, mantiene claim/estado/logs y publica output para Catálogo/Automation/analítica/finanzas. No cambiar paths, costos, estados ni IDs para modificar un parámetro de imagen. Si el cambio afecta defaults o validación compartida, añadir wizard y Automation al alcance de lectura.
+4. Llegar a la prueba real [falImageModels.test.ts](tests/falImageModels.test.ts): `batch generation and model creation/editing submit every new model only to fal.ai`. Ejecuta `generateWithProvider` con `fetch` simulado, comprueba endpoint edit y `image_urls`, bytes devueltos y `image_size` en la ruta compartida de generación de modelos. [providers.test.ts](tests/providers.test.ts) complementa normalización. Reproducción sin proveedores ni Firebase remoto:
+
+   ```sh
+   npm --prefix functions run build
+   node --import tsx --test tests/falImageModels.test.ts tests/providers.test.ts
+   ```
+
+5. Si cambia framing por defecto, incluir [photoGenerationFlow.test.ts](tests/photoGenerationFlow.test.ts). Si la petición se refiere a **transformación local de píxeles**, abrir en cambio `compressGeneratedImageIfNeeded` o [squareCrop.ts](functions/src/spreadsheets/squareCrop.ts) y [syncProductDraftImages.ts](functions/src/spreadsheets/syncProductDraftImages.ts). Las pruebas anteriores no comprueban esos algoritmos: una tarea de ese alcance necesita prueba con imagen sintética, dimensiones/MIME y persistencia; no afirmar que `jobWorker.test.ts` ya la aporta. No hace falta leer administración de marketplaces para cambiar esta transformación.
+
+<a id="verificacion"></a>
+## Verificación y discrepancias documentales
+
+Esta revisión comprueba destinos locales de enlaces, anclas de este documento, nombres de rutas/exports/tipos y pruebas citadas contra el árbol actual. Los nombres de helpers se identifican como internos; no se inventa un endpoint a partir de un archivo. Se comprobaron 65 nombres de entradas de servidor contra los exports resueltos de `functions/src/index.ts`. Los enlaces a informes históricos son evidencia documental, no una nueva comprobación de sus recursos remotos.
+
+Correcciones respecto al mapa anterior y aclaraciones de documentos fechados, aplicadas **solo aquí**:
+
+- Se incorpora la relación de Automation, Manglar, Organizador y Respaldos con la misma cola Firestore; antes solo aparecía el recorrido manual.
+- Se reemplaza la lista parcial de adapters por el dispatch vigente: fal.ai activo, OpenAI directo retirado y tipo histórico conservado.
+- Se precisa la excepción a CRUD de clientes: `automation` y `marketplaces` requieren servidor. Se documentan habilitación administrativa, conexión comercial y datos de catálogo como conceptos separados.
+- Se distinguen OAuth técnico, OAuth individual de Manglar y permisos Google Drive. Los siete tools del informe de conexión y los 23 del inventario MCP v2 son cortes históricos; el código incluye las dos herramientas del Organizador. No se afirma que todos los nuevos callables estén automáticamente en MCP.
+- Se explicita `batchIds` además de `batchId`, mayoría por artículo, escenas compartidas y handoff del Organizador sin coincidencia Excel cuando está habilitado. Se actualiza la localización de fuentes/automatización a las pestañas actuales de la ficha del cliente; algunos docs conservan la antigua sección conjunta.
+- Se separa el lector de Automation del escritor heredado del Organizador/Sheets y de las identidades aisladas de respaldo/trabajo. «Desplegado» no equivale a protección activada ni a migración de permisos realizada.
+- Se conserva la advertencia de backfill solo encolado y se precisan límites de pruebas: recuperación de pendientes no prueba transformación de píxeles; mocks/emuladores no prueban ACL Drive ni consentimiento de una segunda cuenta.
+- Se documenta la diferencia entre `getAppFirestore()` configurable y triggers heredados sin database explícita. La guía anterior podía sugerir una uniformidad que el código no garantiza.
+
+Validación ejecutada para los dos recorridos: `npm --prefix functions run build` correcto y las tres pruebas unitarias indicadas en los ejemplos, **11 casos aprobados, cero fallos y cero omisiones**, sin servicios remotos. Para una futura modificación de contratos, auth, jobs, analítica, spreadsheets, finanzas o comportamiento transversal, [AGENTS.md](AGENTS.md) exige `npm test`; builds/typechecks y despliegues se deciden según el cambio autorizado. No ejecutar pruebas de integración/E2E sin leer su aislamiento: algunas requieren emuladores o sesión real. Esta actualización documental no despliega, no modifica configuración y no incluye credenciales.

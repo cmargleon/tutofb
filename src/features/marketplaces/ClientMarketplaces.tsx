@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import type { Client } from '../../../shared/src/types';
 import { MARKETPLACES } from '../../../shared/src/marketplaces';
-import { useClientMarketplace } from '../../features/clients/useClientMarketplace';
-import { Button } from '../ui';
-import { INPUT_BASE } from './clientUtils';
+import { useClientMarketplace } from './useClientMarketplace';
+import { Button } from '../../components/ui';
+import { INPUT_BASE } from '../../components/clients/clientUtils';
 
 const MarketplaceCard: React.FC<{ client: Client; channel: typeof MARKETPLACES[number] }> = ({ client, channel }) => {
   const state = useClientMarketplace(client, channel.id);

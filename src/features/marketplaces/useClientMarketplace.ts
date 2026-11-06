@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Client, UpdateClientMarketplaceRequest } from '../../../shared/src/types';
 import type { MarketplaceId } from '../../../shared/src/marketplaces';
-import { useClientDraft } from './useClientDraft';
+import { useClientDraft } from '../clients/useClientDraft';
 import { updateClientMarketplace } from './firebase';
 
 export const useClientMarketplace = (client: Client, marketplaceId: MarketplaceId) => {

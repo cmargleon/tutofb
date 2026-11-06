@@ -7,7 +7,7 @@ import { useClientAutomationConfig } from '../features/automation/useClientAutom
 import { clientListUrl } from '../features/clients/clientListState';
 import { ClientDetailHeader } from '../components/clients/ClientDetailHeader';
 import { ClientOverview } from '../components/clients/ClientOverview';
-import { ClientMarketplaces } from '../components/clients/ClientMarketplaces';
+import { ClientMarketplaces } from '../features/marketplaces/ClientMarketplaces';
 import { ClientSettings } from '../components/clients/ClientSettings';
 import { ClientSpreadsheetSection } from '../components/clients/ClientSpreadsheetSection';
 import { ClientAutomationFields, ClientAutomationSave, ClientDriveFolders } from '../components/clients/ClientAutomationSection';

@@ -23,9 +23,6 @@ interface SubscribeClientsOptions {
 export const subscribeToClient = (clientId: string, callback: (client: Client | null) => void, onError: (error: Error) => void) =>
   onSnapshot(doc(db, 'clients', clientId), snapshot => callback(snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Client : null), onError);
 
-export const updateClientMarketplace = async (input: import('../../../shared/src/types').UpdateClientMarketplaceRequest) =>
-  (await httpsCallable<import('../../../shared/src/types').UpdateClientMarketplaceRequest, import('../../../shared/src/types').UpdateClientMarketplaceResponse>(functions, 'updateClientMarketplace')(input)).data;
-
 export const subscribeToClients = (
   callback: (clients: Client[]) => void,
   onError: (error: Error) => void,

@@ -31,15 +31,23 @@ async function setup(page: Page, role = 'admin') {
     }
     if (name === 'marketplace') {
       client.marketplaces ??= {};
-      client.marketplaces[input.marketplaceId] = { enabled: false, ...client.marketplaces[input.marketplaceId], ...('enabled' in input ? { enabled: input.enabled } : {}), ...('settings' in input ? { settings: input.settings } : {}) };
+      const previous = client.marketplaces[input.marketplaceId];
+      client.marketplaces[input.marketplaceId] = { enabled: false, ...previous, ...('enabled' in input ? { enabled: input.enabled } : {}), ...('settings' in input ? { settings: { ...previous?.settings, ...Object.fromEntries(Object.entries(input.settings).map(([key, value]) => [key, (value as string).trim()])) } } : {}) };
     }
     return name === 'automation' ? { automation: client.automation } : { success: true };
   });
   await page.route('https://**/*', route => route.abort());
-  await page.route('**/src/features/clients/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
+  await page.route('**/__clients-fixture.js', route => route.fulfill({ contentType: 'application/javascript', body: `
     const listeners = new Set();
-    const sub = (kind, id, callback, onError) => { let active = true; const emit = async () => { try { const value = await window.__clientsRead(kind, id); if (active) callback(value); } catch (err) { if (active) onError?.(err); } }; listeners.add(emit); emit(); return () => { active = false; listeners.delete(emit); }; };
-    const mutate = async (name, input) => { const result = await window.__clientsMutate(name, input); await Promise.all([...listeners].map(emit => emit())); return result; };
+    export const sub = (kind, id, callback, onError) => { let active = true; const emit = async () => { try { const value = await window.__clientsRead(kind, id); if (active) callback(value); } catch (err) { if (active) onError?.(err); } }; listeners.add(emit); emit(); return () => { active = false; listeners.delete(emit); }; };
+    export const mutate = async (name, input) => { const result = await window.__clientsMutate(name, input); await Promise.all([...listeners].map(emit => emit())); return result; };
+  ` }));
+  await page.route('**/src/features/marketplaces/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
+    import { mutate } from '/__clients-fixture.js';
+    export const updateClientMarketplace = input => mutate('marketplace', input);
+  ` }));
+  await page.route('**/src/features/clients/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
+    import { sub, mutate } from '/__clients-fixture.js';
     export const subscribeToClients = (callback, onError) => sub('clients', null, callback, onError);
     export const subscribeToClient = (id, callback, onError) => sub('client', id, callback, onError);
     export const subscribeToClientSpreadsheetTemplates = (id, callback, onError) => sub('templates', id, callback, onError);
@@ -48,7 +56,6 @@ async function setup(page: Page, role = 'admin') {
     export const archiveClient = id => mutate('archive', { id });
     export const restoreClient = id => mutate('restore', { id });
     export const updateClientAutomation = input => mutate('automation', input);
-    export const updateClientMarketplace = input => mutate('marketplace', input);
     export const importClientSpreadsheetTemplate = () => { throw Error('No upload expected'); };
     export const deleteClientSpreadsheetTemplate = () => { throw Error('No deletion expected'); };
     export const updateClientSpreadsheetTemplateCategory = () => { throw Error('No category edit expected'); };
@@ -173,6 +180,77 @@ test('detail preserves shared automation drafts, channel settings and general se
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await page.screenshot({ path: '/tmp/tuto-client-detail-mobile.png', fullPage: true });
+});
+
+test('marketplace drafts stay independent by client and channel, survive errors and save trimmed settings', async ({ page }) => {
+  const state = await setup(page);
+  page.on('dialog', dialog => dialog.accept());
+  await page.goto('/clients/client-0?tab=marketplaces');
+  const card = (name: string) => page.locator('article').filter({ has: page.getByRole('heading', { name, exact: true }) });
+  const amazon = card('Amazon');
+  const shein = card('SHEIN');
+  await expect(page.getByRole('switch')).toHaveCount(4);
+  for (const name of ['Amazon', 'SHEIN', 'TikTok Shop', 'Mercado Libre']) {
+    await expect(card(name).getByRole('switch')).not.toBeChecked();
+  }
+  await amazon.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await shein.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await amazon.getByRole('textbox', { name: 'País o región' }).fill(' MX ');
+  await amazon.getByRole('textbox', { name: 'Identificador de vendedor' }).fill(' amazon-seller ');
+  await shein.getByRole('textbox', { name: 'País o región' }).fill(' US ');
+  await shein.getByRole('textbox', { name: 'Identificador de vendedor' }).fill(' shein-seller ');
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.includes(':marketplace:')).sort())).toEqual([
+    'tuto:client-draft:client-0:marketplace:amazon',
+    'tuto:client-draft:client-0:marketplace:shein',
+  ]);
+
+  await page.goto('/clients/client-1?tab=marketplaces');
+  await amazon.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await expect(amazon.getByRole('textbox', { name: 'País o región' })).toHaveValue('');
+  await amazon.getByRole('textbox', { name: 'País o región' }).fill('BR');
+  await page.goto('/clients/client-0?tab=marketplaces');
+  await amazon.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await shein.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await expect(amazon.getByRole('textbox', { name: 'País o región' })).toHaveValue(' MX ');
+  await expect(shein.getByRole('textbox', { name: 'País o región' })).toHaveValue(' US ');
+
+  state.controls.rejectMarketplace = true;
+  await amazon.getByRole('button', { name: 'Guardar ajustes de Amazon' }).click();
+  await expect(amazon.getByRole('alert')).toContainText('No se pudo guardar el marketplace');
+  await expect(amazon.getByText('Guardado', { exact: true })).toHaveCount(0);
+  await expect(amazon.getByRole('textbox', { name: 'Identificador de vendedor' })).toHaveValue(' amazon-seller ');
+  await expect(amazon.getByRole('button', { name: 'Guardar ajustes de Amazon' })).toBeEnabled();
+  expect(state.clients[0].marketplaces).toBeUndefined();
+
+  state.controls.rejectMarketplace = false;
+  await amazon.getByRole('button', { name: 'Guardar ajustes de Amazon' }).click();
+  await expect(amazon.getByText('Guardado', { exact: true })).toBeVisible();
+  await expect(amazon.getByRole('textbox', { name: 'País o región' })).toHaveValue('MX');
+  await expect(amazon.getByRole('textbox', { name: 'Identificador de vendedor' })).toHaveValue('amazon-seller');
+  await expect(amazon.getByRole('button', { name: 'Guardar ajustes de Amazon' })).toBeDisabled();
+  await expect(shein.getByRole('textbox', { name: 'Identificador de vendedor' })).toHaveValue(' shein-seller ');
+  await expect(shein.getByRole('button', { name: 'Guardar ajustes de SHEIN' })).toBeEnabled();
+  expect(await page.evaluate(() => sessionStorage.getItem('tuto:client-draft:client-0:marketplace:amazon'))).toBeNull();
+
+  await shein.getByRole('button', { name: 'Guardar ajustes de SHEIN' }).click();
+  await expect(shein.getByText('Guardado', { exact: true })).toBeVisible();
+  await expect(shein.getByRole('button', { name: 'Guardar ajustes de SHEIN' })).toBeDisabled();
+  expect(state.clients[0].marketplaces).toEqual({
+    amazon: { enabled: false, settings: { region: 'MX', sellerId: 'amazon-seller' } },
+    shein: { enabled: false, settings: { region: 'US', sellerId: 'shein-seller' } },
+  });
+  expect(state.calls.map(call => [call.name, call.input.clientId, call.input.marketplaceId])).toEqual([
+    ['marketplace', 'client-0', 'amazon'], ['marketplace', 'client-0', 'amazon'], ['marketplace', 'client-0', 'shein'],
+  ]);
+  await page.reload();
+  await amazon.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await shein.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await expect(amazon.getByRole('textbox', { name: 'Identificador de vendedor' })).toHaveValue('amazon-seller');
+  await expect(shein.getByRole('textbox', { name: 'Identificador de vendedor' })).toHaveValue('shein-seller');
+  await page.goto('/clients/client-1?tab=marketplaces');
+  await amazon.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await expect(amazon.getByRole('textbox', { name: 'País o región' })).toHaveValue('BR');
+  expect(state.clients[1].marketplaces).toBeUndefined();
 });
 
 test('static create route, editing, confirmed archive and reactivation preserve the client', async ({ page }) => {

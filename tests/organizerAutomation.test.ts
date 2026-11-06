@@ -79,6 +79,7 @@ test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera
   };
   try {
     await db.collection('users').doc(uid).set({ uid, active: true, role: 'operador' });
+    await db.collection('users').doc('admin').set({ active: true, role: 'admin' });
     await db.collection('clients').doc(root.id).set({ name: 'Cliente', status: 'active', batchCount: 0, automation: { enabled: true } });
     const system = db.collection('system_config').doc('main');
     await system.set({ batchMaxJobs: 100, jobMaxRetries: 7 });

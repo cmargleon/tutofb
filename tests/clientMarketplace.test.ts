@@ -54,7 +54,16 @@ test('rejects manipulated IDs, unknown channels, secret fields, invalid settings
   for (const clientId of ['missing', 'archived']) await assert.rejects(() => saveClientMarketplace({ clientId, marketplaceId: 'amazon', enabled: true }, db), { code: 'not-found' });
   assert.equal(writes.length, 0);
 });
-test('marketplace callable requires authenticated admin before any data access', async () => {
+test('marketplace callable requires authenticated current admin before client data access', async (t) => {
+  const firestore = require('../functions/lib/functions/src/firebase/appFirestore.js');
+  let currentRole = 'operador';
+  t.mock.method(firestore, 'getAppFirestore', () => ({ collection: (name: string) => {
+    assert.equal(name, 'users');
+    return { doc: () => ({ get: async () => ({ exists: true, data: () => ({ active: true, role: currentRole }) }) }) };
+  } }));
   await assert.rejects(() => updateClientMarketplace.run({ data: {} }), { code: 'unauthenticated' });
-  for (const role of ['operador', 'revisor']) await assert.rejects(() => updateClientMarketplace.run({ data: {}, auth: { uid: 'user', token: { role } } }), { code: 'permission-denied' });
+  for (const role of ['operador', 'revisor']) {
+    currentRole = role;
+    await assert.rejects(() => updateClientMarketplace.run({ data: {}, auth: { uid: 'user', token: { role: 'admin' } } }), { code: 'permission-denied' });
+  }
 });

@@ -21,13 +21,12 @@ export const getRequestRole = async (request: CallableRequest<unknown>): Promise
   return getUserRole(request.auth.uid, request.auth.token.role);
 };
 
-export const getUserRole = async (uid: string, tokenRole?: unknown): Promise<Role | null> => {
-  if (tokenRole === 'admin' || tokenRole === 'operador' || tokenRole === 'revisor') {
-    return tokenRole;
-  }
-
+// Claims identify the signed-in user, but never authorize privileged human actions.
+// Keep the claim argument for existing HTTP callers; the current app user is authoritative.
+export const getUserRole = async (uid: string, _tokenRole?: unknown): Promise<Role | null> => {
   const user = await loadUserDoc(uid);
-  if (!user || !user.active || isArchivedCatalogEntity(user)) {
+  if (!user || user.active !== true || isArchivedCatalogEntity(user)
+    || !['admin', 'operador', 'revisor'].includes(user.role)) {
     return null;
   }
 
@@ -47,7 +46,7 @@ export const assertCallableRoles = async (
     if (request.auth.uid !== delegated.caller.uid) throw new HttpsError('permission-denied', 'Identidad delegada incorrecta.');
     await delegated.authorize?.(request.data);
   }
-  const role = delegated?.caller ? await getUserRole(request.auth.uid) : await getRequestRole(request);
+  const role = await getRequestRole(request);
   if (!role || !allowedRoles.includes(role)) {
     throw new HttpsError('permission-denied', 'No tienes permisos para ejecutar esta acción.');
   }

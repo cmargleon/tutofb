@@ -224,7 +224,7 @@ test('batch callable stores each approved prompt verbatim and rejects old client
   const stored = new Map<string, any>();
   stored.set('clients/client', { name: 'Client', status: 'active' });
   stored.set('models/model', { name: 'Model', clientId: 'client', poseCount: 1, identityTraits: { hairColor: 'do not inject' }, poses: [{ id: 'pose', fileName: 'pose.jpg', storagePath: 'model/pose.jpg', aiClassification: { usableForGarmentViews: ['front'], framing: 'full_body', orientationGroup: 'front', bodyFocus: 'full_body' } }] });
-  stored.set('users/user', { displayName: 'Operator' });
+  stored.set('users/user', { displayName: 'Operator', role: 'operador', active: true });
   let sequence = 0;
   const collection = (path: string): any => ({ doc: (id = `generated-${++sequence}`) => ({
     id, path: `${path}/${id}`,
@@ -250,6 +250,7 @@ test('batch callable stores each approved prompt verbatim and rejects old client
     assert.equal(job.promptFormat, APPROVED_TRY_ON_PROMPT_FORMAT); assert.equal(job.promptCaseText, null);
   }
   await assert.rejects(createGenerationBatch.run({ data: request } as any), /iniciar sesión/);
-  await assert.rejects(createGenerationBatch.run({ data: request, auth: { uid: 'user', token: { role: 'revisor' } } } as any), /permisos/);
+  stored.set('users/reviewer', { role: 'revisor', active: true });
+  await assert.rejects(createGenerationBatch.run({ data: request, auth: { uid: 'reviewer', token: { role: 'admin' } } } as any), /permisos/);
   await assert.rejects(createGenerationBatch.run({ data: { ...request, promptFormat: undefined }, auth: { uid: 'user', token: { role: 'operador' } } } as any), /Actualiza la aplicación/);
 });

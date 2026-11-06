@@ -22,9 +22,6 @@ const enqueue = async (clientId: string) => queue(clientId).set({ nonce: randomU
 export const manageDriveBackup = onCall<DriveBackupRequest, Promise<DriveBackupResponse>>({ serviceAccount: BACKUP_RUNTIME, timeoutSeconds: 120, memory: '256MiB' }, async request => {
   await assertCallableRoles(request, ['admin']);
   if (getManglarContext()?.caller) throw new HttpsError('permission-denied', 'La administración de respaldos no está disponible para conexiones de agentes.');
-  // Check current user document, even when a stale custom claim says admin.
-  const user = (await getAppFirestore().collection('users').doc(request.auth!.uid).get()).data();
-  if (!user?.active || user.role !== 'admin') throw new HttpsError('permission-denied', 'Se requiere un administrador activo.');
   try {
     const input = request.data;
     if (input.action === 'configure') {
@@ -178,13 +175,12 @@ export const driveBackupWorker = onDocumentWritten({ serviceAccount: BACKUP_RUNT
 });
 
 export const agentDriveWorkspace = onCall<DriveWorkspaceRequest, Promise<DriveWorkspaceResponse>>({ serviceAccount: WORKSPACE_RUNTIME, timeoutSeconds: 120, memory: '256MiB' }, async request => {
-  await assertCallableRoles(request, ['admin', 'operador']); enabled();
+  const role = await assertCallableRoles(request, ['admin', 'operador']); enabled();
   try {
     const data = request.data; const clientId = checkedId(data.clientId);
     const config = (await backupRef(clientId).get()).data() as Stored | undefined;
-    const user = (await getAppFirestore().collection('users').doc(request.auth!.uid).get()).data();
     const delegated = getManglarContext()?.caller;
-    if (!config?.enabled || !user?.active || user.role !== 'admin' && !config.operatorUids.includes(request.auth!.uid) ||
+    if (!config?.enabled || role !== 'admin' && !config.operatorUids.includes(request.auth!.uid) ||
         delegated?.allowedClientIds && !delegated.allowedClientIds.includes(clientId)) throw new Error('Cliente no autorizado.');
     const client = (await getAppFirestore().collection('clients').doc(clientId).get()).data();
     if (!client || client.status === 'archived') throw new Error('Cliente inactivo.');

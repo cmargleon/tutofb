@@ -20,12 +20,12 @@ test('backup persistence, authorization and Firestore security rules (local emul
     await db.collection('clients').doc(clientId).set({ name: 'Synthetic backup fixture', automation: { driveFolderIds: [settings.sourceFolderId] } });
     await t.test('only active administrators configure; no agent or frontend can choose new boundaries for an existing client', async () => {
       await assert.rejects(() => manageDriveBackup.run(request(`op-${suffix}`, { action: 'configure', settings }, 'operador')), /permisos/);
-      await assert.rejects(() => manageDriveBackup.run(request(`stale-admin-${suffix}`, { action: 'configure', settings })), /activo/);
+      await assert.rejects(() => manageDriveBackup.run(request(`stale-admin-${suffix}`, { action: 'configure', settings })), { code: 'permission-denied' });
       await manageDriveBackup.run(request(`admin-${suffix}`, { action: 'configure', settings }));
       assert.equal((await backupRef(clientId).get()).data()!.status, 'disabled');
       await assert.rejects(() => manageDriveBackup.run(request(`admin-${suffix}`, { action: 'configure', settings: { ...settings, sourceFolderId: 'unauthorized' } })), /Autoriza/);
       await assert.rejects(() => manageDriveBackup.run(request(`admin-${suffix}`, { action: 'configure', settings: { ...settings, backupFolderId: 'another-root' } })), /inmutables/);
-      await assert.rejects(() => agentDriveWorkspace.run(request(`op-${suffix}`, { action: 'trash', clientId, fileId: settings.backupFolderId }, 'operador')), /no autorizado/);
+      await assert.rejects(() => agentDriveWorkspace.run(request(`op-${suffix}`, { action: 'trash', clientId, fileId: settings.backupFolderId }, 'operador')), { code: 'permission-denied' });
       await db.collection('users').doc(`op-${suffix}`).set({ active: true, role: 'operador' });
       await backupRef(clientId).update({ enabled: true });
       // The client is active, but this operator has no assignment. Rejected before any Google request.

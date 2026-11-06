@@ -85,7 +85,8 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     assert.equal(created.status, 202); assert.equal(created.data.pollAfterSeconds, 20);
     const jobId = created.data.jobId;
     assert.equal((await db.collection('users').doc('automation-machine-test').get()).exists, false);
-    await worker.processAutomation(jobId);
+    // Eventarc/IAM enters through the worker, with a machine principal rather than a human user.
+    await worker.automationIntakeWorker.run({ params: { jobId }, data: { after: { data: () => ({ status: 'pending' }) } } });
     assert.equal((await db.collection('automationJobs').doc(jobId).get()).data().status, 'processing');
     assert.equal((await http('GET', `/jobs/${jobId}`, undefined, token)).data.pollAfterSeconds, 20);
     const jobRef = db.collection('automationJobs').doc(jobId);
@@ -162,7 +163,9 @@ test('automation API, persistence, dispatch and existing worker integration (emu
       scenes: [{ type: 'hero', prompt: 'On a wooden table' }, { type: 'clean', prompt: 'Pure white background' }],
     } };
     await assert.rejects(() => createProductGenerationBatch.run({ ...request, auth: undefined }), { code: 'unauthenticated' });
-    await assert.rejects(() => createProductGenerationBatch.run({ ...request, auth: { uid, token: { role: 'revisor' } } }), { code: 'permission-denied' });
+    const reviewerUid = `${uid}-reviewer`;
+    await db.collection('users').doc(reviewerUid).set({ role: 'revisor', active: true });
+    await assert.rejects(() => createProductGenerationBatch.run({ ...request, auth: { uid: reviewerUid, token: { role: 'admin' } } }), { code: 'permission-denied' });
     const results = await Promise.all([createProductGenerationBatch.run(request), createProductGenerationBatch.run(request)]);
     assert.equal(results[0].batchId, results[1].batchId);
     const batch = (await db.collection('batches').doc(results[0].batchId).get()).data();

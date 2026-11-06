@@ -31,13 +31,13 @@ test('marketplaces persist independently and client rules reject browser writes 
     t.mock.method(googleDrive, 'metadata', async () => ({ mimeType: 'application/vnd.google-apps.folder' }));
     const clientRef = db.collection('clients').doc(clientId);
     await clientRef.update({ 'automation.defaultBudgetUsd': 8 });
-    const sources = await saveClientAutomation({ clientId, section: 'sources', expectedAutomation: { enabled: false }, automation: { driveFolderIds: ['folder-a'] } }, db);
-    assert.deepEqual(sources, { enabled: false, defaultBudgetUsd: 8, driveFolderIds: ['folder-a'] });
-    await clientRef.update({ 'automation.driveFolderIds': ['folder-b'] });
+    const sources = await saveClientAutomation({ clientId, section: 'sources', expectedAutomation: { enabled: false }, automation: { driveFolderIds: ['marketplace-folder-a'] } }, db);
+    assert.deepEqual(sources, { enabled: false, defaultBudgetUsd: 8, driveFolderIds: ['marketplace-folder-a'] });
+    await clientRef.update({ 'automation.driveFolderIds': ['marketplace-folder-b'] });
     const automation = await saveClientAutomation({ clientId, section: 'automation', expectedAutomation: sources, automation: { enabled: false, defaultBudgetUsd: 6 } }, db);
-    assert.deepEqual(automation.driveFolderIds, ['folder-b']);
+    assert.deepEqual(automation.driveFolderIds, ['marketplace-folder-b']);
     assert.equal(automation.defaultBudgetUsd, 6);
-    await db.collection('organizers').doc(clientId).set({ sourceIds: ['folder-b'] });
+    await db.collection('organizers').doc(clientId).set({ sourceIds: ['marketplace-folder-b'] });
     await assert.rejects(() => saveClientAutomation({ clientId, section: 'sources', automation: { driveFolderIds: [] } }, db), { code: 'failed-precondition' });
 
     const response = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'marketplace@example.test', password: 'emulator-only-password', returnSecureToken: true }) });
@@ -65,6 +65,6 @@ test('marketplaces persist independently and client rules reject browser writes 
     // Read access follows existing canReview rules; privileged writes remain denied.
     const denied = await fetch(`${endpoint}/${clientId}?updateMask.fieldPaths=marketplaces`, { method: 'PATCH', headers, body: JSON.stringify({ fields: { marketplaces: { mapValue: { fields: {} } } } }) });
     assert.equal(denied.status, 403);
-    assert.equal((await db.collection('jobs').get()).size, 0);
+    assert.equal((await db.collection('jobs').where('clientId', '==', clientId).get()).size, 0);
   } finally { await app.delete(); }
 });

@@ -158,7 +158,7 @@ export const decideManglarConnection = onCall<DecideManglarConnectionRequest, Pr
   return decideManglarAuthorization(request.data, request.auth!.uid);
 });
 export const listManglarConnections = onCall<Record<string, never>, Promise<{ connections: ManglarConnection[] }>>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador', 'revisor']); await loadManglarUser(request.auth!.uid);
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
   const grants = await getAppFirestore().collection('automationOAuth').where('ownerUid', '==', request.auth!.uid).limit(100).get();
   const awaitGrantActive = new Set<string>();
   await Promise.all(grants.docs.filter((doc) => doc.data().kind === 'grant').map(async (doc) => { try { await readGrant(doc.data().id); awaitGrantActive.add(doc.data().id); } catch { /* expired/revoked */ } }));
@@ -168,7 +168,7 @@ export const listManglarConnections = onCall<Record<string, never>, Promise<{ co
   }) };
 });
 export const revokeManglarConnection = onCall<{ connectionId: string }, Promise<{ revoked: true }>>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador', 'revisor']); await loadManglarUser(request.auth!.uid);
+  await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
   const id = validateRequestId(request.data?.connectionId);
   await getAppFirestore().runTransaction(async (tx) => {
     const target = ref('grant', id); const grant = (await tx.get(target)).data() as Grant | undefined;

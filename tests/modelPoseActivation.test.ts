@@ -17,7 +17,9 @@ test('pose activation enforces admin permissions, validates input, and preserves
   const ref = { id: 'model' };
   let writes = 0;
   t.mock.method(firestore, 'getAppFirestore', () => ({
-    collection: () => ({ doc: () => ref }),
+    collection: (name: string) => ({ doc: (uid: string) => name === 'users'
+      ? { get: async () => ({ exists: true, data: () => ({ active: true, role: uid === 'admin' ? 'admin' : 'revisor' }) }) }
+      : ref }),
     runTransaction: async (callback: any) => callback({
       get: async () => ({ exists: Boolean(model), data: () => model }),
       update: (_ref: any, data: any) => { model = { ...model, ...data }; writes++; },

@@ -7,7 +7,7 @@ import { ORGANIZER_DEFAULT_BUDGET_USD, ORGANIZER_DEFAULT_MODEL, ORGANIZER_DIRECT
 import { assertCallableRoles } from '../auth/roles';
 import { GOOGLE_PRIVATE_KEY } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { assertClientAccess, delegatedStamp, loadManglarUser } from '../manglar/access';
+import { assertClientAccess, delegatedStamp } from '../manglar/access';
 import type { DelegatedCaller } from '../manglar/context';
 import { OrganizerDrive, digest, versionOf, type DriveEntry } from './drive';
 import { checkedId, clientRef, configs, defaultConfig, enqueue, listPage, publicConfig, publicRun, requiresCopy, runRef, type StoredConfig, type StoredRun } from './store';
@@ -343,8 +343,7 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
 
 export const organizerAction = onCall({ secrets: [GOOGLE_PRIVATE_KEY], memory: '512MiB', timeoutSeconds: 120 },
   async request => {
-    await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
+    const role = await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
     const uid = request.auth!.uid;
-    const { role } = await loadManglarUser(uid);
     return executeOrganizer(request.data, { uid, role });
   });

@@ -25,50 +25,34 @@ export const authenticateAutomation = async (
   if (match[1].startsWith('manglar_at_')) return verifyMachineToken(match[1]);
   let uid: string;
   try { ({ uid } = await verify(match[1])); } catch { throw new HttpsError('unauthenticated', 'Token inválido o expirado.'); }
-  // Read current user state rather than trusting stale role claims.
-  const user = await getAppFirestore().collection('users').doc(uid).get();
-  if (!user.exists || user.data()?.active !== true || user.data()?.status === 'archived') throw new HttpsError('permission-denied', 'Usuario no disponible.');
   const role = await assertUserRoles(uid, undefined, ['admin', 'operador']);
   return { uid, role };
 };
-const requireInteractiveUser = async (uid: string | undefined): Promise<void> => {
-  if (!uid) throw new HttpsError('unauthenticated', 'Inicia sesión.');
-  const snapshot = await getAppFirestore().collection('users').doc(uid).get();
-  if (snapshot.data()?.active !== true || snapshot.data()?.status === 'archived') throw new HttpsError('permission-denied', 'Usuario no disponible.');
-};
 export const createAutomationJob = onCall<CreateAutomationJobRequest, Promise<AutomationJobReceipt>>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador']);
-  await requireInteractiveUser(request.auth?.uid);
-  const role = await assertUserRoles(request.auth!.uid, undefined, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador']);
   return createAutomation(request.data, request.auth!.uid, role);
 });
 export const retryAutomationJob = onCall<RetryAutomationJobRequest, Promise<AutomationJobReceipt>>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador']);
-  await requireInteractiveUser(request.auth?.uid);
-  const role = await assertUserRoles(request.auth!.uid, undefined, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador']);
   return retryAutomation(request.data, request.auth!.uid, role);
 });
 
 export const createAutomationPlan = onCall<CreateAutomationJobRequest>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador']); await requireInteractiveUser(request.auth?.uid);
-  const role = await assertUserRoles(request.auth!.uid, undefined, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador']);
   return publicAutomationPlan(await prepareAutomationPlan(request.data, request.auth!.uid, role));
 });
 export const getAutomationPlan = onCall<{ planId: string }>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador']); await requireInteractiveUser(request.auth?.uid);
-  const role = await assertUserRoles(request.auth!.uid, undefined, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador']);
   if (!/^[a-f0-9]{64}$/.test(request.data.planId)) throw new HttpsError('invalid-argument', 'Plan inválido.');
   return publicAutomationPlan(await readAutomationPlan(request.data.planId, request.auth!.uid, role));
 });
 export const executeAutomationPlanCallable = onCall<{ planId: string }>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador']); await requireInteractiveUser(request.auth?.uid);
-  const role = await assertUserRoles(request.auth!.uid, undefined, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador']);
   if (!/^[a-f0-9]{64}$/.test(request.data.planId)) throw new HttpsError('invalid-argument', 'Plan inválido.');
   return executeAutomationPlan(request.data.planId, request.auth!.uid, role);
 });
 export const resumeAutomationJob = onCall<ResumeAutomationRequest>(async (request) => {
-  await assertCallableRoles(request, ['admin', 'operador']); await requireInteractiveUser(request.auth?.uid);
-  const role = await assertUserRoles(request.auth!.uid, undefined, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador']);
   return resumeAutomation(request.data, request.auth!.uid, role);
 });
 

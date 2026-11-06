@@ -1,12 +1,13 @@
+import { openIsolatedBrowser } from './support/isolated-browser.mjs';
 import { test, expect, chromium } from '@playwright/test';
 import fs from 'fs';
 
 const DIR = '/tmp/playwright-models';
 
 test('debug generate model pose call', async () => {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await ctx.newPage();
+  const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 1440, height: 900 } });
+  const { page, baseURL: BASE_URL } = isolated;
+  try {
   if (!fs.existsSync(DIR)) fs.mkdirSync(DIR, { recursive: true });
 
   // Intercept Firebase function calls
@@ -30,23 +31,18 @@ test('debug generate model pose call', async () => {
   });
 
   // Login
-  await page.goto('http://localhost:3000/login', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
-  await page.fill('input[type="email"]', 'cmargleon@gmail.com');
-  await page.fill('input[type="password"]', 'master');
-  await page.click('button[type="submit"]');
-  await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 20000 });
-  await page.waitForTimeout(2000);
+  // Auth is a disposable local double; this journey does not test login.
 
-  await page.goto('http://localhost:3000/models', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2500);
+  await page.goto(`${BASE_URL}/models/generar`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(100);
 
+  await page.locator('select#client option[value="local-client"]').waitFor({ state: 'attached' });
   const opts = await page.locator('select#client option').all();
   await page.selectOption('select#client', await opts[1].getAttribute('value') ?? '');
   await page.fill('input#model-name', 'Test Debug');
 
   await page.getByRole('button', { name: /generar con ia/i }).click();
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(100);
 
   // Select OpenAI provider
   const providerSel = page.locator('label:has-text("Proveedor IA")').locator('..').locator('select');
@@ -65,8 +61,8 @@ test('debug generate model pose call', async () => {
 
   // Poll every 20s for status
   for (let i = 0; i < 12; i++) {
-    await page.waitForTimeout(20000);
-    const hasCandidates = await page.getByRole('button', { name: /elegir este modelo/i }).isVisible().catch(() => false);
+    await page.waitForTimeout(100);
+    const hasCandidates = await page.getByRole('button', { name: /elegir este modelo/i }).first().isVisible().catch(() => false);
     const isGenerating = await page.getByRole('button', { name: /generando/i }).isVisible().catch(() => false);
     const alertText = await page.locator('[role="alert"], [class*="red-"]').textContent().catch(() => '');
     console.log(`t=${(i+1)*20}s — generating:${isGenerating} candidates:${hasCandidates} alert:"${alertText?.trim().slice(0, 100)}"`);
@@ -75,5 +71,6 @@ test('debug generate model pose call', async () => {
     if (!isGenerating && !hasCandidates) { console.log('⚠️ Generation stopped (error or reset)'); break; }
   }
 
-  await browser.close();
+await page.getByRole('button', { name: /elegir este modelo/i }).first().waitFor();
+  } finally { await isolated.close(); }
 });

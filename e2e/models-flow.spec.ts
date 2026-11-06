@@ -1,9 +1,7 @@
+import { openIsolatedBrowser } from './support/isolated-browser.mjs';
 import { test, expect, chromium } from '@playwright/test';
 import fs from 'fs';
 
-const BASE_URL = 'http://localhost:3000';
-const EMAIL = 'cmargleon@gmail.com';
-const PASSWORD = 'master';
 const DIR = '/tmp/playwright-models';
 
 async function shot(page: any, name: string) {
@@ -15,9 +13,9 @@ async function shot(page: any, name: string) {
 }
 
 test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await ctx.newPage();
+  const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 1440, height: 900 } });
+  const { page, baseURL: BASE_URL } = isolated;
+  try {
 
   // Capturar errores de consola
   page.on('console', msg => {
@@ -25,22 +23,17 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   });
 
   // ── 1. Login ──────────────────────────────────────────────────────────────
-  await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
-  await page.fill('input[type="email"]', EMAIL);
-  await page.fill('input[type="password"]', PASSWORD);
-  await page.click('button[type="submit"]');
-  await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 20000 });
-  await page.waitForTimeout(2000);
-  console.log('✅ Login OK');
+  // Auth is a disposable local double; this journey does not test login.
+  console.log('✅ Identidad local aislada');
 
   // ── 2. Ir a /models ────────────────────────────────────────────────────────
-  await page.goto(`${BASE_URL}/models`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2500);
+  await page.goto(`${BASE_URL}/models/generar`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(100);
   await shot(page, '01-models-page');
 
   // ── 3. Seleccionar cliente ─────────────────────────────────────────────────
   await page.locator('select#client').waitFor({ timeout: 10000 });
+  await page.locator('select#client option[value="local-client"]').waitFor({ state: 'attached' });
   const opts = await page.locator('select#client option').all();
   await page.selectOption('select#client', await opts[1].getAttribute('value') ?? '');
   console.log(`✅ Cliente: ${(await opts[1].textContent())?.trim()}`);
@@ -52,7 +45,7 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
 
   // ── 5. Tab "Generar con IA" ────────────────────────────────────────────────
   await page.getByRole('button', { name: /generar con ia/i }).click();
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(100);
   await shot(page, '02-ai-identity-step');
 
   // ── 6. Seleccionar proveedor fal.ai GPT Image 2 ───────────────────────────────────────
@@ -90,20 +83,20 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   const generateBtn = page.getByRole('button', { name: /generar.*candidato/i });
   await expect(generateBtn).toBeEnabled({ timeout: 5000 });
   await generateBtn.click();
-  console.log('⏳ Generando candidatos con fal.ai GPT Image 2 (1-2 min)...');
-  await page.waitForTimeout(5000);
+  console.log('⏳ Generando candidatos con fal.ai GPT Image 2 (fixture local)...');
+  await page.waitForTimeout(100);
   await shot(page, '04-generating-candidates');
 
   // Esperar hasta que aparezca "Elegir este modelo"
   const eligeBtn = page.getByRole('button', { name: /elegir este modelo/i }).first();
   await eligeBtn.waitFor({ timeout: 300000 });
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(100);
   await shot(page, '05-candidates-ready');
   console.log('✅ Candidatos generados con fal.ai GPT Image 2');
 
   // ── 9. Seleccionar candidato ──────────────────────────────────────────────
   await eligeBtn.click();
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(100);
   await shot(page, '06-candidate-selected');
   console.log('✅ Candidato seleccionado');
 
@@ -111,7 +104,7 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   const continuarBtn = page.getByRole('button', { name: /^continuar$/i });
   await expect(continuarBtn).toBeEnabled({ timeout: 5000 });
   await continuarBtn.click();
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(100);
   await shot(page, '07-poses-step');
   console.log('✅ Paso de poses abierto');
 
@@ -119,7 +112,7 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   const selectAll = page.getByRole('button', { name: /seleccionar todas/i }).first();
   if (await selectAll.isVisible({ timeout: 3000 }).catch(() => false)) {
     await selectAll.click();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(100);
   }
   await shot(page, '08-poses-selected');
   console.log('✅ Poses seleccionadas');
@@ -128,14 +121,14 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   const generatePosesBtn = page.getByRole('button', { name: /generar poses/i });
   await expect(generatePosesBtn).toBeEnabled({ timeout: 5000 });
   await generatePosesBtn.click();
-  console.log('⏳ Generando poses con fal.ai GPT Image 2 (1-2 min)...');
-  await page.waitForTimeout(5000);
+  console.log('⏳ Generando poses con fal.ai GPT Image 2 (fixture local)...');
+  await page.waitForTimeout(100);
   await shot(page, '09-generating-poses');
 
   // Esperar "Guardar modelo con estas poses"
   const saveBtn = page.getByRole('button', { name: /guardar modelo con estas poses/i });
   await saveBtn.waitFor({ timeout: 300000 });
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(100);
   await shot(page, '10-poses-ready');
   console.log('✅ Poses generadas con fal.ai GPT Image 2');
 
@@ -143,7 +136,7 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   const acceptAll = page.getByRole('button', { name: /seleccionar todas/i }).last();
   if (await acceptAll.isVisible({ timeout: 3000 }).catch(() => false)) {
     await acceptAll.click();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(100);
   }
   await shot(page, '11-poses-accepted');
 
@@ -152,15 +145,18 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   await saveBtn.click();
   console.log('⏳ Guardando modelo...');
 
+  await page.getByRole('button', { name: /subir fotos/i }).click();
   await page.locator('text=Modelo creado con éxito').waitFor({ timeout: 30000 });
   await shot(page, '12-model-saved');
   console.log('✅ ¡Modelo guardado!');
 
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(100);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(100);
+  await page.goto(`${BASE_URL}/models/catalogo`);
+  await page.getByRole('heading', { name: modelName, exact: true }).waitFor();
   await shot(page, '13-library-final');
 
-  await browser.close();
   console.log('\n🎉 ¡Flujo completo exitoso con fal.ai GPT Image 2!');
+  } finally { await isolated.close(); }
 });

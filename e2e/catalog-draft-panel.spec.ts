@@ -1,41 +1,39 @@
-import { test, chromium } from '@playwright/test';
-import fs from 'fs';
+import { openIsolatedBrowser } from './support/isolated-browser.mjs';
+import { test, expect, chromium } from '@playwright/test';
 
 test('catalog draft panel detail images', async () => {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-  const page = await ctx.newPage();
+  const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 1440, height: 900 } });
+  const { page, baseURL: BASE_URL } = isolated;
+  try {
 
   page.on('console', msg => { if (msg.type() === 'error') console.log(`[ERR] ${msg.text().slice(0, 200)}`); });
 
-  await page.goto('http://localhost:3000/login', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
-  await page.fill('input[type="email"]', 'cmargleon@gmail.com');
-  await page.fill('input[type="password"]', 'master');
-  await page.click('button[type="submit"]');
-  await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 20000 });
-  await page.waitForTimeout(2000);
+  // Auth is a disposable local double; this journey does not test login.
 
-  await page.goto('http://localhost:3000/catalogo', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
+  await page.goto(`${BASE_URL}/catalogo`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(100);
 
-  // Select Barbie
+  // Select the disposable client fixture
   const clientSelect = page.locator('select').first();
+  await expect(clientSelect.locator('option[value="local-client"]')).toHaveCount(1);
   const options = await clientSelect.locator('option').allInnerTexts();
-  const barbieOption = options.find(o => o.toLowerCase().includes('barbie'));
-  if (barbieOption) await clientSelect.selectOption({ label: barbieOption });
-  await page.waitForTimeout(4000);
+  const localOption = options.find(o => o === 'Cliente local');
+  if (localOption) await clientSelect.selectOption({ label: localOption });
+  await page.waitForTimeout(100);
 
   // Get all photo thumbnails with images (completed jobs)
-  const thumbnails = page.locator('button[title] img');
+  const thumbnails = page.locator('[role="button"][title="Artículo local"] img');
+  await expect(thumbnails).toHaveCount(2);
   const count = await thumbnails.count();
   console.log(`Found ${count} thumbnails with images`);
 
-  if (count === 0) { console.log('No thumbnails found'); await browser.close(); return; }
 
   // Click the last photo thumbnail
   await thumbnails.last().click();
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(100);
+
+  await expect(page.getByText('Imagen principal', { exact: true })).toBeVisible();
+  await expect(page.getByText('Imagen detalle 1', { exact: true })).toBeVisible();
 
   // Screenshot of the lightbox
   await page.screenshot({ path: '/tmp/lightbox-open.png', fullPage: false });
@@ -63,5 +61,5 @@ test('catalog draft panel detail images', async () => {
 
   await page.screenshot({ path: '/tmp/lightbox-panel.png', fullPage: false });
   console.log('Screenshots saved');
-  await browser.close();
+  } finally { await isolated.close(); }
 });

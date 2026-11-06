@@ -1,12 +1,13 @@
+import { openIsolatedBrowser } from './e2e/support/isolated-browser.mjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
 
 const DIR = '/tmp/playwright-models';
 if (!fs.existsSync(DIR)) fs.mkdirSync(DIR, { recursive: true });
 
-const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-const page = await ctx.newPage();
+const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 1440, height: 900 } });
+const { page, baseURL: BASE_URL } = isolated;
+try {
 
 // Network interception
 page.on('request', req => {
@@ -30,20 +31,15 @@ page.on('console', msg => {
 });
 
 // Login
-console.log('Logging in...');
-await page.goto('http://localhost:3000/login', { waitUntil: 'domcontentloaded' });
-await page.waitForTimeout(2000);
-await page.fill('input[type="email"]', 'cmargleon@gmail.com');
-await page.fill('input[type="password"]', 'master');
-await page.click('button[type="submit"]');
-await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 20000 });
-await page.waitForTimeout(2000);
-console.log('✅ Logged in');
+
+// Auth is a disposable local double; this journey does not test login.
+console.log('✅ Identidad local aislada');
 
 // Models page
-await page.goto('http://localhost:3000/models', { waitUntil: 'domcontentloaded' });
-await page.waitForTimeout(2500);
+await page.goto(`${BASE_URL}/models/generar`, { waitUntil: 'domcontentloaded' });
+await page.waitForTimeout(100);
 
+await page.locator('select#client option[value="local-client"]').waitFor({ state: 'attached' });
 const opts = await page.locator('select#client option').all();
 await page.selectOption('select#client', await opts[1].getAttribute('value') ?? '');
 const clientName = (await opts[1].textContent())?.trim();
@@ -53,7 +49,7 @@ await page.fill('input#model-name', 'Test Debug AI');
 
 // Click AI tab
 await page.getByRole('button', { name: /generar con ia/i }).click();
-await page.waitForTimeout(1000);
+await page.waitForTimeout(100);
 
 // Select OpenAI
 const providerSel = page.locator('label:has-text("Proveedor IA")').locator('..').locator('select');
@@ -78,9 +74,9 @@ const startTime = Date.now();
 
 // Poll every 15s
 for (let i = 0; i < 16; i++) {
-  await page.waitForTimeout(15000);
+  await page.waitForTimeout(100);
   const elapsed = Math.round((Date.now() - startTime) / 1000);
-  const hasCandidates = await page.getByRole('button', { name: /elegir este modelo/i }).isVisible().catch(() => false);
+  const hasCandidates = await page.getByRole('button', { name: /elegir este modelo/i }).first().isVisible().catch(() => false);
   const isGenerating = await page.getByRole('button', { name: /generando/i }).isVisible().catch(() => false);
   const bodyText = await page.textContent('body').catch(() => '');
   const hasError = bodyText?.toLowerCase().includes('error al generar') || bodyText?.toLowerCase().includes('error:');
@@ -100,5 +96,7 @@ for (let i = 0; i < 16; i++) {
   }
 }
 
-await browser.close();
 console.log('Done');
+
+await page.getByRole('button', { name: /elegir este modelo/i }).first().waitFor();
+} finally { await isolated.close(); }

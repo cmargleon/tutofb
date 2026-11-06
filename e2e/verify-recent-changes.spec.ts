@@ -1,3 +1,4 @@
+import { openIsolatedBrowser } from './support/isolated-browser.mjs';
 /**
  * Verification test for recent UI changes:
  * - Analytics page reorganization (3 sections: Operación / Producción / Costos)
@@ -8,9 +9,6 @@
 import { test, expect, chromium } from '@playwright/test';
 import fs from 'fs';
 
-const BASE_URL = 'https://tutofb-260320-1003.web.app';
-const EMAIL = 'cmargleon@gmail.com';
-const PASSWORD = 'master';
 const DIR = '/tmp/playwright-verify';
 
 async function shot(page: any, name: string) {
@@ -22,26 +20,17 @@ async function shot(page: any, name: string) {
 }
 
 test('Verify recent changes', async () => {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
-  });
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
+  const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 1440, height: 900 } });
+  const { page, baseURL: BASE_URL } = isolated;
+  try {
 
   page.on('console', msg => {
     if (msg.type() === 'error') console.log(`🔴 [browser] ${msg.text().slice(0, 200)}`);
   });
 
   // ── Login ─────────────────────────────────────────────────────────────────
-  await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
-  await page.fill('input[type="email"]', EMAIL);
-  await page.fill('input[type="password"]', PASSWORD);
-  await page.click('button[type="submit"]');
-  await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 20000 });
-  await page.waitForTimeout(2000);
-  console.log('✅ Login OK');
+  // Auth is a disposable local double; this journey does not test login.
+  await page.goto(`${BASE_URL}/configuracion`);
   await shot(page, '01-dashboard');
 
   // ── Sidebar: Configuración item visible ───────────────────────────────────
@@ -53,7 +42,7 @@ test('Verify recent changes', async () => {
   // ── Configuración page ────────────────────────────────────────────────────
   await configLink.click();
   await page.waitForURL(/configuracion/, { timeout: 10000 });
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(100);
   await shot(page, '03-configuracion-page');
 
   // Should show alert settings form
@@ -64,7 +53,7 @@ test('Verify recent changes', async () => {
 
   // ── Analytics page ────────────────────────────────────────────────────────
   await page.goto(`${BASE_URL}/analytics`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(100);
   await shot(page, '04-analytics-top');
 
   // Should have the 3-section structure
@@ -85,7 +74,8 @@ test('Verify recent changes', async () => {
   console.log('✅ Analytics: Alert settings panel removed (moved to Configuración)');
 
   // New language: plain spanish instead of FP/FN
-  await expect(page.getByText(/gemini aprobó pero se corrigió/i)).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText(/gemini aprobó pero se corrigió/i),
+    'PENDIENTE: la interfaz actual no contiene la etiqueta histórica exigida; no se modifica producto ni se elimina la aserción').toBeVisible({ timeout: 5000 });
   await expect(page.getByText(/gemini rechazó pero se aprobó/i)).toBeVisible({ timeout: 5000 });
   console.log('✅ Analytics: Plain language for FP/FN');
 
@@ -103,21 +93,21 @@ test('Verify recent changes', async () => {
   console.log('✅ Analytics: Raw Gemini calls table removed');
 
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(100);
   await shot(page, '05-analytics-middle');
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(100);
   await shot(page, '06-analytics-bottom');
 
   // Test days selector switches data
   await page.getByRole('button', { name: '7d' }).click();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(100);
   const heading7d = page.getByText(/últimos 7 días/i).first();
   await expect(heading7d).toBeVisible();
   console.log('✅ Analytics: 7d selector updates headings');
 
   await page.getByRole('button', { name: '90d' }).click();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(100);
   const heading90d = page.getByText(/últimos 90 días/i).first();
   await expect(heading90d).toBeVisible();
   console.log('✅ Analytics: 90d selector updates headings');
@@ -134,7 +124,7 @@ test('Verify recent changes', async () => {
 
   await catalogLink.click();
   await page.waitForURL(/catalogo/, { timeout: 10000 });
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(100);
   await shot(page, '07-catalogo-page');
 
   // Should show client selector and empty state
@@ -142,6 +132,6 @@ test('Verify recent changes', async () => {
   await expect(page.getByText(/selecciona un cliente para ver su catálogo/i)).toBeVisible({ timeout: 5000 });
   console.log('✅ Catálogo: Client selector rendered');
 
-  await browser.close();
   console.log('\n🎉 All checks passed!');
+  } finally { await isolated.close(); }
 });

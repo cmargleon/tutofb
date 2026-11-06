@@ -5,7 +5,7 @@ import type { AutomationInput, OrganizerPhoto } from '../../../shared/src/types'
 import { assertUserRoles } from '../auth/roles';
 import { getSystemConfigDocRef, sanitizeSystemConfig } from '../admin/systemConfig';
 import { createAutomation } from '../automation/persistence';
-import { normalizeInputImage } from '../automation/imports';
+import { normalizeInputImage } from '../media/normalizeInputImage';
 import { assertDelegatedStamp } from '../manglar/access';
 import { withManglarContext } from '../manglar/context';
 import { getAppFirestore } from '../firebase/appFirestore';

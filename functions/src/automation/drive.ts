@@ -4,7 +4,7 @@ import { defineString } from 'firebase-functions/params';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { AutomationInput } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { MAX_INPUT_BYTES, normalizeInputImage } from './imports';
+import { MAX_INPUT_BYTES, normalizeInputImage } from '../media/normalizeInputImage';
 
 const DRIVE_IDENTITY = defineString('AUTOMATION_DRIVE_SERVICE_ACCOUNT', { default: 'disabled' });
 export const parseDriveFolderId = (value: string): string => {

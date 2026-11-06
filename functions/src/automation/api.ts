@@ -13,7 +13,7 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { canReadAutomation } from './domain';
 import { createAutomation, retryAutomation } from './persistence';
 import { automationPolling } from './polling';
-import { normalizeInputImage } from './imports';
+import { normalizeInputImage } from '../media/normalizeInputImage';
 import { MachineCaller, assertMachineClient, assertMachineScope, issueMachineToken, verifyMachineToken } from './machineAuth';
 
 export const authenticateAutomation = async (

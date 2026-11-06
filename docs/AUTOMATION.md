@@ -165,7 +165,7 @@ Los resúmenes leen los jobs actuales dentro de una transacción, evitando regre
 
 El proveedor predeterminado de automatización es **GPT Image 2.5 Flare** (`fal-gpt-image-2.5-flare`), tanto para prendas como para productos. Un `provider` explícito tiene prioridad, seguido del proveedor del preset del cliente y finalmente este default. La lectura de instrucciones desde correos de Work todavía no está implementada en este repositorio; el integrador debe enviar `provider` explícitamente para elegir otro modelo.
 
-Orden de resolución: `modelId` explícito → modelo del preset del cliente → `clients/{id}.automation.defaultModelId`. Si no existe, no se elige una persona arbitrariamente.
+Orden de resolución: `modelId` explícito → modelo del preset del cliente → modelos predeterminados por género (`automation.defaultMaleModelId` / `defaultFemaleModelId`, o único modelo activo de cada género) → `automation.defaultModelId` como respaldo. Gemini clasifica cada prenda en la llamada inicial; con ambos modelos se elige el correspondiente y con uno solo se usa ese modelo. Unisex permite cualquiera de los dos con elección estable por pedido/artículo. La incertidumbre con ambos disponibles requiere revisión. Configuración y decisiones: [modelos por género](PHOTO_GENERATION.md#modelos-por-género-en-automatización).
 
 Presets: parámetro `preset` → `automation.defaultPreset` del cliente → `standard` (prendas) / `generic_product` (productos). Un admin puede configurar en Firestore Console el mapa opcional del cliente:
 
@@ -187,7 +187,7 @@ Presets: parámetro `preset` → `automation.defaultPreset` del cliente → `sta
 }
 ```
 
-Sin `poseIds` se consideran las poses existentes del modelo; el core filtra las compatibles por vista/área/accesorio. No se inventan poses. Modelos y clientes archivados se rechazan. Clasificación sin área o confianza menor que 0.65, o ausencia de poses compatibles, requiere atención. La selección futura por IA puede implementarse en `resolveAutomationPreset` sin tocar la cola.
+Sin `poseIds` se consideran las poses activas del modelo; el core filtra las compatibles por vista/área/accesorio. No se inventan poses. Modelos y clientes archivados se rechazan. Clasificación sin área o confianza menor que 0.65, o ausencia de poses compatibles, requiere atención. Los pedidos con dos modelos crean sus lotes juntos en una transacción y guardan todos los IDs en `batchIds`, conservando `batchId` como primer lote. El seguimiento y el ZIP incluyen ambos lotes con un presupuesto común.
 
 ## Productos, revisión y costos
 

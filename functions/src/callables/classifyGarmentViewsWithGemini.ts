@@ -28,6 +28,7 @@ interface GeminiGarmentPhotoClassificationPayload {
   view?: unknown;
   confidence?: unknown;
   reasoning?: unknown;
+  quality?: unknown;
 }
 
 interface GeminiGarmentClassificationPayload {
@@ -35,6 +36,9 @@ interface GeminiGarmentClassificationPayload {
   itemKindConfidence?: unknown;
   itemKindReasoning?: unknown;
   itemLabel?: unknown;
+  garmentGender?: unknown;
+  garmentGenderConfidence?: unknown;
+  garmentGenderReasoning?: unknown;
   photos?: unknown;
   bodyArea?: unknown;
   accessoryType?: unknown;
@@ -53,6 +57,9 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
     itemKindConfidence: { type: 'number' },
     itemKindReasoning: { type: 'string' },
     itemLabel: { type: ['string', 'null'] },
+    garmentGender: { type: ['string', 'null'], enum: ['male', 'female', 'unisex', null] },
+    garmentGenderConfidence: { type: ['number', 'null'] },
+    garmentGenderReasoning: { type: ['string', 'null'] },
     photos: {
       type: 'array',
       items: {
@@ -101,6 +108,9 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
     'itemKindConfidence',
     'itemKindReasoning',
     'itemLabel',
+    'garmentGender',
+    'garmentGenderConfidence',
+    'garmentGenderReasoning',
     'photos',
     'bodyArea',
     'accessoryType',
@@ -316,27 +326,33 @@ const loadTemplateCategories = async (
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as SpreadsheetTemplateCategory));
 };
 
+interface OrganizerClassifierAdapter {
+  readImage(id: string): Promise<{ bytes: Buffer; mimeType: string }>;
+  generate(body: unknown): Promise<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>;
+}
+
 export const classifyGarmentWithGemini = async ({
   apiKey,
   model,
   garment,
   userUid,
   categories,
-  fallbackCategoryId, automation, clientId,
+  fallbackCategoryId, automation, clientId, organizer,
 }: {
   automation?: GeminiUsageContext['automation'];
   clientId?: string;
+  organizer?: OrganizerClassifierAdapter;
   apiKey: string;
   model: string;
   garment: ClassifyGarmentViewsGarmentInput;
   userUid?: string | null;
   categories: SpreadsheetTemplateCategory[];
   fallbackCategoryId: string | null;
-}): Promise<ClassifyGarmentViewsResponse['garments'][number]> => {
+}): Promise<ClassifyGarmentViewsResponse['garments'][number] & { referenceQuality?: Record<string, number> }> => {
   const photos = garment.photos.slice(0, 4);
   const imageParts = await Promise.all(
     photos.map(async (photo) => {
-      const image = await downloadStorageImage(photo.storagePath);
+      const image = await (organizer ? organizer.readImage(photo.id) : downloadStorageImage(photo.storagePath));
       return {
         photo,
         part: {
@@ -366,6 +382,8 @@ export const classifyGarmentWithGemini = async ({
     'Analiza el artículo principal de las fotos para un workflow de fotografía de catálogo. Las fotos son referencias del mismo artículo.',
     'Primero identifica itemKind: garment para ropa, calzado y accesorios que se visten o llevan sobre el cuerpo; product para los demás objetos. Si no puedes identificar el artículo principal, devuelve null. No clasifiques por la presencia de una persona o por el nombre del archivo.',
     'Devuelve itemKindConfidence entre 0 y 1, itemKindReasoning explicando la detección e itemLabel con un nombre breve en español, como Camiseta, Mochila o Lámpara.',
+    'Para garment estima el público de la prenda principal con todas sus referencias: garmentGender male (masculino), female (femenino) o unisex (igualmente apropiada para ambos, 50/50). Evalúa corte, diseño y etiquetas visibles; no decidas solo por el color, nombre de archivo ni por la persona que la lleva.',
+    'Devuelve garmentGenderConfidence entre 0 y 1 como confianza en esa clasificación y garmentGenderReasoning breve en español. Unisex no significa incertidumbre: si no hay evidencia suficiente, devuelve garmentGender null. Para product devuelve los tres campos de género null.',
     'Para objetos product devuelve bodyArea y accessoryType null; no inventes un área del cuerpo. Para ropa y accesorios garment identifica el área del cuerpo y el accesorio.',
     'Devuelve la vista principal de cada foto (front/back/side), el área del cuerpo (upper_body/lower_body/footwear/head_accessory/full_body/carry_accessory), el tipo de accesorio si aplica, la categoría final más probable del spreadsheet y el color principal visible de la prenda.',
     'Usa head_accessory para gorras, gorros, sombreros, lentes, gafas, diademas y accesorios cuyo foco principal sea cabeza o rostro.',
@@ -380,17 +398,16 @@ export const classifyGarmentWithGemini = async ({
     `Fotos recibidas: ${photos.map((photo, index) => `${index + 1}:${photo.id}:${photo.fileName}`).join(' | ')}`,
     `Categorías disponibles: ${categoryLines.join(' || ')}`,
     fallbackCategoryId ? `Categoría fallback sugerida por el usuario: ${fallbackCategoryId}` : 'Sin categoría fallback del usuario.',
+    ...(organizer ? ['Evalúa quality de cada foto entre 0 y 1 para su uso como referencia.'] : []),
     'Devuelve solo JSON con el schema solicitado.',
   ].join('\n');
 
-  const { payload } = await callGeminiGenerateContent<{
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  }>({
+  const request = {
     apiKey,
     model,
     context: {
       ...(automation ? { automation, clientId } : {}),
-      feature: 'garment_view_category_color_classification',
+      feature: 'garment_view_category_color_classification' as const,
       garmentId: garment.garmentId,
       garmentName: garment.garmentName,
       userUid,
@@ -408,10 +425,18 @@ export const classifyGarmentWithGemini = async ({
       generationConfig: {
         ...(automation ? { maxOutputTokens: 4096 } : {}),
         responseMimeType: 'application/json',
-        responseJsonSchema: GARMENT_CLASSIFICATION_RESPONSE_SCHEMA,
+        responseJsonSchema: organizer ? {
+          ...GARMENT_CLASSIFICATION_RESPONSE_SCHEMA,
+          properties: { ...GARMENT_CLASSIFICATION_RESPONSE_SCHEMA.properties, photos: { type: 'array',
+            items: { ...GARMENT_CLASSIFICATION_RESPONSE_SCHEMA.properties.photos.items,
+              properties: { ...GARMENT_CLASSIFICATION_RESPONSE_SCHEMA.properties.photos.items.properties, quality: { type: 'number' } },
+              required: [...GARMENT_CLASSIFICATION_RESPONSE_SCHEMA.properties.photos.items.required, 'quality'] } } },
+        } : GARMENT_CLASSIFICATION_RESPONSE_SCHEMA,
       },
     },
-  });
+  };
+  const payload = organizer ? await organizer.generate(request.body)
+    : (await callGeminiGenerateContent<Awaited<ReturnType<OrganizerClassifierAdapter['generate']>>>(request)).payload;
 
   const parsed = JSON.parse(extractResponseText(payload)) as GeminiGarmentClassificationPayload;
   const parsedPhotos = Array.isArray(parsed.photos) ? parsed.photos as GeminiGarmentPhotoClassificationPayload[] : [];
@@ -460,6 +485,10 @@ export const classifyGarmentWithGemini = async ({
     itemKindConfidence: clampConfidence(parsed.itemKindConfidence),
     itemKindReasoning: normalizeText(parsed.itemKindReasoning),
     itemLabel: normalizeText(parsed.itemLabel),
+    garmentGender: itemKind === 'garment' && ['male', 'female', 'unisex'].includes(parsed.garmentGender as string)
+      ? parsed.garmentGender as 'male' | 'female' | 'unisex' : null,
+    garmentGenderConfidence: itemKind === 'garment' ? clampConfidence(parsed.garmentGenderConfidence) : null,
+    garmentGenderReasoning: itemKind === 'garment' ? normalizeText(parsed.garmentGenderReasoning) : null,
     matchedCategoryId: matchedCategory?.id || null,
     matchedCategoryLabel: matchedCategory?.label || null,
     matchedCategoryConfidence: clampConfidence(parsed.matchedCategoryConfidence),
@@ -467,6 +496,9 @@ export const classifyGarmentWithGemini = async ({
     matchedColor,
     matchedColorConfidence: clampConfidence(parsed.matchedColorConfidence),
     matchedColorReasoning: normalizeText(parsed.matchedColorReasoning),
+    ...(organizer ? { referenceQuality: Object.fromEntries(photos.map(photo => [
+      photo.id, clampConfidence(parsedPhotosById.get(photo.id)?.quality) ?? 0,
+    ])) } : {}),
   };
 };
 

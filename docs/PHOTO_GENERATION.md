@@ -27,4 +27,18 @@ El formato predeterminado para ropa y objetos es el vertical **Portrait 4:3** (`
 
 Los objetos producen **seis fotos por artículo**: cuatro lifestyle y dos con personas usando el producto, con fondos relativamente neutros en estas últimas. El wizard y la automatización comparten las escenas de `shared/src/productGeneration.ts` y las instrucciones globales de `system_config/main`. Un cambio de default debe mantener ambos recorridos sincronizados.
 
-La API de automatización conserva su contrato de tipo explícito (`jobType`); no se añade un lote de tipos mezclados ni se cambia ese contrato para inferir permisos o modelos humanos. Véase `AUTOMATION.md`.
+La API de automatización conserva su contrato de tipo explícito (`jobType`); no se añade un lote de tipos mezclados ni se cambia ese contrato para inferir permisos. Véase `AUTOMATION.md`.
+
+## Modelos por género en automatización
+
+Configuración incluye dos prompts adicionales para prendas, uno para modelo hombre y otro para modelo mujer. Ambos empiezan vacíos. El wizard muestra el bloque correspondiente al sexo del modelo y permite editarlo para ese lote; al cambiar de sexo se carga el bloque del nuevo modelo. Automatización compone el mismo prompt completo con los valores globales y el modelo elegido por artículo. Un modelo sin sexo reconocido no incluye ninguno de los dos bloques. Los objetos no los utilizan.
+
+En **Clientes → Google Drive y automatización** se eligen los modelos masculino y femenino predeterminados. Un único modelo activo de cada género se preselecciona automáticamente; con varios candidatos se respeta la selección guardada. Los modelos sin género registrado pueden asignarse manualmente. Solo se admiten modelos activos del propio cliente.
+
+La llamada inicial de clasificación de referencias también devuelve `garmentGender` (`male`, `female`, `unisex` o `null`), confianza y explicación por artículo. Se analiza la prenda y todas sus referencias antes de elegir el modelo; no se deduce su público únicamente de la persona fotografiada. Unisex significa igualmente apropiado para ambos (50/50), no falta de evidencia.
+
+- Un modelo explícito en el pedido o preset tiene prioridad. En su ausencia se usan los predeterminados por género; el modelo general anterior queda como respaldo si no hay ninguno por género.
+- Con ambos disponibles y confianza de al menos 0.65 se usa el correspondiente. Para unisex se elige uno de forma estable por pedido/artículo, conservándolo en los reintentos.
+- Con un único predeterminado disponible se usa para cualquier prenda, incluso si el género es incierto. Con ambos y detección incierta, el artículo requiere revisión; sus referencias se conservan.
+- Un pedido mixto crea un lote por modelo, vinculados en `automationJobs.batchIds`, con un único presupuesto, progreso y descarga. `batchId` conserva el primer lote para compatibilidad. Todos los lotes se crean en una misma transacción para evitar duplicados.
+- Los planes estiman imágenes y costo usando el modelo con más poses; tras clasificar se selecciona un solo modelo por artículo y se filtran las poses compatibles. El Organizador inteligente utiliza este mismo recorrido cuando envía prendas a automatización.

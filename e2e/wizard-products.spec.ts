@@ -13,7 +13,7 @@ async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}
     const poses = ['front', 'back'].map(view => ({ id: 'pose-' + view, fileName: view + '.jpg', storagePath: 'test/' + view + '.jpg',
       aiClassification: { usableForGarmentViews: [view], bodyFocus: 'full_body', orientationGroup: view, orientationDetail: view,
         faceVisible: true, framing: 'full_body', autoCategory: view + '_cuerpo_completo', confidence: 0.99 } }));
-    const models = [{ id: 'model', clientId: 'client', name: 'Modelo de prueba', poses, poseCount: 2 }, { id: 'model2', clientId: 'client', name: 'Segundo modelo', poses, poseCount: 2 }];
+    const models = [{ id: 'model', clientId: 'client', name: 'Modelo de prueba', identityTraits: { sex: 'female' }, poses, poseCount: 2 }, { id: 'model2', clientId: 'client', name: 'Segundo modelo', identityTraits: { sex: 'male' }, poses, poseCount: 2 }];
     const templates = ${options.templates ? "[{ id: 'template', name: 'Plantilla de prueba', defaultCategoryId: 'category' }]" : '[]'};
     const categories = [{ id: 'category', label: 'Camisetas', attributes: [], columns: [] }];
     const empty = [];
@@ -87,6 +87,41 @@ const next = (page: Page) => page.getByRole('button', { name: 'Continuar', exact
 const back = (page: Page) => page.getByRole('button', { name: 'Volver', exact: true });
 const uploadItem = (page: Page, names = ['front.png']) => page.getByLabel('Fotos del mismo artículo').setInputFiles(names.map(image));
 const openAdvanced = (page: Page) => page.getByText('Ajustes avanzados · Instrucciones', { exact: true }).click();
+
+test('garment gender prompt starts empty and switches with model sex while preserving other local edits', async ({ page }) => {
+  await openWizard(page, { systemPromptMale: 'Global male instructions' });
+  await uploadItem(page, ['shirt-front.png']);
+  await next(page).click();
+  await page.getByRole('button', { name: /Modelo de prueba/ }).click();
+  await next(page).click();
+  await openAdvanced(page);
+  const female = page.getByRole('textbox', { name: 'Prendas · Prompt adicional para modelo mujer', exact: true });
+  const male = page.getByRole('textbox', { name: 'Prendas · Prompt adicional para modelo hombre', exact: true });
+  await expect(female).toHaveValue('');
+  await expect(male).toHaveCount(0);
+  await female.fill('Local female instructions');
+  const labels = page.getByRole('textbox', { name: 'Tratamiento de etiquetas interiores', exact: true });
+  await labels.fill('Local label instructions');
+  await expect(page.getByLabel('Prompt completo para fal.ai')).toContainText('Local female instructions');
+  await back(page).click();
+  await page.getByRole('button', { name: /Segundo modelo/ }).click();
+  await next(page).click();
+  if (!(await male.isVisible())) await openAdvanced(page);
+  await expect(male).toHaveValue('Global male instructions');
+  await expect(female).toHaveCount(0);
+  await expect(labels).toHaveValue('Local label instructions');
+  const preview = page.getByLabel('Prompt completo para fal.ai');
+  await expect(preview).not.toContainText('Local female instructions');
+  await male.fill('Local male instructions');
+  await expect(preview).toContainText('Local male instructions');
+  await page.getByRole('button', { name: /Crear lote y abrir evaluación/ }).click();
+  await expect(page).toHaveURL(/batchId=garment-test/);
+  const request = await page.evaluate(() => (window as any).__garmentRequest);
+  expect(request.modelId).toBe('model2');
+  expect(request.approvedPrompts[0].text).toContain('Local male instructions');
+  expect(request.approvedPrompts[0].text).toContain('Local label instructions');
+  expect(request.approvedPrompts[0].text).not.toMatch(/Global male instructions|Local female instructions/);
+});
 
 test('selecting a model resets to Portrait 4:3 while preserving quality, format and later manual framing', async ({ page }) => {
   await openWizard(page);

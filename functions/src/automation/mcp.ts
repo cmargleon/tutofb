@@ -1,3 +1,5 @@
+import { executeOrganizer } from '../organizer/api';
+import type { OrganizerRequest } from '../../../shared/src/types';
 import { validateSchema, type Schema } from '../manglar/schema';
 import { withManglarContext } from '../manglar/context';
 import { MANGLAR_DOMAIN_TOOLS, executeDomainTool } from '../manglar/tools';
@@ -41,7 +43,23 @@ export const MANGLAR_LEGACY_TOOLS = [
   tool('manglar_execute_plan', 'Generar las fotografías del plan', 'Inicia una producción pagada. Antes presenta el plan y obtén la autorización del usuario para su presupuesto. confirmedBudgetUsd debe ser exactamente el límite del plan aprobado. Repetir el mismo plan devuelve el mismo trabajo.', { planId: planSchema, confirmedBudgetUsd: { type: 'number', exclusiveMinimum: 0 } }, ['planId', 'confirmedBudgetUsd'], 'jobs:create', false),
   tool('manglar_get_job', 'Consultar producción y resultados', 'Consulta el progreso y los enlaces temporales de fotografías aprobadas. Respeta pollAfterSeconds y pollingDeadlineAt: 20 s al inicio, luego 60 s, máximo 30 minutos. Un timeout no autoriza otro pedido.', { jobId: idSchema }, ['jobId'], 'jobs:read'),
 ];
-export const MANGLAR_MCP_TOOLS = [...MANGLAR_LEGACY_TOOLS, ...MANGLAR_DOMAIN_TOOLS];
+const organizerTools = [
+  tool('manglar_organizer_read', 'Organizador inteligente · consultas', 'Consulta clientes, configuración y watcher (config), ejecuciones y presupuesto (run/runs), productos y variantes (products), fotos, conflictos, pestañas de fuentes (tabs), celdas originales (provenance) y reportes. clientId es obligatorio salvo para clients. Usa cursor para paginar.', {
+    action: { type: 'string', enum: ['clients', 'config', 'run', 'runs', 'report', 'products', 'photos', 'conflicts', 'tabs', 'provenance', 'files', 'ledger', 'baseProducts', 'commercial', 'plan', 'interpretations'] },
+    clientId: idSchema, runId: idSchema, cursor: idSchema, variantId: idSchema, status: { type: 'string', enum: ['pending', 'review', 'uploaded'] },
+  }, ['action'], 'jobs:read'),
+  tool('manglar_organizer_manage', 'Organizador inteligente · gestión', 'Configura, inicia, pausa, reanuda, cancela y revisa el organizador. start acepta mode inventory, dry_run, classify o sync y requestId estable. Clasificación y sincronización requieren autorización explícita del usuario y confirmedBudgetUsd exacto de config. Usa photoIds o variantId para reanalizar. Las ejecuciones completas requieren planRunId de una simulación terminada; consulta plan antes de aplicar. correct admite variantIds para fotos compartidas y photoIds para hasta 25 fotos con evidencia común; preserva excepciones humanas. configure acepta settings con sourceIds, parentId y opciones del organizador. Activar enabled autoriza lotes automáticos del cliente. Al terminar de organizar, las fotos nuevas pasan a generación aunque no coincidan con Excel si organizerAutoGenerationEnabled está activo en Sistema → Configuración; usa el presupuesto y preset de automatización del cliente.', {
+    action: { type: 'string', enum: ['configure', 'start', 'pause', 'resume', 'cancel', 'correct', 'references'] },
+    clientId: idSchema, runId: idSchema, requestId: idSchema, photoId: idSchema, planRunId: idSchema,
+    variantIds: { type: 'array', maxItems: 10, items: idSchema }, referenceVariantIds: { type: 'array', maxItems: 10, items: idSchema },
+    mode: { type: 'string', enum: ['inventory', 'dry_run', 'classify', 'sync'] },
+    confirmedBudgetUsd: { type: 'number', maximum: 40 },
+    photoIds: { type: 'array', maxItems: 100, items: idSchema }, variantId: { anyOf: [idSchema, { type: 'null' }] },
+    decision: { type: 'string', enum: ['approve', 'reject', 'reset'] },
+    settings: { type: 'object', additionalProperties: true },
+  }, ['action', 'clientId'], 'jobs:create', false),
+];
+export const MANGLAR_MCP_TOOLS = [...MANGLAR_LEGACY_TOOLS, ...MANGLAR_DOMAIN_TOOLS, ...organizerTools];
 const validId = (value: unknown, plan = false): string => {
   if (typeof value !== 'string' || !(plan ? /^[a-f0-9]{64}$/ : /^[\w-]{1,200}$/).test(value)) throw new HttpsError('invalid-argument', 'Identificador inválido.');
   return value;
@@ -66,7 +84,7 @@ export const executeManglarTool = async (name: string, args: Record<string, unkn
       const client = (await getAppFirestore().collection('clients').doc(clientId).get()).data();
       if (!client || client.status === 'archived' || client.automation?.enabled !== true) throw new HttpsError('permission-denied', 'Cliente no disponible.');
       const models = await getAppFirestore().collection('models').where('clientId', '==', clientId).get();
-      return { clientId, models: models.docs.filter((doc) => doc.data().status !== 'archived').map((doc) => {
+      return { clientId, models: models.docs.filter((doc) => doc.data().status !== 'archived' && doc.data().active !== false).map((doc) => {
         const model = doc.data() as Model;
         return { modelId: doc.id, name: model.name, poses: model.poses.filter(isPoseActive).map((pose) => ({ poseId: pose.id, fileName: pose.fileName, classification: pose.aiClassification || null })) };
       }) };
@@ -90,6 +108,11 @@ export const executeManglarTool = async (name: string, args: Record<string, unkn
 const executeDelegatedTool = async (name: string, args: Record<string, unknown>, caller: DelegatedCaller): Promise<unknown> => {
   const user = await loadManglarUser(caller.uid); const access = await loadManglarAccess(caller.uid,user.role);
   if (!access.enabled || user.role !== caller.role || access.version !== caller.accessVersion) throw new HttpsError('permission-denied','Permisos individuales revocados.');
+  const organizer = organizerTools.find(tool => tool.name === name);
+  if (organizer) {
+    validateSchema(args, organizer.inputSchema as unknown as Schema);
+    return executeOrganizer(args as OrganizerRequest, { uid: caller.uid, role: caller.role, delegated: caller });
+  }
   const definition = MANGLAR_LEGACY_TOOLS.find(tool=>tool.name===name);
   if (!definition) return executeDomainTool(name,args,caller);
   if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).some(key=>!Object.hasOwn(definition.inputSchema.properties,key)) || definition.inputSchema.required.some(key=>!Object.hasOwn(args,key))) throw new HttpsError('invalid-argument','Argumentos inválidos.');
@@ -104,7 +127,7 @@ const executeDelegatedTool = async (name: string, args: Record<string, unknown>,
     case 'manglar_list_models': {
       const clientId=assertClientAccess(caller,args.clientId);
       const models=await getAppFirestore().collection('models').where('clientId','==',clientId).get();
-      return {clientId,models:models.docs.filter(doc=>doc.data().status!=='archived').map(doc=>({modelId:doc.id,name:doc.data().name,poses:(doc.data().poses||[]).filter(isPoseActive).map((pose:any)=>({poseId:pose.id,fileName:pose.fileName,classification:pose.aiClassification||null})),visualDetails:{tool:'manglar_models',action:'get',data:{id:doc.id}}}))};
+      return {clientId,models:models.docs.filter(doc=>doc.data().status !== 'archived' && doc.data().active !== false).map(doc=>({modelId:doc.id,name:doc.data().name,poses:(doc.data().poses||[]).filter(isPoseActive).map((pose:any)=>({poseId:pose.id,fileName:pose.fileName,classification:pose.aiClassification||null})),visualDetails:{tool:'manglar_models',action:'get',data:{id:doc.id}}}))};
     }
     case 'manglar_list_drive_files': return listAuthorizedDriveFiles(assertClientAccess(caller,args.clientId),validId(args.folderId));
     case 'manglar_prepare_plan': {

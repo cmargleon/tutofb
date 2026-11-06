@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "npm --prefix functions run build && node --import tsx --test tests/**/*.test.ts"
+    "test": "npm --prefix functions run build && node --import tsx --test tests/**/*.test.ts",
+    "organizer:pilot": "node --env-file=functions/.env.tutofb-260320-1003 --import tsx scripts/organizer/run.ts"
   },
   "dependencies": {
     "@sentry/react": "^10.47.0",

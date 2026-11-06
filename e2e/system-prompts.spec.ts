@@ -33,6 +33,8 @@ test('configuration edits, saves, reloads and resets every additional global pro
   await page.goto('/config-preview');
   const savePrompts = page.getByRole('heading', { name: 'Prompts globales del wizard' }).locator('../..').getByRole('button', { name: 'Guardar', exact: true });
   const fields = [
+    ['Prendas · Prompt adicional para modelo hombre', 'systemPromptMale'],
+    ['Prendas · Prompt adicional para modelo mujer', 'systemPromptFemale'],
     ['Conservación de identidad de la modelo', 'systemPromptIdentity'],
     ['Tratamiento de etiquetas interiores', 'systemPromptInternalLabels'],
     ['Caso D: accesorio transportable', 'systemPromptCarryAccessory'],
@@ -60,7 +62,11 @@ test('configuration edits, saves, reloads and resets every additional global pro
   await page.reload();
   for (const [label, key] of fields) {
     expect(saved[key]).toBeNull();
-    await expect(page.getByRole('textbox', { name: label, exact: true })).not.toHaveValue('');
+    if (key === 'systemPromptMale' || key === 'systemPromptFemale') {
+      await expect(page.getByRole('textbox', { name: label, exact: true })).toHaveValue('');
+    } else {
+      await expect(page.getByRole('textbox', { name: label, exact: true })).not.toHaveValue('');
+    }
   }
   expect(saved.systemProductScenePrompts).toBeNull();
   for (const label of scenes) await expect(page.getByRole('textbox', { name: label, exact: true })).not.toHaveValue('');

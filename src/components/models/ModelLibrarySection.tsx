@@ -1,17 +1,19 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
+  Image as ImageIcon,
+  RefreshCw,
   Upload,
   UserSquare2,
 } from 'lucide-react';
+import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { Client } from '../../../shared/src/types';
 import { UseModelLibraryResult } from '../../features/models/hooks/useModelLibrary';
 import { UseModelsCatalogResult } from '../../features/models/hooks/useModelsCatalog';
-import { EmptyState, LoadingBlock, Button } from '../ui';
+import { EmptyState, LoadingBlock, Button, ImageThumb } from '../ui';
 import { ModelImportDialog } from './ModelImportDialog';
-import { ModelLibraryItem } from './ModelLibraryItem';
 
 interface ModelLibrarySectionProps {
   catalog: UseModelsCatalogResult;
@@ -22,6 +24,7 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
   catalog,
   library,
 }) => {
+  const { search } = useLocation();
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importClientId, setImportClientId] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -123,27 +126,64 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
           )}
         />
       ) : (
-        <ul className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
-          {catalog.pagedModels.map((model) => (
-            <ModelLibraryItem
-              key={model.id}
-              model={model}
-              clients={catalog.clients}
-              isEditing={library.editingId === model.id}
-              isExpanded={catalog.expandedId === model.id}
-              isHighlighted={catalog.highlightedModelId === model.id}
-              expandedId={catalog.expandedId}
-              setExpandedId={catalog.setExpandedId}
-              library={library}
-            />
-          ))}
+        <ul className="grid grid-cols-3 gap-3 px-4 sm:grid-cols-4 sm:px-6 md:grid-cols-5">
+          {catalog.pagedModels.map((model) => {
+            const pose = model.poses[0];
+            const archived = isArchivedCatalogEntity(model);
+            const active = model.active !== false;
+            const updating = Boolean(model.id && library.updatingModelIds.has(model.id));
+
+            return (
+              <li key={model.id} className="relative isolate flex flex-col rounded-lg bg-white ring-1 ring-gray-200 transition hover:ring-indigo-400 focus-within:ring-indigo-400">
+                <Link
+                  to={`/models/catalogo/${encodeURIComponent(model.id!)}${search}`}
+                  aria-label={model.name}
+                  className="flex flex-1 flex-col after:absolute after:inset-0 after:rounded-lg"
+                >
+                  <div className="px-2.5 pb-2 pt-2.5">
+                    <h3 className="break-words text-sm font-semibold text-indigo-600">{model.name}</h3>
+                    <p className="mt-1 break-words text-xs text-gray-500">{model.clientNameSnapshot}</p>
+                    <p className="mt-1 text-xs text-gray-500">{model.poseCount ?? model.poses.length} poses</p>
+                  </div>
+                  <div className="mt-auto aspect-[3/4]">
+                    {pose ? (
+                      <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} />
+                    ) : (
+                      <div className="grid h-full place-items-center rounded-md bg-gray-100 text-gray-400" aria-label="Sin foto">
+                        <ImageIcon className="h-6 w-6" aria-hidden="true" />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+                <div className="flex min-h-10 flex-wrap items-center justify-between gap-1 px-2.5 py-1.5 text-xs text-gray-500">
+                  <span>{archived ? 'Archivado' : active ? 'Activo' : 'Inactivo'}</span>
+                  {!archived && (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label={`Modelo activo: ${model.name}`}
+                      aria-checked={active}
+                      title={active ? 'Desactivar modelo' : 'Activar modelo'}
+                      disabled={updating}
+                      onClick={() => void library.handleToggleModelActive(model)}
+                      className={`relative inline-flex h-6 w-9 shrink-0 items-center rounded-full shadow-sm transition-colors disabled:opacity-40 sm:w-10 ${active ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-500 hover:bg-gray-600'}`}
+                    >
+                      <span className={`absolute left-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-white shadow transition-transform ${active ? 'translate-x-3 sm:translate-x-4' : 'translate-x-0'}`}>
+                        {updating && <RefreshCw className="h-3 w-3 animate-spin text-gray-500" />}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 
       {catalog.modelsTotalPages > 1 && (
         <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-6 py-4">
           <button
-            onClick={() => catalog.setModelsPage((page) => Math.max(1, page - 1))}
+            onClick={() => catalog.setModelsPage(catalog.modelsPage - 1)}
             disabled={catalog.modelsPage === 1}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -155,7 +195,7 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
           </span>
           <button
             onClick={() =>
-              catalog.setModelsPage((page) => Math.min(catalog.modelsTotalPages, page + 1))
+              catalog.setModelsPage(catalog.modelsPage + 1)
             }
             disabled={catalog.modelsPage === catalog.modelsTotalPages}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"

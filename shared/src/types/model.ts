@@ -49,10 +49,17 @@ export interface Pose {
   createdAt: TimestampLike;
 }
 
-export interface SetModelPoseActiveRequest {
+export interface SetModelActiveRequest {
   modelId: string;
-  poseId: string;
   active: boolean;
+}
+
+export interface SetModelActiveResponse extends SetModelActiveRequest {
+  success: boolean;
+}
+
+export interface SetModelPoseActiveRequest extends SetModelActiveRequest {
+  poseId: string;
 }
 
 export interface SetModelPoseActiveResponse extends SetModelPoseActiveRequest {
@@ -67,6 +74,7 @@ export interface Model {
   name: string;
   identityTraits?: ModelIdentityTraits | null;
   status?: CatalogEntityStatus;
+  active?: boolean;
   archivedAt?: TimestampLike | null;
   archivedByUid?: string | null;
   storageRootPath?: string;

@@ -3178,6 +3178,28 @@
           }
         ]
       },
+      "systemPromptMale": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string",
+            "maxLength": 30000
+          }
+        ]
+      },
+      "systemPromptFemale": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string",
+            "maxLength": 30000
+          }
+        ]
+      },
       "systemPromptIdentity": {
         "anyOf": [
           {
@@ -3706,6 +3728,14 @@
             }
           },
           "defaultModelId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "defaultMaleModelId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "defaultFemaleModelId": {
             "type": "string",
             "maxLength": 30000
           },

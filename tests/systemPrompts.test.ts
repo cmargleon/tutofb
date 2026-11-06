@@ -9,6 +9,15 @@ const { DEFAULT_TRY_ON_PROMPT, buildModelIdentityPromptBlock } = require('../sha
 const { createDefaultProductScenes } = require('../shared/src/productGeneration') as typeof import('../shared/src/productGeneration');
 const { sanitizeSystemConfig, assertValidAdditionalSystemPrompts } = require('../functions/lib/functions/src/admin/systemConfig.js') as typeof import('../functions/src/admin/systemConfig');
 
+test('el control de generación después de organizar conserva ambos estados al normalizar la configuración', () => {
+  assert.equal(sanitizeSystemConfig({}).organizerAutoGenerationEnabled, true);
+  for (const enabled of [false, true]) {
+    const config = sanitizeSystemConfig({ organizerAutoGenerationEnabled: enabled, jobMaxRetries: 7 });
+    assert.equal(sanitizeSystemConfig(config).organizerAutoGenerationEnabled, enabled);
+    assert.equal(config.jobMaxRetries, 7);
+  }
+});
+
 test('global prompt overrides survive backend normalization and populate the approved garment prompt', () => {
   const config = sanitizeSystemConfig({
     systemPromptIdentity: 'Keep the same model.', systemPromptInternalLabels: 'Remove inside labels.',
@@ -47,12 +56,43 @@ test('old config documents and cleared overrides retain internal prompt defaults
   assert.deepEqual(createDefaultProductScenes(sanitizeSystemConfig({ systemProductScenePrompts: { clean: ' ' } })), createDefaultProductScenes());
 });
 
+test('gender prompts start empty, persist independently and follow the selected model sex', () => {
+  const config = sanitizeSystemConfig({ systemPromptMale: '  Male instructions  ', systemPromptFemale: 'Female instructions' });
+  assert.equal(config.systemPromptMale, 'Male instructions');
+  assert.equal(sanitizeSystemConfig(config).systemPromptFemale, 'Female instructions');
+  for (const [sex, expected, other] of [
+    ['male', 'Male instructions', 'Female instructions'], ['hombre', 'Male instructions', 'Female instructions'],
+    ['female', 'Female instructions', 'Male instructions'], [' MUJER ', 'Female instructions', 'Male instructions'],
+    ['', '', 'Male instructions'], ['unknown', '', 'Female instructions'],
+  ]) {
+    const traits = { sex, age: null, skin: null, hairColor: null, hairLength: null, build: null };
+    const seeded = seedTryOnPrompt(DEFAULT_TRY_ON_PROMPT, traits, config);
+    assert.equal(seeded.blocks.gender, expected);
+    const prompt = composeApprovedTryOnPrompt(seeded.general, seeded.blocks, 'upper_body');
+    assert.ok(prompt.includes(expected));
+    assert.ok(!prompt.includes(other));
+    assert.equal(seedTryOnPrompt(DEFAULT_TRY_ON_PROMPT, traits, sanitizeSystemConfig({})).blocks.gender, '');
+    assert.equal(seedTryOnPrompt(DEFAULT_TRY_ON_PROMPT, traits, sanitizeSystemConfig({ systemPromptMale: '', systemPromptFemale: '' })).blocks.gender, '');
+  }
+  assert.deepEqual(createDefaultProductScenes(config), createDefaultProductScenes());
+});
+
+test('system configuration contract accepts gender prompts and clearing them without accepting invalid values', () => {
+  const { contractSchema, validateSchema } = require('../functions/lib/functions/src/manglar/schema.js') as typeof import('../functions/src/manglar/schema');
+  const schema = contractSchema('UpdateSystemConfigRequest');
+  assert.doesNotThrow(() => validateSchema({ systemPromptMale: 'Male instructions', systemPromptFemale: 'Female instructions' }, schema));
+  assert.doesNotThrow(() => validateSchema({ systemPromptMale: null, systemPromptFemale: '' }, schema));
+  assert.throws(() => validateSchema({ systemPromptMale: false }, schema));
+  assert.throws(() => validateSchema({ systemPromptFemale: 'x'.repeat(30001) }, schema));
+});
+
 test('configuration rejects unusable prompt types, control characters and scene or product limits before saving', () => {
   assert.doesNotThrow(() => assertValidAdditionalSystemPrompts({ systemProductScenePrompts: null, systemPromptIdentity: null }));
   assert.doesNotThrow(() => assertValidAdditionalSystemPrompts({ systemPromptProduct: 'p'.repeat(8000), systemProductScenePrompts: { clean: 's'.repeat(4000) } }));
   for (const patch of [
     { systemPromptProduct: 'x'.repeat(8001) }, { systemPromptIdentity: 'x'.repeat(30001) },
     { systemPromptAccessories: 1 }, { systemPromptInternalLabels: 'invalid\u0000text' },
+    { systemPromptMale: 'x'.repeat(30001) }, { systemPromptFemale: 'invalid\u0000text' }, { systemPromptMale: 1 },
     { systemProductScenePrompts: [] }, { systemProductScenePrompts: 'bad' },
     { systemProductScenePrompts: { clean: 'x'.repeat(4001) } }, { systemProductScenePrompts: { unknown: 'scene' } },
     { systemProductScenePrompts: { clean: false } },

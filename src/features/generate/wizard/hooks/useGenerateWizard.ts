@@ -211,11 +211,16 @@ export const useGenerateWizard = () => {
     const seeded = seedTryOnPrompt(resolvedPromptBase, selectedModel?.identityTraits, systemConfig);
     setState((current) => ({ ...current,
       prompt: isPromptDirty ? current.prompt : seeded.general,
-      tryOnPromptBlocks: arePromptBlocksDirty ? current.tryOnPromptBlocks : seeded.blocks,
+      tryOnPromptBlocks: arePromptBlocksDirty ? {
+        ...current.tryOnPromptBlocks,
+        ...(current.tryOnPromptBlocks.modelGender !== seeded.blocks.modelGender
+          ? { modelGender: seeded.blocks.modelGender, gender: seeded.blocks.gender } : {}),
+      } : seeded.blocks,
     }));
   }, [isPromptDirty, arePromptBlocksDirty, resolvedPromptBase, state.generationKind, selectedModel?.identityTraits,
     defaultProductPrompt, systemConfig.systemPromptIdentity, systemConfig.systemPromptInternalLabels,
     systemConfig.systemPromptAccessories, systemConfig.systemPromptCarryAccessory,
+    systemConfig.systemPromptMale, systemConfig.systemPromptFemale,
     systemConfig.systemPromptFullOutfit, systemConfig.systemPromptTopOnly, systemConfig.systemPromptBottomOnly]);
 
   useEffect(() => {
@@ -532,11 +537,15 @@ export const useGenerateWizard = () => {
     defaultPrompt: defaultProductPrompt, onScenesChange: () => setAreProductScenesDirty(true) });
 
   const handleModelSelect = (modelId: string | null) => {
+    const seeded = seedTryOnPrompt(resolvedPromptBase, models.find((model) => model.id === modelId)?.identityTraits, systemConfig);
     setState((current) => resetWizardGeneratedOutputs({
       ...current,
       selectedModelId: modelId,
       tryOnPromptBlocks: { ...current.tryOnPromptBlocks,
-        identity: seedTryOnPrompt(resolvedPromptBase, models.find((model) => model.id === modelId)?.identityTraits, systemConfig).blocks.identity,
+        identity: seeded.blocks.identity,
+        modelGender: seeded.blocks.modelGender,
+        gender: current.tryOnPromptBlocks.modelGender === seeded.blocks.modelGender
+          ? current.tryOnPromptBlocks.gender : seeded.blocks.gender,
       },
     }));
   };

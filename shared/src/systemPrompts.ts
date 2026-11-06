@@ -3,6 +3,8 @@ import { DEFAULT_PRODUCT_PROMPT, PRODUCT_SCENES } from './productGeneration';
 import type { SystemConfig } from './types';
 
 export const ADDITIONAL_SYSTEM_PROMPT_FIELDS = [
+  { key: 'systemPromptMale', label: 'Prendas · Prompt adicional para modelo hombre', defaultValue: '', maxLength: 30000 },
+  { key: 'systemPromptFemale', label: 'Prendas · Prompt adicional para modelo mujer', defaultValue: '', maxLength: 30000 },
   { key: 'systemPromptIdentity', label: 'Conservación de identidad de la modelo', defaultValue: buildModelIdentityPromptBlock(), maxLength: 30000 },
   { key: 'systemPromptInternalLabels', label: 'Tratamiento de etiquetas interiores', defaultValue: INTERNAL_GARMENT_DETAILS_PROMPT_BLOCK, maxLength: 30000 },
   { key: 'systemPromptCarryAccessory', label: 'Caso D: accesorio transportable', defaultValue: DEFAULT_TRY_ON_PROMPT_CASES.carry_accessory, maxLength: 30000 },

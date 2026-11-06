@@ -64,7 +64,7 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       const photoId = prompt.match(/Fotos recibidas: 1:([^:]+):/)?.[1] || 'shirt-0';
       if (photoId.startsWith('transport-error-')) return Response.json({ error: { message: 'Simulated classification failure' } }, { status: 503 });
       const uncertain = photoId.startsWith('uncertain-');
-      return Response.json({ usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 100, thoughtsTokenCount: 50 }, candidates: [{ content: { parts: [{ text: JSON.stringify({ itemKind: photoId.startsWith('wrong-kind-') ? 'product' : 'garment', itemKindConfidence: photoId.startsWith('uncertain-kind-') ? 0.2 : 0.99, itemKindReasoning: 'Original photo', itemLabel: 'Camiseta', bodyArea: 'upper_body', photos: [{ photoId, view: photoId.startsWith('incompatible-') ? 'back' : 'front', confidence: uncertain ? 0.2 : 0.99, reasoning: 'Original reference' }] }) }] } }] });
+      return Response.json({ usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 100, thoughtsTokenCount: 50 }, candidates: [{ content: { parts: [{ text: JSON.stringify({ itemKind: photoId.startsWith('wrong-kind-') ? 'product' : 'garment', itemKindConfidence: photoId.startsWith('uncertain-kind-') ? 0.2 : 0.99, itemKindReasoning: 'Original photo', itemLabel: 'Camiseta', garmentGender: photoId.startsWith('unknown-gender-') ? null : photoId.startsWith('female-') ? 'female' : photoId.startsWith('unisex-') ? 'unisex' : 'male', garmentGenderConfidence: photoId.startsWith('low-gender-') ? 0.4 : 0.99, garmentGenderReasoning: 'Corte y diseño de las referencias', bodyArea: 'upper_body', photos: [{ photoId, view: photoId.startsWith('incompatible-') ? 'back' : 'front', confidence: uncertain ? 0.2 : 0.99, reasoning: 'Original reference' }] }) }] } }] });
     }
     const reviewPrompt = body.contents[0].parts[0].text;
     reviewedPrompts.push(reviewPrompt);
@@ -86,6 +86,16 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       const config = require('../functions/lib/functions/src/automation/clientConfig.js');
       await config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, driveFolderIds: ['https://drive.google.com/drive/folders/folder-a'], defaultBudgetUsd: 5 } });
       assert.deepEqual((await db.collection('clients').doc(clientA).get()).data().automation.driveFolderIds, ['folder-a']);
+      await assert.rejects(() => config.saveClientAutomation({ clientId: clientB, automation: { enabled: true, driveFolderIds: ['folder-a'] } }), { code: 'already-exists' });
+      const organizer = db.collection('organizers').doc(clientA);
+      await organizer.set({ sourceIds: ['folder-a'] });
+      try {
+        await assert.rejects(() => config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, driveFolderIds: [] } }), { code: 'failed-precondition' });
+        const saved = await config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, defaultBudgetUsd: 5 } });
+        assert.deepEqual(saved.driveFolderIds, ['folder-a']);
+      } finally {
+        await organizer.delete();
+      }
       await assert.rejects(() => config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, defaultModelId: 'foreign-model' } }), { code: 'invalid-argument' });
       await assert.rejects(() => config.saveClientAutomation({ clientId: clientA, automation: { enabled: true, defaultBudgetUsd: 101 } }), { code: 'invalid-argument' });
     });
@@ -146,12 +156,12 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       const denied = await persistence.createAutomation({ ...garment, externalId: randomUUID() }, uid, 'operador');
       await worker.processAutomation(denied.jobId); assert.equal(classificationCalls, 0);
       assert.equal((await db.collection('automationJobs').doc(denied.jobId).get()).data().status, 'failed');
-      const core = require('../functions/lib/functions/src/callables/createGenerationBatch.js'); const original = core.createGenerationBatchCore;
+      const core = require('../functions/lib/functions/src/callables/createGenerationBatch.js'); const original = core.createGenerationBatchesCore;
       const created = await persistence.createAutomation({ ...garment, authorizeClassification: true, externalId: randomUUID() }, uid, 'operador');
       try {
-        core.createGenerationBatchCore = async () => { throw new Error('Simulated interruption after paid analysis'); };
+        core.createGenerationBatchesCore = async () => { throw new Error('Simulated interruption after paid analysis'); };
         await worker.processAutomation(created.jobId);
-      } finally { core.createGenerationBatchCore = original; }
+      } finally { core.createGenerationBatchesCore = original; }
       const partial = (await db.collection('automationJobs').doc(created.jobId).get()).data();
       assert.equal(partial.status, 'failed'); assert.equal(classificationCalls, 1); assert.equal(Object.keys(partial.analysisCache).length, 1);
       assert.equal(partial.budget.spentUsd, 0.05); assert.ok(partial.budget.recordedUsd > 0);
@@ -215,6 +225,88 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       job = await worker.refreshAutomation(job.id);
       assert.equal(job.status, 'processing'); assert.equal(job.items.length, 2); assert.equal(job.generationJobIds.length, 1);
       assert.equal(classificationCalls - before, 2);
+    });
+    await t.test('gender defaults persist, split mixed articles atomically, and reuse paid analysis on retry', async () => {
+      const config = require('../functions/lib/functions/src/automation/clientConfig.js');
+      const core = require('../functions/lib/functions/src/callables/createGenerationBatch.js');
+      const models = [
+        { id: 'gender-man', sex: 'male', poses: ['front-one', 'front-two'] },
+        { id: 'gender-woman', sex: 'female', poses: ['front'] },
+      ];
+      for (const model of models) await db.collection('models').doc(model.id).set({
+        clientId: clientA, name: model.id, status: 'active', active: true, poseCount: model.poses.length,
+        identityTraits: { sex: model.sex, age: null, skin: null, hairColor: null, hairLength: null, build: null },
+        poses: model.poses.map(id => ({ id, storagePath: inputPath, fileName: `${id}.jpg`, aiClassification: {
+          usableForGarmentViews: ['front'], orientationGroup: 'front', orientationDetail: 'front', framing: 'full_body', bodyFocus: 'full_body',
+        } })),
+      });
+      const previous = (await db.collection('clients').doc(clientA).get()).data().automation;
+      const saved = await config.saveClientAutomation({ clientId: clientA, automation: { ...previous } });
+      assert.equal(saved.defaultMaleModelId, 'gender-man'); assert.equal(saved.defaultFemaleModelId, 'gender-woman');
+      await assert.rejects(() => config.saveClientAutomation({ clientId: clientA, automation: { ...saved, defaultFemaleModelId: 'gender-man' } }), { code: 'invalid-argument' });
+      await assert.rejects(() => config.saveClientAutomation({ clientId: clientB, automation: { enabled: true, defaultMaleModelId: 'gender-man' } }), { code: 'invalid-argument' });
+      const itemIds = ['male-shirt', 'female-shirt', 'unisex-shirt', 'unknown-gender-shirt', 'low-gender-shirt'];
+      const plan = await plans.prepareAutomationPlan({ ...base, jobType: 'garment', authorizeClassification: true, budgetUsd: 10,
+        externalId: randomUUID(), inputImages: itemIds.map(itemId => ({ itemId, fileName: `${itemId}.jpg`, storagePath: inputPath })),
+      }, uid, 'operador');
+      assert.equal(plan.modelOptions.length, 2); assert.equal(plan.modelId, null);
+      assert.equal(plans.publicAutomationPlan(plan).imageCount, 10, 'Estimates use the model with more poses');
+      const before = classificationCalls;
+      const created = await plans.executeAutomationPlan(plan.id, uid, 'operador');
+      const original = core.createGenerationBatchesCore;
+      try {
+        core.createGenerationBatchesCore = async () => { throw new Error('Simulated interruption before committing groups'); };
+        await worker.processAutomation(created.jobId);
+      } finally { core.createGenerationBatchesCore = original; }
+      let job = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      assert.equal(job.status, 'failed'); assert.equal(classificationCalls - before, itemIds.length);
+      assert.equal((await db.collection('batches').where('automationJobId', '==', job.id).get()).size, 0);
+      const assignments = job.items.filter((item: any) => item.modelId).map((item: any) => [item.itemId, item.modelId]);
+      await persistence.retryAutomation({ jobId: job.id }, uid, 'operador');
+      const batchCount = (await db.collection('clients').doc(clientA).get()).data().batchCount;
+      await Promise.all([worker.processAutomation(job.id), worker.processAutomation(job.id)]);
+      job = await worker.refreshAutomation(job.id);
+      assert.equal(job.status, 'processing'); assert.equal(job.batchIds.length, 2);
+      assert.equal(classificationCalls - before, itemIds.length, 'Retry reuses the same classification');
+      assert.equal((await db.collection('clients').doc(clientA).get()).data().batchCount, batchCount + 2);
+      assert.deepEqual(job.items.filter((item: any) => item.modelId).map((item: any) => [item.itemId, item.modelId]), assignments);
+      assert.equal(job.items.find((item: any) => item.itemId === 'male-shirt').modelId, 'gender-man');
+      assert.equal(job.items.find((item: any) => item.itemId === 'female-shirt').modelId, 'gender-woman');
+      for (const itemId of ['unknown-gender-shirt', 'low-gender-shirt']) assert.equal(job.items.find((item: any) => item.itemId === itemId).issue.code, 'garment-gender-required');
+      const batches = await db.getAll(...job.batchIds.map((id: string) => db.collection('batches').doc(id)));
+      assert.deepEqual(new Set(batches.map((batch: any) => batch.data().modelId)), new Set(['gender-man', 'gender-woman']));
+      const scenes = await db.getAll(...job.generationJobIds.map((id: string) => db.collection('jobs').doc(id)));
+      for (const scene of scenes) {
+        assert.ok(job.batchIds.includes(scene.data().batchId));
+        assert.equal(scene.data().modelId, job.items.find((item: any) => item.itemId === scene.data().garmentId).modelId);
+        await generation.processJob(scene.id, 'create', { skipBacklogSweep: true });
+      }
+      job = await worker.refreshAutomation(job.id);
+      assert.equal(job.status, 'needs_attention'); assert.equal(job.outputImages.length, scenes.length);
+      assert.equal(job.progress.failed, 0); assert.equal(results.automationReport(job).catalogUrls.length, 2);
+      const JSZip = require('../functions/node_modules/jszip');
+      const zip = await JSZip.loadAsync(await results.automationResultsZip(job));
+      const manifest = JSON.parse(await zip.file('manifest.json').async('string'));
+      assert.equal(manifest.images.length, scenes.length); assert.deepEqual(new Set(manifest.images.map((image: any) => image.batchId)), new Set(job.batchIds));
+      await worker.processAutomation(job.id);
+      assert.equal((await db.collection('batches').where('automationJobId', '==', job.id).get()).size, 2);
+    });
+    await t.test('a single available gender model handles male, female, unisex and unknown garments', async () => {
+      const config = require('../functions/lib/functions/src/automation/clientConfig.js');
+      for (const sex of ['female', 'male']) {
+        await db.collection('models').doc('gender-man').update({ active: sex === 'male' });
+        await db.collection('models').doc('gender-woman').update({ active: sex === 'female' });
+        const saved = await config.saveClientAutomation({ clientId: clientA, automation: { enabled: true } });
+        assert.equal(saved[sex === 'male' ? 'defaultMaleModelId' : 'defaultFemaleModelId'], `gender-${sex === 'male' ? 'man' : 'woman'}`);
+        const itemIds = ['male-only', 'female-only', 'unisex-only', 'unknown-gender-only'];
+        const created = await persistence.createAutomation({ ...base, jobType: 'garment', authorizeClassification: true, budgetUsd: 10,
+          externalId: randomUUID(), inputImages: itemIds.map(itemId => ({ itemId, fileName: `${itemId}.jpg`, storagePath: inputPath })),
+        }, uid, 'operador');
+        await worker.processAutomation(created.jobId);
+        const job = await worker.refreshAutomation(created.jobId);
+        assert.equal(job.status, 'processing'); assert.equal(job.batchIds.length, 1);
+        assert.equal(job.items.length, 4); assert.ok(job.items.every((item: any) => item.modelId === `gender-${sex === 'male' ? 'man' : 'woman'}` && !item.issue));
+      }
     });
     let productionJob: any;
     await t.test('all six scenes per article start independently; a rejected scene cannot block siblings or other articles', async () => {

@@ -13,13 +13,32 @@ export const ClientAutomationSection = ({ client }: { client: Client }) => {
   const { value, setValue, preset, updatePreset } = state;
   const selectedModel = state.models.find((m) => m.id === (preset.modelId || value.defaultModelId));
   return <details className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <summary className="cursor-pointer text-sm font-semibold text-slate-800">Automatización · {value.enabled ? 'Activada' : 'Desactivada'}</summary>
+    <summary className="cursor-pointer text-sm font-semibold text-slate-800">Google Drive y automatización · {client.automation?.driveFolderIds?.length ?? 0} carpetas</summary>
     <div className="mt-5 space-y-4">
       <fieldset disabled={state.saving} className="space-y-4">
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={value.enabled === true} onChange={(e) => setValue({ ...value, enabled: e.target.checked })} />Permitir pedidos automáticos para este cliente</label>
-        <label className="block space-y-2 text-sm">Carpetas autorizadas de Google Drive (enlace o ID, una por línea)<textarea rows={3} className={inputClass} value={state.folders} onChange={(e) => state.setFolders(e.target.value)} /><span className="block text-xs text-slate-500">Al guardar se verifica el acceso de la identidad de integración. Cada foto del pedido debe indicar su artículo.</span></label>
+        <label className="block space-y-2 text-sm">Carpetas autorizadas de Google Drive<textarea rows={3} className={inputClass} value={state.folders} onChange={(e) => state.setFolders(e.target.value)} /><span className="block text-xs text-slate-500">Pega hasta 20 enlaces o IDs, uno por línea. La automatización usa esta lista y el Organizador inteligente permite elegir de ella sus carpetas de origen. Tuto verifica el acceso de la cuenta de integración al guardar.</span></label>
+        <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <legend className="px-1 text-sm font-semibold">Modelos predeterminados por género</legend>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {([
+              ['defaultMaleModelId', 'Modelo masculino predeterminado', state.maleModels],
+              ['defaultFemaleModelId', 'Modelo femenino predeterminado', state.femaleModels],
+            ] as const).map(([key, label, models]) => <label key={key} className="space-y-2 text-sm">{label}
+              <select className={inputClass} value={state.genderDefaults[key] || ''} onChange={(event) => {
+                const next = { ...value }; if (event.target.value) next[key] = event.target.value; else delete next[key]; setValue(next);
+              }}>
+                <option value="">Automático si hay un único modelo de este género</option>
+                {value[key] && !models.some(model => model.id === value[key]) && <option value={value[key]}>Modelo no disponible · elige otro</option>}
+                {models.map(model => <option key={model.id} value={model.id}>{model.name}{!model.identityTraits?.sex ? ' · género sin registrar' : ''}</option>)}
+              </select>
+            </label>)}
+          </div>
+          <p className="text-xs text-slate-500">Gemini analiza cada prenda antes de elegir el modelo. Si solo hay un predeterminado disponible, se usa para todas las prendas. Para unisex se elige cualquiera de los dos y se conserva en los reintentos.</p>
+          <p className="text-xs text-slate-500">Un único modelo activo de cada género se selecciona automáticamente. Una selección explícita de modelo en el pedido o preset tiene prioridad.</p>
+        </fieldset>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2 text-sm">Modelo humano predeterminado<select className={inputClass} value={value.defaultModelId || ''} onChange={(e) => { const next = { ...value }; if (e.target.value) next.defaultModelId = e.target.value; else delete next.defaultModelId; setValue(next); }}><option value="">Seleccionar cuando se solicite</option>{state.models.map((model) => <option value={model.id} key={model.id}>{model.name}</option>)}</select></label>
+          <label className="space-y-2 text-sm">Modelo general de respaldo<select className={inputClass} value={value.defaultModelId || ''} onChange={(e) => { const next = { ...value }; if (e.target.value) next.defaultModelId = e.target.value; else delete next.defaultModelId; setValue(next); }}><option value="">Sin respaldo</option>{state.models.map((model) => <option value={model.id} key={model.id}>{model.name}</option>)}</select><span className="block text-xs text-slate-500">Se usa si no hay modelos predeterminados por género.</span></label>
           <label className="space-y-2 text-sm">Presupuesto por pedido (USD)<input className={inputClass} type="number" min="0.01" step="0.01" placeholder="Heredar Sistema" value={value.defaultBudgetUsd ?? ''} onChange={(e) => { const next = { ...value }; if (e.target.value) next.defaultBudgetUsd = Number(e.target.value); else delete next.defaultBudgetUsd; setValue(next); }} /></label>
           <label className="space-y-2 text-sm">Máximo de intentos de calidad<input className={inputClass} type="number" min="1" max="10" placeholder="Heredar Sistema" value={value.maxReviewAttempts ?? ''} onChange={(e) => { const next = { ...value }; if (e.target.value) next.maxReviewAttempts = Number(e.target.value); else delete next.maxReviewAttempts; setValue(next); }} /></label>
         </div>
@@ -39,7 +58,7 @@ export const ClientAutomationSection = ({ client }: { client: Client }) => {
         </details>
       </fieldset>
       <p className="text-xs text-slate-500">Los límites de Sistema prevalecen. Cada escena se genera y revisa de forma independiente.</p>
-      <Button loading={state.saving} type="button" onClick={() => void state.save()}>Guardar automatización del cliente</Button>
+      <Button loading={state.saving} type="button" onClick={() => void state.save()}>Guardar Drive y automatización</Button>
     </div>
   </details>;
 };

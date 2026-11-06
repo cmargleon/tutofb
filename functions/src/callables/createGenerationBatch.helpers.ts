@@ -377,6 +377,10 @@ export const assertModelOwnershipAndPoses = (
     throw new HttpsError('failed-precondition', 'El cliente seleccionado está archivado y ya no admite nuevos lotes.');
   }
 
+  if (model.active === false) {
+    throw new HttpsError('failed-precondition', 'El modelo seleccionado está desactivado.');
+  }
+
   if (isArchivedCatalogEntity(model)) {
     throw new HttpsError('failed-precondition', 'El modelo seleccionado está archivado y ya no admite nuevos lotes.');
   }

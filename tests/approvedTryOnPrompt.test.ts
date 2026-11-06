@@ -64,6 +64,25 @@ test('seeding separates exact default blocks without duplicate rules or loss of 
   assert.match(composeApprovedTryOnPrompt(seeded.general, seeded.blocks, 'upper_body', 'multi_angle_composite'), /multiples angulos/);
 });
 
+test('wizard exposes only the selected model gender block and preserves local edits and deletion in the submitted prompt', () => {
+  const { state, request } = makeRequest();
+  const config = { systemPromptMale: 'Male global instructions', systemPromptFemale: 'Female global instructions' };
+  for (const sex of ['male', 'female'] as const) {
+    state.tryOnPromptBlocks = seedTryOnPrompt(state.prompt, { ...traits('black'), sex }, config).blocks;
+    const name = sex === 'male' ? 'hombre' : 'mujer';
+    const html = renderToStaticMarkup(React.createElement(TryOnPromptFields, { state, sourceLabel: 'Configuración', onPromptChange() {}, onBlocksChange() {} }));
+    assert.ok(html.includes(`Prendas · Prompt adicional para modelo ${name}`));
+    assert.ok(!html.includes(`Prendas · Prompt adicional para modelo ${sex === 'male' ? 'mujer' : 'hombre'}`));
+    state.tryOnPromptBlocks.gender = 'Local gender instructions';
+    for (const entry of buildCreateGenerationBatchRequest(state, request.garments).approvedPrompts!) {
+      assert.equal(entry.text.split('Local gender instructions').length - 1, 1);
+      assert.doesNotMatch(entry.text, /Male global instructions|Female global instructions/);
+    }
+    state.tryOnPromptBlocks.gender = '';
+    assert.doesNotMatch(buildCreateGenerationBatchRequest(state, request.garments).approvedPrompts![0].text, /Local gender instructions|Male global instructions|Female global instructions/);
+  }
+});
+
 test('deleted blocks stay deleted through frontend preview, validation, persistence and regeneration', () => {
   const { state, request } = makeRequest();
   state.prompt = '  Only the instructions I approved.\n';
@@ -212,7 +231,11 @@ test('batch callable stores each approved prompt verbatim and rejects old client
     get: async () => ({ id, exists: stored.has(`${path}/${id}`), data: () => stored.get(`${path}/${id}`) }),
     collection: (child: string) => collection(`${path}/${id}/${child}`),
   }) });
-  const transaction = { set: (ref: any, data: any) => { stored.set(ref.path, data); } };
+  const transaction = {
+    get: (ref: any) => ref.get(),
+    getAll: (...refs: any[]) => Promise.all(refs.map(ref => ref.get())),
+    set: (ref: any, data: any) => { stored.set(ref.path, data); },
+  };
   t.mock.method(firestoreModule, 'getAppFirestore', () => ({ collection, runTransaction: async (callback: any) => callback(transaction) }));
   t.mock.method(configModule, 'getSystemConfigCached', async () => ({ ...configModule.DEFAULT_SYSTEM_CONFIG, batchMaxJobs: 100, jobMaxRetries: 3, systemPromptTopOnly: 'HIDDEN CONFIGURATION TEXT' }));
   const { request } = makeRequest();

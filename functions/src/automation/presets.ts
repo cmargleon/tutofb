@@ -33,6 +33,5 @@ export const resolveAutomationPreset = (data: CreateAutomationJobRequest, client
   if (data.jobType === 'garment' && name !== 'standard' && !configured) throw new AutomationAttentionError('Preset del cliente no configurado.');
   const config = { ...configured, provider: data.provider || configured?.provider || DEFAULT_AUTOMATION_PROVIDER };
   const modelId = data.modelId || config.modelId || client.automation?.defaultModelId || null;
-  if (data.jobType === 'garment' && !modelId) throw new AutomationAttentionError('Selecciona modelId o configura un modelo default/preset del cliente.');
   return { name, config, modelId };
 };

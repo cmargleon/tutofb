@@ -5,6 +5,7 @@ import { resolveAutomationPolicy, DEFAULT_AUTOMATION_BUDGET } from '../../../sha
 import { isProvider } from '../../../shared/src/domain';
 import { isProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
+import { getClientGenderModelDefaults, getModelGender } from '../../../shared/src/automationModels';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { parseDriveFolderId, validateDriveFolder } from './drive';
@@ -17,10 +18,22 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
   const raw = input.automation;
   if (typeof raw.enabled !== 'boolean') throw new HttpsError('invalid-argument', 'Activación inválida.');
   if (raw.driveFolderIds !== undefined && (!Array.isArray(raw.driveFolderIds) || raw.driveFolderIds.length > 20 || raw.driveFolderIds.some((id) => typeof id !== 'string'))) throw new HttpsError('invalid-argument', 'Máximo 20 carpetas de Drive.');
-  const config: ClientAutomationConfig = { enabled: raw.enabled, driveFolderIds: [...new Set((raw.driveFolderIds || []).map(parseDriveFolderId))] };
-  for (const key of ['defaultModelId', 'defaultPreset'] as const) {
-    if (raw[key]) { if (typeof raw[key] !== 'string' || !/^[\w-]{1,200}$/.test(raw[key])) throw new HttpsError('invalid-argument', `${key} inválido.`); config[key] = raw[key]; }
+  const config: ClientAutomationConfig = { enabled: raw.enabled };
+  const requestedFolders = raw.driveFolderIds && [...new Set(raw.driveFolderIds.map(parseDriveFolderId))];
+  for (const key of ['defaultModelId', 'defaultMaleModelId', 'defaultFemaleModelId', 'defaultPreset'] as const) {
+    if (raw[key] !== undefined && raw[key] !== '') { if (typeof raw[key] !== 'string' || !/^[\w-]{1,200}$/.test(raw[key])) throw new HttpsError('invalid-argument', `${key} inválido.`); config[key] = raw[key]; }
   }
+  const models = (await db.collection('models').where('clientId', '==', input.clientId).get()).docs
+    .map(doc => ({ ...doc.data(), id: doc.id } as Model));
+  Object.assign(config, getClientGenderModelDefaults(input.clientId, config, models));
+  for (const [gender, key] of [['male', 'defaultMaleModelId'], ['female', 'defaultFemaleModelId']] as const) {
+    if (!config[key]) continue;
+    const model = models.find(model => model.id === config[key]);
+    if (!model || model.status === 'archived' || model.active === false || (getModelGender(model) && getModelGender(model) !== gender)) {
+      throw new HttpsError('invalid-argument', `El modelo predeterminado ${gender === 'male' ? 'masculino' : 'femenino'} debe estar activo, pertenecer al cliente y corresponder al género elegido.`);
+    }
+  }
+  if (config.defaultMaleModelId && config.defaultMaleModelId === config.defaultFemaleModelId) throw new HttpsError('invalid-argument', 'Selecciona modelos distintos para masculino y femenino.');
   for (const key of ['defaultBudgetUsd', 'maxReviewAttempts', 'maxOperationalRetries'] as const) if (raw[key] !== undefined) config[key] = raw[key];
   config.presets = raw.presets || {};
   if (Array.isArray(config.presets) || Object.keys(config.presets).length > 20 || JSON.stringify(config.presets).length > 100000) throw new HttpsError('invalid-argument', 'Presets inválidos.');
@@ -35,20 +48,42 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
     const modelId = preset.modelId || config.defaultModelId;
     if (modelId) {
       const model = (await db.collection('models').doc(modelId).get()).data() as Model | undefined;
-      if (!model || model.clientId !== input.clientId || model.status === 'archived' || preset.poseIds?.some((id) => !model.poses.some((p) => p.id === id))) throw new HttpsError('invalid-argument', 'Modelo o poses ajenos al cliente.');
+      if (!model || model.clientId !== input.clientId || model.status === 'archived' || model.active === false || preset.poseIds?.some((id) => !model.poses.some((p) => p.id === id))) throw new HttpsError('invalid-argument', 'Modelo o poses ajenos al cliente.');
     } else if (preset.poseIds) throw new HttpsError('invalid-argument', 'Las poses requieren un modelo del cliente.');
   }
   if (config.defaultModelId) {
-    const model = (await db.collection('models').doc(config.defaultModelId).get()).data();
-    if (!model || model.clientId !== input.clientId || model.status === 'archived') throw new HttpsError('invalid-argument', 'Modelo predeterminado ajeno al cliente.');
+    const model = (await db.collection('models').doc(config.defaultModelId).get()).data() as Model | undefined;
+    if (!model || model.clientId !== input.clientId || model.status === 'archived' || model.active === false) throw new HttpsError('invalid-argument', 'Modelo predeterminado ajeno al cliente.');
   }
-  for (const id of config.driveFolderIds!) await validateDriveFolder(id);
+  if (requestedFolders) {
+    for (const id of requestedFolders) await validateDriveFolder(id);
+  }
   // Re-read global limits in the transaction; concurrent System edits cannot be bypassed.
   await db.runTransaction(async (tx) => {
-    const system = await tx.get(db.collection('system_config').doc('main'));
+    const [system, current, organizer] = await tx.getAll(
+      db.collection('system_config').doc('main'), ref, db.collection('organizers').doc(input.clientId),
+    );
+    if (!current.exists || current.data()?.status === 'archived') throw new HttpsError('not-found', 'Cliente no disponible.');
+    const previousFolders: string[] = current.data()?.automation?.driveFolderIds ?? [];
+    const nextFolders = requestedFolders ?? previousFolders;
+    const organizerSources: string[] = organizer.data()?.sourceIds ?? [];
+    if (previousFolders.some(id => !nextFolders.includes(id) && organizerSources.includes(id))) {
+      throw new HttpsError('failed-precondition', 'Quita primero la carpeta de los orígenes del Organizador inteligente.');
+    }
+    const added = nextFolders.filter(id => !previousFolders.includes(id));
+    if (added.length) {
+      const [clients, organizers] = await Promise.all([
+        tx.get(db.collection('clients').where('automation.driveFolderIds', 'array-contains-any', added)),
+        tx.get(db.collection('organizers').where('sourceIds', 'array-contains-any', added)),
+      ]);
+      if ([...clients.docs, ...organizers.docs].some(doc => doc.id !== input.clientId)) {
+        throw new HttpsError('already-exists', 'Una de las carpetas ya está asignada a otro cliente.');
+      }
+    }
     const global = system.data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET;
     try { resolveAutomationPolicy(global, { ...config, enabled: true }); }
     catch (error) { throw new HttpsError('invalid-argument', (error as Error).message); }
+    config.driveFolderIds = nextFolders;
     tx.update(ref, { automation: config, updatedAt: FieldValue.serverTimestamp() });
   });
   return config;

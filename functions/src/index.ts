@@ -35,6 +35,7 @@ export * from './callables/permanentlyDeleteAppUser';
 export * from './callables/permanentlyDeleteClient';
 export * from './callables/permanentlyDeleteModel';
 export * from './callables/setModelPoseActive';
+export * from './callables/setModelActive';
 export * from './callables/generateModelPose';
 export * from './admin/rebuildAnalytics';
 export * from './admin/getSystemHealth';
@@ -77,3 +78,8 @@ export { manglarMcp } from './automation/mcp';
 export { getManglarConnectionRequest, decideManglarConnection, listManglarConnections, revokeManglarConnection } from './automation/mcpOAuth';
 
 export { saveClient, saveModel, setClientArchived, setModelArchived, replaceModelPose, setJobManualFlag } from './manglar/catalogService';
+
+export { organizerAction } from './organizer/api';
+export { organizerScheduler } from './organizer/worker';
+
+export { manageDriveBackup, scheduledDriveBackup, driveBackupWorker, agentDriveWorkspace } from "./backups/functions";

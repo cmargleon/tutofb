@@ -51,7 +51,7 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     const job: AutomationJob = {
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
       ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy, budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, providerConfirmedUsd: null },
-      ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || '', createdByUid: uid, status: 'pending',
+      ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd, ...(plan.modelOptions ? { modelOptions: plan.modelOptions } : {}) } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || '', createdByUid: uid, status: 'pending',
       inputImages: data.inputImages || [], sourceImages: data.inputImages || [], outputImages: [], generationJobIds: [], batchId: null,
       createdAt: now, updatedAt: now, startedAt: null, completedAt: null, failedAt: null,
       error: null, retryCount: 0, leaseToken: null, leaseExpiresAt: null,
@@ -87,7 +87,7 @@ export const retryAutomation = async (input: RetryAutomationJobRequest, uid: str
     uploadBindings.forEach((binding) => tx.create(binding, { inputClientId: data.clientId }));
     tx.update(ref, {
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
-      ...((input.preset || input.provider || input.modelId) ? { resolvedPreset: FieldValue.delete() } : {}),
+      ...((input.preset || input.provider || input.modelId) ? { resolvedPreset: FieldValue.delete(), modelOptions: FieldValue.delete() } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       modelId: data.modelId || null, requestedPreset: data.preset || '', preset: data.preset || null,
       inputImages: data.inputImages || [], ...(input.inputImages ? { sourceImages: input.inputImages } : {}), status: 'pending', error: null,

@@ -34,6 +34,7 @@ export const TryOnPromptFields: React.FC<{
   return <div className="space-y-5">
     <p className="text-sm text-slate-600">Estos campos componen todas las instrucciones de generación. Puedes borrar cualquier bloque; los reintentos conservarán el mismo texto aprobado. Solo se incluye el caso de cada prenda según su clasificación.</p>
     <PromptBaseField value={state.prompt} onChange={onPromptChange} sourceLabel={sourceLabel} />
+    {blocks.modelGender && field(`Prendas · Prompt adicional para modelo ${blocks.modelGender === 'male' ? 'hombre' : 'mujer'}`, blocks.gender ?? '', (gender) => onBlocksChange({ ...blocks, gender }))}
     {field('Conservación de identidad y rasgos de la modelo', blocks.identity, (identity) => onBlocksChange({ ...blocks, identity }))}
     {field('Tratamiento de etiquetas interiores', blocks.internalLabels, (internalLabels) => onBlocksChange({ ...blocks, internalLabels }))}
     {caseKeys.map((key) => field(CASE_LABELS[key], blocks.cases[key], (text) => onBlocksChange({ ...blocks, cases: { ...blocks.cases, [key]: text } })))}

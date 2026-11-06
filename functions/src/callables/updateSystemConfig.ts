@@ -10,6 +10,9 @@ import { assertValidAdditionalSystemPrompts, getSystemConfigDocRef, invalidateSy
 export const updateSystemConfig = onCall<UpdateSystemConfigRequest, Promise<UpdateSystemConfigResponse>>(
   async (request) => {
     await assertCallableRoles(request, ['admin']);
+    if (request.data.organizerAutoGenerationEnabled !== undefined && typeof request.data.organizerAutoGenerationEnabled !== 'boolean') {
+      throw new HttpsError('invalid-argument', 'El control de generación después de organizar debe ser activado o desactivado.');
+    }
     assertValidAdditionalSystemPrompts(request.data);
     if (request.data.automationBudget) {
       try { validateAutomationBudget(request.data.automationBudget); }

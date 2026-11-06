@@ -31,9 +31,9 @@ export const ModelPosesEditGrid: React.FC<ModelPosesEditGridProps> = ({ model, l
             }`}
             >
               <div className={`h-full ${active ? '' : 'opacity-50 grayscale'}`}>
-                <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} />
+                <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} previewOnClick />
               </div>
-            <div className="absolute inset-0 rounded-md bg-black/0 transition-colors group-hover:bg-black/10" />
+            <div className="pointer-events-none absolute inset-0 rounded-md bg-black/0 transition-colors group-hover:bg-black/10" />
             <div className="absolute right-1 top-1 z-10 flex items-center gap-1 opacity-100 transition-opacity duration-150 sm:right-2 sm:top-2 sm:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
               <button
                 type="button"

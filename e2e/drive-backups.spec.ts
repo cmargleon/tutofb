@@ -1,0 +1,34 @@
+import { test, expect } from '@playwright/test';
+test('administrative backup panel shows failures, sync and additive restore with isolated fixtures', async ({ page }) => {
+  await page.route('https://**/*', route => route.abort());
+  const hook = await (await page.request.get('/src/features/backups/useDriveBackups.ts')).text();
+  const feedback = hook.match(/from ["']([^"']*FeedbackProvider\.tsx[^"']*)["']/)?.[1];
+  if (!feedback) throw Error('Vite feedback module missing');
+  await page.route('**/src/features/auth/AuthProvider.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: 'export const useRole = () => ({ isAdmin: true, isActive: true });' }));
+  await page.route('**/src/features/backups/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
+    const item = { clientId: 'fixture', sourceFolderId: 'source', backupFolderId: 'backup', workspaceFolderId: 'work', sourceReader: 'reader@test.iam.gserviceaccount.com', backupWriter: 'backup@test.iam.gserviceaccount.com', workspaceWriter: 'work@test.iam.gserviceaccount.com', operatorUids: [], enabled: true, status: 'error', lastError: 'Permiso perdido; respaldo conservado', lastSuccessAt: 1793952000000, counts: { created: 3, updated: 1, failed: 1, retained: 2 } };
+    export const subscribeBackups = cb => { cb([item]); return () => {}; };
+    export const subscribeBackupAudit = (_id, cb) => { cb([{ id: 'event', at: 1793952000000, action: 'error', message: 'Permiso perdido' }]); return () => {}; };
+    export const subscribeBackupFiles = (_id, cb) => { cb([{ sourceId: 'photo', name: 'foto.jpg', mimeType: 'image/jpeg', missing: true }]); return () => {}; };
+    export const subscribeBackupVersions = (_id, cb) => { cb([{ id: 'version', sourceId: 'photo', name: 'foto.jpg', at: 1793952000000 }]); return () => {}; };
+    export const subscribeBackupRestores = (_id, cb) => { cb([]); return () => {}; };
+    export const manageBackup = async request => { (window.backupCalls ||= []).push(request); return { accepted: true, message: 'Solicitud en cola' }; };` }));
+  await page.route('**/backups-preview', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="es" class="theme-dark"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="padding:24px"></div><script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script><script type="module">import React from '/node_modules/.vite/deps/react.js'; import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js'; import {FeedbackProvider} from '${feedback}'; import {SeguridadRespaldos} from '/src/pages/SeguridadRespaldos.tsx'; import '/src/index.css'; ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(FeedbackProvider, null, React.createElement(SeguridadRespaldos)));</script></body></html>` }));
+  await page.goto('/backups-preview');
+  await expect(page.getByRole('heading', { name: 'Seguridad y respaldos' })).toBeVisible();
+  await expect(page.getByText('Requiere atención', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Sincronizar', exact: true }).click();
+  await page.getByRole('button', { name: 'Ver / configurar' }).click();
+  await page.getByLabel('Seleccionar archivo respaldado').selectOption('photo');
+  await page.getByLabel('Seleccionar versión respaldada').selectOption('version');
+  await page.getByRole('button', { name: 'Restaurar copias' }).click();
+  await expect(page.getByRole('dialog')).toContainText('conserva los archivos de trabajo existentes');
+  await page.getByRole('button', { name: 'Restaurar', exact: true }).click();
+  const calls = await page.evaluate(() => (window as unknown as { backupCalls: unknown[] }).backupCalls);
+  expect(calls[0]).toMatchObject({ action: 'sync', clientId: 'fixture' });
+  expect(calls[1]).toMatchObject({ action: 'restore', clientId: 'fixture', sourceFileId: 'photo', versionKey: 'version' });
+  await page.screenshot({ path: '/tmp/tuto-drive-backups-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('heading', { name: 'Seguridad y respaldos' })).toBeVisible();
+  await page.screenshot({ path: '/tmp/tuto-drive-backups-mobile.png', fullPage: true });
+});

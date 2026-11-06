@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, AlertTriangle, Clock, MinusCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Clock, MinusCircle, Loader2, X } from 'lucide-react';
 import { useStorageAssetUrl } from '../features/storage/useStorageAssetUrl';
 
 // ─── Button ─────────────────────────────────────────────────────────────────
@@ -151,6 +151,7 @@ interface ImageThumbProps {
   alt?: string;
   fit?: 'cover' | 'contain';
   imgClassName?: string;
+  previewOnClick?: boolean;
 }
 
 export const ImageThumb: React.FC<ImageThumbProps> = ({
@@ -158,8 +159,10 @@ export const ImageThumb: React.FC<ImageThumbProps> = ({
   alt = 'Thumbnail',
   fit = 'cover',
   imgClassName = '',
+  previewOnClick = false,
 }) => {
   const { url, loading } = useStorageAssetUrl(storagePath);
+  const [isPreviewOpen, setIsPreviewOpen] = React.useState(false);
 
   if (loading) {
     return <div className="app-skeleton h-full w-full rounded-md" />;
@@ -173,12 +176,85 @@ export const ImageThumb: React.FC<ImageThumbProps> = ({
     );
   }
 
-  return (
+  const image = (
     <img
       src={url}
       alt={alt}
       className={`h-full w-full rounded-md border border-gray-200 bg-white ${fit === 'contain' ? 'object-contain' : 'object-cover'} ${imgClassName}`.trim()}
       referrerPolicy="no-referrer"
     />
+  );
+
+  if (!previewOnClick) return image;
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`Ampliar foto: ${alt}`}
+        aria-haspopup="dialog"
+        className="block h-full w-full cursor-zoom-in focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-500"
+        onClick={() => setIsPreviewOpen(true)}
+      >
+        {image}
+      </button>
+      {isPreviewOpen && <ImagePreview url={url} alt={alt} onClose={() => setIsPreviewOpen(false)} />}
+    </>
+  );
+};
+
+const ImagePreview: React.FC<{ url: string; alt: string; onClose: () => void }> = ({ url, alt, onClose }) => {
+  const dialogRef = React.useRef<HTMLDialogElement>(null);
+
+  React.useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-label={`Foto ampliada: ${alt}`}
+      className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none overflow-hidden bg-black/95 p-0 text-white backdrop:bg-black"
+      onClose={onClose}
+    >
+      <div
+        className="grid h-full place-items-center"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) dialogRef.current?.close();
+        }}
+      >
+        <div
+          className="group cursor-zoom-in overflow-hidden"
+          onPointerMove={(event) => {
+            if (event.pointerType !== 'mouse') return;
+
+            const frame = event.currentTarget;
+            const { left, top, width, height } = frame.getBoundingClientRect();
+            if (!width || !height) return;
+
+            frame.style.setProperty('--image-origin', `${(event.clientX - left) / width * 100}% ${(event.clientY - top) / height * 100}%`);
+            frame.dataset.zoomed = 'true';
+          }}
+          onPointerLeave={(event) => delete event.currentTarget.dataset.zoomed}
+        >
+          <img
+            src={url}
+            alt={alt}
+            referrerPolicy="no-referrer"
+            className="pointer-events-none block max-h-dvh max-w-full origin-(--image-origin) transition-transform group-data-[zoomed=true]:scale-200 motion-reduce:transition-none"
+          />
+        </div>
+        <button
+          type="button"
+          autoFocus
+          aria-label="Cerrar foto"
+          className="absolute top-4 right-4 cursor-pointer rounded-full bg-black/70 p-2 hover:bg-black focus-visible:outline-2 focus-visible:outline-white"
+          onClick={() => dialogRef.current?.close()}
+        >
+          <X className="h-6 w-6" aria-hidden="true" />
+        </button>
+      </div>
+    </dialog>
   );
 };

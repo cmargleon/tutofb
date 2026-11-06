@@ -1,6 +1,9 @@
 import { ProductScenesStep } from '../components/wizard/ProductScenesStep';
-import React, { useEffect, useRef } from 'react';
-import { LoadingBlock } from '../components/ui';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { organizer } from '../features/organizer/firebase';
+import type { OrganizerDraft } from '../../shared/src/types';
+import { Button, LoadingBlock } from '../components/ui';
 import { WizardStepper } from '../components/WizardStepper';
 import { WizardFooter } from '../components/wizard/WizardFooter';
 import { ClientModelStep } from '../components/wizard/ClientModelStep';
@@ -13,6 +16,10 @@ import { GENERATE_WIZARD_MAX_STEP, getGenerateWizardSteps } from '../features/ge
 
 export const Wizard: React.FC = () => {
   const toast = useToast();
+  const [params, setParams] = useSearchParams();
+  const [importing, setImporting] = useState(false);
+  const organizerClient = params.get('organizerClient');
+  const organizerVariant = params.get('organizerVariant');
   const lastErrorRef = useRef<string | null>(null);
   const {
     state,
@@ -62,7 +69,24 @@ export const Wizard: React.FC = () => {
     handleRetryPoseSuggestions,
     handleRetryProductDraftPreparation,
   } = useWizard();
-  const isWizardBusy = isSubmitting || isAnalyzing;
+  const isWizardBusy = isSubmitting || isAnalyzing || importing;
+  const importOrganizer = async () => {
+    if (!organizerClient || !organizerVariant || state.garments.length || !clients.some(client => client.id === organizerClient)) return;
+    setImporting(true);
+    try {
+      const draft = await organizer<OrganizerDraft>({ action: 'draft', clientId: organizerClient, variantId: organizerVariant });
+      const files = draft.photos.map(photo => new File([Uint8Array.from(atob(photo.base64), char => char.charCodeAt(0))], photo.name, { type: 'image/jpeg' }));
+      handleClientChange(organizerClient);
+      await product.handleFiles(files, true, draft);
+      setParams(previous => {
+        const next = new URLSearchParams(previous);
+        next.delete('organizerClient'); next.delete('organizerVariant');
+        return next;
+      }, { replace: true });
+    } catch (error) {
+      toast({ tone: 'error', title: 'No se pudieron importar las referencias', description: (error as Error).message });
+    } finally { setImporting(false); }
+  };
 
   useEffect(() => {
     if (!error) {
@@ -131,6 +155,11 @@ export const Wizard: React.FC = () => {
 
       {state.step === 1 && <div className="space-y-6">
         {contextSection('client')}
+        {organizerClient && organizerVariant && <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div><h2 className="font-semibold">Referencias aprobadas del organizador</h2>
+            <p className="text-sm text-slate-600">Importa el artículo y sus vistas aprobadas al lote.</p></div>
+          <Button disabled={isWizardBusy || Boolean(state.garments.length)} loading={importing} onClick={importOrganizer}>Importar referencias</Button>
+        </section>}
         {state.selectedClientId && <GarmentsStep
           garments={state.garments}
           isSubmitting={isWizardBusy}

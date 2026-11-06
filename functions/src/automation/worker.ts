@@ -10,6 +10,7 @@ import { GEMINI_API_KEY } from '../config/runtime';
 import { assertUserRoles } from '../auth/roles';
 import { AutomationAttentionError, importImagesForAutomationJob } from './imports';
 import { resolveAutomationPreset } from './presets';
+import { loadAutomationModelOptions } from './models';
 import { dispatchGarment, dispatchProduct } from './pipelines';
 import { automationPublicError } from './persistence';
 import { authorizeMachineJob, pruneExpiredMachineTokens } from './machineAuth';
@@ -39,18 +40,21 @@ export const processAutomation = async (jobId: string): Promise<void> => {
     const client = clientSnapshot.data() as Client | undefined;
     if (!client || client.status === 'archived') throw new AutomationAttentionError('Cliente no disponible.');
     const preset = job.resolvedPreset ? { name: job.requestedPreset, config: job.resolvedPreset, modelId: job.modelId || null } : resolveAutomationPreset(job, client);
+    const modelOptions = job.jobType === 'garment'
+      ? job.modelOptions || await loadAutomationModelOptions(job.clientId, client, job.modelId || preset.config.modelId, preset.config.poseIds)
+      : undefined;
     const inputImages = await importImagesForAutomationJob(job);
     const stillActive = await db.runTransaction(async (tx) => {
       const snapshot = await tx.get(ref);
       if (snapshot.data()?.leaseToken !== token || snapshot.data()?.status !== 'importing') return false;
-      tx.update(ref, { inputImages, modelId: preset.modelId, requestedPreset: preset.name, updatedAt: FieldValue.serverTimestamp() });
+      tx.update(ref, { inputImages, ...(modelOptions ? { modelOptions } : {}), requestedPreset: preset.name, updatedAt: FieldValue.serverTimestamp() });
       return true;
     });
     if (!stillActive) return;
     logger.info('automation import completed', { jobId, count: inputImages.length });
-    const prepared = { ...job, inputImages };
+    const prepared = { ...job, inputImages, modelOptions };
     logger.info('automation generation started', { jobId, jobType: job.jobType });
-    if (job.jobType === 'garment') await dispatchGarment(prepared, client, preset.config, preset.modelId!);
+    if (job.jobType === 'garment') await dispatchGarment(prepared, client, preset.config, modelOptions!);
     else await dispatchProduct(prepared, client, preset.config);
     await refreshAutomation(jobId);
   } catch (error) {
@@ -81,11 +85,13 @@ export const refreshAutomation = async (jobId: string): Promise<AutomationJob | 
     const itemIssues = (job.items || []).filter((item) => item.issue);
     const items = [...itemIssues, ...[...new Set(jobs.map((scene) => scene.garmentId))].map((itemId) => {
       const scenes = jobs.filter((scene) => scene.garmentId === itemId);
-      return { itemId, status: scenes.every((scene) => scene.status === 'completed') ? 'completed' as const : scenes.some((scene) => scene.status === 'failed') ? 'needs_attention' as const : 'processing' as const,
+      const previous = job.items?.find(item => item.itemId === itemId);
+      return { ...previous, itemId, modelId: scenes[0].modelId, status: scenes.every((scene) => scene.status === 'completed') ? 'completed' as const : scenes.some((scene) => scene.status === 'failed') ? 'needs_attention' as const : 'processing' as const,
         scenes: scenes.map((scene) => ({ jobId: scene.id!, scene: scene.productScene || scene.poseImageId,
           status: scene.automationGate || scene.status, attempts: scene.generationAttemptCount || 0, verdict: scene.latestAutoReview?.verdict || null, reason: scene.lastError || null })) };
     })];
-    const missing = jobs.length !== job.generationJobIds.length || jobs.some((scene) => scene.clientId !== job.clientId || scene.automationJobId !== job.id || scene.batchId !== job.batchId);
+    const batchIds = job.batchIds || [job.batchId];
+    const missing = jobs.length !== job.generationJobIds.length || jobs.some((scene) => scene.clientId !== job.clientId || scene.automationJobId !== job.id || !batchIds.includes(scene.batchId));
     const summary = missing ? { status: 'needs_attention' as const, progress: job.progress, outputImages: [] } : summarizeAutomation(jobs);
     if (summary.status === 'completed' && itemIssues.length) summary.status = 'needs_attention';
     const error = missing ? { code: 'missing-generation-job', message: 'Un job de generación fue eliminado.' }

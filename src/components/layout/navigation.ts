@@ -1,4 +1,5 @@
 import {
+  Archive,
   BarChart3,
   DollarSign,
   Images,
@@ -56,6 +57,7 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
     { type: 'item', name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: role.isActive },
     { type: 'item', name: 'Generar Fotos', path: '/generate', icon: Wand2, visible: role.canCreateBatches },
     { type: 'item', name: 'Automatización', path: '/automation', icon: Rows3, visible: role.canCreateBatches },
+    { type: 'item', name: 'Organizador inteligente', path: '/organizador', icon: Archive, visible: role.canEvaluate },
     { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate },
     { type: 'item', name: 'Cola', path: '/cola', icon: Rows3, visible: role.canEvaluate },
     {
@@ -100,6 +102,7 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
       children: [
         { type: 'item', name: 'Analíticas', path: '/analytics', icon: BarChart3, visible: role.canAccessAnalytics },
         { type: 'item', name: 'Finanzas', path: '/finanzas', icon: DollarSign, visible: role.canAccessFinance },
+        { type: 'item', name: 'Seguridad y respaldos', path: '/seguridad-respaldos', icon: Shield, visible: role.canManageUsers },
         { type: 'item', name: 'Configuración', path: '/configuracion', icon: Settings, visible: role.canManageUsers },
       ],
     },

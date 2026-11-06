@@ -7,6 +7,8 @@ import type {
   GenerationKind,
 } from './common';
 
+export type GarmentGender = 'male' | 'female' | 'unisex';
+
 export interface GarmentPhotoAssetInput {
   id: string;
   fileName: string;
@@ -70,6 +72,9 @@ export interface ClassifiedGarmentViewsGarmentResult {
   itemKindConfidence?: number | null;
   itemKindReasoning?: string | null;
   itemLabel?: string | null;
+  garmentGender?: GarmentGender | null;
+  garmentGenderConfidence?: number | null;
+  garmentGenderReasoning?: string | null;
   matchedCategoryId?: string | null;
   matchedCategoryLabel?: string | null;
   matchedCategoryConfidence?: number | null;

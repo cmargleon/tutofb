@@ -2,7 +2,7 @@ import { DEFAULT_AUTOMATION_BUDGET, validateAutomationBudget } from '../../../sh
 import {
   DEFAULT_TRY_ON_PROMPT_CASES,
 } from '../../../shared/src/domain';
-import { Provider, SystemConfig } from '../../../shared/src/types';
+import { DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED, Provider, SystemConfig } from '../../../shared/src/types';
 import { ADDITIONAL_SYSTEM_PROMPT_FIELDS, normalizeAdditionalSystemPrompts } from '../../../shared/src/systemPrompts';
 import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -13,6 +13,7 @@ const CONFIG_COLLECTION = 'system_config';
 const CONFIG_DOC_ID = 'main';
 
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
+  organizerAutoGenerationEnabled: DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED,
   automationBudget: DEFAULT_AUTOMATION_BUDGET,
   jobMaxRetries: getJobMaxRetries(),
   jobRetryDelayMs: getJobRetryDelayMs(),
@@ -54,6 +55,8 @@ const readAutomationBudget = (input: SystemConfig['automationBudget']) => {
 };
 
 export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undefined): SystemConfig => ({
+  organizerAutoGenerationEnabled: typeof input?.organizerAutoGenerationEnabled === 'boolean'
+    ? input.organizerAutoGenerationEnabled : DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED,
   automationBudget: readAutomationBudget(input?.automationBudget),
   jobMaxRetries: typeof input?.jobMaxRetries === 'number' && input.jobMaxRetries >= 0 ? Math.round(input.jobMaxRetries) : DEFAULT_SYSTEM_CONFIG.jobMaxRetries,
   jobRetryDelayMs: typeof input?.jobRetryDelayMs === 'number' && input.jobRetryDelayMs >= 0 ? Math.round(input.jobRetryDelayMs) : DEFAULT_SYSTEM_CONFIG.jobRetryDelayMs,

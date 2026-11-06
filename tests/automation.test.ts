@@ -41,7 +41,7 @@ test('garment model precedence and explicit missing model attention', () => {
   assert.equal(resolveAutomationPreset({ ...payload, modelId: 'explicit' } as any, client).modelId, 'explicit');
   assert.equal(resolveAutomationPreset(payload as any, client).modelId, 'preset');
   assert.equal(resolveAutomationPreset(payload as any, { automation: { defaultModelId: 'default' } } as any).modelId, 'default');
-  assert.throws(() => resolveAutomationPreset(payload as any, {} as any), /modelId/);
+  assert.equal(resolveAutomationPreset(payload as any, {} as any).modelId, null, 'Model selection can wait for client gender defaults');
   assert.throws(() => resolveAutomationPreset({ ...payload, preset: 'missing' } as any, client), /Preset/);
 });
 test('product preset has bounded review and shares the six scenes used by the object wizard', () => {

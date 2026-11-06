@@ -18,6 +18,7 @@ interface ToastOptions {
   description?: string;
   tone?: ToastTone;
   durationMs?: number;
+  compact?: boolean;
 }
 
 interface ConfirmOptions {
@@ -48,6 +49,7 @@ interface FeedbackContextValue {
 interface ToastItem extends Required<Pick<ToastOptions, 'title' | 'tone' | 'durationMs'>> {
   id: string;
   description?: string;
+  compact: boolean;
 }
 
 interface DialogState extends Required<Pick<ConfirmOptions, 'title' | 'description' | 'confirmLabel' | 'cancelLabel' | 'tone'>> {
@@ -255,10 +257,10 @@ export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const toast = useCallback(
-    ({ title, description, durationMs = 4500, tone = 'info' }: ToastOptions) => {
+    ({ title, description, durationMs = 4500, tone = 'info', compact = false }: ToastOptions) => {
       const id = buildToastId();
 
-      setToasts((currentToasts) => [...currentToasts, { id, title, description, durationMs, tone }]);
+      setToasts((currentToasts) => [...currentToasts, { id, title, description, durationMs, tone, compact }]);
 
       const timeoutId = window.setTimeout(() => {
         dismissToast(id);
@@ -354,46 +356,51 @@ export const FeedbackProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     <FeedbackContext.Provider value={value}>
       {children}
 
-      <div
-        className="pointer-events-none fixed inset-x-0 top-4 z-[90] flex justify-center px-4 sm:justify-end sm:px-6"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <div className="flex w-full max-w-sm flex-col gap-3">
-          {toasts.map((toastItem) => {
-            const style = TOAST_STYLES[toastItem.tone];
-            const Icon = style.icon;
+      {[false, true].map((compact) => (
+        <div
+          key={String(compact)}
+          className={compact
+            ? 'pointer-events-none fixed inset-x-0 bottom-4 z-[90] flex justify-end px-4 sm:px-6'
+            : 'pointer-events-none fixed inset-x-0 top-4 z-[90] flex justify-center px-4 sm:justify-end sm:px-6'}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className={compact ? 'flex max-w-full flex-col items-end gap-2' : 'flex w-full max-w-sm flex-col gap-3'}>
+            {toasts.filter((item) => item.compact === compact).map((toastItem) => {
+              const style = TOAST_STYLES[toastItem.tone];
+              const Icon = style.icon;
 
-            return (
-              <div
-                key={toastItem.id}
-                role={toastItem.tone === 'error' ? 'alert' : 'status'}
-                className={`pointer-events-auto rounded-2xl border px-4 py-3 shadow-lg backdrop-blur ${style.container}`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`mt-0.5 shrink-0 ${style.iconColor}`}>
-                    <Icon className="h-5 w-5" />
+              return (
+                <div
+                  key={toastItem.id}
+                  role={toastItem.tone === 'error' ? 'alert' : 'status'}
+                  className={`pointer-events-auto border shadow-lg backdrop-blur ${compact ? 'rounded-xl px-3 py-1.5' : 'rounded-2xl px-4 py-3'} ${style.container}`}
+                >
+                  <div className={compact ? 'flex items-center gap-2' : 'flex items-start gap-3'}>
+                    <div className={`mt-0.5 shrink-0 ${style.iconColor}`}>
+                      <Icon className={compact ? 'h-4 w-4' : 'h-5 w-5'} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-semibold ${style.titleColor}`}>{toastItem.title}</p>
+                      {toastItem.description ? (
+                        <p className={`mt-1 text-sm ${style.descriptionColor}`}>{toastItem.description}</p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => dismissToast(toastItem.id)}
+                      className="rounded-full p-1 text-slate-400 hover:bg-white/70 hover:text-slate-600"
+                      aria-label="Cerrar notificación"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-semibold ${style.titleColor}`}>{toastItem.title}</p>
-                    {toastItem.description ? (
-                      <p className={`mt-1 text-sm ${style.descriptionColor}`}>{toastItem.description}</p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => dismissToast(toastItem.id)}
-                    className="rounded-full p-1 text-slate-400 hover:bg-white/70 hover:text-slate-600"
-                    aria-label="Cerrar notificación"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ))}
 
       {nameDialog && typeof document !== 'undefined'
         ? createPortal(

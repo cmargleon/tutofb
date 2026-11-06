@@ -4,15 +4,14 @@ import {
   useMemo,
   useRef,
   useState,
-  type Dispatch,
-  type SetStateAction,
 } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { isArchivedCatalogEntity } from '../../../../shared/src/domain';
 import { Client, Model } from '../../../../shared/src/types';
 import { subscribeToClients } from '../../clients/firebase';
-import { subscribeToModels } from '../firebase';
+import { subscribeToModel, subscribeToModels } from '../firebase';
 
-const MODELS_PAGE_SIZE = 12;
+const MODELS_PAGE_SIZE = 20;
 
 export interface UseModelsCatalogResult {
   models: Model[];
@@ -20,31 +19,29 @@ export interface UseModelsCatalogResult {
   loading: boolean;
   error: string | null;
   showArchived: boolean;
-  setShowArchived: Dispatch<SetStateAction<boolean>>;
+  setShowArchived: (value: boolean) => void;
   modelSearch: string;
   handleModelSearchChange: (value: string) => void;
   modelsPage: number;
-  setModelsPage: Dispatch<SetStateAction<number>>;
+  setModelsPage: (value: number) => void;
   modelsTotalPages: number;
   filteredModelsCount: number;
   pagedModels: Model[];
-  highlightedModelId: string | null;
-  expandedId: string | null;
-  setExpandedId: Dispatch<SetStateAction<string | null>>;
   applyOptimisticModels: (updater: (prev: Model[]) => Model[]) => void;
   getModelsSnapshot: () => Model[];
 }
 
-export const useModelsCatalog = (): UseModelsCatalogResult => {
-  const location = useLocation();
+export const useModelsCatalog = (modelId?: string): UseModelsCatalogResult => {
+  const [params, setParams] = useSearchParams();
   const [models, setModels] = useState<Model[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
-  const [modelSearch, setModelSearch] = useState('');
-  const [modelsPage, setModelsPage] = useState(1);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const showArchived = params.get('archived') === '1';
+  const modelSearch = params.get('q') ?? '';
+  const pageParam = Number(params.get('page'));
+  const requestedPage = Number.isSafeInteger(pageParam) && pageParam > 0 ? pageParam : 1;
+  const includeArchived = !modelId && showArchived;
   const modelsRef = useRef<Model[]>([]);
 
   useEffect(() => {
@@ -60,21 +57,22 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
       }
     };
 
-    const unsubModels = subscribeToModels(
-      (data) => {
-        modelsRef.current = data;
-        setModels(data);
-        modelsLoaded = true;
-        checkLoading();
-      },
-      (err) => {
-        console.error('Error loading models:', err);
-        setError('Error al cargar los modelos.');
-        modelsLoaded = true;
-        checkLoading();
-      },
-      { includeArchived: showArchived },
-    );
+    const handleModels = (data: Model[]) => {
+      modelsRef.current = data;
+      setModels(data);
+      modelsLoaded = true;
+      checkLoading();
+    };
+
+    const handleModelsError = (err: Error) => {
+      console.error('Error loading models:', err);
+      setError('Error al cargar los modelos.');
+      handleModels([]);
+    };
+
+    const unsubModels = modelId
+      ? subscribeToModel(modelId, (model) => handleModels(model ? [model] : []), handleModelsError)
+      : subscribeToModels(handleModels, handleModelsError, { includeArchived, includeInactive: true });
 
     const unsubClients = subscribeToClients(
       (data) => {
@@ -93,66 +91,43 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
       unsubModels();
       unsubClients();
     };
-  }, [showArchived]);
+  }, [includeArchived, modelId]);
 
   const filteredModels = useMemo(() => {
     const query = modelSearch.trim().toLowerCase();
-    if (!query) return models;
-
-    return models.filter((model) => model.name.toLowerCase().includes(query));
-  }, [models, modelSearch]);
+    return models.filter((model) =>
+      (showArchived || !isArchivedCatalogEntity(model)) && model.name.toLowerCase().includes(query),
+    );
+  }, [models, modelSearch, showArchived]);
 
   const modelsTotalPages = Math.max(1, Math.ceil(filteredModels.length / MODELS_PAGE_SIZE));
+  const modelsPage = Math.min(requestedPage, modelsTotalPages);
   const pagedModels = filteredModels.slice(
     (modelsPage - 1) * MODELS_PAGE_SIZE,
     modelsPage * MODELS_PAGE_SIZE,
   );
-  const highlightedModelId = location.hash.startsWith('#model-')
-    ? location.hash.slice('#model-'.length)
-    : null;
 
-  useEffect(() => {
-    if (modelsPage > modelsTotalPages) {
-      setModelsPage(modelsTotalPages);
-    }
-  }, [modelsPage, modelsTotalPages]);
-
-  useEffect(() => {
-    if (!highlightedModelId) return;
-
-    const targetIndex = models.findIndex((model) => model.id === highlightedModelId);
-    if (targetIndex < 0) return;
-
-    if (modelSearch) {
-      setModelSearch('');
-    }
-
-    if (modelsPage !== Math.floor(targetIndex / MODELS_PAGE_SIZE) + 1) {
-      setModelsPage(Math.floor(targetIndex / MODELS_PAGE_SIZE) + 1);
-    }
-
-    setExpandedId(highlightedModelId);
-
-    const scrollTarget = () => {
-      const element = document.getElementById(`model-${highlightedModelId}`);
-      if (!element) return false;
-
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return true;
-    };
-
-    if (scrollTarget()) return;
-
-    const timeoutId = window.setTimeout(() => {
-      scrollTarget();
-    }, 120);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [highlightedModelId, modelSearch, models, modelsPage]);
+  const setShowArchived = (value: boolean) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set('archived', '1');
+    else next.delete('archived');
+    next.delete('page');
+    setParams(next);
+  };
 
   const handleModelSearchChange = (value: string) => {
-    setModelSearch(value);
-    setModelsPage(1);
+    const next = new URLSearchParams(params);
+    if (value) next.set('q', value);
+    else next.delete('q');
+    next.delete('page');
+    setParams(next, { replace: true, preventScrollReset: true });
+  };
+
+  const setModelsPage = (value: number) => {
+    const next = new URLSearchParams(params);
+    if (value > 1) next.set('page', String(value));
+    else next.delete('page');
+    setParams(next);
   };
 
   const applyOptimisticModels = useCallback((updater: (prev: Model[]) => Model[]) => {
@@ -175,9 +150,6 @@ export const useModelsCatalog = (): UseModelsCatalogResult => {
     modelsTotalPages,
     filteredModelsCount: filteredModels.length,
     pagedModels,
-    highlightedModelId,
-    expandedId,
-    setExpandedId,
     applyOptimisticModels,
     getModelsSnapshot,
   };

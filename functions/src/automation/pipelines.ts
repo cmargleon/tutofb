@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { AutomationInput, AutomationItemState, AutomationJob, AutomationPreset, Client, Model, UploadedGarmentInput } from '../../../shared/src/types';
+import { AutomationInput, AutomationItemState, AutomationJob, AutomationModelOption, AutomationPreset, Client, Model, UploadedGarmentInput } from '../../../shared/src/types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { createGenerationBatchCore } from '../callables/createGenerationBatch';
+import { createGenerationBatchesCore } from '../callables/createGenerationBatch';
+import { selectAutomationModel } from './models';
 import { getCompatibleGarmentPoseCombinations } from '../callables/createGenerationBatch.helpers';
 import { classifyGarmentWithGemini } from '../callables/classifyGarmentViewsWithGemini';
 import { GEMINI_API_KEY, getGeminiGarmentViewClassificationModel } from '../config/runtime';
@@ -14,19 +15,26 @@ import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 import { getSystemConfigCached } from '../admin/systemConfig';
 import { createDefaultProductGeneration } from '../../../shared/src/productGeneration';
 import { AutomationBudgetError } from './budget';
+import { APPROVED_TRY_ON_PROMPT_FORMAT, composeApprovedTryOnPrompt, seedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
+import { DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
 
 const groupedImages = (inputs: AutomationInput[]) => {
   const groups = new Map<string, AutomationInput[]>();
   for (const image of inputs) groups.set(image.itemId, [...(groups.get(image.itemId) || []), image]);
   return groups;
 };
-export const dispatchGarment = async (job: AutomationJob, client: Client, config: AutomationPreset, modelId: string): Promise<void> => {
-  const snapshot = await getAppFirestore().collection('models').doc(modelId).get();
-  const model = snapshot.data() as Model | undefined;
-  if (!model || model.status === 'archived' || model.clientId !== job.clientId) throw new AutomationAttentionError('El modelo no está disponible para este cliente.');
-  const poseIds = resolveAutomationPoseIds(model, config.poseIds);
-  const selectedPoses = model.poses.filter((pose) => poseIds.includes(pose.id));
-  const garments: UploadedGarmentInput[] = [];
+export const dispatchGarment = async (job: AutomationJob, client: Client, config: AutomationPreset, options: AutomationModelOption[]): Promise<void> => {
+  const snapshots = await getAppFirestore().getAll(...options.map(option => getAppFirestore().collection('models').doc(option.modelId)));
+  const available = options.flatMap((option, index) => {
+    const model = snapshots[index].data() as Model | undefined;
+    if (!model || model.status === 'archived' || model.active === false || model.clientId !== job.clientId) {
+      if (option.gender) return [];
+      throw new AutomationAttentionError('El modelo no está disponible para este cliente.');
+    }
+    return [{ ...option, poseIds: resolveAutomationPoseIds(model, option.poseIds), model }];
+  });
+  if (!available.length) throw new AutomationAttentionError('No hay modelos predeterminados disponibles para este cliente.');
+  const groups = new Map<string, { option: typeof available[number]; garments: UploadedGarmentInput[] }>();
   const items: AutomationItemState[] = [];
   const ref = getAppFirestore().collection('automationJobs').doc(job.id);
   const persistItems = async (finished = false) => getAppFirestore().runTransaction(async (tx) => {
@@ -40,12 +48,13 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
   await persistItems();
   for (const [itemId, images] of groupedImages(job.inputImages)) {
     const cacheKey = createHash('sha256').update(JSON.stringify([itemId, images.map((i) => [i.storagePath, i.normalizedSha256 || null])])).digest('hex');
-    const cached = job.classificationCache?.[cacheKey];
-    let garment = cached;
-    if (!garment) {
+    let garment = job.classificationCache?.[cacheKey];
+    let analysis = job.analysisCache?.[cacheKey];
+    const needsGenderAnalysis = new Set(available.map(option => option.modelId)).size > 1 && !Object.hasOwn(analysis || {}, 'garmentGender');
+    if (!garment || needsGenderAnalysis) {
       let classified: Awaited<ReturnType<typeof classifyGarmentWithGemini>>;
       try {
-        classified = job.analysisCache?.[cacheKey] || await classifyGarmentWithGemini({
+        classified = (!needsGenderAnalysis && analysis) || await classifyGarmentWithGemini({
           ...(job.effectivePolicy ? { automation: { id: job.id, key: `classification:${cacheKey}:${job.retryCount}`, kind: 'classification' as const }, clientId: job.clientId } : {}),
           apiKey: GEMINI_API_KEY.value(), model: getGeminiGarmentViewClassificationModel(), userUid: job.createdByUid,
           categories: [], fallbackCategoryId: null,
@@ -60,7 +69,8 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
         await persistItems();
         continue;
       }
-      if (!job.analysisCache?.[cacheKey]) await getAppFirestore().collection('automationJobs').doc(job.id).update({ [`analysisCache.${cacheKey}`]: classified });
+      analysis = classified;
+      if (needsGenderAnalysis || !job.analysisCache?.[cacheKey]) await getAppFirestore().collection('automationJobs').doc(job.id).update({ [`analysisCache.${cacheKey}`]: classified });
       if (classified.itemKind !== 'garment' || (classified.itemKindConfidence ?? 0) < 0.65 || !classified.garmentBodyArea || classified.photos.some((photo) => (photo.confidence ?? 0) < 0.65)) {
         items.push({ itemId, status: 'needs_attention', scenes: [], issue: { code: 'classification-required', message: `La clasificación de ${images[0].fileName} necesita revisión. Revisa el tipo de artículo y sus vistas.` } });
         await persistItems();
@@ -73,19 +83,48 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
       };
       await getAppFirestore().collection('automationJobs').doc(job.id).update({ [`classificationCache.${cacheKey}`]: garment });
     }
-    if (!getCompatibleGarmentPoseCombinations([garment], selectedPoses).length) {
-      items.push({ itemId, status: 'needs_attention', scenes: [], issue: { code: 'no-compatible-poses', message: `No hay poses compatibles con las vistas de ${images[0].fileName}. Revisa el modelo/preset de este artículo.` } });
+    const detection = {
+      garmentGender: analysis?.garmentGender || null,
+      garmentGenderConfidence: analysis?.garmentGenderConfidence ?? null,
+      garmentGenderReasoning: analysis?.garmentGenderReasoning || null,
+    };
+    const selection = selectAutomationModel(available, detection.garmentGender, detection.garmentGenderConfidence, `${job.id}:${itemId}`);
+    if (!selection) {
+      items.push({ itemId, ...detection, status: 'needs_attention', scenes: [], issue: {
+        code: 'garment-gender-required', message: `No se pudo determinar si ${images[0].fileName} es masculino, femenino o unisex. Revisa sus referencias o selecciona un modelo explícito.`,
+      } });
       await persistItems();
       continue;
     }
-    garments.push(garment);
+    const option = available.find(option => option.modelId === selection.modelId)!;
+    const selectedPoses = option.model.poses.filter(pose => option.poseIds.includes(pose.id));
+    if (!getCompatibleGarmentPoseCombinations([garment], selectedPoses).length) {
+      items.push({ itemId, ...detection, modelId: option.modelId, status: 'needs_attention', scenes: [], issue: { code: 'no-compatible-poses', message: `No hay poses compatibles con las vistas de ${images[0].fileName}. Revisa el modelo/preset de este artículo.` } });
+      await persistItems();
+      continue;
+    }
+    const group = groups.get(option.modelId) || { option, garments: [] };
+    group.garments.push(garment);
+    groups.set(option.modelId, group);
+    items.push({ itemId, ...detection, modelId: option.modelId, status: 'processing', scenes: [] });
   }
-  if (!garments.length) { await persistItems(true); return; }
-  await createGenerationBatchCore({
-    clientId: job.clientId, modelId, poseIds,
-    provider: config.provider || DEFAULT_AUTOMATION_PROVIDER, aspectRatio: config.aspectRatio || '3:4', ...(config.imageConfig ? { imageConfig: config.imageConfig } : {}),
-    outputMode: 'photos_only', garments, productDrafts: [], promptBase: config.prompt ?? client.generationPromptBase ?? '',
-  }, job.createdByUid, { id: job.id, leaseToken: job.leaseToken! });
+  if (!groups.size) { await persistItems(true); return; }
+  await persistItems();
+  const systemConfig = await getSystemConfigCached();
+  const prompt = config.prompt?.trim() || client.generationPromptBase?.trim() || systemConfig.systemPromptOverride || DEFAULT_TRY_ON_PROMPT;
+  await createGenerationBatchesCore([...groups.values()].map(({ option, garments }) => {
+    const seeded = seedTryOnPrompt(prompt, option.model.identityTraits, systemConfig);
+    return {
+      clientId: job.clientId, modelId: option.modelId, poseIds: option.poseIds,
+      provider: config.provider || DEFAULT_AUTOMATION_PROVIDER, aspectRatio: config.aspectRatio || '3:4', ...(config.imageConfig ? { imageConfig: config.imageConfig } : {}),
+      outputMode: 'photos_only', garments, productDrafts: [], promptBase: seeded.general,
+      promptFormat: APPROVED_TRY_ON_PROMPT_FORMAT,
+      approvedPrompts: garments.map(garment => ({ garmentId: garment.id,
+        text: composeApprovedTryOnPrompt(seeded.general, seeded.blocks, garment.garmentBodyArea),
+      })),
+    };
+  }), job.createdByUid, { id: job.id, leaseToken: job.leaseToken! });
+
 };
 
 export const dispatchProduct = async (job: AutomationJob, _client: Client, config: AutomationPreset): Promise<void> => {

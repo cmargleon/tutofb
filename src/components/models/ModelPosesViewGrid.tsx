@@ -15,8 +15,8 @@ export const ModelPosesViewGrid: React.FC<{ model: Model }> = ({ model }) => (
           key={pose.id}
           className="relative aspect-[3/4] overflow-hidden rounded-md bg-white group"
         >
-          <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} />
-          <div className="absolute inset-x-0 bottom-0 rounded-b-md bg-gradient-to-t from-black/80 to-transparent px-2 py-2">
+          <ImageThumb storagePath={pose.storagePath} alt={pose.fileName} previewOnClick />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-md bg-gradient-to-t from-black/80 to-transparent px-2 py-2">
             {!isPoseActive(pose) && <p className="mb-1 text-[10px] font-semibold text-amber-200">Inactiva</p>}
             <p className="truncate text-[11px] text-white">{pose.fileName}</p>
             <p className="mt-1 inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white">

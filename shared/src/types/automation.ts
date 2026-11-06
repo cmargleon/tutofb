@@ -4,6 +4,11 @@ import type { ProductSceneInput } from './productGeneration';
 
 export type AutomationStatus = 'pending' | 'importing' | 'processing' | 'review' | 'completed' | 'failed' | 'needs_attention';
 export type AutomationJobType = 'garment' | 'product';
+export interface AutomationModelOption {
+  gender: 'male' | 'female' | null;
+  modelId: string;
+  poseIds: string[];
+}
 export interface AutomationInput {
   itemId: string;
   fileName: string;
@@ -49,6 +54,7 @@ export interface AutomationJob extends CreateAutomationJobRequest {
   planId?: string;
   effectivePolicy?: AutomationPolicy;
   resolvedPreset?: AutomationPreset;
+  modelOptions?: AutomationModelOption[];
   budget?: AutomationBudgetState;
   spendingPaused?: boolean;
   items?: AutomationItemState[];
@@ -66,6 +72,7 @@ export interface AutomationJob extends CreateAutomationJobRequest {
   sourceImages?: AutomationInput[];
   outputImages: Array<{ storagePath: string; outputId?: string; jobId: string; itemId: string; type: string }>;
   batchId: string | null;
+  batchIds?: string[];
   generationJobIds: string[];
   retryCount: number;
   leaseToken: string | null;
@@ -85,6 +92,8 @@ export interface ClientAutomationConfig {
   enabled?: boolean;
   driveFolderIds?: string[];
   defaultModelId?: string;
+  defaultMaleModelId?: string;
+  defaultFemaleModelId?: string;
   defaultPreset?: string;
   presets?: Record<string, AutomationPreset>;
   defaultBudgetUsd?: number;
@@ -112,6 +121,10 @@ export interface AutomationSceneState {
 }
 export interface AutomationItemState {
   itemId: string; status: 'processing' | 'completed' | 'needs_attention';
+  garmentGender?: import('./garment').GarmentGender | null;
+  garmentGenderConfidence?: number | null;
+  garmentGenderReasoning?: string | null;
+  modelId?: string;
   issue?: { code: string; message: string };
   scenes: AutomationSceneState[];
 }
@@ -119,6 +132,7 @@ export interface AutomationPlan {
   id: string; createdByUid: string; clientId: string; clientName: string;
   request: CreateAutomationJobRequest; presetName: string; preset: AutomationPreset;
   policy: AutomationPolicy; modelId: string | null;
+  modelOptions?: AutomationModelOption[];
   items: Array<{ itemId: string; imageCount: number; sceneIds: string[]; estimatedCostUsd: number }>;
   estimatedCostUsd: number; classificationRequired: boolean;
   costGuarantee: 'estimated_authorization_required';
@@ -129,6 +143,7 @@ export interface ResumeAutomationRequest { jobId: string; budgetUsd?: number }
 export interface AutomationPlanSummary {
   planId: string; clientId: string; clientName: string; jobType: AutomationJobType;
   modelId: string | null; provider?: Provider; preset: string; imageConfig?: ProviderImageConfig;
+  modelOptions?: AutomationModelOption[];
   items: AutomationPlan['items']; imageCount: number; policy: AutomationPolicy;
   estimatedCostUsd: number; classificationRequired: boolean; costGuarantee: string; executedJobId: string | null;
 }

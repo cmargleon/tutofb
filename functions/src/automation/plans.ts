@@ -3,14 +3,15 @@ import type { AutomationJob, AutomationPlanSummary } from '../../../shared/src/t
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import type { AutomationPlan, Client, CreateAutomationJobRequest, Model } from '../../../shared/src/types';
+import type { AutomationModelOption, AutomationPlan, Client, CreateAutomationJobRequest } from '../../../shared/src/types';
 import { DEFAULT_AUTOMATION_BUDGET, resolveAutomationPolicy, usd } from '../../../shared/src/automationPolicy';
 import { createDefaultProductGeneration } from '../../../shared/src/productGeneration';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { assertProviderEnabledInSystemConfig, sanitizeSystemConfig } from '../admin/systemConfig';
 import { canReadAutomation, validateAutomationInput } from './domain';
-import { resolveAutomationPreset, resolveAutomationPoseIds } from './presets';
+import { resolveAutomationPreset } from './presets';
+import { loadAutomationModelOptions } from './models';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 import { authorizeDriveFile, googleDrive, validateDriveFolder } from './drive';
 import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from './budget';
@@ -42,13 +43,14 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
     ...(data.jobType === 'product' ? { scenes: resolved.config.scenes || defaults.scenes } : {}),
   };
   let sceneIds: string[];
+  let modelOptions: AutomationModelOption[] | undefined;
   if (data.jobType === 'garment') {
-    const model = (await db.collection('models').doc(resolved.modelId!).get()).data() as Model | undefined;
-    if (!model || model.clientId !== data.clientId || model.status === 'archived') throw new HttpsError('failed-precondition', 'Modelo no disponible para el cliente.');
-    try { sceneIds = resolveAutomationPoseIds(model, preset.poseIds); }
+    try { modelOptions = await loadAutomationModelOptions(data.clientId, client, data.modelId || resolved.config.modelId, preset.poseIds); }
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
-    preset.poseIds = sceneIds;
+    // Until classification, estimate using the model with the most poses per item.
+    sceneIds = modelOptions.reduce<string[]>((largest, option) => option.poseIds.length > largest.length ? option.poseIds : largest, []);
   } else sceneIds = preset.scenes!.map((scene) => scene.type);
+  const modelId = modelOptions?.length === 1 ? modelOptions[0].modelId : null;
   const inputs: NonNullable<CreateAutomationJobRequest['inputImages']> = [];
   for (const image of data.inputImages) {
     if (image.driveFile) {
@@ -68,11 +70,11 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
       estimatedCostUsd: usd(sceneIds.length * (generation.holdUsd + GEMINI_OPERATION_HOLD_USD) * (policy.maxReviewAttempts + policy.maxOperationalRetries) + (data.jobType === 'garment' ? GEMINI_OPERATION_HOLD_USD * (policy.maxOperationalRetries + 1) : 0)) };
   });
   const plan: AutomationPlan = { id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
-    request: { ...data, inputImages: inputs, modelId: resolved.modelId || undefined, preset: resolved.name },
-    presetName: resolved.name, preset, policy, modelId: resolved.modelId, items, classificationRequired: data.jobType === 'garment',
+    request: { ...data, inputImages: inputs, preset: resolved.name },
+    presetName: resolved.name, preset, policy, modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment',
     estimatedCostUsd: usd(items.reduce((sum, item) => sum + item.estimatedCostUsd, 0)),
     costGuarantee: 'estimated_authorization_required', createdAt: FieldValue.serverTimestamp(), executedJobId: null };
-  if (!plan.modelId) delete plan.request.modelId;
+  if (!plan.request.modelId) delete plan.request.modelId;
   return db.runTransaction(async (tx) => {
     const current = await tx.get(ref);
     if (current.exists) return current.data() as AutomationPlan;
@@ -87,6 +89,7 @@ export const readAutomationPlan = async (id: string, uid: string, role: string):
 };
 export const publicAutomationPlan = (plan: AutomationPlan): AutomationPlanSummary => ({ planId: plan.id, clientId: plan.clientId, clientName: plan.clientName,
   jobType: plan.request.jobType, modelId: plan.modelId, provider: plan.preset.provider, preset: plan.presetName,
+  ...(plan.modelOptions ? { modelOptions: plan.modelOptions } : {}),
   imageConfig: plan.preset.imageConfig, items: plan.items, imageCount: plan.items.reduce((count, item) => count + item.sceneIds.length, 0),
   policy: plan.policy, estimatedCostUsd: plan.estimatedCostUsd, classificationRequired: plan.classificationRequired,
   costGuarantee: plan.costGuarantee, executedJobId: plan.executedJobId,
@@ -100,7 +103,7 @@ export const executeAutomationPlan = async (id: string, uid: string, role: strin
   if (!plan.policy.allowEstimatedCosts || (plan.classificationRequired && !plan.policy.authorizeClassification)) throw new HttpsError('failed-precondition', 'Prepara el plan con allowEstimatedCosts y, para prendas, authorizeClassification explícitos antes de ejecutarlo.');
   // Check file versions and current folder authorization before any paid processing.
   for (const image of plan.request.inputImages || []) if (image.driveFile) await authorizeDriveFile(plan.clientId, image);
-  const receipt = await createAutomation({ ...plan.request, modelId: plan.modelId || undefined }, uid, role, plan);
+  const receipt = await createAutomation(plan.request, uid, role, plan);
   const job = (await getAppFirestore().collection('automationJobs').doc(receipt.jobId).get()).data() as AutomationJob;
   return { ...receipt, ...automationPolling(job) };
 };

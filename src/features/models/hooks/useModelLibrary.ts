@@ -17,6 +17,7 @@ import {
   permanentlyDeleteModel,
   replaceModelPoseWithGeneratedPhoto,
   restoreModel,
+  setModelActive,
   setModelPoseActive,
   updateModel,
 } from '../firebase';
@@ -56,6 +57,8 @@ export interface UseModelLibraryResult {
     pose: Pose,
   ) => { canRegenerate: boolean; reason: string };
   handleSaveEdit: (model: Model) => Promise<boolean>;
+  updatingModelIds: Set<string>;
+  handleToggleModelActive: (model: Model) => Promise<void>;
   handleArchive: (model: Model) => Promise<void>;
   handleRestore: (model: Model) => Promise<void>;
   handlePermanentDelete: (model: Model) => Promise<void>;
@@ -233,7 +236,7 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
       toast({
         tone: 'success',
         title: active ? 'Pose activada' : 'Pose desactivada',
-        description: active ? 'Disponible para nuevas generaciones compatibles.' : 'Se guardó el cambio. No aparecerá en el wizard ni se usará en nuevas generaciones automáticas.',
+        compact: true,
       });
     } catch (error) {
       toast({
@@ -396,6 +399,35 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     }
   };
 
+  const [updatingModelIds, setUpdatingModelIds] = useState<Set<string>>(new Set());
+
+  const handleToggleModelActive = async (model: Model) => {
+    const modelId = model.id;
+    if (!modelId || updatingModelIds.has(modelId)) return;
+
+    const active = model.active === false;
+    setUpdatingModelIds((ids) => new Set(ids).add(modelId));
+    try {
+      await setModelActive({ modelId, active });
+      onOptimisticUpdate?.((models) => models.map((current) =>
+        current.id === modelId ? { ...current, active } : current,
+      ));
+      toast({ tone: 'success', title: active ? 'Modelo activado' : 'Modelo desactivado' });
+    } catch (error) {
+      toast({
+        tone: 'error',
+        title: 'No se pudo cambiar el estado del modelo',
+        description: error instanceof Error ? error.message : 'Inténtalo otra vez.',
+      });
+    } finally {
+      setUpdatingModelIds((ids) => {
+        const next = new Set(ids);
+        next.delete(modelId);
+        return next;
+      });
+    }
+  };
+
   const handleArchive = async (model: Model) => {
     const accepted = await confirm({
       title: 'Archivar modelo',
@@ -410,7 +442,7 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     if (!accepted || !model.id) return;
 
     const snapshot = getModelsSnapshot?.();
-    onOptimisticUpdate?.((prev) => prev.filter((m) => m.id !== model.id));
+    onOptimisticUpdate?.((prev) => prev.map((m) => m.id === model.id ? { ...m, status: 'archived' as const } : m));
     try {
       await archiveModel(model.id);
       toast({
@@ -566,6 +598,8 @@ export const useModelLibrary = (options: UseModelLibraryOptions = {}): UseModelL
     handleRegeneratePoseFromReference,
     getPoseRegenerationAvailability,
     handleSaveEdit,
+    updatingModelIds,
+    handleToggleModelActive,
     handleArchive,
     handleRestore,
     handlePermanentDelete,

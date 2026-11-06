@@ -28,11 +28,12 @@ import {
   validateCreateGenerationBatchInput,
 } from './createGenerationBatch.helpers';
 
-export const createGenerationBatchCore = async (
+const prepareGenerationBatch = async (
   data: CreateGenerationBatchRequest,
   uid: string,
   automation?: { id: string; leaseToken: string },
-): Promise<CreateGenerationBatchResponse> => {
+  groupIndex?: number,
+) => {
     const systemConfig = await getSystemConfigCached();
     const validated = validateCreateGenerationBatchInput(data, uid, systemConfig.batchMaxJobs);
     assertProviderEnabledInSystemConfig(validated.provider, systemConfig, 'usar para crear un lote');
@@ -110,7 +111,7 @@ export const createGenerationBatchCore = async (
     }
 
     const now = admin.firestore.FieldValue.serverTimestamp();
-    const batchRef = automation ? db.collection('batches').doc(`automation-${automation.id}`) : db.collection('batches').doc();
+    const batchRef = automation ? db.collection('batches').doc(`automation-${automation.id}${groupIndex === undefined ? '' : `-${groupIndex}`}`) : db.collection('batches').doc();
     const batchData: Omit<Batch, 'id'> = {
       clientId: client.id!,
       clientNameSnapshot: client.name,
@@ -158,18 +159,8 @@ export const createGenerationBatchCore = async (
       createdByDisplayName,
     };
 
-    return db.runTransaction(async (writeBatch) => {
-    const automationRef = automation ? db.collection('automationJobs').doc(automation.id) : null;
-    let automationPolicy: AutomationPolicy | undefined;
-    if (automationRef && automation) {
-      const snapshot = await writeBatch.get(automationRef);
-      const current = snapshot.data();
-      automationPolicy = current?.effectivePolicy;
-      if (current?.batchId) return { batchId: current.batchId, createdJobs: current.generationJobIds.length };
-      if (current?.leaseToken !== automation.leaseToken || current?.status !== 'importing') {
-        throw new HttpsError('aborted', 'La importación ya no tiene una reserva activa.');
-      }
-    }
+    return { modelRef, client, poseIds: validated.poseIds, actualTotalJobs,
+      write: (writeBatch: FirebaseFirestore.Transaction, automationPolicy?: AutomationPolicy) => {
     const generationJobIds: string[] = [];
     writeBatch.set(batchRef, { ...batchData, ...(automation ? { automationJobId: automation.id, generationKind: 'garment' } : {}) });
     if (validated.outputMode === 'spreadsheet' && template) {
@@ -307,17 +298,53 @@ export const createGenerationBatchCore = async (
       { merge: true },
     );
 
-    if (automationRef) writeBatch.update(automationRef, {
-      batchId: batchRef.id, generationJobIds, status: 'processing', leaseToken: null,
-      leaseExpiresAt: null, updatedAt: now, error: null,
-      progress: { total: actualTotalJobs, completed: 0, failed: 0 },
-    });
+    return { batchId: batchRef.id, createdJobs: actualTotalJobs, generationJobIds };
+    } };
+};
 
-    return {
-      batchId: batchRef.id,
-      createdJobs: actualTotalJobs,
-    };
+// Prepare all groups before writing. One transaction links every batch to the same
+// automation budget and lease, so interruption or concurrent retries cannot duplicate a group.
+export const createGenerationBatchesCore = async (
+  requests: CreateGenerationBatchRequest[], uid: string, automation?: { id: string; leaseToken: string },
+): Promise<CreateGenerationBatchResponse & { batchIds: string[] }> => {
+  if (!requests.length || requests.length > 2 || (requests.length > 1 && !automation)
+    || requests.some(request => request.clientId !== requests[0].clientId)) {
+    throw new HttpsError('invalid-argument', 'Grupos de generación inválidos.');
+  }
+  const groups = await Promise.all(requests.map((request, index) => prepareGenerationBatch(request, uid, automation, requests.length > 1 ? index : undefined)));
+  const totalJobs = groups.reduce((sum, group) => sum + group.actualTotalJobs, 0);
+  if (totalJobs > (await getSystemConfigCached()).batchMaxJobs) throw new HttpsError('out-of-range', 'El pedido excede el límite configurado de trabajos.');
+  const db = getAppFirestore();
+  return db.runTransaction(async tx => {
+    const automationRef = automation ? db.collection('automationJobs').doc(automation.id) : null;
+    const current = automationRef ? (await tx.get(automationRef)).data() : undefined;
+    if (current?.batchId) return { batchId: current.batchId, batchIds: current.batchIds || [current.batchId], createdJobs: current.generationJobIds.length };
+    if (automation && (current?.leaseToken !== automation.leaseToken || current?.status !== 'importing')) {
+      throw new HttpsError('aborted', 'La importación ya no tiene una reserva activa.');
+    }
+    const models = await tx.getAll(...groups.map(group => group.modelRef));
+    models.forEach((snapshot, index) => {
+      const model = snapshot.data() as Model | undefined;
+      if (!model) throw new HttpsError('not-found', 'No se encontró el modelo seleccionado.');
+      assertModelOwnershipAndPoses(groups[index].client, model, groups[index].poseIds);
     });
+    const results = groups.map(group => group.write(tx, current?.effectivePolicy));
+    const batchIds = results.map(result => result.batchId);
+    const generationJobIds = results.flatMap(result => result.generationJobIds);
+    if (automationRef) tx.update(automationRef, {
+      batchId: batchIds[0], batchIds, generationJobIds, status: 'processing', leaseToken: null,
+      leaseExpiresAt: null, updatedAt: admin.firestore.FieldValue.serverTimestamp(), error: null,
+      progress: { total: totalJobs, completed: 0, failed: 0 },
+    });
+    return { batchId: batchIds[0], batchIds, createdJobs: totalJobs };
+  });
+};
+
+export const createGenerationBatchCore = async (
+  data: CreateGenerationBatchRequest, uid: string, automation?: { id: string; leaseToken: string },
+): Promise<CreateGenerationBatchResponse> => {
+  const { batchId, createdJobs } = await createGenerationBatchesCore([data], uid, automation);
+  return { batchId, createdJobs };
 };
 
 export const createGenerationBatch = onCall<CreateGenerationBatchRequest, Promise<CreateGenerationBatchResponse>>(

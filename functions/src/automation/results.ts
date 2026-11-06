@@ -11,16 +11,20 @@ export const automationReport = (job: AutomationJob, globalMaxBudgetUsd = Infini
   planId: job.planId || null, estimatedCostUsd: job.estimatedCostUsd ?? null,
   budget: job.budget ? { ...job.budget, effectiveLimitUsd: Math.min(job.budget.limitUsd, globalMaxBudgetUsd), remainingUsd: remainingAutomationBudget({ ...job.budget, limitUsd: Math.min(job.budget.limitUsd, globalMaxBudgetUsd) }), costBasis: 'estimated_not_provider_confirmed' } : null,
   catalogUrl: job.batchId ? `/catalogo?clientId=${encodeURIComponent(job.clientId)}&batchId=${encodeURIComponent(job.batchId)}` : null,
+  batchIds: job.batchIds || (job.batchId ? [job.batchId] : []),
+  catalogUrls: (job.batchIds || (job.batchId ? [job.batchId] : [])).map(id => `/catalogo?clientId=${encodeURIComponent(job.clientId)}&batchId=${encodeURIComponent(id)}`),
   downloadPath: job.batchId ? `/api/automation/jobs/${job.id}/download` : null,
   issues: [...(job.error ? [job.error] : []), ...(job.items || []).flatMap((item) => item.issue ? [{ itemId: item.itemId, ...item.issue }] : [])],
 });
 export const automationResultsZip = async (job: AutomationJob): Promise<Buffer> => {
   if (!job.batchId || !job.generationJobIds.length) throw new HttpsError('failed-precondition', 'No hay resultados para descargar.');
   const db = getAppFirestore();
-  const batch = (await db.collection('batches').doc(job.batchId).get()).data() as Batch;
-  if (!batch || batch.clientId !== job.clientId || batch.automationJobId !== job.id) throw new HttpsError('permission-denied', 'Lote no disponible.');
+  const batchIds = job.batchIds || [job.batchId];
+  const batches = await db.getAll(...batchIds.map(id => db.collection('batches').doc(id)));
+  const batchesById = new Map(batches.map(snapshot => [snapshot.id, snapshot.data() as Batch]));
+  if (batches.some(snapshot => !snapshot.exists || snapshot.data()?.clientId !== job.clientId || snapshot.data()?.automationJobId !== job.id)) throw new HttpsError('permission-denied', 'Lote no disponible.');
   const snapshots = await db.getAll(...job.generationJobIds.map((id) => db.collection('jobs').doc(id)));
-  const scenes = snapshots.map((s) => ({ ...s.data(), id: s.id } as Job)).filter((s) => s.clientId === job.clientId && s.batchId === job.batchId && s.automationJobId === job.id && s.status === 'completed' && s.currentOutput?.autoReview?.verdict === 'approved');
+  const scenes = snapshots.map((s) => ({ ...s.data(), id: s.id } as Job)).filter((s) => s.clientId === job.clientId && batchesById.has(s.batchId) && s.automationJobId === job.id && s.status === 'completed' && s.currentOutput?.autoReview?.verdict === 'approved');
   if (!scenes.length) throw new HttpsError('failed-precondition', 'Todavía no hay imágenes aprobadas por Gemini.');
   const zip = new JSZip(); const manifest: unknown[] = []; let size = 0;
   for (const [index, scene] of scenes.entries()) {
@@ -28,10 +32,10 @@ export const automationResultsZip = async (job: AutomationJob): Promise<Buffer> 
     const [metadata] = await admin.storage().bucket().file(output.resultImagePath).getMetadata();
     size += Number(metadata.size || 0);
     if (size > 64 * 1024 * 1024) throw new HttpsError('resource-exhausted', 'El ZIP supera 64 MB; usa los enlaces individuales de los resultados.');
-    const name = buildJobImageFilename(batch, scene, index);
+    const name = buildJobImageFilename(batchesById.get(scene.batchId)!, scene, index);
     zip.file(name, await readAssetBytes(output.resultImagePath));
-    manifest.push({ fileName: name, clientId: job.clientId, itemId: scene.garmentId, scene: scene.productScene || scene.poseImageId, jobId: scene.id, outputId: output.id, reviewStatus: 'approved' });
+    manifest.push({ fileName: name, clientId: job.clientId, batchId: scene.batchId, modelId: scene.modelId, itemId: scene.garmentId, scene: scene.productScene || scene.poseImageId, jobId: scene.id, outputId: output.id, reviewStatus: 'approved' });
   }
-  zip.file('manifest.json', JSON.stringify({ automationJobId: job.id, batchId: job.batchId, images: manifest }, null, 2));
+  zip.file('manifest.json', JSON.stringify({ automationJobId: job.id, batchId: job.batchId, batchIds, images: manifest }, null, 2));
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 };

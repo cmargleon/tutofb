@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
   Download,
   Image as ImageIcon,
   Trash2,
@@ -21,11 +21,6 @@ import { ModelPosesEditGrid } from './ModelPosesEditGrid';
 interface ModelLibraryItemProps {
   model: Model;
   clients: Client[];
-  isEditing: boolean;
-  isExpanded: boolean;
-  isHighlighted: boolean;
-  expandedId: string | null;
-  setExpandedId: React.Dispatch<React.SetStateAction<string | null>>;
   library: UseModelLibraryResult;
 }
 
@@ -33,77 +28,42 @@ interface ModelLibraryItemProps {
 export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
   model,
   clients,
-  isEditing,
-  isExpanded,
-  isHighlighted,
-  expandedId,
-  setExpandedId,
   library,
 }) => {
   const hasPoses = model.poses && model.poses.length > 0;
   const isArchived = isArchivedCatalogEntity(model);
-  const showExpandedEditor = isExpanded && isEditing && !isArchived;
-  const showExpandedArchiveView = isExpanded && isArchived && hasPoses;
+  const { search } = useLocation();
+  const initialized = useRef(false);
+  const { handleStartEdit } = library;
 
-  const handleToggleExpanded = () => {
-    if (!model.id) return;
-
-    if (isExpanded) {
-      if (isEditing) library.handleCancelEdit();
-      setExpandedId(null);
-      return;
+  useEffect(() => {
+    if (!initialized.current && !isArchived) {
+      initialized.current = true;
+      handleStartEdit(model);
     }
+  }, [handleStartEdit, isArchived, model]);
 
-    if (!isArchived) {
-      library.handleStartEdit(model);
-    }
-
-    setExpandedId(model.id);
-  };
-
-  const handleSummaryKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    if (isArchived && !hasPoses) return;
-    handleToggleExpanded();
-  };
-
-  const handleCollapseEditor = () => {
-    library.handleCancelEdit();
-    setExpandedId(null);
-  };
-
-  const handleSaveAndCollapse = async () => {
-    const saved = await library.handleSaveEdit(model);
-    if (saved) setExpandedId(null);
-  };
+  const isEditing = library.editingId === model.id && !isArchived;
 
   return (
-    <li
-      id={model.id ? `model-${model.id}` : undefined}
-      className={`scroll-mt-28 transition-colors hover:bg-gray-50 ${
-        isHighlighted ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200' : ''
-      }`}
-    >
+    <article className="rounded-xl bg-white">
       <div className="p-4 sm:px-6">
+        <Link
+          to={`/models/catalogo${search}`}
+          className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Volver al catálogo
+        </Link>
         {isArchivedCatalogEntity(model) && (
           <div className="mb-3 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
             Archivado
           </div>
         )}
 
-        <div
-          className={`flex items-center justify-between gap-4 ${
-            !isArchived || hasPoses ? 'cursor-pointer' : ''
-          }`}
-          onClick={!isArchived || hasPoses ? handleToggleExpanded : undefined}
-          onKeyDown={!isArchived || hasPoses ? handleSummaryKeyDown : undefined}
-          role={!isArchived || hasPoses ? 'button' : undefined}
-          tabIndex={!isArchived || hasPoses ? 0 : undefined}
-          aria-expanded={!isArchived || hasPoses ? isExpanded : undefined}
-        >
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-indigo-600">{model.name}</p>
+            <h2 className="text-lg font-semibold text-gray-900">{model.name}</h2>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
               <span>Cliente: {model.clientNameSnapshot}</span>
               <span className="flex items-center gap-1">
@@ -119,11 +79,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
             </div>
           </div>
 
-          <div
-            className="flex shrink-0 items-center gap-2"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
+          <div className="flex flex-wrap items-center gap-2">
             {!isArchived ? (
               <>
                 {hasPoses && (
@@ -169,22 +125,13 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
               </>
             )}
 
-            {(!isArchived || hasPoses) && (
-              <span
-                className="rounded-lg p-1.5 text-gray-400"
-                aria-hidden="true"
-              >
-                {isExpanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </span>
+            {!isArchived && !isEditing && (
+              <Button size="sm" onClick={() => library.handleStartEdit(model)}>Editar</Button>
             )}
           </div>
         </div>
 
-        {showExpandedEditor ? (
+        {isEditing ? (
           <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4">
             <div className="flex items-center gap-2">
               <input
@@ -274,7 +221,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                 variant="primary"
                 size="sm"
                 loading={library.isSavingEdit}
-                onClick={() => void handleSaveAndCollapse()}
+                onClick={() => void library.handleSaveEdit(model)}
               >
                 Guardar
               </Button>
@@ -282,7 +229,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
                 variant="ghost"
                 size="sm"
                 disabled={library.isSavingEdit}
-                onClick={handleCollapseEditor}
+                onClick={library.handleCancelEdit}
               >
                 Cancelar
               </Button>
@@ -290,8 +237,8 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
           </div>
         ) : null}
 
-        {showExpandedArchiveView ? <ModelPosesViewGrid model={model} /> : null}
+        {!isEditing && hasPoses && <ModelPosesViewGrid model={model} />}
       </div>
-    </li>
+    </article>
   );
 };

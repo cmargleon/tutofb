@@ -1,3 +1,4 @@
+import { assertLegacyDriveDestination } from '../backups/legacyGuard';
 import { createSign } from 'node:crypto';
 import {
   getGoogleClientEmail,
@@ -13,10 +14,9 @@ const DRIVE_FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const GOOGLE_SHEETS_MIME_TYPE = 'application/vnd.google-apps.spreadsheet';
 
-interface GoogleDriveConfig {
+interface GoogleDriveCredentials {
   clientEmail: string;
   privateKey: string;
-  folderId: string;
   workspaceUserEmail: string | null;
 }
 
@@ -33,12 +33,11 @@ interface DriveFileResponse {
 }
 
 interface CachedAccessToken {
-  cacheKey: string;
   token: string;
   expiresAtMs: number;
 }
 
-let cachedAccessToken: CachedAccessToken | null = null;
+const accessTokens = new Map<string, CachedAccessToken>();
 
 const requireEnvValue = (value: string | undefined, name: string): string => {
   const normalized = value?.trim() || '';
@@ -54,13 +53,17 @@ const normalizePrivateKey = (value: string): string =>
     .replace(/^"|"$/g, '')
     .replace(/\\n/g, '\n');
 
-const getGoogleDriveConfig = (): GoogleDriveConfig => ({
+const getGoogleCredentials = (): GoogleDriveCredentials => ({
   clientEmail: requireEnvValue(getGoogleClientEmail() || process.env.GOOGLE_CLIENT_EMAIL, 'GOOGLE_CLIENT_EMAIL'),
   privateKey: normalizePrivateKey(
     requireEnvValue(GOOGLE_PRIVATE_KEY.value() || process.env.GOOGLE_PRIVATE_KEY, 'GOOGLE_PRIVATE_KEY'),
   ),
-  folderId: requireEnvValue(getGoogleDriveFolderId() || process.env.GOOGLE_DRIVE_FOLDER_ID, 'GOOGLE_DRIVE_FOLDER_ID'),
   workspaceUserEmail: (getGoogleWorkspaceUserEmail() || process.env.GOOGLE_WORKSPACE_USER_EMAIL || '').trim() || null,
+});
+
+const getGoogleDriveConfig = () => ({
+  ...getGoogleCredentials(),
+  folderId: requireEnvValue(getGoogleDriveFolderId() || process.env.GOOGLE_DRIVE_FOLDER_ID, 'GOOGLE_DRIVE_FOLDER_ID'),
 });
 
 const toBase64Url = (input: string | Buffer): string =>
@@ -70,7 +73,7 @@ const toBase64Url = (input: string | Buffer): string =>
     .replace(/\//g, '_')
     .replace(/=+$/g, '');
 
-const buildServiceAccountJwt = (config: GoogleDriveConfig): string => {
+const buildServiceAccountJwt = (config: GoogleDriveCredentials, scope: string): string => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const header = {
     alg: 'RS256',
@@ -78,7 +81,7 @@ const buildServiceAccountJwt = (config: GoogleDriveConfig): string => {
   };
   const claimSet: Record<string, string | number> = {
     iss: config.clientEmail,
-    scope: DRIVE_SCOPE,
+    scope,
     aud: TOKEN_URL,
     iat: nowSeconds,
     exp: nowSeconds + 3600,
@@ -117,13 +120,14 @@ const parseGoogleError = async (response: Response): Promise<string> => {
   return text;
 };
 
-const getAccessToken = async (config: GoogleDriveConfig): Promise<string> => {
-  const cacheKey = `${config.clientEmail}:${config.workspaceUserEmail || ''}`;
-  if (cachedAccessToken?.cacheKey === cacheKey && cachedAccessToken.expiresAtMs > Date.now() + 60_000) {
+const getAccessToken = async (config: GoogleDriveCredentials, scope = DRIVE_SCOPE): Promise<string> => {
+  const cacheKey = `${config.clientEmail}:${config.workspaceUserEmail || ''}:${scope}`;
+  const cachedAccessToken = accessTokens.get(cacheKey);
+  if (cachedAccessToken && cachedAccessToken.expiresAtMs > Date.now() + 60_000) {
     return cachedAccessToken.token;
   }
 
-  const assertion = buildServiceAccountJwt(config);
+  const assertion = buildServiceAccountJwt(config, scope);
   const response = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: {
@@ -141,14 +145,16 @@ const getAccessToken = async (config: GoogleDriveConfig): Promise<string> => {
     throw new Error(message);
   }
 
-  cachedAccessToken = {
-    cacheKey,
+  accessTokens.set(cacheKey, {
     token: payload.access_token,
     expiresAtMs: Date.now() + Math.max(0, (payload.expires_in || 3600) - 120) * 1000,
-  };
+  });
 
   return payload.access_token;
 };
+
+export const getOrganizerDriveToken = (readOnly: boolean): Promise<string> =>
+  getAccessToken(getGoogleCredentials(), readOnly ? `${DRIVE_SCOPE}.readonly` : DRIVE_SCOPE);
 
 const buildMultipartBody = (metadata: Record<string, unknown>, media: Buffer): { body: Buffer; contentType: string } => {
   const boundary = `batch_spreadsheet_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -189,6 +195,14 @@ const parseDriveFileResponse = async (response: Response): Promise<{ sheetId: st
   };
 };
 
+const assertLegacyTarget = (fileId: string, token: string) => assertLegacyDriveDestination(fileId, async id => {
+  const response = await fetch(`${DRIVE_FILES_URL}/${encodeURIComponent(id)}?supportsAllDrives=true&fields=id,parents,driveId,appProperties`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000), redirect: 'error',
+  });
+  if (!response.ok) throw new Error('No se pudo verificar la frontera de seguridad del destino de Drive.');
+  return response.json();
+});
+
 export const createGoogleSheetFromXlsx = async ({
   workbookBuffer,
   sheetName,
@@ -198,6 +212,7 @@ export const createGoogleSheetFromXlsx = async ({
 }): Promise<{ sheetId: string; sheetUrl: string }> => {
   const config = getGoogleDriveConfig();
   const token = await getAccessToken(config);
+  await assertLegacyTarget(config.folderId, token);
   const { body, contentType } = buildMultipartBody(
     {
       name: sheetName,
@@ -236,6 +251,7 @@ export const updateGoogleSheetFromXlsx = async ({
 }): Promise<{ sheetId: string; sheetUrl: string }> => {
   const config = getGoogleDriveConfig();
   const token = await getAccessToken(config);
+  await assertLegacyTarget(sheetId, token);
   const { body, contentType } = buildMultipartBody({ name: sheetName }, workbookBuffer);
   const response = await fetch(
     `${DRIVE_FILES_UPLOAD_URL}/${encodeURIComponent(sheetId)}?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink`,
@@ -274,6 +290,7 @@ export const shareGoogleSheetWithEditor = async ({
   }
 
   const token = await getAccessToken(config);
+  await assertLegacyTarget(sheetId, token);
   const response = await fetch(
     `${DRIVE_FILES_URL}/${encodeURIComponent(sheetId)}/permissions?supportsAllDrives=true&sendNotificationEmail=false&fields=id`,
     {

@@ -15,6 +15,8 @@ import {
   GenerateModelPhotoRequest,
   GenerateModelPhotoResponse,
   GeneratedModelPhoto,
+  SetModelActiveRequest,
+  SetModelActiveResponse,
   SetModelPoseActiveRequest,
   SetModelPoseActiveResponse,
 } from '../../../shared/src/types';
@@ -78,6 +80,7 @@ const getModelBundleDownloadUrl = (): string => {
 
 interface SubscribeModelsOptions {
   includeArchived?: boolean;
+  includeInactive?: boolean;
 }
 
 export const subscribeToModels = (
@@ -90,9 +93,17 @@ export const subscribeToModels = (
     : query(collection(db, 'models'), where('status', '==', 'active'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const models = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Model));
-    callback(models);
+    callback(options.includeInactive ? models : models.filter((model) => model.active !== false));
   }, onError);
 };
+
+export const subscribeToModel = (
+  modelId: string,
+  callback: (model: Model | null) => void,
+  onError: (error: Error) => void,
+) => onSnapshot(doc(db, 'models', modelId), (snapshot) => {
+  callback(snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Model : null);
+}, onError);
 
 export const createModel = async (
   clientId: string,
@@ -233,6 +244,11 @@ export const archiveModel = async (id: string) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
   await httpsCallable<{ id: string; archived: boolean }, unknown>(functions, 'setModelArchived')({ id, archived: true });
+};
+
+export const setModelActive = async (input: SetModelActiveRequest): Promise<SetModelActiveResponse> => {
+  const callable = httpsCallable<SetModelActiveRequest, SetModelActiveResponse>(functions, 'setModelActive');
+  return (await callable(input)).data;
 };
 
 export const setModelPoseActive = async (input: SetModelPoseActiveRequest): Promise<SetModelPoseActiveResponse> => {

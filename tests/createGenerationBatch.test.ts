@@ -329,6 +329,15 @@ test('assertModelOwnershipAndPoses rechaza poses ajenas o modelos de otro client
   );
 });
 
+test('el backend rechaza modelos desactivados aunque la pose esté activa', () => {
+  const client = { id: 'client-1' } as Client;
+  assert.doesNotThrow(() => assertModelOwnershipAndPoses(client, baseModel, ['pose-1']));
+  assert.throws(
+    () => assertModelOwnershipAndPoses(client, { ...baseModel, active: false }, ['pose-1']),
+    { code: 'failed-precondition', message: /modelo seleccionado está desactivado/i },
+  );
+});
+
 test('el backend rechaza poses desactivadas y conserva el acceso a poses anteriores sin estado', () => {
   const client = { id: 'client-1' } as Client;
   const model = { ...baseModel, poses: baseModel.poses.map((pose, index) => ({ ...pose, ...(index === 1 ? { active: false } : {}) })) };

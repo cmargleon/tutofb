@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { ProductSceneInput, ProductSceneType } from '../../../../../shared/src/types';
+import type { OrganizerDraft, ProductSceneInput, ProductSceneType } from '../../../../../shared/src/types';
 import { handleGarmentFiles, revokeGarmentUrls } from '../../garments';
 import { resetWizardGeneratedOutputs } from '../stateTransitions';
 import type { WizardState } from '../../types';
@@ -12,7 +12,7 @@ export const useProductGeneration = ({ state, setState, setFlowError, defaultSce
   defaultPrompt: string;
   onScenesChange: () => void;
 }) => {
-  const handleFiles = async (files: File[], sameItem = false) => {
+  const handleFiles = async (files: File[], sameItem = false, catalog?: OrganizerDraft) => {
     let prepared: WizardState['garments'] = [];
     try {
       if (files.some((file) => !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) throw new Error('Usa fotografías JPEG, PNG o WebP.');
@@ -20,6 +20,17 @@ export const useProductGeneration = ({ state, setState, setFlowError, defaultSce
       if (sameItem && prepared.length > 0) {
         prepared = [{ ...prepared[0], files: prepared.flatMap((item) => item.files), originalFileNames: prepared.flatMap((item) => item.originalFileNames),
           originalPhotos: prepared.flatMap((item) => item.originalPhotos).map((photo, index) => ({ ...photo, sourceIndex: index })), isMultiAngle: files.length > 1 }];
+      }
+      if (catalog && prepared.length) {
+        prepared[0] = { ...prepared[0], name: catalog.name, analysisStatus: 'ready', itemKind: catalog.kind,
+          itemKindConfidence: 1, itemKindReasoning: 'Referencias aprobadas en el Organizador inteligente',
+          matchedColor: catalog.color || null,
+          originalPhotos: prepared[0].originalPhotos.map(photo => {
+            const view = catalog.photos[files.indexOf(photo.file)]?.view || catalog.photos[photo.sourceIndex]?.view;
+            return view ? { ...photo, classification: { status: 'classified', view, confidence: 1,
+              reasoning: 'Vista aprobada en el Organizador inteligente', classifiedBy: 'gemini', error: null } } : photo;
+          }),
+        };
       }
       const next = [...state.garments, ...prepared];
       if (next.some((item) => item.originalPhotos.length > 4)) throw new Error('Cada artículo admite hasta 4 fotos de referencia.');

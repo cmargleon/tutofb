@@ -18,9 +18,11 @@ const Wizard = lazyRoute('wizard', () => import('../pages/Wizard').then((module)
 const Analytics = lazyRoute('analytics', () => import('../pages/Analytics').then((module) => ({ default: module.Analytics })));
 const Finanzas = lazyRoute('finanzas', () => import('../pages/Finanzas').then((module) => ({ default: module.Finanzas })));
 const Cola = lazyRoute('cola', () => import('../pages/Cola').then((module) => ({ default: module.Cola })));
+const SeguridadRespaldos = lazyRoute('seguridad-respaldos', () => import('../pages/SeguridadRespaldos').then(module => ({ default: module.SeguridadRespaldos })));
 const Configuracion = lazyRoute('configuracion', () => import('../pages/Configuracion').then((module) => ({ default: module.Configuracion })));
 const Catalogo = lazyRoute('catalogo', () => import('../pages/Catalogo').then((module) => ({ default: module.Catalogo })));
 
+const Organizador = lazyRoute('organizador', () => import('../pages/Organizador').then((module) => ({ default: module.Organizador })));
 const Automation = lazyRoute('automation', () => import('../pages/Automation').then((module) => ({ default: module.Automation })));
 
 const RouteLoadingFallback: React.FC = () => (
@@ -85,13 +87,15 @@ export const AppRouter: React.FC = () => {
             <Route path="clients/lista" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients view="list" /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Models /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/generar" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsGenerate /></PageErrorBoundary></ProtectedRoute>} />
-            <Route path="models/catalogo" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsCatalog /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="models/catalogo/:modelId?" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsCatalog /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="organizador" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Organizador /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="automation" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Automation /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="automation/intake" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Automation intake /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="generate" element={<ProtectedRoute roles={['admin', 'operador']}><PageErrorBoundary><Wizard /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="cola" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Cola /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="analytics" element={<ProtectedRoute roles={['admin', 'revisor']}><PageErrorBoundary><Analytics /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="finanzas" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Finanzas /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="seguridad-respaldos" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><SeguridadRespaldos /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Configuracion /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="catalogo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Catalogo /></PageErrorBoundary></ProtectedRoute>} />
           </Route>

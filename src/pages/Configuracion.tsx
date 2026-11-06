@@ -1,4 +1,5 @@
 import { AutomationBudgetSettings } from '../components/automation/AutomationBudgetSettings';
+import { OrganizerAutomationSettings } from '../components/automation/OrganizerAutomationSettings';
 import React, { useEffect, useState } from 'react';
 import { Bell, Settings, Sliders, Cpu, ToggleLeft, FileText } from 'lucide-react';
 import { PageHeader, LoadingBlock } from '../components/ui';
@@ -271,6 +272,7 @@ export const Configuracion: React.FC = () => {
       </div>
 
       <AutomationBudgetSettings />
+      <OrganizerAutomationSettings />
 
       {/* Section 2: Queue parameters */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -426,6 +428,7 @@ export const Configuracion: React.FC = () => {
           El prompt base se usa en el wizard cuando el cliente seleccionado no tiene un prompt propio.
           Los casos A/B/C se precargan como campos editables según la clasificación de cada prenda. El wizard muestra el texto completo para aprobarlo antes de enviarlo.
           Los demás bloques y las escenas de producto también se precargan desde estos valores globales.
+          Los prompts adicionales de hombre y mujer se incluyen solo en prendas, según el sexo del modelo seleccionado, tanto en el wizard como en automatización. Empiezan vacíos; dejarlos vacíos no añade instrucciones.
           Un campo vacío o igual al valor interno por defecto restaura ese valor. Las ediciones del wizard se aplican solo a ese lote.
         </p>
         {systemConfigLoading ? (
@@ -472,7 +475,7 @@ export const Configuracion: React.FC = () => {
               onChange={(value) => setAdditionalPrompts((current) => ({ ...current, [key]: value }))}
               disabled={!role.canManageUsers}
               maxLength={maxLength}
-              placeholder="Vacío: usar instrucciones originales"
+              placeholder={key === 'systemPromptMale' || key === 'systemPromptFemale' ? 'Vacío: sin instrucciones adicionales' : 'Vacío: usar instrucciones originales'}
             /></div>)}
             <h3 className="pt-4 text-sm font-semibold text-slate-900">Escenas de fotografía de producto</h3>
             {productScenes.map((scene) => <div key={scene.type}><PromptTextarea

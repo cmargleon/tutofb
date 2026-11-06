@@ -3,11 +3,14 @@ import {
   INTERNAL_GARMENT_DETAILS_PROMPT_BLOCK, resolveTryOnPromptCaseKey,
 } from './domain';
 import type { GarmentBodyArea, GarmentReferenceImageType, ModelIdentityTraits, SystemConfig, TryOnPromptCaseKey } from './types';
+import { getModelGender } from './automationModels';
 
 export const APPROVED_TRY_ON_PROMPT_FORMAT = 'approved-try-on-v1' as const;
 export const MAX_APPROVED_TRY_ON_PROMPT_LENGTH = 30000;
 export interface TryOnPromptBlocks {
   identity: string;
+  modelGender?: 'male' | 'female' | null;
+  gender?: string;
   internalLabels: string;
   accessories: string;
   cases: Record<TryOnPromptCaseKey, string>;
@@ -17,12 +20,15 @@ export const MULTI_ANGLE_PROMPT = 'La referencia de la prenda incluye multiples 
 
 // Only extract exact known blocks. Custom instructions remain verbatim and visible in the general field.
 export const seedTryOnPrompt = (general: string, traits?: ModelIdentityTraits | null, config?: Partial<SystemConfig>) => {
+  const modelGender = getModelGender({ identityTraits: traits });
   const identityLine = "- Preserve 100% the model's identity (face, body shape, skin tone, proportions)";
   const hasIdentityLine = general.includes(identityLine);
   return {
     general: general.split(INTERNAL_GARMENT_DETAILS_PROMPT_BLOCK).join('')
       .split(CARRY_ACCESSORY_PROMPT_BLOCK).join('').split(identityLine).join('').trim(),
     blocks: {
+      modelGender,
+      gender: (modelGender === 'male' ? config?.systemPromptMale : modelGender === 'female' ? config?.systemPromptFemale : null) ?? '',
       identity: config?.systemPromptIdentity != null
         ? buildModelIdentityPromptBlock(traits, config.systemPromptIdentity)
         : [buildModelIdentityPromptBlock(traits), ...(hasIdentityLine ? [identityLine] : [])].join('\n'),
@@ -45,7 +51,7 @@ export const composeApprovedTryOnPrompt = (
   referenceType: GarmentReferenceImageType = 'single_view',
 ): string => {
   const caseKey = resolveTryOnPromptCaseKey(bodyArea);
-  return [blocks.identity, general, blocks.internalLabels,
+  return [blocks.identity, general, blocks.gender ?? '', blocks.internalLabels,
     ...(caseKey ? [blocks.cases[caseKey]] : []),
     ...(caseKey === 'carry_accessory' ? [blocks.accessories] : []),
     ...(referenceType === 'multi_angle_composite' ? [blocks.multiAngle] : []),

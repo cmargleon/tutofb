@@ -17,3 +17,5 @@ export * from './manglarConnection';
 export * from './productGeneration';
 
 export * from './manglar';
+
+export * from './organizer';

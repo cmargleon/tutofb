@@ -75,6 +75,17 @@ service cloud.firestore {
         );
     }
 
+    match /driveBackups/{clientId} {
+      allow read: if isAdmin();
+      allow write: if false;
+      match /{document=**} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+    match /driveBackupQueue/{id} { allow read, write: if false; }
+    match /driveBackupControl/{id} { allow read, write: if false; }
+
     match /automationJobs/{jobId} {
       allow read: if isAdmin() || (isActiveUser() && currentRole() == 'operador' && resource.data.createdByUid == request.auth.uid);
       allow write: if false;

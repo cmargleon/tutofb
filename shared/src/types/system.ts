@@ -30,6 +30,7 @@ export interface SystemAlertSettings {
 }
 
 export interface SystemConfig {
+  organizerAutoGenerationEnabled?: boolean;
   automationBudget?: import('./automation').AutomationBudgetConfig;
   jobMaxRetries: number;
   jobRetryDelayMs: number;
@@ -40,6 +41,8 @@ export interface SystemConfig {
   systemPromptFullOutfit: string | null;
   systemPromptTopOnly: string | null;
   systemPromptBottomOnly: string | null;
+  systemPromptMale: string | null;
+  systemPromptFemale: string | null;
   systemPromptIdentity: string | null;
   systemPromptInternalLabels: string | null;
   systemPromptAccessories: string | null;

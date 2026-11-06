@@ -1,5 +1,6 @@
 import { runManglarPaid } from '../manglar/budget';
-import { reserveAutomationOperation, settleAutomationOperation, GEMINI_OPERATION_HOLD_USD } from '../automation/budget';
+import { reserveAutomationOperation, settleAutomationOperation } from '../automation/budget';
+import { GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
 import * as admin from 'firebase-admin';
 import { GeminiUsageFeature, GeminiUsageRecord, GeminiUsageStatus } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';

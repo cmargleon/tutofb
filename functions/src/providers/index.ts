@@ -1,5 +1,5 @@
 import { runManglarPaid } from '../manglar/budget';
-import { estimateGenerationHold } from '../automation/budget';
+import { estimateGenerationHold } from '../costs/generationEstimates';
 import { Provider } from '../../../shared/src/types';
 import { ProviderGenerationError } from '../errors/jobFailure';
 import { generateWithNewFalModel, generateWithFalBananaPro, generateWithFalGPTImage2, generateWithFalNanoBanana2, generateWithFalSeedream, generateWithFalSeedream5 } from './fal';

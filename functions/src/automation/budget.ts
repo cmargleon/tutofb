@@ -2,23 +2,16 @@ import { assertDelegatedStamp } from '../manglar/access';
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import type { AutomationJob, Job, Provider, ProviderImageConfig } from '../../../shared/src/types';
+import type { AutomationJob, Job } from '../../../shared/src/types';
 import { DEFAULT_AUTOMATION_BUDGET, remainingAutomationBudget, usd, validateAutomationBudget } from '../../../shared/src/automationPolicy';
-import { getProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { authorizeMachineJob } from './machineAuth';
 
 export class AutomationBudgetError extends HttpsError {
   constructor(message: string) { super('resource-exhausted', message); }
 }
-// Rate-card values in the shared module are estimates, especially token-priced GPT models.
-// Never describe these holds as a provider-enforced spending guarantee.
-export const estimateGenerationHold = (provider: Provider, config: ProviderImageConfig, references: number) => {
-  const estimate = getProviderCostUsd(provider, config, references);
-  const fixed = ['fal-seedream', 'fal-banana-pro', 'fal-nano-banana-2', 'fal-seedream-5', 'fal-seedream-5-flash'].includes(provider);
-  return { estimateUsd: estimate, holdUsd: fixed ? estimate : Math.max(0.5, estimate * 4), fixed };
-};
-export const GEMINI_OPERATION_HOLD_USD = 0.05;
+// Compatibility for callers that still import estimates from the automation ledger.
+export { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
 const operationId = (key: string) => createHash('sha256').update(key).digest('hex');
 
 export const reserveAutomationOperation = async (

@@ -1,4 +1,4 @@
-import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from '../automation/budget';
+import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { mapModelPhotoProviderToProvider } from '../../../shared/src/domain';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';

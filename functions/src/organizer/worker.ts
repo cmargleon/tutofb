@@ -8,81 +8,23 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { assertDelegatedStamp } from '../manglar/access';
 import { ALGORITHM_VERSION, associatePhotos, associationIndex, groupProductRows, identityFromFilename, normalize, productVariant, readWorkbook, type TabMapping } from './catalog';
 import { digest, fileUrl, FOLDER, isImage, isWorkbook, OrganizerDrive, OrganizerDriveError, SHEET, versionOf, type DriveEntry, type DriveFile, type ManagedZone } from './drive';
-import { assertLease, clientRef, configs, createAttemptRecorder, documents, enqueue, requiresCopy, runRef, whileLeased, writePages, type StoredConfig, type StoredRun } from './store';
+import { assertLease, clientRef, configs, createAttemptRecorder, documents, requiresCopy, runRef, whileLeased, writePages, type StoredConfig, type StoredRun } from './store';
 import { analyze, OrganizerBudgetExhausted, reconcileReservations, type VisionPhoto } from './vision';
 import { interpretStructure, rankCandidates, matchObservation } from './interpretation';
 import { photoDecisionKey, planFile, stableDestination } from './planning';
 import { automateNewPhotos } from './automation';
+import { compare } from './fingerprint';
+import { watch } from './watch';
 
 const sliceMs = 380_000;
 const leaseMs = 560_000;
 type RunFile = { entry: DriveEntry; added?: boolean; changed?: boolean; copied?: boolean; error?: string | null };
 type PhotoState = OrganizerPhoto & { hasConflict: boolean; version: string; visionKey?: string | null; kind?: string; quality?: number; visualConfidence?: number; algorithm: string; updatedAt: number };
-const compare = (entry: DriveEntry) => digest([entry.id, versionOf(entry), entry.path, entry.parents]);
 const inventoryFingerprint = (files: RunFile[]) => digest(files.map(file => compare(file.entry)).sort());
 const message = (error: unknown) => error instanceof Error ? error.message.slice(0, 350) : 'Error de ejecución.';
 const assetId = (file: DriveEntry) => digest([file.id, versionOf(file)]);
 const clean = <T extends object>(data: T): T => JSON.parse(JSON.stringify(data));
 const manifestRef = (root: DocumentReference, file: DriveEntry) => root.collection('manifest').doc(assetId(file));
-
-async function* scan(drive: OrganizerDrive, sourceFiles: DriveFile[]) {
-  const queue = sourceFiles.map(entry => ({ ...entry, path: [entry.name], sourceId: entry.id, ancestorIds: [] as string[] }));
-  while (queue.length) {
-    const parent = queue.pop()!;
-    let token = '';
-    do {
-      const page = await drive.children(parent, token);
-      for (const file of page.files) {
-        if (file.trashed || file.appProperties?.organizerTenant || !file.parents?.includes(parent.id)) continue;
-        const entry = { ...file, path: [...parent.path, file.name], sourceId: parent.sourceId, ancestorIds: [...parent.ancestorIds, parent.id] };
-        yield entry;
-        if (entry.mimeType === FOLDER) queue.push(entry);
-      }
-      token = page.nextPageToken || '';
-    } while (token);
-  }
-}
-
-async function watch(drive: OrganizerDrive, config: StoredConfig) {
-  if (!config.enabled || config.activeRunId) return;
-  const ref = clientRef(config.clientId);
-  const { sources } = await drive.zone(config.sourceIds, config.parentId, config.allowInheritedAccess);
-  const now = Date.now();
-  let cursor = config.changeCursor;
-  let changed = true;
-  try {
-    if (cursor) {
-      const changes = await drive.changes(cursor, sources[0].driveId);
-      cursor = changes.cursor;
-      changed = changes.changed;
-    } else {
-      cursor = await drive.startChanges(sources[0].driveId);
-    }
-  } catch (error) {
-    if (!(error instanceof OrganizerDriveError) || ![400, 403, 404, 410].includes(error.status)) throw error;
-    cursor = null;
-  }
-  const needsScan = changed || !config.observedFingerprint || config.observedFingerprint !== config.processedFingerprint ||
-    now - (config.lastFullScanAt || 0) >= 60 * 60_000;
-  let fingerprint = config.observedFingerprint;
-  if (needsScan) {
-    const inventory: string[] = [];
-    for await (const file of scan(drive, sources)) inventory.push(compare(file));
-    fingerprint = digest(inventory.sort());
-  }
-  const shouldEnqueue = await getAppFirestore().runTransaction(async tx => {
-    const current = (await tx.get(ref)).data() as StoredConfig;
-    if (!current.enabled || current.activeRunId || digest(current.sourceIds) !== digest(config.sourceIds) || current.parentId !== config.parentId) return false;
-    const changed = fingerprint !== current.observedFingerprint;
-    const observedAt = changed ? now : current.observedAt || now;
-    const pending = fingerprint !== current.processedFingerprint && fingerprint !== current.blockedFingerprint;
-    tx.update(ref, { observedFingerprint: fingerprint, observedAt, lastPollAt: now, changeCursor: cursor, watcherError: null,
-      lastFullScanAt: needsScan ? now : current.lastFullScanAt || null, watcher: pending ? 'collecting' : 'idle' });
-    return pending && now - observedAt >= current.debounceMinutes * 60_000;
-  });
-  if (!shouldEnqueue || !fingerprint) return;
-  return enqueue(config.clientId, 'classify', `automatic-${fingerprint}-${config.observedAt}`, 'watcher', { automaticFingerprint: fingerprint });
-}
 
 async function inventory(drive: OrganizerDrive, config: StoredConfig, run: StoredRun, doc: DocumentReference, lease: string, deadline: number) {
   const folders = doc.collection('scanFolders');

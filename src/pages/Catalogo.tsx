@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { AlertCircle, ChevronLeft, ChevronRight, Download, ExternalLink, Images, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
@@ -8,6 +7,7 @@ import { subscribeToClients } from '../features/clients/firebase';
 import { cancelBatchProcessing, editBatchSpreadsheet, exportBatchSpreadsheet, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
 import { useRole } from '../features/auth/AuthProvider';
 import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
+import { subscribeToCatalogBatch, subscribeToCatalogBatchJobs, subscribeToCatalogJob } from '../features/catalog/firebase';
 import { Batch, Client, Job, Provider } from '../../shared/src/types';
 import { formatDateTimeLong, toMillisOrZero } from '../../shared/src/utils/dateUtils';
 import { CatalogGarmentSection } from '../components/catalog/CatalogGarmentSection';
@@ -15,7 +15,6 @@ import { CatalogLightbox } from '../components/catalog/CatalogLightbox';
 import { useConfirm, useToast } from '../features/feedback/FeedbackProvider';
 import { useSystemConfig } from '../features/system/useSystemConfig';
 import { PROVIDER_LABELS } from '../../shared/src/domain';
-import { db } from '../firebase';
 
 interface PendingCatalogRegeneration {
   job: Job;
@@ -78,9 +77,8 @@ export const Catalogo: React.FC = () => {
   useEffect(() => {
     setRequestedBatch(null); setBatchLinkError(null);
     if (!selectedBatchId) return;
-    return onSnapshot(doc(db, 'batches', selectedBatchId), (snapshot) => {
-      if (!snapshot.exists()) { setBatchLinkError('El lote solicitado no está disponible.'); return; }
-      const batch = { ...snapshot.data(), id: snapshot.id } as Batch;
+    return subscribeToCatalogBatch(selectedBatchId, (batch) => {
+      if (!batch) { setBatchLinkError('El lote solicitado no está disponible.'); return; }
       if (selectedClientId && batch.clientId !== selectedClientId) { setBatchLinkError('El lote solicitado pertenece a otro cliente.'); return; }
       setRequestedBatch(batch);
       if (!selectedClientId) setSearchParams((current) => { const next = new URLSearchParams(current); next.set('clientId', batch.clientId); return next; }, { replace: true });
@@ -108,19 +106,12 @@ export const Catalogo: React.FC = () => {
       return undefined;
     }
 
-    const jobsQuery = query(
-      collection(db, 'jobs'),
-      where('batchId', '==', selectedBatchId),
-      orderBy('createdAt', sortOrder),
-    );
-
-    const unsubscribe = onSnapshot(
-      jobsQuery,
-      (snapshot) => {
+    const unsubscribe = subscribeToCatalogBatchJobs(
+      selectedBatchId,
+      sortOrder,
+      (jobs) => {
         setGeneratingJobs(
-          snapshot.docs
-            .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job)
-            .filter((job) => job.status === 'pending' || job.status === 'processing'),
+          jobs.filter((job) => job.status === 'pending' || job.status === 'processing'),
         );
       },
       () => setGeneratingJobs([]),
@@ -315,17 +306,9 @@ export const Catalogo: React.FC = () => {
       return undefined;
     }
 
-    const jobRef = doc(db, 'jobs', lightbox.jobId);
-    return onSnapshot(
-      jobRef,
-      (docSnapshot) => {
-        if (!docSnapshot.exists()) {
-          setLightboxLiveJob(null);
-          return;
-        }
-
-        setLightboxLiveJob({ id: docSnapshot.id, ...docSnapshot.data() } as Job);
-      },
+    return subscribeToCatalogJob(
+      lightbox.jobId,
+      setLightboxLiveJob,
       () => setLightboxLiveJob(null),
     );
   }, [lightbox?.jobId]);

@@ -1,5 +1,5 @@
 import { runManglarPaid } from '../manglar/budget';
-import { estimateGenerationHold } from '../automation/budget';
+import { estimateGenerationHold } from '../costs/generationEstimates';
 import { isNewFalProvider, NewFalImageConfig } from '../providers/falModels';
 import { generateModelPhotoWithNewFalModel } from '../providers/textToImage';
 import {

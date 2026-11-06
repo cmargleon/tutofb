@@ -9,12 +9,15 @@ const requireFunctions = createRequire(new URL('../functions/package.json', impo
 const local = [process.env.FIRESTORE_EMULATOR_HOST, process.env.FIREBASE_STORAGE_EMULATOR_HOST]
   .every(value => /^((127\.0\.0\.1)|localhost):\d+$/.test(value || ''));
 
-test('organizador de extremo a extremo con Firestore local, Drive y Gemini simulados', { skip: !local, timeout: 120_000 }, async ({ mock }) => {
+test('organizador de extremo a extremo con Firestore local, Drive y Gemini simulados', { skip: !local, timeout: 120_000 }, async (t) => {
+  const { mock } = t;
   const admin: typeof import('../functions/node_modules/firebase-admin') = requireFunctions('firebase-admin');
   const app = admin.initializeApp({ projectId: 'demo-tutofb-organizer', storageBucket: 'demo-tutofb-organizer.appspot.com' });
   const { OrganizerDrive, FOLDER, SHEET } = requireFunctions('./lib/functions/src/organizer/drive.js') as typeof import('../functions/src/organizer/drive');
   const { defaultConfig, clientRef, enqueue, runRef } = requireFunctions('./lib/functions/src/organizer/store.js') as typeof import('../functions/src/organizer/store');
   const { reserveOrganizerBudget, settleOrganizerBudget, reconcileReservations, holdFor } = requireFunctions('./lib/functions/src/organizer/vision.js') as typeof import('../functions/src/organizer/vision');
+  const { watch } = requireFunctions('./lib/functions/src/organizer/watch.js') as typeof import('../functions/src/organizer/watch');
+  const { digest } = requireFunctions('./lib/functions/src/organizer/drive.js') as typeof import('../functions/src/organizer/drive');
   const { tickOrganizer } = requireFunctions('./lib/functions/src/organizer/worker.js') as typeof import('../functions/src/organizer/worker');
   const { executeOrganizer } = requireFunctions('./lib/functions/src/organizer/api.js') as typeof import('../functions/src/organizer/api');
   const sharp: typeof import('../functions/node_modules/sharp') = requireFunctions('sharp');
@@ -266,5 +269,152 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
     assert.equal(finalLedger.uncertainUsd, 0);
     await ledger.update({ maxCalls: finalLedger.calls });
     await assert.rejects(() => reserveOrganizerBudget(ledger, 'test-lease', 'over-call-limit', model), /Límite de llamadas/);
+
+    // Exercise observation directly: enqueue remains a control write, without executing the run.
+    let fixtureIndex = 0;
+    const watcherFixture = async () => {
+      const id = `watch-fixture-${++fixtureIndex}`;
+      const ref = clientRef(id);
+      await ref.set(defaultConfig(id, 'Watcher', { ...settings, enabled: true, sourceIds: ['watch-origin'], parentId: 'watch-parent' }));
+      const origin = folder('watch-origin', []);
+      const parent = folder('watch-parent', []);
+      const sub = { ...folder('watch-sub', [origin.id]), version: '1' };
+      const photo: DriveFile = { id: 'watch-photo', name: 'foto.jpg', mimeType: 'image/jpeg', parents: [sub.id], md5Checksum: 'pixels' };
+      const entries = [
+        { ...sub, path: [origin.name, sub.name], sourceId: origin.id, ancestorIds: [origin.id] },
+        { ...photo, path: [origin.name, sub.name, photo.name], sourceId: origin.id, ancestorIds: [origin.id, sub.id] },
+      ];
+      // The pre-extraction byte-for-byte fingerprint formula, independent of the helper under test.
+      const fingerprint = digest(entries.map(entry => digest([entry.id, entry.version || entry.md5Checksum || '', entry.path, entry.parents])).sort());
+      const requests: string[] = [];
+      const childPages: string[] = [];
+      let cursorStatus = 0;
+      let changed = false;
+      let duringScan: (() => Promise<unknown>) | undefined;
+      const observedDrive = new OrganizerDrive(async () => 'fake-watcher-oauth', async (request, init) => {
+        assert.ok(!init?.method || init.method === 'GET', 'El watcher solo lee Drive');
+        const url = new URL(String(request));
+        const resource = url.pathname.split('/').at(-1)!;
+        requests.push(resource);
+        if (resource === 'startPageToken') return Response.json({ startPageToken: 'watch-start' });
+        if (resource === 'changes') {
+          if (cursorStatus) return Response.json({ error: { errors: [{ reason: 'expired' }] } }, { status: cursorStatus });
+          if (url.searchParams.get('pageToken') !== 'watch-next') return Response.json({
+            nextPageToken: 'watch-next', changes: [{ file: { appProperties: { organizerTenant: 'managed' } } }],
+          });
+          return Response.json({ newStartPageToken: 'watch-final', changes: changed ? [{ removed: true }] : [] });
+        }
+        if (resource === 'files') {
+          const source = url.searchParams.get('q')!.match(/^'([^']+)'/)![1];
+          const page = url.searchParams.get('pageToken') || '';
+          childPages.push(`${source}:${page}`);
+          if (duringScan) { const action = duringScan; duringScan = undefined; await action(); }
+          if (source === origin.id && !page) return Response.json({ files: [sub,
+            { ...folder('trashed-folder', [origin.id]), trashed: true },
+            { ...folder('managed-folder', [origin.id]), appProperties: { organizerTenant: 'tenant' } },
+            folder('wrong-parent', ['elsewhere'])], nextPageToken: 'second' });
+          if (source === origin.id) return Response.json({ files: [
+            { ...photo, id: 'trashed', parents: [origin.id], trashed: true },
+            { ...photo, id: 'managed', parents: [origin.id], appProperties: { organizerTenant: 'tenant' } },
+            { ...photo, id: 'moved', parents: ['elsewhere'] }],
+          });
+          assert.equal(source, sub.id, 'No recorre carpetas omitidas');
+          return Response.json({ files: [photo] });
+        }
+        const file = [origin, parent].find(file => file.id === resource);
+        assert.ok(file, `Lectura inesperada: ${url}`);
+        return Response.json(file);
+      });
+      const config = async () => (await ref.get()).data() as import('../functions/src/organizer/store').StoredConfig;
+      return { ref, config, drive: observedDrive, fingerprint, requests, childPages,
+        expire: (status: number) => { cursorStatus = status; },
+        change: () => { changed = true; },
+        duringScan: (action: () => Promise<unknown>) => { duringScan = action; } };
+    };
+
+    await t.test('watch: Drive paginado, exclusiones, debounce e ID estable sin ejecutar ni repetir el inventario', async () => {
+      const f = await watcherFixture();
+      const before = await f.config();
+      assert.equal(await watch(f.drive, before), undefined);
+      const observed = await f.config();
+      assert.equal(observed.observedFingerprint, f.fingerprint);
+      assert.deepEqual(f.childPages, ['watch-origin:', 'watch-origin:second', 'watch-sub:']);
+      assert.equal(observed.changeCursor, 'watch-start');
+      assert.equal(observed.watcher, 'collecting');
+      assert.equal(observed.activeRunId, null);
+      assert.equal(observed.watcherError, null);
+      assert.ok(observed.lastFullScanAt && observed.lastPollAt && observed.observedAt);
+      const controlFields = ['observedFingerprint', 'observedAt', 'lastPollAt', 'changeCursor', 'watcherError', 'lastFullScanAt', 'watcher'];
+      for (const key of Object.keys(before)) if (!controlFields.includes(key)) assert.deepEqual(observed[key], before[key], key);
+      assert.equal(await watch(f.drive, observed), undefined);
+      assert.equal((await f.config()).observedAt, observed.observedAt, 'El mismo inventario conserva el inicio del debounce');
+      const observedAt = Date.now() - 3 * 60_000;
+      await f.ref.update({ observedAt });
+      const run = await watch(f.drive, await f.config());
+      assert.equal(run?.id, digest([before.clientId, 'watcher', `automatic-${f.fingerprint}-${observedAt}`]));
+      assert.equal(run?.mode, 'classify');
+      assert.equal(run?.status, 'queued');
+      assert.equal((await runRef(before.clientId, run!.id).get()).data()?.fingerprint, f.fingerprint);
+      assert.equal(await watch(f.drive, await f.config()), undefined);
+      assert.equal((await f.ref.collection('runs').get()).size, 1);
+      assert.deepEqual((await f.ref.listCollections()).map(collection => collection.id), ['runs'], 'No publica catálogo ni crea manifiestos');
+    });
+
+    for (const status of [400, 403, 404, 410]) await t.test(`watch: recupera cursor inválido ${status} mediante escaneo completo`, async () => {
+      const f = await watcherFixture();
+      await f.ref.update({ changeCursor: 'expired' });
+      f.expire(status);
+      await watch(f.drive, await f.config());
+      assert.equal((await f.config()).changeCursor, null);
+      assert.equal((await f.config()).observedFingerprint, f.fingerprint);
+      assert.equal(f.childPages.length, 3);
+      f.expire(0);
+      await watch(f.drive, await f.config());
+      assert.equal((await f.config()).changeCursor, 'watch-start');
+    });
+
+    for (const reason of ['unchanged', 'changes', 'missing', 'pending', 'hourly', 'blocked']) await t.test(`watch: condición de escaneo ${reason}`, async () => {
+      const f = await watcherFixture();
+      await f.ref.update({ changeCursor: 'existing', observedFingerprint: f.fingerprint, processedFingerprint: f.fingerprint,
+        observedAt: Date.now() - 3 * 60_000, lastFullScanAt: Date.now() });
+      if (reason === 'changes') f.change();
+      if (reason === 'missing') await f.ref.update({ observedFingerprint: null });
+      if (reason === 'pending' || reason === 'blocked') await f.ref.update({ processedFingerprint: 'old',
+        ...(reason === 'blocked' ? { blockedFingerprint: f.fingerprint } : {}) });
+      if (reason === 'hourly') await f.ref.update({ lastFullScanAt: Date.now() - 61 * 60_000 });
+      const result = await watch(f.drive, await f.config());
+      assert.equal(f.childPages.length, reason === 'unchanged' ? 0 : 3);
+      assert.equal((await f.config()).changeCursor, 'watch-final', 'Consume todas las páginas de changes');
+      assert.equal((await f.ref.collection('runs').get()).size, reason === 'pending' ? 1 : 0);
+      assert.equal(Boolean(result), reason === 'pending');
+    });
+
+    for (const update of [{ sourceIds: ['different-source'] }, { parentId: 'different-parent' }, { enabled: false }, { activeRunId: 'ongoing-run' }])
+      await t.test(`watch: revalida configuración cambiada durante la observación ${Object.keys(update)[0]}`, async () => {
+        const f = await watcherFixture();
+        const before = await f.config();
+        f.duringScan(() => f.ref.update(update));
+        assert.equal(await watch(f.drive, before), undefined);
+        assert.deepEqual(await f.config(), { ...before, ...update }, 'La transacción no sobrescribe configuración ni controles');
+        assert.equal((await f.ref.collection('runs').get()).size, 0);
+      });
+
+    for (const update of [{ activeRunId: 'ongoing-run' }, { enabled: false }]) await t.test(`watch: omite observación con ${Object.keys(update)[0]}`, async () => {
+      const f = await watcherFixture();
+      await f.ref.update(update);
+      const before = await f.config();
+      assert.equal(await watch(f.drive, before), undefined);
+      assert.deepEqual(f.requests, []);
+      assert.deepEqual(await f.config(), before);
+    });
+
+    await t.test('watch: propaga errores ajenos a cursor inválido sin escrituras de control', async () => {
+      const f = await watcherFixture();
+      await f.ref.update({ changeCursor: 'existing' });
+      const before = await f.config();
+      f.expire(503);
+      await assert.rejects(() => watch(f.drive, before), { status: 503 });
+      assert.deepEqual(await f.config(), before);
+    });
   } finally { await app.delete(); }
 });

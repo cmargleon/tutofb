@@ -14,7 +14,7 @@ import { resolveAutomationPreset } from './presets';
 import { loadAutomationModelOptions } from './models';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 import { authorizeDriveFile, googleDrive, validateDriveFolder } from './drive';
-import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from './budget';
+import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
 import { createAutomation } from './persistence';
 import { authorizeMachineJob } from './machineAuth';
 

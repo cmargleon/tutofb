@@ -47,7 +47,8 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
   const requestedPrompts: string[] = [];
   let classificationCalls = 0;
   let providerCalls = 0, rejectArticle = '', rejectCount = 0, reviewTransportFailures = 0;
-  providers.generateWithProvider = async (provider: string, request: any) => { providerCalls++; requestedPrompts.push(request.prompt); return { provider, imageBytes: bytes, contentType: 'image/jpeg', remoteUrl: null, requestId: `request-${providerCalls}`, responseSummary: {} }; };
+  let generatedImage = { bytes, contentType: 'image/jpeg' };
+  providers.generateWithProvider = async (provider: string, request: any) => { providerCalls++; requestedPrompts.push(request.prompt); return { provider, imageBytes: generatedImage.bytes, contentType: generatedImage.contentType, remoteUrl: null, requestId: `request-${providerCalls}`, responseSummary: {} }; };
   const originalFetch = globalThis.fetch;
   const reviewedPrompts: string[] = [];
   globalThis.fetch = async (url: any, options: any) => {
@@ -378,17 +379,65 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       assert.deepEqual((await db.collection('automationJobs').doc(current.id).get()).data().generationJobIds, ids);
       assert.equal((await first.ref.collection('outputs').get()).size, 1);
     });
-    await t.test('operational review retry reuses the generated output and keeps quality attempts separate', async () => {
+    await t.test('worker persists exact generated path, extension, MIME and bytes for JPEG, PNG and WebP on either side of 3 MiB', async () => {
+      const created = await persistence.createAutomation({ ...base, externalId: randomUUID(), budgetUsd: 2 }, uid, 'operador');
+      await worker.processAutomation(created.jobId);
+      const job = (await db.collection('automationJobs').doc(created.jobId).get()).data();
+      let index = 0;
+      try {
+        for (const oversized of [false, true]) for (const format of ['jpeg', 'png', 'webp']) {
+          const original = await sharp({ create: { width: 13, height: 7, channels: 4, background: '#22664488' } })[format]().toBuffer();
+          generatedImage = { bytes: oversized ? Buffer.concat([original, Buffer.alloc(3 * 1024 * 1024 + 1 - original.length)]) : original, contentType: `image/${format}` };
+          const ref = db.collection('jobs').doc(job.generationJobIds[index++]);
+          const before = providerCalls;
+          await generation.processJob(ref.id, 'create', { skipBacklogSweep: true });
+          const done = (await ref.get()).data();
+          assert.equal(done.status, 'completed', done.lastError);
+          assert.equal(providerCalls, before + 1);
+          const expectedMime = oversized ? 'image/jpeg' : `image/${format}`;
+          const extension = expectedMime === 'image/jpeg' ? 'jpg' : format;
+          const path = `generated/${done.clientId}/${done.batchId}/${ref.id}/${done.currentOutputId}.${extension}`;
+          assert.equal(done.currentOutput.resultImagePath, path);
+          assert.equal(done.currentOutput.contentType, expectedMime);
+          assert.deepEqual((await ref.collection('outputs').doc(done.currentOutputId).get()).data(), done.currentOutput);
+          const [metadata] = await bucket.file(path).getMetadata();
+          assert.equal(metadata.contentType, expectedMime);
+          assert.equal(metadata.cacheControl, 'private, max-age=31536000');
+          const [stored] = await bucket.file(path).download();
+          const expected = oversized ? await sharp(generatedImage.bytes, { failOn: 'none' }).rotate().jpeg({ quality: 90, mozjpeg: true }).toBuffer() : original;
+          assert.deepEqual(stored, expected);
+          assert.equal((await sharp(stored).metadata()).format, oversized ? 'jpeg' : format);
+        }
+      } finally { generatedImage = { bytes, contentType: 'image/jpeg' }; }
+    });
+    await t.test('operational review retry reuses the compressed output and keeps quality attempts separate', async () => {
       const created = await persistence.createAutomation({ ...base, externalId: randomUUID(), budgetUsd: 2 }, uid, 'operador');
       await worker.processAutomation(created.jobId);
       const job = (await db.collection('automationJobs').doc(created.jobId).get()).data();
       const first = db.collection('jobs').doc(job.generationJobIds[0]);
       const before = providerCalls; reviewTransportFailures = 1;
-      await generation.processJob(first.id, 'create', { skipBacklogSweep: true });
+      const png = await sharp(bytes).png().toBuffer();
+      generatedImage = { bytes: Buffer.concat([png, Buffer.alloc(3 * 1024 * 1024 + 1 - png.length)]), contentType: 'image/png' };
+      try { await generation.processJob(first.id, 'create', { skipBacklogSweep: true }); }
+      finally { generatedImage = { bytes, contentType: 'image/jpeg' }; }
       const partial = (await first.get()).data(); assert.equal(partial.status, 'pending'); assert.equal(partial.automationReviewPending, true); assert.equal(partial.retryCount, 1);
+      assert.equal(partial.currentOutput.contentType, 'image/jpeg');
+      assert.ok(partial.currentOutput.resultImagePath.endsWith(`/${partial.currentOutputId}.jpg`));
+      const file = bucket.file(partial.currentOutput.resultImagePath);
+      const [storedBefore] = await file.download();
+      const [metadataBefore] = await file.getMetadata();
       await generation.processJob(first.id, 'requeue', { skipBacklogSweep: true });
       const done = (await first.get()).data(); assert.equal(done.status, 'completed'); assert.equal(done.generationAttemptCount, 1); assert.equal(providerCalls, before + 1);
       assert.equal(done.currentOutputId, partial.currentOutputId); assert.equal(done.completedOutputCount, 1); assert.equal((await first.collection('outputs').get()).size, 1);
+      assert.equal(done.currentOutput.resultImagePath, partial.currentOutput.resultImagePath);
+      assert.equal(done.currentOutput.contentType, partial.currentOutput.contentType);
+      assert.equal(done.totalCostUsd, partial.totalCostUsd);
+      assert.equal(done.totalDurationSeconds, partial.totalDurationSeconds);
+      assert.deepEqual(done.providerUsage, partial.providerUsage);
+      const [storedAfter] = await file.download(); const [metadataAfter] = await file.getMetadata();
+      assert.deepEqual(storedAfter, storedBefore);
+      assert.equal(metadataAfter.generation, metadataBefore.generation);
+      assert.equal(metadataAfter.contentType, 'image/jpeg');
     });
     await t.test('machine API authorizes multiple configured clients and scopes every plan, job and download', async () => {
       const machineAuth = require('../functions/lib/functions/src/automation/machineAuth.js');

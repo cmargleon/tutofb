@@ -1,9 +1,10 @@
 import { withManglarJobBudget } from '../manglar/budget';
-import { AutomationBudgetError, reserveAutomationOperation, settleAutomationOperation, estimateGenerationHold, pauseAutomationGeneration } from '../automation/budget';
+import { AutomationBudgetError, reserveAutomationOperation, settleAutomationOperation, pauseAutomationGeneration } from '../automation/budget';
+import { estimateGenerationHold } from '../costs/generationEstimates';
 import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import sharp from 'sharp';
+import { compressGeneratedImageIfNeeded } from '../media/compressGeneratedImage';
 import { getProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { Job, JobAutoReview, JobLog, JobOutput, Provider } from '../../../shared/src/types';
 import { normalizeProviderImageConfig, summarizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
@@ -32,10 +33,6 @@ import { buildAutomaticRetryPromptPatch, shouldBackstopPendingJob } from './jobW
 
 const db = getAppFirestore();
 const bucket = admin.storage().bucket();
-const MAX_STORED_OUTPUT_BYTES = 3 * 1024 * 1024;
-const OUTPUT_JPEG_QUALITIES = [90, 82, 74, 66, 58, 50] as const;
-const OUTPUT_LONGEST_SIDES = [2200, 2000, 1800, 1600, 1400, 1200, 1000] as const;
-
 const getSignedUrl = async (storagePath: string): Promise<string> => {
   const file = bucket.file(storagePath);
   const [url] = await file.getSignedUrl({
@@ -57,66 +54,6 @@ const mimeTypeFromStoragePath = (storagePath: string): string => {
   if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
   if (normalized.endsWith('.webp')) return 'image/webp';
   return 'image/png';
-};
-
-const compressGeneratedImageIfNeeded = async ({
-  bytes,
-  contentType,
-}: {
-  bytes: Buffer;
-  contentType: string;
-}): Promise<{ bytes: Buffer; contentType: string }> => {
-  if (bytes.length <= MAX_STORED_OUTPUT_BYTES) {
-    return { bytes, contentType };
-  }
-
-  const source = sharp(bytes, { failOn: 'none' }).rotate();
-  const metadata = await source.metadata();
-  const sourceWidth = metadata.width || null;
-  const sourceHeight = metadata.height || null;
-  const longestSide = Math.max(sourceWidth || 0, sourceHeight || 0);
-  let bestCandidate: Buffer | null = null;
-
-  for (const targetLongestSide of OUTPUT_LONGEST_SIDES) {
-    const shouldResize = longestSide > 0 && longestSide > targetLongestSide;
-
-    for (const quality of OUTPUT_JPEG_QUALITIES) {
-      let pipeline = sharp(bytes, { failOn: 'none' }).rotate();
-      if (shouldResize) {
-        pipeline = pipeline.resize({
-          width: sourceWidth && sourceWidth >= (sourceHeight || 0) ? targetLongestSide : undefined,
-          height: sourceHeight && sourceHeight > (sourceWidth || 0) ? targetLongestSide : undefined,
-          fit: 'inside',
-          withoutEnlargement: true,
-        });
-      }
-
-      const candidate = await pipeline.jpeg({
-        quality,
-        mozjpeg: true,
-      }).toBuffer();
-
-      if (!bestCandidate || candidate.length < bestCandidate.length) {
-        bestCandidate = candidate;
-      }
-
-      if (candidate.length <= MAX_STORED_OUTPUT_BYTES) {
-        return {
-          bytes: candidate,
-          contentType: 'image/jpeg',
-        };
-      }
-    }
-  }
-
-  if (bestCandidate && bestCandidate.length < bytes.length) {
-    return {
-      bytes: bestCandidate,
-      contentType: 'image/jpeg',
-    };
-  }
-
-  return { bytes, contentType };
 };
 
 const createLog = async (jobId: string, input: Omit<JobLog, 'createdAt'>): Promise<void> => {

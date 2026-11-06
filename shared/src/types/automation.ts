@@ -138,7 +138,14 @@ export interface AutomationPlan {
   costGuarantee: 'estimated_authorization_required';
   createdAt: TimestampLike; executedJobId: string | null;
 }
-export interface UpdateClientAutomationRequest { clientId: string; automation: ClientAutomationConfig }
+export interface UpdateClientAutomationRequest {
+  clientId: string;
+  automation: ClientAutomationConfig;
+  /** Omitted by legacy callers that save the complete configuration. */
+  section?: import('../clientAutomationSections').ClientAutomationSection;
+  /** Optional optimistic concurrency guard for editors sharing a draft across tabs. */
+  expectedAutomation?: ClientAutomationConfig | null;
+}
 export interface ResumeAutomationRequest { jobId: string; budgetUsd?: number }
 export interface AutomationPlanSummary {
   planId: string; clientId: string; clientName: string; jobType: AutomationJobType;

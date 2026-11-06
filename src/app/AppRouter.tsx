@@ -11,6 +11,7 @@ const ManglarConnect = lazyRoute('manglar-connect', () => import('../pages/Mangl
 const Dashboard = lazyRoute('dashboard', () => import('../pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Users = lazyRoute('users', () => import('../pages/Users').then((module) => ({ default: module.Users })));
 const Clients = lazyRoute('clients', () => import('../pages/Clients').then((module) => ({ default: module.Clients })));
+const ClientDetail = lazyRoute('client-detail', () => import('../pages/ClientDetail').then(module => ({ default: module.ClientDetail })));
 const Models = lazyRoute('models', () => import('../pages/Models').then((module) => ({ default: module.Models })));
 const ModelsGenerate = lazyRoute('models-generate', () => import('../pages/ModelsGenerate').then((module) => ({ default: module.ModelsGenerate })));
 const ModelsCatalog = lazyRoute('models-catalog', () => import('../pages/ModelsCatalog').then((module) => ({ default: module.ModelsCatalog })));
@@ -85,6 +86,7 @@ export const AppRouter: React.FC = () => {
             <Route path="clients" element={<ProtectedRoute roles={['admin']}><ClientsRedirect /></ProtectedRoute>} />
             <Route path="clients/crear" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients view="create" /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="clients/lista" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients view="list" /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="clients/:clientId" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ClientDetail /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Models /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/generar" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsGenerate /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/catalogo/:modelId?" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsCatalog /></PageErrorBoundary></ProtectedRoute>} />

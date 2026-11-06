@@ -6,6 +6,7 @@ admin.initializeApp();
 setGlobalOptions({ maxInstances: 10 });
 
 // Export callables
+export * from './callables/updateClientMarketplace';
 export * from './callables/createGenerationBatch';
 export * from './callables/createProductGenerationBatch';
 export * from './callables/classifyGarmentViewsWithGemini';

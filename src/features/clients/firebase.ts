@@ -1,5 +1,5 @@
 import { db, auth, storage } from '../../firebase';
-import { collection, collectionGroup, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { collection, collectionGroup, doc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { ref, uploadBytes, deleteObject } from 'firebase/storage';
 import {
   Client,
@@ -19,6 +19,12 @@ import { PermanentDeleteCatalogEntityRequest, PermanentDeleteCatalogEntityRespon
 interface SubscribeClientsOptions {
   includeArchived?: boolean;
 }
+
+export const subscribeToClient = (clientId: string, callback: (client: Client | null) => void, onError: (error: Error) => void) =>
+  onSnapshot(doc(db, 'clients', clientId), snapshot => callback(snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as Client : null), onError);
+
+export const updateClientMarketplace = async (input: import('../../../shared/src/types').UpdateClientMarketplaceRequest) =>
+  (await httpsCallable<import('../../../shared/src/types').UpdateClientMarketplaceRequest, import('../../../shared/src/types').UpdateClientMarketplaceResponse>(functions, 'updateClientMarketplace')(input)).data;
 
 export const subscribeToClients = (
   callback: (clients: Client[]) => void,

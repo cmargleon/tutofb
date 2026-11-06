@@ -3,6 +3,7 @@ import type { TimestampLike, CatalogEntityStatus } from './common';
 export interface Client {
   id?: string;
   name: string;
+  marketplaces?: Partial<Record<import('../marketplaces').MarketplaceId, import('./marketplace').ClientMarketplaceConfig>>;
   automation?: import('./automation').ClientAutomationConfig;
   generationPromptBase?: string | null;
   status?: CatalogEntityStatus;

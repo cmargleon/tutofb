@@ -2,6 +2,7 @@ export * from './common';
 export * from './provider';
 export * from './user';
 export * from './client';
+export * from './marketplace';
 export * from './model';
 export * from './garment';
 export * from './spreadsheet';

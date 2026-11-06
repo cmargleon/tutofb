@@ -261,7 +261,9 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       let job = (await db.collection('automationJobs').doc(created.jobId).get()).data();
       assert.equal(job.status, 'failed'); assert.equal(classificationCalls - before, itemIds.length);
       assert.equal((await db.collection('batches').where('automationJobId', '==', job.id).get()).size, 0);
-      const assignments = job.items.filter((item: any) => item.modelId).map((item: any) => [item.itemId, item.modelId]);
+      // Grouping by model may reorder items; retry must preserve each assignment.
+      const assignmentsOf = (items: any[]) => items.filter(item => item.modelId).map(item => [item.itemId, item.modelId]).sort((a, b) => a[0].localeCompare(b[0]));
+      const assignments = assignmentsOf(job.items);
       await persistence.retryAutomation({ jobId: job.id }, uid, 'operador');
       const batchCount = (await db.collection('clients').doc(clientA).get()).data().batchCount;
       await Promise.all([worker.processAutomation(job.id), worker.processAutomation(job.id)]);
@@ -269,7 +271,7 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       assert.equal(job.status, 'processing'); assert.equal(job.batchIds.length, 2);
       assert.equal(classificationCalls - before, itemIds.length, 'Retry reuses the same classification');
       assert.equal((await db.collection('clients').doc(clientA).get()).data().batchCount, batchCount + 2);
-      assert.deepEqual(job.items.filter((item: any) => item.modelId).map((item: any) => [item.itemId, item.modelId]), assignments);
+      assert.deepEqual(assignmentsOf(job.items), assignments);
       assert.equal(job.items.find((item: any) => item.itemId === 'male-shirt').modelId, 'gender-man');
       assert.equal(job.items.find((item: any) => item.itemId === 'female-shirt').modelId, 'gender-woman');
       for (const itemId of ['unknown-gender-shirt', 'low-gender-shirt']) assert.equal(job.items.find((item: any) => item.itemId === itemId).issue.code, 'garment-gender-required');

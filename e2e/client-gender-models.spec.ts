@@ -34,7 +34,7 @@ for (const single of [false, true]) test(`Clientes guarda modelos por género ${
   await expect(male.getByRole('option', { name: 'Otro cliente' })).toHaveCount(0);
   await expect(male.getByRole('option', { name: 'Modelo femenina' })).toHaveCount(0);
   if (!single) await female.selectOption('other-woman');
-  await page.getByRole('button', { name: 'Guardar Drive y automatización' }).click();
+  await page.getByRole('button', { name: 'Guardar automatizaciones' }).click();
   await expect.poll(() => automation.defaultFemaleModelId).toBe(single ? 'woman' : 'other-woman');
   expect(automation.defaultMaleModelId).toBe(single ? undefined : 'man');
   expect(automation.defaultBudgetUsd).toBe(4);

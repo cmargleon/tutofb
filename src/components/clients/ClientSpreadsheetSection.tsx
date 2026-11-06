@@ -31,11 +31,11 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
         </p>
       </div>
       {!isArchivedCatalogEntity(client) ? (
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500">
           <input
             type="file"
             accept=".xlsx,.xls"
-            className="hidden"
+            className="sr-only"
             disabled={uploadingTemplateClientId === client.id}
             onChange={(event) => {
               onUpload(client, event.target.files?.[0] || null);
@@ -75,10 +75,11 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
               ) : null}
             </div>
             <div className="mt-3">
-              <label className="mb-1.5 block text-xs font-medium text-slate-600">
+              <label htmlFor={`template-category-${template.id}`} className="mb-1.5 block text-xs font-medium text-slate-600">
                 Categoría por defecto para el wizard
               </label>
               <select
+                id={`template-category-${template.id}`}
                 value={template.defaultCategoryId || ''}
                 disabled={isArchivedCatalogEntity(client) || savingTemplateCategoryId === template.id}
                 onChange={(event) => onCategoryChange(client, template, event.target.value || null)}

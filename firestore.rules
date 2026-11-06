@@ -117,8 +117,8 @@ service cloud.firestore {
 
     match /clients/{clientId} {
       allow read: if canReview();
-      allow create: if isAdmin() && !('automation' in request.resource.data);
-      allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['automation']);
+      allow create: if isAdmin() && !request.resource.data.keys().hasAny(['automation', 'marketplaces']);
+      allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['automation', 'marketplaces']);
       allow delete: if isAdmin();
 
       match /spreadsheetTemplates/{templateId} {

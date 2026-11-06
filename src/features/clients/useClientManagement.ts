@@ -1,27 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import {
   subscribeToClients,
-  subscribeToSpreadsheetTemplates,
+  subscribeToClient,
+  subscribeToClientSpreadsheetTemplates,
   createClient,
-  updateClient,
   archiveClient,
   restoreClient,
-  permanentlyDeleteClient,
   importClientSpreadsheetTemplate,
   deleteClientSpreadsheetTemplate,
   updateClientSpreadsheetTemplateCategory,
 } from './firebase';
-import { useConfirm, useConfirmByName, useToast } from '../feedback/FeedbackProvider';
+import { useConfirm, useToast } from '../feedback/FeedbackProvider';
 import { Client, SpreadsheetTemplate } from '../../../shared/src/types';
 
-export const CLIENTS_PAGE_SIZE = 20;
+export { CLIENTS_PAGE_SIZE } from './clientListState';
 
-export const useClientManagement = () => {
-  const location = useLocation();
+export const useClientManagement = (clientId?: string) => {
   const toast = useToast();
   const confirm = useConfirm();
-  const confirmByName = useConfirmByName();
 
   const [clients, setClients] = useState<Client[]>([]);
   const [templates, setTemplates] = useState<SpreadsheetTemplate[]>([]);
@@ -31,63 +27,25 @@ export const useClientManagement = () => {
   const [newClientPrompt, setNewClientPrompt] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editPrompt, setEditPrompt] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
-  const [clientSearch, setClientSearch] = useState('');
-  const [clientsPage, setClientsPage] = useState(1);
   const [uploadingTemplateClientId, setUploadingTemplateClientId] = useState<string | null>(null);
   const [savingTemplateCategoryId, setSavingTemplateCategoryId] = useState<string | null>(null);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeToClients(
-      (data) => { setClients(data); setLoading(false); },
-      (err) => { console.error('Error subscribing to clients:', err); setError('Error al cargar los clientes.'); setLoading(false); },
-      { includeArchived: showArchived },
-    );
-    return () => unsubscribe();
-  }, [showArchived]);
+    setLoading(true);
+    setError(null);
+    const onError = (err: Error) => { setError(err.message || 'Error al cargar los clientes.'); setLoading(false); };
+    const onData = (data: Client[]) => { setClients(data); setLoading(false); };
+    return clientId
+      ? subscribeToClient(clientId, client => onData(client ? [client] : []), onError)
+      : subscribeToClients(onData, onError, { includeArchived: true });
+  }, [clientId]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToSpreadsheetTemplates(
-      (data) => setTemplates(data),
-      (err) => { console.error('Error subscribing to spreadsheet templates:', err); },
-    );
-    return () => unsubscribe();
-  }, []);
-
-  const filteredClients = useMemo(() => {
-    const query = clientSearch.trim().toLowerCase();
-    if (!query) return clients;
-    return clients.filter((c) => c.name.toLowerCase().includes(query));
-  }, [clients, clientSearch]);
-
-  const clientsTotalPages = Math.max(1, Math.ceil(filteredClients.length / CLIENTS_PAGE_SIZE));
-  const pagedClients = filteredClients.slice((clientsPage - 1) * CLIENTS_PAGE_SIZE, clientsPage * CLIENTS_PAGE_SIZE);
-
-  const highlightedClientId = location.hash.startsWith('#client-') ? location.hash.slice('#client-'.length) : null;
-
-  useEffect(() => {
-    if (!highlightedClientId) return;
-    const targetIndex = clients.findIndex((client) => client.id === highlightedClientId);
-    if (targetIndex < 0) return;
-    if (clientSearch) setClientSearch('');
-    const targetPage = Math.floor(targetIndex / CLIENTS_PAGE_SIZE) + 1;
-    if (clientsPage !== targetPage) setClientsPage(targetPage);
-    setExpandedId(highlightedClientId);
-    const scrollTarget = () => {
-      const element = document.getElementById(`client-${highlightedClientId}`);
-      if (!element) return false;
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return true;
-    };
-    if (scrollTarget()) return;
-    const timeoutId = window.setTimeout(() => { scrollTarget(); }, 120);
-    return () => window.clearTimeout(timeoutId);
-  }, [clientSearch, clients, clientsPage, highlightedClientId]);
+    if (!clientId) return;
+    return subscribeToClientSpreadsheetTemplates(clientId, setTemplates,
+      err => setError(`No se pudieron cargar las plantillas: ${err.message}`));
+  }, [clientId]);
 
   const templatesByClientId = useMemo(
     () => templates.reduce<Record<string, SpreadsheetTemplate[]>>((acc, t) => {
@@ -127,23 +85,6 @@ export const useClientManagement = () => {
     }
   };
 
-  const handleStartEdit = (client: Client) => {
-    setEditingId(client.id!);
-    setEditName(client.name);
-    setEditPrompt(client.generationPromptBase ?? '');
-  };
-
-  const handleSaveEdit = async (id: string) => {
-    const trimmedName = editName.trim();
-    if (!trimmedName) return;
-    try {
-      await updateClient(id, trimmedName, editPrompt);
-      setEditingId(null);
-    } catch (err: any) {
-      toast({ tone: 'error', title: 'No pudimos actualizar el cliente', description: err.message || 'Vuelve a intentarlo en un momento.' });
-    }
-  };
-
   const handleArchive = async (client: Client) => {
     const accepted = await confirm({
       title: 'Archivar cliente',
@@ -155,7 +96,7 @@ export const useClientManagement = () => {
     });
     if (!accepted || !client.id) return;
     const snapshot = clients;
-    setClients((prev) => prev.filter((c) => c.id !== client.id));
+    setClients((prev) => prev.map((c) => c.id === client.id ? { ...c, status: 'archived' as const } : c));
     try {
       await archiveClient(client.id);
       toast({ tone: 'success', title: 'Cliente archivado', description: `"${client.name}" salió del catálogo operativo pero su historial sigue disponible.` });
@@ -175,26 +116,6 @@ export const useClientManagement = () => {
     } catch (err: any) {
       setClients(snapshot);
       toast({ tone: 'error', title: 'No pudimos reactivar el cliente', description: err.message || 'Inténtalo de nuevo en un momento.' });
-    }
-  };
-
-  const handlePermanentDelete = async (client: Client) => {
-    if (!client.id) return;
-    const nameConfirmed = await confirmByName({
-      title: 'Borrado permanente',
-      description: `Vas a borrar definitivamente "${client.name}". Esta acción no se puede deshacer.`,
-      impact: 'Esto elimina todos los datos del cliente de forma permanente.',
-      entityName: client.name,
-      entityLabel: 'el nombre del cliente',
-      confirmLabel: 'Borrar definitivamente',
-      tone: 'danger',
-    });
-    if (!nameConfirmed) return;
-    try {
-      await permanentlyDeleteClient(client.id);
-      toast({ tone: 'success', title: 'Cliente eliminado definitivamente', description: `"${client.name}" se eliminó de forma permanente.` });
-    } catch (err: any) {
-      toast({ tone: 'error', title: 'No pudimos borrar el cliente definitivamente', description: err.message || 'Revisa dependencias o permisos e inténtalo de nuevo.' });
     }
   };
 
@@ -251,16 +172,12 @@ export const useClientManagement = () => {
     clients, templates, loading, error,
     newClientName, setNewClientName, newClientPrompt, setNewClientPrompt,
     isCreating, createSuccess,
-    editingId, setEditingId, editName, setEditName, editPrompt, setEditPrompt,
-    expandedId, setExpandedId, showArchived, setShowArchived,
-    clientSearch, setClientSearch, clientsPage, setClientsPage,
     uploadingTemplateClientId, savingTemplateCategoryId, deletingTemplateId,
     // computed
-    filteredClients, clientsTotalPages, pagedClients, highlightedClientId,
     sortedTemplatesByClientId,
     // handlers
-    handleCreate, handleStartEdit, handleSaveEdit,
-    handleArchive, handleRestore, handlePermanentDelete,
+    handleCreate,
+    handleArchive, handleRestore,
     handleTemplateUpload, handleTemplateCategoryChange, handleTemplateDelete,
   };
 };

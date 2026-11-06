@@ -3,6 +3,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { PermanentDeleteAppUserRequest, PermanentDeleteAppUserResponse } from '../../../shared/src/types';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { assertCallableRoles } from '../auth/roles';
+import { getAppFirestore } from '../firebase/appFirestore';
 import { loadUserDoc } from './userManagement.helpers';
 
 export const permanentlyDeleteAppUser = onCall<
@@ -43,7 +44,7 @@ export const permanentlyDeleteAppUser = onCall<
     throw new HttpsError('internal', 'No se pudo borrar el usuario en Firebase Auth.');
   }
 
-  await admin.firestore().collection('users').doc(uid).delete();
+  await getAppFirestore().collection('users').doc(uid).delete();
 
   return {
     success: true,

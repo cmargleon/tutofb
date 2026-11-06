@@ -3,6 +3,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { ArchiveAppUserRequest, ArchiveAppUserResponse } from '../../../shared/src/types';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { assertCallableRoles } from '../auth/roles';
+import { getAppFirestore } from '../firebase/appFirestore';
 import { applyUserClaims, loadUserDoc } from './userManagement.helpers';
 
 export const archiveAppUser = onCall<ArchiveAppUserRequest, Promise<ArchiveAppUserResponse>>(async (request) => {
@@ -30,7 +31,7 @@ export const archiveAppUser = onCall<ArchiveAppUserRequest, Promise<ArchiveAppUs
     return { success: true, uid };
   }
 
-  await admin.firestore().collection('users').doc(uid).set(
+  await getAppFirestore().collection('users').doc(uid).set(
     {
       active: false,
       status: 'archived',

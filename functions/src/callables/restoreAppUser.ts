@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { RestoreAppUserRequest, RestoreAppUserResponse } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
+import { getAppFirestore } from '../firebase/appFirestore';
 import { loadUserDoc, applyUserClaims } from './userManagement.helpers';
 
 export const restoreAppUser = onCall<RestoreAppUserRequest, Promise<RestoreAppUserResponse>>(async (request) => {
@@ -17,7 +18,7 @@ export const restoreAppUser = onCall<RestoreAppUserRequest, Promise<RestoreAppUs
     throw new HttpsError('not-found', 'No se encontró el usuario seleccionado.');
   }
 
-  await admin.firestore().collection('users').doc(uid).set(
+  await getAppFirestore().collection('users').doc(uid).set(
     {
       active: false,
       status: 'active',

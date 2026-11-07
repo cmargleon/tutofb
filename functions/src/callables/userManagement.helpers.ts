@@ -163,6 +163,7 @@ export const upsertUserDoc = async ({
   if (!existingUser) {
     payload.createdAt = admin.firestore.FieldValue.serverTimestamp();
     payload.lastLoginAt = null;
+    payload.clientAccess = { mode: 'assigned', clientIds: [] };
   }
 
   await getAppFirestore().collection('users').doc(uid).set(payload, { merge: true });

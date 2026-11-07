@@ -4,7 +4,7 @@ import { validateSchema, type Schema } from '../manglar/schema';
 import { withManglarContext } from '../manglar/context';
 import { MANGLAR_DOMAIN_TOOLS, executeDomainTool } from '../manglar/tools';
 import type { DelegatedCaller } from '../manglar/context';
-import { assertClientAccess, assertResourceAccess, authorizeManglarInput, loadManglarAccess, loadManglarUser } from '../manglar/access';
+import { assertClientAccess, assertResourceAccess, authorizeManglarInput, isClientScopeSubset, loadManglarAccess, loadManglarUser } from '../manglar/access';
 import { FAL_KEY, GEMINI_API_KEY, GOOGLE_PRIVATE_KEY } from '../config/runtime';
 import { HttpsError, onRequest, type Request } from 'firebase-functions/v2/https';
 import type { Response } from 'express';
@@ -107,7 +107,7 @@ export const executeManglarTool = async (name: string, args: Record<string, unkn
 };
 const executeDelegatedTool = async (name: string, args: Record<string, unknown>, caller: DelegatedCaller): Promise<unknown> => {
   const user = await loadManglarUser(caller.uid); const access = await loadManglarAccess(caller.uid,user.role);
-  if (!access.enabled || user.role !== caller.role || access.version !== caller.accessVersion) throw new HttpsError('permission-denied','Permisos individuales revocados.');
+  if (!access.enabled || user.role !== caller.role || access.version !== caller.accessVersion || !isClientScopeSubset(access.clientIds, caller.allowedClientIds)) throw new HttpsError('permission-denied','Permisos individuales revocados.');
   const organizer = organizerTools.find(tool => tool.name === name);
   if (organizer) {
     validateSchema(args, organizer.inputSchema as unknown as Schema);

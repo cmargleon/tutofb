@@ -17,7 +17,7 @@ export function requireLoopback(value) {
   return url;
 }
 
-export async function startIsolatedFrontend() {
+export async function startIsolatedFrontend({ realAuth = false } = {}) {
   // Reject inherited remote overrides before starting a server or browser.
   if (process.env.PLAYWRIGHT_BASE_URL) requireLoopback(process.env.PLAYWRIGHT_BASE_URL);
   const nonce = randomUUID();
@@ -37,7 +37,8 @@ export async function startIsolatedFrontend() {
         if (path === `${root}src/firebase.ts`) return `export { auth, db, storage, functions } from ${JSON.stringify(fixturePath)};`;
         if (path === `${root}firebase-applet-config.json`) return JSON.stringify({ projectId: 'demo-local-browser' });
         if (path === `${root}src/sentry.ts`) return 'export const initSentry = () => {}; export const reportError = () => {};';
-        if (path === `${root}src/features/auth/AuthProvider.tsx`) return `
+        if (!realAuth && path === `${root}src/features/auth/AuthProvider.tsx`) return `
+          import { humanClientIds } from '/shared/src/clientAccess.ts';
           import { user } from ${JSON.stringify(fixturePath)};
           export const useAuth = () => ({ user, appUser: { ...user, role: 'admin', active: true }, loading: false });
           export const AuthProvider = ({ children }) => children;
@@ -95,11 +96,12 @@ export async function createIsolatedContext(browser, frontend, options = {}) {
 }
 
 export async function openIsolatedBrowser(chromium, options = {}) {
-  const frontend = await startIsolatedFrontend();
+  const { realAuth = false, ...contextOptions } = options;
+  const frontend = await startIsolatedFrontend({ realAuth });
   let browser;
   try {
     browser = await chromium.launch({ headless: true, args: ['--disable-background-networking', '--disable-component-update', '--dns-prefetch-disable', '--no-proxy-server'] });
-    const context = await createIsolatedContext(browser, frontend, options);
+    const context = await createIsolatedContext(browser, frontend, contextOptions);
     const page = await context.newPage();
     return { page, context, baseURL: frontend.baseURL, close: async () => { await browser.close(); await frontend.close(); } };
   } catch (error) {

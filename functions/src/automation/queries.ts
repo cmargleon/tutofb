@@ -1,3 +1,4 @@
+import { assertHumanClientAccess } from '../auth/clientAccess';
 import * as admin from 'firebase-admin';
 import { DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
 import { PROVIDER_VALUES } from '../../../shared/src/domain';
@@ -29,6 +30,7 @@ export const readAutomationJobStatus = async (id: string, caller: { uid: string;
     assertMachineScope(machine, 'jobs:read');
     assertMachineClient(machine.principal, stored.clientId, stored.jobType);
   }
+    if (caller.role !== 'automation') await assertHumanClientAccess(caller.uid, stored.clientId);
     const job = (await refreshAutomation(id))!;
     const outputs = await Promise.all(job.outputImages.map(async (output) => {
       const [url] = await admin.storage().bucket().file(output.storagePath).getSignedUrl({ action: 'read', version: 'v4', expires: Date.now() + 15 * 60_000 });

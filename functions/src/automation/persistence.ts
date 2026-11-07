@@ -1,3 +1,4 @@
+import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getManglarContext } from '../manglar/context';
 import { delegatedStamp } from '../manglar/access';
 import { createHash } from 'node:crypto';
@@ -24,6 +25,7 @@ const readUploadBindings = async (tx: FirebaseFirestore.Transaction, data: impor
 
 export const createAutomation = async (input: unknown, uid: string, role: string, plan?: AutomationPlan): Promise<AutomationJobReceipt> => {
   const data = validateAutomationInput(input, uid);
+  if (role !== 'automation') await assertHumanClientAccess(uid, data.clientId);
   if (role === 'automation') await authorizeMachineJob(uid, data.clientId, data.jobType);
   const db = getAppFirestore();
   const keys = automationKeys(data).map((key) => db.collection('automationKeys').doc(key));
@@ -75,6 +77,7 @@ export const retryAutomation = async (input: RetryAutomationJobRequest, uid: str
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'Trabajo no encontrado.');
     const job = snap.data() as AutomationJob;
+    if (role !== 'automation') await assertHumanClientAccess(uid, job.clientId);
     if (!canReadAutomation(job, uid, role)) throw new HttpsError('permission-denied', 'Sin acceso.');
     if (job.batchId) throw new HttpsError('failed-precondition', 'Usa los controles de reintento del batch existente.');
     const system = await tx.get(db.collection('system_config').doc('main'));

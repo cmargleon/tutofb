@@ -1,3 +1,4 @@
+import { assertHumanClientAccess, loadHumanClientIds } from '../auth/clientAccess';
 import { FieldPath, Filter } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import sharp from 'sharp';
@@ -81,9 +82,16 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
   if (request.action === 'clients') {
     const collection = getAppFirestore().collection('clients');
     const configured = new Map((await configs().get()).docs.map(doc => [doc.id, doc.data() as StoredConfig]));
+    const humanIds = await loadHumanClientIds(actor.uid);
+    const delegatedIds = actor.delegated?.allowedClientIds ?? null;
+    let ids = humanIds === null ? delegatedIds : delegatedIds === null ? humanIds : humanIds.filter(id => delegatedIds.includes(id));
+    if (actor.role !== 'admin') ids = [...configured.keys()].filter(id => (ids === null || ids.includes(id)) && allowed(actor, configured.get(id)));
     const ordered = collection.orderBy(FieldPath.documentId());
-    const page = await (request.cursor ? ordered.startAfter(checkedId(request.cursor)) : ordered).limit(51).get();
-    const docs = page.docs.slice(0, 50);
+    const after = request.cursor ? ordered.startAfter(checkedId(request.cursor)) : ordered;
+    const pages = ids === null ? [await after.limit(51).get()] : await Promise.all(Array.from({ length: Math.ceil(ids.length / 20) }, (_, i) => after.where(FieldPath.documentId(), 'in', ids!.slice(i * 20, i * 20 + 20)).limit(51).get()));
+    const allDocs = pages.flatMap(page => page.docs).sort((a,b) => a.id.localeCompare(b.id));
+    const page = { size: allDocs.length };
+    const docs = allDocs.slice(0, 50);
     const items = docs.filter(doc => doc.data().status !== 'archived' && allowed(actor, configured.get(doc.id)) &&
       (!actor.delegated || actor.delegated.allowedClientIds === null || actor.delegated.allowedClientIds.includes(doc.id)))
       .map(doc => ({ id: doc.id, name: String(doc.data().name || doc.id), configured: configured.has(doc.id),
@@ -91,6 +99,7 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
     return { items, next: page.size > 50 ? docs.at(-1)!.id : null };
   }
   const clientId = actor.delegated ? assertClientAccess(actor.delegated, request.clientId) : checkedId(request.clientId);
+  await assertHumanClientAccess(actor.uid, clientId);
   const client = await getAppFirestore().collection('clients').doc(clientId).get();
   if (!client.exists || client.data()?.status === 'archived') throw new HttpsError('not-found', 'Cliente no disponible.');
   const root = clientRef(clientId);

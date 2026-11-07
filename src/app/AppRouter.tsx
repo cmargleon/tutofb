@@ -56,7 +56,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode, roles?: string[] }> 
     return <Navigate to="/login" replace />;
   }
 
-  if (!appUser || !appUser.active) {
+  if (!appUser || appUser.active !== true || appUser.status === 'archived') {
     return <Navigate to="/login" replace />;
   }
 

@@ -18,17 +18,12 @@ service cloud.firestore {
     }
 
     function currentRole() {
-      return isAuthenticated()
-        ? (
-            request.auth.token.role is string
-              ? request.auth.token.role
-              : (hasUserDoc() ? userData().role : null)
-          )
-        : null;
+      return hasUserDoc() ? userData().role : null;
     }
 
     function isActiveUser() {
-      return isAuthenticated() && hasUserDoc() && userData().active == true;
+      return isAuthenticated() && hasUserDoc() && userData().active == true
+        && userData().get('status', 'active') != 'archived';
     }
 
     function hasRole(role) {
@@ -39,12 +34,22 @@ service cloud.firestore {
       return hasRole('admin');
     }
 
+    function hasGlobalClients() {
+      return isAdmin() || (isActiveUser() && userData().get('clientAccess', {}).get('mode', '') == 'global');
+    }
+
+    function canAccessClient(clientId) {
+      return canReview() && (hasGlobalClients()
+        || (userData().get('clientAccess', {}).get('mode', '') == 'assigned'
+          && clientId in userData().clientAccess.get('clientIds', [])));
+    }
+
     function canReview() {
       return isActiveUser() && (currentRole() in ['admin', 'operador', 'revisor']);
     }
 
     function canReadAnalytics() {
-      return isActiveUser() && (currentRole() in ['admin', 'revisor']);
+      return hasGlobalClients() && (currentRole() in ['admin', 'revisor']);
     }
 
     function canReadFinance() {
@@ -52,7 +57,7 @@ service cloud.firestore {
     }
 
     function canUpdateJobSelection() {
-      return canReview()
+      return canAccessClient(resource.data.get('clientId', ''))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'userSelectedOutputId',
           'userSelectedOutput',
@@ -61,7 +66,7 @@ service cloud.firestore {
     }
 
     function canUpdateJobManualFlag() {
-      return canReview()
+      return canAccessClient(resource.data.get('clientId', ''))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'manuallyFlagged',
           'manuallyFlaggedAt',
@@ -87,12 +92,12 @@ service cloud.firestore {
     match /driveBackupControl/{id} { allow read, write: if false; }
 
     match /automationJobs/{jobId} {
-      allow read: if isAdmin() || (isActiveUser() && currentRole() == 'operador' && resource.data.createdByUid == request.auth.uid);
+      allow read: if isAdmin() || (canAccessClient(resource.data.get('clientId', '')) && currentRole() == 'operador' && resource.data.createdByUid == request.auth.uid);
       allow write: if false;
     }
 
     match /automationPlans/{id} {
-      allow read: if isAdmin() || (isActiveUser() && currentRole() == 'operador' && resource.data.createdByUid == request.auth.uid);
+      allow read: if isAdmin() || (canAccessClient(resource.data.get('clientId', '')) && currentRole() == 'operador' && resource.data.createdByUid == request.auth.uid);
       allow write: if false;
     }
 
@@ -116,60 +121,53 @@ service cloud.firestore {
     }
 
     match /clients/{clientId} {
-      allow read: if canReview();
+      allow read: if canAccessClient(clientId);
       allow create: if isAdmin() && !request.resource.data.keys().hasAny(['automation', 'marketplaces']);
-      allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['automation', 'marketplaces']);
+      allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['automation', 'marketplaces', 'name', 'generationPromptBase']);
       allow delete: if false;
 
       match /spreadsheetTemplates/{templateId} {
-        allow read: if canReview();
-        allow create, update, delete: if false;
-
+        allow read: if canAccessClient(clientId);
+        allow write: if false;
         match /categories/{categoryId} {
-          allow read: if canReview();
-          allow create, update, delete: if false;
+          allow read: if canAccessClient(clientId);
+          allow write: if false;
         }
       }
     }
-
     match /{path=**}/spreadsheetTemplates/{templateId} {
-      allow read: if canReview();
-      allow create, update, delete: if false;
-
-      match /categories/{categoryId} {
-        allow read: if canReview();
-        allow create, update, delete: if false;
-      }
+      allow read: if canAccessClient(resource.data.get('clientId', ''));
+      allow write: if false;
     }
 
     match /models/{modelId} {
-      allow read: if canReview();
+      allow read: if canAccessClient(resource.data.get('clientId', ''));
       allow create, update: if isAdmin();
       allow delete: if false;
     }
 
     match /batches/{batchId} {
-      allow read: if canReview();
+      allow read: if canAccessClient(resource.data.get('clientId', ''));
       allow create, update, delete: if false;
 
       match /productDrafts/{draftId} {
-        allow read: if canReview();
+        allow read: if canAccessClient(get(/databases/$(database)/documents/batches/$(batchId)).data.clientId);
         allow create, update, delete: if false;
       }
     }
 
     match /jobs/{jobId} {
-      allow read: if canReview();
+      allow read: if canAccessClient(resource.data.get('clientId', ''));
       allow create, delete: if false;
       allow update: if canUpdateJobSelection() || canUpdateJobManualFlag();
 
       match /outputs/{outputId} {
-        allow read: if canReview();
+        allow read: if canAccessClient(get(/databases/$(database)/documents/jobs/$(jobId)).data.clientId);
         allow create, update, delete: if false;
       }
 
       match /logs/{logId} {
-        allow read: if canReview();
+        allow read: if canAccessClient(get(/databases/$(database)/documents/jobs/$(jobId)).data.clientId);
         allow create, update, delete: if false;
       }
     }

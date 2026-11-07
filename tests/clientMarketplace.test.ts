@@ -27,11 +27,11 @@ const fixture = () => {
 test('marketplace patches preserve other channels, settings, future metadata and client operations; target only requested client', async () => {
   const { records, writes, db } = fixture();
   const original = structuredClone(records.a);
-  await saveClientMarketplace({ clientId: 'a', marketplaceId: 'amazon', enabled: true }, db);
+  await saveClientMarketplace({ clientId: 'a', marketplaceId: 'amazon', enabled: true, expected: { enabled: false } }, db);
   assert.equal(records.a.marketplaces.amazon.enabled, true);
   assert.deepEqual(records.a.marketplaces.amazon.settings, original.marketplaces.amazon.settings);
   assert.equal(records.a.marketplaces.amazon.authorizationRef, 'future-ref');
-  await saveClientMarketplace({ clientId: 'a', marketplaceId: 'amazon', settings: { region: ' US ' } }, db);
+  await saveClientMarketplace({ clientId: 'a', marketplaceId: 'amazon', settings: { region: ' US ' }, expected: { region: 'MX' } }, db);
   assert.equal(records.a.marketplaces.amazon.enabled, true);
   assert.equal(records.a.marketplaces.amazon.settings.region, 'US');
   assert.equal(records.a.marketplaces.amazon.settings.sellerId, 'seller');
@@ -43,7 +43,7 @@ test('marketplace patches preserve other channels, settings, future metadata and
 });
 test('missing marketplace defaults disabled without a migration, and settings updates do not enable it', async () => {
   const { records, db } = fixture();
-  await saveClientMarketplace({ clientId: 'a', marketplaceId: 'mercado-libre', settings: { sellerId: 'seller' } }, db);
+  await saveClientMarketplace({ clientId: 'a', marketplaceId: 'mercado-libre', settings: { sellerId: 'seller' }, expected: { sellerId: '' } }, db);
   assert.equal(records.a.marketplaces['mercado-libre'].enabled, false);
 });
 test('rejects manipulated IDs, unknown channels, secret fields, invalid settings and unavailable clients without writing', async () => {
@@ -51,7 +51,7 @@ test('rejects manipulated IDs, unknown channels, secret fields, invalid settings
   for (const patch of [{ clientId: '../b' }, { marketplaceId: 'amazon.enabled' }, { enabled: 'true' }, { token: 'secret' }, { settings: { apiKey: 'secret' } }, { settings: { region: 'x'.repeat(81) } }, { settings: [] }, { settings: { region: null } }]) {
     await assert.rejects(() => saveClientMarketplace({ clientId: 'a', marketplaceId: 'amazon', enabled: true, ...patch }, db), { code: 'invalid-argument' });
   }
-  for (const clientId of ['missing', 'archived']) await assert.rejects(() => saveClientMarketplace({ clientId, marketplaceId: 'amazon', enabled: true }, db), { code: 'not-found' });
+  for (const clientId of ['missing', 'archived']) await assert.rejects(() => saveClientMarketplace({ clientId, marketplaceId: 'amazon', enabled: true, expected: { enabled: false } }, db), { code: 'not-found' });
   assert.equal(writes.length, 0);
 });
 test('marketplace callable requires authenticated current admin before client data access', async (t) => {

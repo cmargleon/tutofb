@@ -1,3 +1,4 @@
+import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getManglarContext } from '../manglar/context';
 import { delegatedStamp } from '../manglar/access';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -18,6 +19,7 @@ export const resumeAutomation = async (input: ResumeAutomationRequest, uid: stri
   const ref = db.collection('automationJobs').doc(input.jobId);
   const before = (await ref.get()).data() as AutomationJob | undefined;
   if (!before || !canReadAutomation(before, uid, role)) throw new HttpsError('not-found', 'Trabajo no encontrado.');
+  if (role !== 'automation') await assertHumanClientAccess(uid, before.clientId);
   if (role === 'automation') await authorizeMachineJob(uid, before.clientId, before.jobType);
   return db.runTransaction(async (tx) => {
     const [snapshot, system, client] = await tx.getAll(ref, db.collection('system_config').doc('main'), db.collection('clients').doc(before.clientId));

@@ -16,19 +16,21 @@ test('automation API, persistence, dispatch and existing worker integration (emu
   process.env.FAL_KEY = 'emulator-test-placeholder';
   process.env.OPENAI_API_KEY = 'emulator-test-placeholder';
   admin.initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` });
-  const db = admin.firestore();
+  const db = require('../functions/lib/functions/src/firebase/appFirestore.js').getAppFirestore();
   const authResponse = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'automation@example.test', password: 'test-password-only', returnSecureToken: true }),
   });
   const { localId: uid } = await authResponse.json() as any;
   assert.ok(uid);
-  await admin.auth().setCustomUserClaims(uid, { role: 'operador', active: true });
+  await admin.auth().setCustomUserClaims(uid, { role: 'operador', active: true, clientAccess: { mode: 'global' } });
   const signedIn = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=emulator`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'automation@example.test', password: 'test-password-only', returnSecureToken: true }),
   });
   const { idToken } = await signedIn.json() as any;
-  await db.collection('users').doc(uid).set({ uid, role: 'operador', active: true, displayName: 'Automation Test' });
+  await db.collection('users').doc(uid).set({ uid, role: 'operador', active: true, clientAccess: { mode: 'global' }, displayName: 'Automation Test' });
   await db.collection('clients').doc('client').set({ name: 'Test client', status: 'active', batchCount: 0, createdByUid: uid });
+  const previousSystem = await db.collection('system_config').doc('main').get();
+  try {
   await db.collection('system_config').doc('main').set({ batchMaxJobs: 100, jobMaxRetries: 1, jobRetryDelayMs: 0 });
   const storage = admin.storage().bucket();
   const sharp = require('../functions/node_modules/sharp');
@@ -164,7 +166,7 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     } };
     await assert.rejects(() => createProductGenerationBatch.run({ ...request, auth: undefined }), { code: 'unauthenticated' });
     const reviewerUid = `${uid}-reviewer`;
-    await db.collection('users').doc(reviewerUid).set({ role: 'revisor', active: true });
+    await db.collection('users').doc(reviewerUid).set({ role: 'revisor', active: true, clientAccess: { mode: 'global' } });
     await assert.rejects(() => createProductGenerationBatch.run({ ...request, auth: { uid: reviewerUid, token: { role: 'admin' } } }), { code: 'permission-denied' });
     const results = await Promise.all([createProductGenerationBatch.run(request), createProductGenerationBatch.run(request)]);
     assert.equal(results[0].batchId, results[1].batchId);
@@ -319,5 +321,8 @@ test('automation API, persistence, dispatch and existing worker integration (emu
     await pipeline.dispatchProduct({ ...current, leaseToken: 'stale' }, { name: 'Test' }, {});
     assert.equal((await db.collection('jobs').where('automationJobId', '==', productId).get()).size, 6);
   });
-  await admin.app().delete();
+  } finally {
+    if (previousSystem.exists) await previousSystem.ref.set(previousSystem.data()); else await previousSystem.ref.delete();
+    await admin.app().delete();
+  }
 });

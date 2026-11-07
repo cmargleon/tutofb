@@ -57,7 +57,7 @@ test('catalog deletion protection (loopback emulators only)', { skip: !enabled &
       const role = name === 'inactive-admin' ? 'admin' : name;
       await app.auth().createUser({ uid, email, password });
       await app.auth().setCustomUserClaims(uid, { role });
-      await db.collection('users').doc(uid).set({ uid, role, active: name !== 'inactive-admin', status: 'active' });
+      await db.collection('users').doc(uid).set({ uid, role, active: name !== 'inactive-admin', clientAccess: { mode: 'global' }, status: 'active' });
       const { user } = await signInWithEmailAndPassword(auth, email, password);
       principals.push({ name, uid, auth: { uid, token: (await user.getIdTokenResult()).claims }, db: browserDb });
     }
@@ -86,11 +86,12 @@ test('catalog deletion protection (loopback emulators only)', { skip: !enabled &
           const archive = () => updateDoc(ref, { status: 'archived', archivedByUid: principal.uid ?? null });
           if (canWrite) {
             await create();
-            await edit();
-            assert.equal((await adminRef.get()).data().name, 'Edited');
+            if (resource === 'clients') await denied(edit); else await edit();
+            assert.equal((await adminRef.get()).data().name, resource === 'clients' ? id : 'Edited');
             await archive();
             assert.equal((await adminRef.get()).data().status, 'archived');
-            await updateDoc(ref, { name: 'Edited while archived' });
+            if (resource === 'clients') await denied(() => updateDoc(ref, { name: 'Edited while archived' }));
+            else await updateDoc(ref, { name: 'Edited while archived' });
           } else {
             await denied(create);
             await denied(edit);

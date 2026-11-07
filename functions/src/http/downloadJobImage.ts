@@ -1,3 +1,4 @@
+import { authorizeHumanInput, loadHumanClientIds } from '../auth/clientAccess';
 import * as admin from 'firebase-admin';
 import { HttpsError, onRequest } from 'firebase-functions/v2/https';
 import type { Request, Response } from 'express';
@@ -49,6 +50,7 @@ export const downloadJobImage = onRequest(
         throw new HttpsError('invalid-argument', 'Debes indicar la imagen que quieres descargar.');
       }
 
+      await authorizeHumanInput(decodedToken.uid, { jobId }, await loadHumanClientIds(decodedToken.uid));
       const { job, output: resolvedOutput } = await resolveJobAsset({ jobId, outputId: requestedOutputId || undefined });
       const resultImagePath = resolvedOutput?.resultImagePath;
       if (!resultImagePath) {

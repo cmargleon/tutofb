@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  subscribeToClients,
+  listClients,
   subscribeToClient,
   subscribeToClientSpreadsheetTemplates,
   createClient,
@@ -15,10 +15,12 @@ import { Client, SpreadsheetTemplate } from '../../../shared/src/types';
 
 export { CLIENTS_PAGE_SIZE } from './clientListState';
 
-export const useClientManagement = (clientId?: string) => {
+export const useClientManagement = (clientId?: string, filters?: import('../../../shared/src/types').ListClientsRequest, skipList = false) => {
   const toast = useToast();
   const confirm = useConfirm();
 
+  const [pageInfo, setPageInfo] = useState({ page: filters?.page ?? 1, hasMore: false, queryKey: '' });
+  const [refresh, setRefresh] = useState(0);
   const [clients, setClients] = useState<Client[]>([]);
   const [templates, setTemplates] = useState<SpreadsheetTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,10 +38,15 @@ export const useClientManagement = (clientId?: string) => {
     setError(null);
     const onError = (err: Error) => { setError(err.message || 'Error al cargar los clientes.'); setLoading(false); };
     const onData = (data: Client[]) => { setClients(data); setLoading(false); };
-    return clientId
-      ? subscribeToClient(clientId, client => onData(client ? [client] : []), onError)
-      : subscribeToClients(onData, onError, { includeArchived: true });
-  }, [clientId]);
+    if (clientId) return subscribeToClient(clientId, client => onData(client ? [client] : []), onError);
+    if (skipList) { setLoading(false); return; }
+    let active = true;
+    setClients([]);
+    void listClients(filters ?? {}).then(result => {
+      if (active) { onData(result.clients); setPageInfo({ page: result.page, hasMore: result.hasMore, queryKey: JSON.stringify(filters) }); }
+    }, err => { if (active) onError(err); });
+    return () => { active = false; };
+  }, [clientId, JSON.stringify(filters), skipList, refresh]);
 
   useEffect(() => {
     if (!clientId) return;
@@ -99,6 +106,7 @@ export const useClientManagement = (clientId?: string) => {
     setClients((prev) => prev.map((c) => c.id === client.id ? { ...c, status: 'archived' as const } : c));
     try {
       await archiveClient(client.id);
+      setRefresh(value => value + 1);
       toast({ tone: 'success', title: 'Cliente archivado', description: `"${client.name}" salió del catálogo operativo pero su historial sigue disponible.` });
     } catch (err: any) {
       setClients(snapshot);
@@ -112,6 +120,7 @@ export const useClientManagement = (clientId?: string) => {
     setClients((prev) => prev.map((c) => c.id === client.id ? { ...c, status: 'active' as const } : c));
     try {
       await restoreClient(client.id);
+      setRefresh(value => value + 1);
       toast({ tone: 'success', title: 'Cliente reactivado', description: `"${client.name}" volvió al catálogo operativo.` });
     } catch (err: any) {
       setClients(snapshot);
@@ -169,7 +178,7 @@ export const useClientManagement = (clientId?: string) => {
 
   return {
     // state
-    clients, templates, loading, error,
+    clients, templates, loading, error, pageInfo,
     newClientName, setNewClientName, newClientPrompt, setNewClientPrompt,
     isCreating, createSuccess,
     uploadingTemplateClientId, savingTemplateCategoryId, deletingTemplateId,

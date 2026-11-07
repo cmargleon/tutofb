@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { Client } from '../../shared/src/types';
 import { LoadingBlock, EmptyState } from '../components/ui';
@@ -11,6 +11,8 @@ import { ClientMarketplaces } from '../features/marketplaces/ClientMarketplaces'
 import { ClientSettings } from '../components/clients/ClientSettings';
 import { ClientSpreadsheetSection } from '../components/clients/ClientSpreadsheetSection';
 import { ClientAutomationFields, ClientAutomationSave, ClientDriveFolders } from '../components/clients/ClientAutomationSection';
+
+const ClientCatalog = lazy(() => import('./Catalogo').then(module => ({ default: module.Catalogo })));
 
 const TABS = [['resumen', 'Resumen'], ['productos', 'Productos'], ['marketplaces', 'Marketplaces'], ['fuentes', 'Fuentes de datos'], ['automatizaciones', 'Automatizaciones'], ['configuracion', 'Configuración'], ['historial', 'Historial']] as const;
 
@@ -25,7 +27,7 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
     <nav aria-label="Secciones del cliente" className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">{TABS.map(([id, label]) => <button key={id} type="button" aria-current={active === id ? 'page' : undefined} onClick={() => changeTab(id)} className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${active === id ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</nav>
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
       <section hidden={active !== 'resumen'} aria-label="Resumen"><h2 className="mb-4 text-lg font-semibold">Resumen</h2><ClientOverview client={client} templates={templates} /></section>
-      <section hidden={active !== 'productos'} aria-label="Productos"><h2 className="mb-4 text-lg font-semibold">Productos</h2><p className="mb-4 text-sm text-slate-500">Consulta los productos y sus operaciones en el catálogo existente, filtrado por este cliente.</p><Link className="text-sm font-medium text-indigo-700 hover:underline" to={`/catalogo?clientId=${encodeURIComponent(client.id!)}`}>Abrir catálogo de {client.name} →</Link></section>
+      <section hidden={active !== 'productos'} aria-label="Productos"><h2 className="mb-4 text-lg font-semibold">Productos</h2><Link className="text-sm font-medium text-indigo-700 hover:underline" to={`/catalogo?clientId=${encodeURIComponent(client.id!)}`}>Abrir catálogo de {client.name} →</Link>{active === 'productos' && <Suspense fallback={<LoadingBlock />}><ClientCatalog client={client} /></Suspense>}</section>
       <section hidden={active !== 'marketplaces'} aria-label="Marketplaces"><h2 className="mb-4 text-lg font-semibold">Marketplaces</h2><ClientMarketplaces client={client} /></section>
       <section hidden={active !== 'fuentes'} aria-label="Fuentes de datos"><h2 className="mb-4 text-lg font-semibold">Fuentes de datos</h2><fieldset disabled={client.status === 'archived' || automation.saving}><ClientDriveFolders state={automation} /></fieldset><ClientAutomationSave state={automation} section="sources" disabled={client.status === 'archived'} /><ClientSpreadsheetSection client={client} templates={templates} uploadingTemplateClientId={management.uploadingTemplateClientId} savingTemplateCategoryId={management.savingTemplateCategoryId} deletingTemplateId={management.deletingTemplateId} onUpload={management.handleTemplateUpload} onCategoryChange={management.handleTemplateCategoryChange} onDelete={management.handleTemplateDelete} /></section>
       <section hidden={active !== 'automatizaciones'} aria-label="Automatizaciones"><h2 className="mb-4 text-lg font-semibold">Automatizaciones</h2><p className="text-sm text-slate-500">Guarda los ajustes de esta pestaña de forma independiente. La generación posterior al Organizador sigue controlada globalmente desde Configuración.</p><ClientAutomationFields client={client} state={automation} /><ClientAutomationSave state={automation} section="automation" disabled={client.status === 'archived'} /></section>

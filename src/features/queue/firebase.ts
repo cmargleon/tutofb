@@ -1,3 +1,4 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
 import { useEffect, useState } from 'react';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { Batch, BatchStatus, Job } from '../../../shared/src/types';
@@ -25,13 +26,14 @@ export const subscribeToQueueData = (
     });
   };
 
-  const unsubscribeBatches = onSnapshot(
+  const unsubscribeBatches = subscribeHumanQuery(
     query(
       collection(db, 'batches'),
       where('status', 'in', QUEUE_BATCH_STATUSES),
       orderBy('updatedAt', 'desc'),
       limit(100),
     ),
+    'clientId',
     (snapshot) => {
       const nextBatches = snapshot.docs
         .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Batch));
@@ -51,7 +53,7 @@ export const subscribeToQueueData = (
         }
 
         const unsubscribeJobs = onSnapshot(
-          query(collection(db, 'jobs'), where('batchId', '==', batch.id), orderBy('createdAt', 'desc')),
+          query(collection(db, 'jobs'), where('batchId', '==', batch.id), where('clientId', '==', batch.clientId), orderBy('createdAt', 'desc')),
           (jobsSnapshot) => {
             latestJobsByBatch = {
               ...latestJobsByBatch,

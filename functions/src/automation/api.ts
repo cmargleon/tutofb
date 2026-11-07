@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpsError, onCall, onRequest, Request } from 'firebase-functions/v2/https';
 import type { Response } from 'express';
 import { AutomationJob, CreateAutomationJobRequest, AutomationJobReceipt, RetryAutomationJobRequest } from '../../../shared/src/types';
+import { assertHumanClientAccess, loadHumanClientIds } from '../auth/clientAccess';
 import { assertCallableRoles, assertUserRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { canReadAutomation } from './domain';
@@ -33,7 +34,7 @@ export const createAutomationJob = onCall<CreateAutomationJobRequest, Promise<Au
   return createAutomation(request.data, request.auth!.uid, role);
 });
 export const retryAutomationJob = onCall<RetryAutomationJobRequest, Promise<AutomationJobReceipt>>(async (request) => {
-  const role = await assertCallableRoles(request, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador'], { jobId: 'automationJobs' });
   return retryAutomation(request.data, request.auth!.uid, role);
 });
 
@@ -52,7 +53,7 @@ export const executeAutomationPlanCallable = onCall<{ planId: string }>(async (r
   return executeAutomationPlan(request.data.planId, request.auth!.uid, role);
 });
 export const resumeAutomationJob = onCall<ResumeAutomationRequest>(async (request) => {
-  const role = await assertCallableRoles(request, ['admin', 'operador']);
+  const role = await assertCallableRoles(request, ['admin', 'operador'], { jobId: 'automationJobs' });
   return resumeAutomation(request.data, request.auth!.uid, role);
 });
 
@@ -84,7 +85,7 @@ export const automationHttpHandler = async (request: Request, response: Response
     const machine = caller.role === 'automation' ? caller : null;
     if (request.method === 'GET' && path === '/capabilities') {
       if (machine) assertMachineScope(machine, 'jobs:read');
-      response.json(await getAutomationCapabilities(machine)); return;
+      response.json(await getAutomationCapabilities(machine, machine ? undefined : await loadHumanClientIds(caller.uid))); return;
     }
     if (request.method === 'POST' && path === '/plans') {
       if (machine) { assertMachineScope(machine, 'jobs:create'); assertMachineClient(machine.principal, request.body?.clientId, request.body?.jobType); }
@@ -104,6 +105,7 @@ export const automationHttpHandler = async (request: Request, response: Response
     const driveMatch = path.match(/^\/clients\/([\w-]{1,200})\/drive\/([A-Za-z0-9_-]{1,200})$/);
     if (request.method === 'GET' && driveMatch) {
       if (machine) { assertMachineScope(machine, 'jobs:read'); if (!machine.principal.allowedClientIds.includes(driveMatch[1])) throw new HttpsError('permission-denied', 'Cliente no autorizado.'); }
+      if (!machine) await assertHumanClientAccess(caller.uid, driveMatch[1]);
       response.json(await listAuthorizedDriveFiles(driveMatch[1], driveMatch[2])); return;
     }
     if (request.method === 'POST' && path === '/uploads') {
@@ -129,6 +131,7 @@ export const automationHttpHandler = async (request: Request, response: Response
     const stored = snapshot.data() as AutomationJob | undefined;
     if (!stored || !canReadAutomation(stored, caller.uid, caller.role)) throw new HttpsError('not-found', 'Trabajo no encontrado.');
     if (machine) assertMachineClient(machine.principal, stored.clientId, stored.jobType);
+    else await assertHumanClientAccess(caller.uid, stored.clientId);
     if (request.method === 'POST' && match[2] === '/resume') {
       if (machine) assertMachineScope(machine, 'jobs:retry');
       response.json(await resumeAutomation({ ...request.body, jobId: match[1] }, caller.uid, caller.role)); return;

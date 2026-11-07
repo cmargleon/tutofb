@@ -1,3 +1,4 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
 import { db, auth, storage } from '../../firebase';
 import { collection, collectionGroup, doc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { ref, uploadBytes, deleteObject } from 'firebase/storage';
@@ -31,7 +32,7 @@ export const subscribeToClients = (
   const q = options.includeArchived
     ? query(collection(db, 'clients'), orderBy('createdAt', 'desc'))
     : query(collection(db, 'clients'), where('status', '==', 'active'), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snapshot) => {
+  return subscribeHumanQuery(q, '__name__', (snapshot) => {
     const clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
     callback(clients);
   }, onError);
@@ -42,7 +43,7 @@ export const subscribeToSpreadsheetTemplates = (
   onError: (error: Error) => void,
 ) => {
   const q = query(collectionGroup(db, 'spreadsheetTemplates'));
-  return onSnapshot(q, (snapshot) => {
+  return subscribeHumanQuery(q, 'clientId', (snapshot) => {
     const templates = snapshot.docs.map((templateDoc) => ({
       id: templateDoc.id,
       ...templateDoc.data(),
@@ -88,10 +89,10 @@ export const createClient = async (name: string, generationPromptBase: string = 
   return (await httpsCallable<import('../../../shared/src/types').ManglarClientSaveRequest, { id: string }>(functions, 'saveClient')({ name, generationPromptBase })).data.id;
 };
 
-export const updateClient = async (id: string, name: string, generationPromptBase: string = '') => {
+export const updateClient = async (id: string, patch: Pick<import('../../../shared/src/types').ManglarClientSaveRequest, 'name' | 'generationPromptBase' | 'expected'>) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
   
-  await httpsCallable<import('../../../shared/src/types').ManglarClientSaveRequest, { id: string }>(functions, 'saveClient')({ id, name, generationPromptBase });
+  return (await httpsCallable<import('../../../shared/src/types').ManglarClientSaveRequest, import('../../../shared/src/types').ManglarClientSaveResponse>(functions, 'saveClient')({ id, ...patch })).data;
 };
 
 const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -190,3 +191,6 @@ export const permanentlyDeleteClient = async (id: string) => {
 
 export const updateClientAutomation = async (data: import('../../../shared/src/types').UpdateClientAutomationRequest) =>
   (await httpsCallable<import('../../../shared/src/types').UpdateClientAutomationRequest, { automation: import('../../../shared/src/types').ClientAutomationConfig }>(functions, 'updateClientAutomation')(data)).data;
+
+export const listClients = async (input: import('../../../shared/src/types').ListClientsRequest) =>
+  (await httpsCallable<import('../../../shared/src/types').ListClientsRequest, import('../../../shared/src/types').ListClientsResponse>(functions, 'listClients')(input)).data;

@@ -6,6 +6,7 @@ export interface User {
   displayName: string;
   role: Role;
   active: boolean;
+  clientAccess?: import('../clientAccess').ClientAccess;
   status?: CatalogEntityStatus;
   archivedAt?: TimestampLike | null;
   archivedByUid?: string | null;
@@ -40,3 +41,10 @@ export interface RestoreAppUserResponse {
   success: boolean;
   uid: string;
 }
+
+export interface SetUserClientAccessRequest {
+  uid: string;
+  clientAccess: import('../clientAccess').ClientAccess;
+  expected: import('../clientAccess').ClientAccess | null;
+}
+export interface SetUserClientAccessResponse { success: boolean }

@@ -1,3 +1,5 @@
+import { cleanupEmulatorDatabase } from './support/cleanupEmulator';
+process.env.FIRESTORE_DATABASE_ID = 'test-modelposeactivation';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -112,5 +114,5 @@ test('MCP discovers and changes pose activation with idempotency, role and clien
   }
   await db.collection('models').doc('pose-foreign').set({ clientId: 'foreign-client', status: 'active', poses });
   await assert.rejects(() => executeManglarTool('manglar_models', { ...args, data: { ...args.data, modelId: 'pose-foreign' }, idempotencyKey: 'pose-foreign' }, caller), { code: 'permission-denied' });
-  await admin.app().delete();
+  await cleanupEmulatorDatabase(db); await admin.app().delete();
 });

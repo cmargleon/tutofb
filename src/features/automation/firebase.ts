@@ -1,3 +1,4 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
 import type { AutomationPlanSummary, ResumeAutomationRequest } from '../../../shared/src/types';
 import { auth } from '../../firebase';
 import firebaseConfig from '../../../firebase-applet-config.json';
@@ -14,7 +15,7 @@ export const subscribeToAutomationJobs = (uid: string, admin: boolean, callback:
   const source = collection(db, 'automationJobs');
   const q = admin ? query(source, orderBy('createdAt', 'desc'), limit(100))
     : query(source, where('createdByUid', '==', uid), orderBy('createdAt', 'desc'), limit(100));
-  return onSnapshot(q, (snapshot) => callback(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as AutomationJob))), onError);
+  return subscribeHumanQuery(q, 'clientId', (snapshot) => callback(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as AutomationJob))), onError);
 };
 
 export const prepareAutomationPlan = async (data: CreateAutomationJobRequest) =>

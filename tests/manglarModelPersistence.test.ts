@@ -1,3 +1,5 @@
+import { cleanupEmulatorDatabase } from './support/cleanupEmulator';
+process.env.FIRESTORE_DATABASE_ID = 'test-model-persistence';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -60,7 +62,7 @@ test('model persistence through authenticated HTTP MCP and callable endpoints (e
     const signup = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `model-persistence-${role}-${Date.now()}@example.test`, password: 'emulator-password', returnSecureToken: true }) });
     const { localId: uid, idToken } = await signup.json() as any;
     assert.ok(uid);
-    await db.collection('users').doc(uid).set({ role, active: true, status: 'active' });
+    await db.collection('users').doc(uid).set({ role, active: true, clientAccess: { mode: 'global' }, status: 'active' });
     await db.collection('manglarAccess').doc(uid).set({ enabled: true, clientIds: ['persistence-client'], version: 1 });
     const verifier = 'persistence-verifier-'.repeat(4);
     const params = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state: 'test-state', resource: helpers.MANGLAR_MCP_RESOURCE, response_type: 'code', code_challenge: helpers.pkceChallenge(verifier), code_challenge_method: 'S256', scope: 'jobs:read jobs:create' });
@@ -279,7 +281,7 @@ test('model persistence through authenticated HTTP MCP and callable endpoints (e
   } finally {
     globalThis.fetch = nativeFetch;
     await new Promise<void>((resolve, reject) => server.close((err: Error | undefined) => err ? reject(err) : resolve()));
-    await db.terminate();
+    await cleanupEmulatorDatabase(db); await db.terminate();
     await admin.app().delete();
   }
 });

@@ -40,7 +40,7 @@ test('privileged human authorization uses current users in the configured databa
   const uid = `stale-admin-${randomUUID()}`;
   const ref = db.collection('users').doc(uid);
   const request = { auth: { uid, token: { role: 'admin' } }, data: {} };
-  const setUser = (data: object) => ref.set({ role: 'admin', active: true, status: 'active', ...data });
+  const setUser = (data: object) => ref.set({ role: 'admin', active: true, status: 'active', clientAccess: { mode: 'global' }, ...data });
   const post = async (path: string, token?: string) => {
     const response = await fetch(`${base}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(path === 'getSystemConfig' ? { data: {} } : {}) });
     return { status: response.status, body: await response.json() as any };
@@ -155,7 +155,7 @@ test('privileged human authorization uses current users in the configured databa
       await setUser({ role: 'revisor' });
       await assert.rejects(() => roles.assertCallableRoles(request, ['admin']), { code: 'permission-denied' });
       assert.equal(reads, 2);
-      await db.collection('users').doc('other-active').set({ role: 'operador', active: true });
+      await db.collection('users').doc('other-active').set({ role: 'operador', active: true, clientAccess: { mode: 'global' } });
       const result = await Promise.all([roles.getUserRole(uid, 'admin'), roles.getUserRole('other-active', 'admin')]);
       assert.deepEqual(result, ['revisor', 'operador']);
     });

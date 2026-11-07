@@ -1,3 +1,4 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
 import FileSaver from 'file-saver';
 import { db, auth, storage } from '../../firebase';
 import { collection, doc, onSnapshot, query, orderBy, getDoc, where } from 'firebase/firestore';
@@ -79,6 +80,7 @@ const getModelBundleDownloadUrl = (): string => {
 };
 
 interface SubscribeModelsOptions {
+  clientId?: string;
   includeArchived?: boolean;
   includeInactive?: boolean;
 }
@@ -88,10 +90,11 @@ export const subscribeToModels = (
   onError: (error: Error) => void,
   options: SubscribeModelsOptions = {},
 ) => {
+  const base = options.clientId ? query(collection(db, 'models'), where('clientId', '==', options.clientId)) : collection(db, 'models');
   const q = options.includeArchived
-    ? query(collection(db, 'models'), orderBy('createdAt', 'desc'))
-    : query(collection(db, 'models'), where('status', '==', 'active'), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snapshot) => {
+    ? query(base, orderBy('createdAt', 'desc'))
+    : query(base, where('status', '==', 'active'), orderBy('createdAt', 'desc'));
+  return subscribeHumanQuery(q, 'clientId', (snapshot) => {
     const models = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Model));
     callback(options.includeInactive ? models : models.filter((model) => model.active !== false));
   }, onError);

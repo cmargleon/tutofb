@@ -56,7 +56,15 @@ for (const symbol of symbols) {
   // TimestampLike has SDK internals; request inputs only accept ISO representations of timestamps.
   defs[symbol.name] = schema(type);
 }
-const output=JSON.stringify(defs,null,2)+'\n';
+// Targeted regeneration avoids rewriting unrelated contracts that predate this change.
+const only = process.argv.find(arg => arg.startsWith('--only='))?.slice(7).split(',');
+const previous = JSON.parse(fs.readFileSync('functions/src/manglar/contracts.json','utf8'));
+const result = only ? { ...previous } : {};
+for (const name of only ?? Object.keys(defs)) {
+  if (!defs[name]) throw new Error(`Unknown request contract: ${name}`);
+  result[name] = defs[name];
+}
+const output=JSON.stringify(result,null,2)+'\n';
 if(process.argv.includes('--check')) { if(fs.readFileSync('functions/src/manglar/contracts.json','utf8')!==output) throw new Error('MCP schemas are stale; run node scripts/generate-manglar-schemas.mjs'); }
 else fs.writeFileSync('functions/src/manglar/contracts.json',output);
 console.log(`Generated ${Object.keys(defs).length} request schemas.`);

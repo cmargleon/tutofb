@@ -1,4 +1,4 @@
-import { loadManglarUser, loadManglarAccess } from '../manglar/access';
+import { loadManglarUser, loadManglarAccess, isClientScopeSubset } from '../manglar/access';
 import type { DelegatedCaller } from '../manglar/context';
 import type { Role } from '../../../shared/src/types';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -78,7 +78,7 @@ const readGrant = async (id: string): Promise<Grant> => {
     try {
       const user = await loadManglarUser(grant!.ownerUid);
       const access = await loadManglarAccess(grant!.ownerUid, user.role);
-      if (!access.enabled || user.role !== grant!.role || access.version !== grant!.accessVersion) throw new Error('revoked');
+      if (!access.enabled || user.role !== grant!.role || access.version !== grant!.accessVersion || !isClientScopeSubset(access.clientIds, grant!.allowedClientIds ?? null)) throw new Error('revoked');
     } catch { throw new OAuthError('invalid_grant', 'Permisos individuales revocados; vuelve a conectar.'); }
     return grant!;
   }

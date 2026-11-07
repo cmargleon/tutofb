@@ -3,7 +3,7 @@ import { AlertCircle, ChevronLeft, ChevronRight, Download, ExternalLink, Images,
 import { useSearchParams } from 'react-router-dom';
 import { LoadingBlock } from '../components/ui';
 import { RetryFailedJobsDialog } from '../components/evaluation/RetryFailedJobsDialog';
-import { subscribeToClients } from '../features/clients/firebase';
+import { subscribeToClients, subscribeToClient } from '../features/clients/firebase';
 import { cancelBatchProcessing, editBatchSpreadsheet, exportBatchSpreadsheet, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
 import { useRole } from '../features/auth/AuthProvider';
 import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
@@ -29,10 +29,11 @@ const SORT_ORDER_OPTIONS: Array<{ value: CatalogSortOrder; label: string }> = [
   { value: 'asc', label: 'Más antiguos primero' },
 ];
 
-export const Catalogo: React.FC = () => {
+export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlClientId = searchParams.get('clientId') ?? '';
-  const urlBatchId = searchParams.get('batchId') ?? '';
+  const urlClientId = client?.id ?? searchParams.get('clientId') ?? '';
+  const batchParam = client ? 'productBatchId' : 'batchId';
+  const urlBatchId = searchParams.get(batchParam) ?? '';
   const toast = useToast();
   const confirm = useConfirm();
   const role = useRole();
@@ -219,19 +220,21 @@ export const Catalogo: React.FC = () => {
   }, [displayGarmentGroups]);
 
   const selectedBatchLabel = useMemo(() => {
-    if (!selectedBatchId) return 'Sin lotes disponibles';
+    if (!selectedBatchId) return client ? 'Todos los lotes del cliente' : 'Sin lotes disponibles';
     const found = batchOptions.find((b) => b.id === selectedBatchId);
     return found ? `${formatDateTimeLong(found.createdAt)} · ${found.id}` : selectedBatchId;
   }, [batchOptions, selectedBatchId]);
 
-  useEffect(() => subscribeToClients(setClients, (error) => setBatchLinkError(error.message)), []);
+  useEffect(() => client?.id
+    ? subscribeToClient(client.id, value => setClients(value ? [value] : []), error => setBatchLinkError(error.message))
+    : subscribeToClients(setClients, error => setBatchLinkError(error.message)), [client?.id]);
 
   useEffect(() => {
-    if (!selectedClientId || selectedBatchId || !batchOptions.length) return;
+    if (client || !selectedClientId || selectedBatchId || !batchOptions.length) return;
     // Only choose a default when the URL does not request a specific batch.
     setSearchParams((current) => {
-      if (current.get('batchId') || current.get('clientId') !== selectedClientId) return current;
-      const next = new URLSearchParams(current); next.set('batchId', batchOptions[0].id); return next;
+      if (current.get(batchParam) || current.get('clientId') !== selectedClientId) return current;
+      const next = new URLSearchParams(current); next.set(batchParam, batchOptions[0].id); return next;
     }, { replace: true });
   }, [batchOptions, selectedClientId, selectedBatchId, setSearchParams]);
 
@@ -485,11 +488,13 @@ export const Catalogo: React.FC = () => {
               <span className="mb-1.5 block text-xs font-medium text-gray-600">Cliente</span>
               <select
                 id="catalog-client"
+                disabled={Boolean(client)}
                 value={selectedClientId}
                 onChange={(e) => {
+                  if (client) return;
                   const next = new URLSearchParams(searchParams);
                   if (e.target.value) next.set('clientId', e.target.value); else next.delete('clientId');
-                  next.delete('batchId'); setSearchParams(next);
+                  next.delete(batchParam); setSearchParams(next);
                 }}
                 className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
@@ -504,10 +509,11 @@ export const Catalogo: React.FC = () => {
               <span className="mb-1.5 block text-xs font-medium text-gray-600">Lote</span>
               <select
                 value={selectedBatchId}
-                onChange={(e) => { const next = new URLSearchParams(searchParams); next.set('batchId', e.target.value); setSearchParams(next); }}
+                onChange={(e) => { const next = new URLSearchParams(searchParams); next.set(batchParam, e.target.value); setSearchParams(next); }}
                 disabled={!selectedClientId || batchOptions.length === 0}
                 className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
               >
+                {client && <option value="">Todos los lotes del cliente</option>}
                 {batchOptions.length === 0 ? (
                   <option value="">Sin lotes disponibles</option>
                 ) : (
@@ -558,7 +564,7 @@ export const Catalogo: React.FC = () => {
                 <span className="mx-2">·</span>
                 <span>{pageLabel}</span>
                 <span className="mx-2">·</span>
-                <span>{visibleJobsCount} job{visibleJobsCount === 1 ? '' : 's'} visibles</span>
+                <span>{client ? `${displayGarmentGroups.length} artículos en esta página · ${visibleJobsCount} trabajos de imagen visibles` : `${visibleJobsCount} jobs visibles`}</span>
               </div>
               {paginationControls}
             </div>
@@ -723,7 +729,7 @@ export const Catalogo: React.FC = () => {
                 <span className="mx-2">·</span>
                 <span>{pageLabel}</span>
                 <span className="mx-2">·</span>
-                <span>{visibleJobsCount} job{visibleJobsCount === 1 ? '' : 's'} visibles</span>
+                <span>{client ? `${displayGarmentGroups.length} artículos en esta página · ${visibleJobsCount} trabajos de imagen visibles` : `${visibleJobsCount} jobs visibles`}</span>
               </div>
               {paginationControls}
             </div>

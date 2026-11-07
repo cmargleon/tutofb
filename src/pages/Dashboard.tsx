@@ -85,18 +85,18 @@ export const Dashboard: React.FC = () => {
       },
     );
 
-    const unsubscribeSummary = subscribeToAnalyticsSummary(
+    const unsubscribeSummary = role.canAccessAnalytics ? subscribeToAnalyticsSummary(
       (nextSummary) => setSummary(nextSummary),
       (loadError) => {
         console.error(loadError);
       },
-    );
+    ) : () => {};
 
     return () => {
       unsubscribeDashboard();
       unsubscribeSummary();
     };
-  }, []);
+  }, [role.canAccessAnalytics]);
 
   const garmentCount = useMemo(
     () => new Set(data.recentJobs.map((job) => `${job.garmentFilePath}::${job.garmentName}`)).size,

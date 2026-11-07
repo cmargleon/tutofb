@@ -59,6 +59,7 @@ const buildCatalogQueryConstraints = ({
       batchId
     ? [
         where('batchId', '==', batchId),
+        where('clientId', '==', clientId),
         where('status', 'in', ['completed', 'failed']),
         orderBy('createdAt', sortOrder),
       ]

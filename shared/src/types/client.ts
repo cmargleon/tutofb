@@ -24,3 +24,15 @@ export interface PermanentDeleteCatalogEntityResponse {
   success: boolean;
   id: string;
 }
+
+export interface ListClientsRequest {
+  search?: string;
+  status?: 'all' | 'active' | 'archived';
+  showArchived?: boolean;
+  page?: number;
+}
+export interface ListClientsResponse {
+  clients: Client[];
+  page: number;
+  hasMore: boolean;
+}

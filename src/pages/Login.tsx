@@ -30,7 +30,7 @@ export const Login: React.FC<{ redirectTo?: string }> = ({ redirectTo = '/' }) =
       }
 
       const appUser = userSnapshot.data() as AppUser;
-      if (!appUser.active) {
+      if (appUser.active !== true || appUser.status === 'archived') {
         await signOut(auth);
         throw new Error('Tu usuario está desactivado. Pide a un administrador que revise tu acceso.');
       }

@@ -1,3 +1,5 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
+import { useRole } from '../auth/AuthProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -17,6 +19,7 @@ export interface UseNotificationsReturn {
 
 export const useNotifications = (): UseNotificationsReturn => {
   const toast = useToast();
+  const { canAccessAnalytics } = useRole();
   const [queueCount, setQueueCount] = useState(0);
   const [notifications, setNotifications] = useState<BatchNotificationItem[]>([]);
   const [notifSeenAt, setNotifSeenAt] = useState(() => {
@@ -33,17 +36,18 @@ export const useNotifications = (): UseNotificationsReturn => {
   }>>({});
 
   useEffect(() => {
-    const unsubQueue = onSnapshot(doc(db, 'analytics_summary', 'global'), (snap) => {
+    const unsubQueue = canAccessAnalytics ? onSnapshot(doc(db, 'analytics_summary', 'global'), (snap) => {
       if (snap.exists()) {
         const data = snap.data() as AnalyticsSummary;
         setQueueCount((data.pendingJobs ?? 0) + (data.processingJobs ?? 0));
       } else {
         setQueueCount(0);
       }
-    });
+    }, () => setQueueCount(0)) : () => {};
 
-    const unsubBatches = onSnapshot(
+    const unsubBatches = subscribeHumanQuery(
       query(collection(db, 'batches'), orderBy('updatedAt', 'desc'), limit(60)),
+      'clientId',
       (snap) => {
         const nextState: typeof batchStateRef.current = {};
         const nextNotifications = snap.docs
@@ -92,10 +96,11 @@ export const useNotifications = (): UseNotificationsReturn => {
         batchStateRef.current = nextState;
         setNotifications(nextNotifications);
       },
+      () => setNotifications([]),
     );
 
     return () => { unsubQueue(); unsubBatches(); };
-  }, [toast]);
+  }, [toast, canAccessAnalytics]);
 
   useEffect(() => {
     if (!isNotifOpen) return;

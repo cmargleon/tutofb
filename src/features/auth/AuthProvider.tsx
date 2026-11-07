@@ -1,7 +1,10 @@
+import { humanClientIds } from '../../../shared/src/clientAccess';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../../firebase';
-import { getIdTokenResult, onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { clearStorageAssetCache } from '../storage/assets';
+import { clearClientDrafts } from '../clients/draftStorage';
 import { User as AppUser } from '../../../shared/src/types';
 
 interface AuthContextType {
@@ -15,7 +18,8 @@ const AuthContext = createContext<AuthContextType>({ user: null, appUser: null, 
 export const useAuth = () => useContext(AuthContext);
 
 export const useRole = () => {
-  const { appUser } = useAuth();
+  const { appUser: current } = useAuth();
+  const appUser = current?.active === true && current.status !== 'archived' ? current : null;
   
   return {
     isAdmin: appUser?.role === 'admin',
@@ -28,7 +32,7 @@ export const useRole = () => {
     canCreateBatches: appUser?.role === 'admin' || appUser?.role === 'operador',
     canEvaluate: appUser?.role === 'admin' || appUser?.role === 'operador' || appUser?.role === 'revisor',
     canRegenerate: appUser?.role === 'admin' || appUser?.role === 'operador',
-    canAccessAnalytics: appUser?.role === 'admin' || appUser?.role === 'revisor',
+    canAccessAnalytics: Boolean(appUser && humanClientIds(appUser) === null && (appUser.role === 'admin' || appUser.role === 'revisor')),
     canAccessFinance: appUser?.role === 'admin',
   };
 };
@@ -41,22 +45,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let unsubscribeDoc: () => void;
+    let unsubscribeDoc: (() => void) | undefined;
+    let identity: string | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      clearStorageAssetCache();
+      unsubscribeDoc?.();
+      unsubscribeDoc = undefined;
+      if (identity && identity !== firebaseUser?.uid) clearClientDrafts(auth.app.options.projectId!, identity);
+      identity = firebaseUser?.uid ?? null;
+      setAppUser(null);
       setLoading(true);
       setUser(firebaseUser);
       if (firebaseUser) {
         unsubscribeDoc = onSnapshot(
           doc(db, 'users', firebaseUser.uid),
-          async (userDoc) => {
+          (userDoc) => {
+            if (auth.currentUser?.uid !== firebaseUser.uid) return;
             if (userDoc.exists()) {
-              const tokenResult = await getIdTokenResult(firebaseUser);
-              const appUserData = userDoc.data() as AppUser;
-              setAppUser({
-                ...appUserData,
-                role: (tokenResult.claims.role as AppUser['role']) || appUserData.role,
-              });
+              clearStorageAssetCache();
+              setAppUser(userDoc.data() as AppUser);
             } else {
               setAppUser(null);
             }

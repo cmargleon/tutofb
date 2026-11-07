@@ -1,3 +1,6 @@
+import { assertUserRoles } from '../auth/roles';
+import { assertHumanClientAccess } from '../auth/clientAccess';
+import { getBearerToken } from './downloadAssets.helpers';
 import * as admin from 'firebase-admin';
 import { HttpsError, onRequest } from 'firebase-functions/v2/https';
 import type { Request, Response } from 'express';
@@ -40,7 +43,12 @@ export const publicGeneratedImage = onRequest(
     }
 
     try {
+      const token = getBearerToken(request.header('Authorization'));
+      if (!token) throw new HttpsError('unauthenticated', 'Debes iniciar sesión.');
+      const decoded = await admin.auth().verifyIdToken(token);
+      await assertUserRoles(decoded.uid, decoded.role, ['admin', 'operador', 'revisor']);
       const storagePath = resolveStoragePath(request);
+      await assertHumanClientAccess(decoded.uid, storagePath.split('/')[1]);
       const file = bucket.file(storagePath);
       const [exists] = await file.exists();
 
@@ -50,7 +58,7 @@ export const publicGeneratedImage = onRequest(
 
       const [metadata] = await file.getMetadata();
       const contentType = metadata.contentType || 'application/octet-stream';
-      const cacheControl = metadata.cacheControl || 'public, max-age=31536000, immutable';
+      const cacheControl = 'private, no-store, max-age=0';
 
       response.set('Content-Type', contentType);
       response.set('Cache-Control', cacheControl);
@@ -78,7 +86,7 @@ export const publicGeneratedImage = onRequest(
     } catch (error) {
       if (error instanceof HttpsError) {
         const statusCode =
-          error.code === 'permission-denied'
+          error.code === 'unauthenticated' ? 401 : error.code === 'permission-denied'
             ? 403
             : error.code === 'invalid-argument'
               ? 400

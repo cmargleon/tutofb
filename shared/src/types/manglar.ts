@@ -2,8 +2,9 @@ import type { ModelIdentityTraits, PoseAiClassification } from './model';
 import type { Role } from './common';
 export interface ManglarClientSaveRequest {
     id?: string;
-    name: string;
+    name?: string;
     generationPromptBase?: string | null;
+    expected?: { name?: string; generationPromptBase?: string | null };
 }
 export interface ManglarModelSaveRequest {
     id?: string;
@@ -175,3 +176,5 @@ export interface ManglarExecutePlanRequest {
     planId: string;
     confirmedBudgetUsd: number;
 }
+
+export interface ManglarClientSaveResponse { id: string; values: { name: string; generationPromptBase: string | null } }

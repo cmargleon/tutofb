@@ -1,3 +1,4 @@
+import { UserClientAccess } from './UserClientAccess';
 import React from 'react';
 import { ChevronDown, ChevronUp, Edit2, Trash2, X } from 'lucide-react';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
@@ -133,6 +134,7 @@ export const UserListItem: React.FC<UserListItemProps> = ({
 
       {isExpanded ? (
         <div className="mt-4 border-t border-slate-100 pt-4">
+          <UserClientAccess user={appUser} />
           {isEditing && editForm && !isArchivedCatalogEntity(appUser) ? (
             <form onSubmit={onSaveEdit} className="grid gap-4 md:grid-cols-2">
               <div>

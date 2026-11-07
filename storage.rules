@@ -5,14 +5,21 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function currentRole() {
-      return isAuthenticated() && request.auth.token.role is string
-        ? request.auth.token.role
-        : null;
+    // Storage cross-service rules support only the default Firestore database.
+    // Release verification rejects a configured named database; never fall back to stale claims.
+    function userData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }
-
+    function currentRole() {
+      return userData().role;
+    }
     function isActiveUser() {
-      return isAuthenticated() && request.auth.token.active == true;
+      return isAuthenticated() && userData().active == true && userData().get('status', 'active') != 'archived';
+    }
+    function canAccessClient(clientId) {
+      return isActiveUser() && (currentRole() in ['admin', 'operador', 'revisor'])
+        && (currentRole() == 'admin' || userData().get('clientAccess', {}).get('mode', '') == 'global'
+          || (userData().get('clientAccess', {}).get('mode', '') == 'assigned' && clientId in userData().clientAccess.get('clientIds', [])));
     }
 
     function isAdmin() {
@@ -39,7 +46,7 @@ service firebase.storage {
     }
 
     match /models/{clientId}/{modelId}/poses/{fileName} {
-      allow read: if isActiveUser();
+      allow read: if canAccessClient(firestore.get(/databases/(default)/documents/models/$(modelId)).data.clientId);
       allow write: if isAdmin() && isImageUpload();
       allow delete: if isAdmin();
     }
@@ -57,14 +64,13 @@ service firebase.storage {
     }
 
     match /generated/{clientId}/{batchId}/{jobId}/{fileName} {
-      // Generated outputs must be embeddable and fetchable outside authenticated app sessions.
-      allow read: if true;
+      allow read: if canAccessClient(clientId);
       allow write: if false;
       allow delete: if isAdmin();
     }
 
     match /client_spreadsheets/{clientId}/{templateId}/{fileName} {
-      allow read: if isActiveUser();
+      allow read: if canAccessClient(clientId);
       allow write: if isAdmin() && isSpreadsheetUpload();
       allow delete: if isAdmin();
     }
@@ -76,13 +82,13 @@ service firebase.storage {
     }
 
     match /client_spreadsheet_exports/{clientId}/{batchId}/{fileName} {
-      allow read: if isActiveUser();
+      allow read: if canAccessClient(clientId);
       allow write: if false;
       allow delete: if isAdmin();
     }
 
     match /model_generations/{clientId}/{sessionId}/{fileName} {
-      allow read: if isActiveUser();
+      allow read: if canAccessClient(clientId);
       allow write: if false;
       allow delete: if isAdmin();
     }
@@ -90,7 +96,7 @@ service firebase.storage {
     // Newer model-generation flows store assets under
     // model_generations/{clientId}/{modelId}/{stage}/{sessionId}/{fileName}.
     match /model_generations/{clientId}/{modelId}/{stage}/{sessionId}/{fileName} {
-      allow read: if isActiveUser();
+      allow read: if canAccessClient(clientId);
       allow write: if false;
       allow delete: if isAdmin();
     }

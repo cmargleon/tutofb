@@ -1,3 +1,4 @@
+import { authorizeHumanInput, loadHumanClientIds } from '../auth/clientAccess';
 import * as admin from 'firebase-admin';
 import { HttpsError, onRequest } from 'firebase-functions/v2/https';
 import { assertUserRoles } from '../auth/roles';
@@ -15,6 +16,7 @@ export const downloadBatchZip = onRequest({ timeoutSeconds: 300, cors: true }, a
     const decoded = await admin.auth().verifyIdToken(token);
     await assertUserRoles(decoded.uid, decoded.role, ['admin','operador','revisor']);
     const body = parseBody(request.body) as unknown as ManglarZipRequest;
+    await authorizeHumanInput(decoded.uid, body, await loadHumanClientIds(decoded.uid));
     const archive = await createBatchArchive(body);
     response.set('Content-Type','application/zip');
     response.set('Content-Disposition',`attachment; filename="${archive.filename}"`);

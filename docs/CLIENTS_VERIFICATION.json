@@ -1,0 +1,105 @@
+{
+  "verifiedAtUtc": "2026-11-07T09:29:23.747890+00:00",
+  "project": "tutofb-260320-1003",
+  "database": "(default)",
+  "nodeVersion": "22.22.0",
+  "tests": {
+    "suitePassed": 361,
+    "suiteFailed": 0,
+    "suiteSkipped": 0,
+    "playwrightPassed": 12
+  },
+  "functions": {
+    "active": 97,
+    "runtime": "nodejs22",
+    "created": [
+      "listClients",
+      "setUserClientAccess"
+    ],
+    "removed": [],
+    "allExistingRetained": true
+  },
+  "indexes": {
+    "ready": 48,
+    "notReady": 0
+  },
+  "rules": {
+    "firestore.rules": {
+      "matchesLocal": true,
+      "ruleset": "projects/tutofb-260320-1003/rulesets/3f27848e-4a46-4c64-86cd-03e512112dab"
+    },
+    "storage.rules": {
+      "matchesLocal": true,
+      "ruleset": "projects/tutofb-260320-1003/rulesets/d4493e20-d88c-4c85-9e03-70d1c9495676"
+    }
+  },
+  "hosting": {
+    "htmlMatchesLocal": true,
+    "assets": [
+      {
+        "path": "/assets/index-DklIQ-rr.js",
+        "sha256": "d2b49e7b6b6cf9aadef49683f9d52a1688b2968c7301f4f45a2809d51a091201"
+      },
+      {
+        "path": "/assets/vendor-react-QuHEsiqW.js",
+        "sha256": "de7aa87e99f63bc7fc3e3246fd16beb7b93b58937aa4bb69e5ffa451ff4a3fcf"
+      },
+      {
+        "path": "/assets/vendor-firebase-shared-YdRuUFf2.js",
+        "sha256": "b99e9d97bb6f071f7711e818f2bd450046bff7819178b6110d98619ae70d0329"
+      },
+      {
+        "path": "/assets/vendor-firebase-core-MEOWNpZt.js",
+        "sha256": "387df1259c49767330997a5980eb094a21aba3aef3fcefffc9afc227bb7cc14c"
+      },
+      {
+        "path": "/assets/vendor-firebase-auth-S-kyj_dZ.js",
+        "sha256": "583a26494aee4e78b5450f6b650ee41b877c0e72949cfd09b92be8aa7cd64f43"
+      },
+      {
+        "path": "/assets/vendor-firebase-firestore-DDRxhgQF.js",
+        "sha256": "7e3133fc2659b385825c03c19d81e025a97a624c0a10a7040362a2655abb6587"
+      },
+      {
+        "path": "/assets/vendor-firebase-storage-DyA22IST.js",
+        "sha256": "3735ef4ff1b9956344a89e9f4fa8b41e737cea38c3100d7e28df2ac446a3415e"
+      },
+      {
+        "path": "/assets/vendor-firebase-functions-DJU_zq2s.js",
+        "sha256": "34759dde4db19d382f7fc2d9f6ef0bd994d009780c23ddc367f3e11b94c1086e"
+      },
+      {
+        "path": "/assets/vendor-icons-Cj4MInKI.js",
+        "sha256": "2731bb1e0c3c42d3b7a56d3e33b4e0f98201637a4f2a3d076eca180b649b30f2"
+      },
+      {
+        "path": "/assets/vendor-router-ChbR9WtU.js",
+        "sha256": "948875bafb31ba9fb4098569b4bfb1ec12220d112dcf7e32a6b22b683ae1877b"
+      },
+      {
+        "path": "/assets/index-CZ0Jq2A-.css",
+        "sha256": "00311476d71796e861650473762ee7dc68cfae5e6d5db70bfd9acff9ceb82da0"
+      }
+    ]
+  },
+  "anonymousChecks": [
+    {
+      "anonymousEndpoint": "listClients",
+      "status": 401
+    },
+    {
+      "anonymousEndpoint": "saveClient",
+      "status": 401
+    },
+    {
+      "anonymousEndpoint": "publicGeneratedImage",
+      "status": 401
+    },
+    {
+      "anonymousFirestore": 403
+    },
+    {
+      "anonymousExistingStorageObject": 403
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import type { Operation } from './registry';
 import { callableOperations } from './registry';
 import type { DelegatedCaller } from './context';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { assertClientAccess, assertResourceAccess, authorizeManglarInput, loadManglarAccess, loadManglarUser, requireUnrestrictedAdmin, validId } from './access';
+import { assertClientAccess, assertResourceAccess, authorizeManglarInput, isClientScopeSubset, loadManglarAccess, loadManglarUser, requireUnrestrictedAdmin, validId } from './access';
 import { dashboardTotals, dashboardSummary, queryDataset, readEntity, sanitizeResult, spreadsheetCategories } from './reads';
 import { saveClientService, saveModelService, setCatalogArchivedService, replaceModelPoseService, flagJobService } from './catalogService';
 import { classifyModelPoses } from './models';
@@ -121,7 +121,7 @@ export const findOperation = (domain: string, action: string): Operation => {
 export const authorizeOperation = async (operation: Operation, data: any, caller: DelegatedCaller): Promise<void> => {
     const user = await loadManglarUser(caller.uid);
     const access = await loadManglarAccess(caller.uid, user.role);
-    if (!access.enabled || user.role !== caller.role || access.version !== caller.accessVersion || !operation.roles.includes(user.role))
+    if (!access.enabled || user.role !== caller.role || access.version !== caller.accessVersion || !operation.roles.includes(user.role) || !isClientScopeSubset(access.clientIds, caller.allowedClientIds))
         throw new HttpsError('permission-denied', 'Tu usuario no tiene permiso para esta operación.');
     if (!caller.scopes.includes(operation.risk === 'read' ? 'jobs:read' : 'jobs:create'))
         throw new HttpsError('permission-denied', 'Scope OAuth insuficiente.');

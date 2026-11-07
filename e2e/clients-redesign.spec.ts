@@ -15,6 +15,12 @@ async function setup(page: Page, role = 'admin') {
   await page.exposeFunction('__clientsRead', (kind: string, id?: string) => {
     reads.push({ kind, id });
     if (controls.readError) throw new Error('Lectura no disponible');
+    if (kind === 'page') {
+      const filters = JSON.parse(id!); const q = (filters.search || '').trim().toLowerCase();
+      const matching = clients.filter(client => (filters.showArchived || client.status !== 'archived') && (!filters.status || filters.status === 'all' || client.status === filters.status) && client.name.toLowerCase().includes(q));
+      const page = Math.max(1, Math.min(filters.page || 1, Math.ceil(matching.length / 20)));
+      return { clients: matching.slice((page-1)*20, page*20), page, hasMore: matching.length > page*20 };
+    }
     if (kind === 'templates') return [{ id: 'template', clientId: id, name: 'Plantilla real simulada', categories: [{ id: 'cat', label: 'Ropa' }], defaultCategoryId: 'cat' }];
     return id ? clients.find(client => client.id === id) ?? null : clients;
   });
@@ -24,7 +30,12 @@ async function setup(page: Page, role = 'admin') {
     const client = clients.find(client => client.id === input.clientId || client.id === input.id);
     if (name === 'archive' || name === 'restore') client.status = name === 'archive' ? 'archived' : 'active';
     if (name === 'create') clients.unshift({ ...initialClients()[0], id: 'new-client', name: input.name, generationPromptBase: input.prompt });
-    if (name === 'update') { client.name = input.name; client.generationPromptBase = input.prompt; }
+    if (name === 'update') {
+      const current = { name: client.name, generationPromptBase: client.generationPromptBase ?? null };
+      const patch = Object.fromEntries(['name', 'generationPromptBase'].filter(key => key in input).map(key => [key, input[key]]));
+      if (Object.keys(patch).some(key => input.expected?.[key] !== current[key])) return { _conflict: { current } };
+    }
+    if (name === 'update') { if (input.name !== undefined) client.name = input.name; if (input.generationPromptBase !== undefined) client.generationPromptBase = input.generationPromptBase; }
     if (name === 'automation') {
       if (input.section === 'sources') client.automation = { ...client.automation, driveFolderIds: input.automation.driveFolderIds };
       else client.automation = { ...input.automation, driveFolderIds: client.automation.driveFolderIds };
@@ -32,15 +43,19 @@ async function setup(page: Page, role = 'admin') {
     if (name === 'marketplace') {
       client.marketplaces ??= {};
       const previous = client.marketplaces[input.marketplaceId];
+      const current = { enabled: previous?.enabled === true, region: previous?.settings?.region ?? '', sellerId: previous?.settings?.sellerId ?? '' };
+      const patch = { ...input.settings, ...('enabled' in input ? { enabled: input.enabled } : {}) };
+      if (Object.keys(patch).some(key => input.expected?.[key] !== current[key])) return { _conflict: { current } };
       client.marketplaces[input.marketplaceId] = { enabled: false, ...previous, ...('enabled' in input ? { enabled: input.enabled } : {}), ...('settings' in input ? { settings: { ...previous?.settings, ...Object.fromEntries(Object.entries(input.settings).map(([key, value]) => [key, (value as string).trim()])) } } : {}) };
     }
     return name === 'automation' ? { automation: client.automation } : { success: true };
   });
   await page.route('https://**/*', route => route.abort());
+  await page.route('**/src/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `export const auth = { currentUser: { uid: 'admin' }, app: { options: { projectId: 'demo-clients' } } }; export const db = {}; export const functions = {}; export const storage = {};` }));
   await page.route('**/__clients-fixture.js', route => route.fulfill({ contentType: 'application/javascript', body: `
     const listeners = new Set();
     export const sub = (kind, id, callback, onError) => { let active = true; const emit = async () => { try { const value = await window.__clientsRead(kind, id); if (active) callback(value); } catch (err) { if (active) onError?.(err); } }; listeners.add(emit); emit(); return () => { active = false; listeners.delete(emit); }; };
-    export const mutate = async (name, input) => { const result = await window.__clientsMutate(name, input); await Promise.all([...listeners].map(emit => emit())); return result; };
+    export const mutate = async (name, input) => { const result = await window.__clientsMutate(name, input); if (result?._conflict) { const error = new Error('Los valores cambiaron en otra sesión.'); error.details = result._conflict; throw error; } await Promise.all([...listeners].map(emit => emit())); return result; };
   ` }));
   await page.route('**/src/features/marketplaces/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
     import { mutate } from '/__clients-fixture.js';
@@ -48,11 +63,12 @@ async function setup(page: Page, role = 'admin') {
   ` }));
   await page.route('**/src/features/clients/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
     import { sub, mutate } from '/__clients-fixture.js';
+    export const listClients = input => window.__clientsRead('page', JSON.stringify(input));
     export const subscribeToClients = (callback, onError) => sub('clients', null, callback, onError);
     export const subscribeToClient = (id, callback, onError) => sub('client', id, callback, onError);
     export const subscribeToClientSpreadsheetTemplates = (id, callback, onError) => sub('templates', id, callback, onError);
     export const createClient = (name, prompt) => mutate('create', { name, prompt });
-    export const updateClient = (id, name, prompt) => mutate('update', { id, name, prompt });
+    export const updateClient = (id, patch) => mutate('update', { id, ...patch });
     export const archiveClient = id => mutate('archive', { id });
     export const restoreClient = id => mutate('restore', { id });
     export const updateClientAutomation = input => mutate('automation', input);
@@ -64,7 +80,7 @@ async function setup(page: Page, role = 'admin') {
     { id: 'man', name: 'Modelo masculino', clientId: 'client-0', status: 'active', identityTraits: { sex: 'male' }, poses: [] },
     { id: 'woman', name: 'Modelo femenino', clientId: 'client-0', status: 'active', identityTraits: { sex: 'female' }, poses: [] },
   ]); return () => {}; };` }));
-  await page.route('**/src/features/auth/AuthProvider.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `export const useAuth = () => ({ user: { uid: 'admin' }, appUser: { active: true, role: '${role}' }, loading: false });` }));
+  await page.route('**/src/features/auth/AuthProvider.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `export const useRole = () => ({ isAdmin: true, canRegenerate: true, canEvaluate: true }); export const useAuth = () => ({ user: { uid: 'admin' }, appUser: { active: true, role: '${role}' }, loading: false });` }));
   await page.route('**/src/components/Layout.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '/node_modules/.vite/deps/react.js'; import { Outlet } from '${routerImport}'; export const Layout = () => React.createElement('main', { style: { padding: 16 } }, React.createElement(Outlet));` }));
   await page.route('**/src/pages/Dashboard.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '/node_modules/.vite/deps/react.js'; export const Dashboard = () => React.createElement('h1', null, 'Inicio');` }));
   await page.route('http://localhost:3000/**', route => {
@@ -199,9 +215,9 @@ test('marketplace drafts stay independent by client and channel, survive errors 
   await amazon.getByRole('textbox', { name: 'Identificador de vendedor' }).fill(' amazon-seller ');
   await shein.getByRole('textbox', { name: 'País o región' }).fill(' US ');
   await shein.getByRole('textbox', { name: 'Identificador de vendedor' }).fill(' shein-seller ');
-  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.includes(':marketplace:')).sort())).toEqual([
-    'tuto:client-draft:client-0:marketplace:amazon',
-    'tuto:client-draft:client-0:marketplace:shein',
+  expect(await page.evaluate(() => Object.keys(sessionStorage).filter(key => key.includes('%3Amarketplace%3A')).sort())).toEqual([
+    'tuto:client-draft:v2:demo-clients:admin:client-0%3Amarketplace%3Aamazon',
+    'tuto:client-draft:v2:demo-clients:admin:client-0%3Amarketplace%3Ashein',
   ]);
 
   await page.goto('/clients/client-1?tab=marketplaces');
@@ -230,7 +246,7 @@ test('marketplace drafts stay independent by client and channel, survive errors 
   await expect(amazon.getByRole('button', { name: 'Guardar ajustes de Amazon' })).toBeDisabled();
   await expect(shein.getByRole('textbox', { name: 'Identificador de vendedor' })).toHaveValue(' shein-seller ');
   await expect(shein.getByRole('button', { name: 'Guardar ajustes de SHEIN' })).toBeEnabled();
-  expect(await page.evaluate(() => sessionStorage.getItem('tuto:client-draft:client-0:marketplace:amazon'))).toBeNull();
+  expect(await page.evaluate(() => sessionStorage.getItem('tuto:client-draft:v2:demo-clients:admin:client-0%3Amarketplace%3Aamazon'))).toBeNull();
 
   await shein.getByRole('button', { name: 'Guardar ajustes de SHEIN' }).click();
   await expect(shein.getByText('Guardado', { exact: true })).toBeVisible();
@@ -312,4 +328,42 @@ test('save errors retain settings and do not change channel activation; read err
   state.controls.readError = true;
   await page.goto('/clients/lista');
   await expect(page.getByRole('alert')).toContainText('Lectura no disponible');
+});
+
+
+test('marketplace conflict keeps the edited field and adopts untouched remote fields when resolving', async ({ page }) => {
+  const state = await setup(page);
+  state.clients[0].marketplaces = { amazon: { enabled: false, settings: { region: 'MX', sellerId: 'seller-old' } } };
+  await page.goto('/clients/client-0?tab=marketplaces');
+  const amazon = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Amazon', exact: true }) });
+  await amazon.getByRole('button', { name: 'Configurar', exact: true }).click();
+  await amazon.getByRole('textbox', { name: 'País o región' }).fill('US');
+  state.clients[0].marketplaces.amazon.settings = { region: 'CA', sellerId: 'seller-new' };
+  await amazon.getByRole('button', { name: 'Guardar ajustes de Amazon' }).click();
+  await expect(amazon.getByRole('alert')).toBeVisible();
+  await expect(amazon.getByText('Guardado', { exact: true })).toHaveCount(0);
+  await expect(amazon.getByRole('textbox', { name: 'País o región' })).toHaveValue('US');
+  await expect(amazon.getByText(/Valores actuales: región CA/)).toBeVisible();
+  await amazon.getByRole('button', { name: 'Conservar mi borrador y revisar antes de guardar' }).click();
+  await expect(amazon.getByRole('textbox', { name: 'Identificador de vendedor' })).toHaveValue('seller-new');
+  await amazon.getByRole('button', { name: 'Guardar ajustes de Amazon' }).click();
+  await expect(amazon.getByText('Guardado', { exact: true })).toBeVisible();
+  expect(state.calls.at(-1)!.input.settings).toEqual({ region: 'US' });
+  expect(state.clients[0].marketplaces.amazon.settings).toEqual({ region: 'US', sellerId: 'seller-new' });
+});
+
+test('general settings conflict retains name and reviews remote prompt before resolving', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/clients/client-0?tab=configuracion');
+  await page.getByRole('textbox', { name: 'Nombre del cliente' }).fill('Mi nombre');
+  state.clients[0].name = 'Nombre remoto'; state.clients[0].generationPromptBase = 'Prompt remoto';
+  await page.getByRole('button', { name: 'Guardar datos generales' }).click();
+  await expect(page.getByText('Valores actuales en el servidor:')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Nombre del cliente' })).toHaveValue('Mi nombre');
+  await page.getByRole('button', { name: 'Conservar mi borrador y revisar antes de guardar' }).click();
+  await expect(page.getByRole('textbox', { name: 'Prompt base del cliente' })).toHaveValue('Prompt remoto');
+  await page.getByRole('button', { name: 'Guardar datos generales' }).click();
+  await expect(page.getByRole('status')).toHaveText('Datos generales guardados');
+  expect(state.clients[0].name).toBe('Mi nombre'); expect(state.clients[0].generationPromptBase).toBe('Prompt remoto');
+  expect(state.calls.at(-1)!.input.generationPromptBase).toBeUndefined();
 });

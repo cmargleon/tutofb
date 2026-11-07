@@ -1,3 +1,4 @@
+import { humanClientIds } from '../../../shared/src/clientAccess';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getAppFirestore } from '../firebase/appFirestore';
 import type { Role, User } from '../../../shared/src/types';
@@ -26,7 +27,9 @@ export const loadManglarAccess = async (uid: string, role: Role): Promise<Mangla
     if (typeof data.enabled !== 'boolean' || !Number.isInteger(data.version) || (data.clientIds !== null && (!Array.isArray(data.clientIds) || data.clientIds.some((id: unknown) => typeof id !== 'string')))
         || (role !== 'admin' && data.clientIds === null))
         throw new HttpsError('permission-denied', 'Permisos MCP inválidos.');
-    return data as ManglarAccess;
+    const user = await loadManglarUser(uid);
+    const humanIds = humanClientIds(user);
+    return { ...data, clientIds: humanIds === null ? data.clientIds : data.clientIds === null ? humanIds : data.clientIds.filter((id: string) => humanIds.includes(id)) } as ManglarAccess;
 };
 export const assertClientAccess = (caller: DelegatedCaller, id: unknown): string => {
     const clientId = validId(id);
@@ -115,3 +118,7 @@ export const assertDelegatedStamp = async (stamp: ReturnType<typeof delegatedSta
     if (!grant?.active || grant.ownerUid !== stamp.uid || grant.expiresAt.toMillis() <= Date.now())
         throw new HttpsError('permission-denied', 'Conexión de producción revocada o vencida.');
 };
+
+/** A caller or grant captured earlier cannot retain a client removed from the current scope. */
+export const isClientScopeSubset = (current: string[] | null, previous: string[] | null) =>
+    current === null || previous !== null && previous.every(id => current.includes(id));

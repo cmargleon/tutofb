@@ -12,5 +12,6 @@ export interface UpdateClientMarketplaceRequest {
   marketplaceId: MarketplaceId;
   enabled?: boolean;
   settings?: ClientMarketplaceConfig['settings'];
+  expected?: { enabled?: boolean; region?: string; sellerId?: string };
 }
-export interface UpdateClientMarketplaceResponse { success: boolean }
+export interface UpdateClientMarketplaceResponse { success: boolean; current: { enabled: boolean; region: string; sellerId: string } }

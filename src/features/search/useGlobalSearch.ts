@@ -1,3 +1,4 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
 import { useEffect, useMemo, useState } from 'react';
 import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -74,8 +75,9 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
       return;
     }
 
-    return onSnapshot(
+    return subscribeHumanQuery(
       query(collection(db, 'clients'), orderBy('updatedAt', 'desc'), limit(100)),
+      '__name__',
       (snapshot) => {
         setClients(
           snapshot.docs
@@ -96,8 +98,9 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
       return;
     }
 
-    return onSnapshot(
+    return subscribeHumanQuery(
       query(collection(db, 'models'), orderBy('updatedAt', 'desc'), limit(150)),
+      'clientId',
       (snapshot) => {
         setModels(
           snapshot.docs
@@ -118,8 +121,9 @@ export const useGlobalSearch = ({ enabledClients, enabledModels, enabledBatches 
       return;
     }
 
-    return onSnapshot(
+    return subscribeHumanQuery(
       query(collection(db, 'batches'), orderBy('updatedAt', 'desc'), limit(150)),
+      'clientId',
       (snapshot) => {
         setBatches(snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() } as Batch)));
       },

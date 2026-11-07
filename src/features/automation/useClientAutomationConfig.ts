@@ -1,3 +1,4 @@
+import { isAutomationDraft } from '../clients/draftStorage';
 import { useEffect, useState } from 'react';
 import type { AutomationPreset, Client, ClientAutomationConfig, Model } from '../../../shared/src/types';
 import { getClientGenderModelDefaults, getModelGender } from '../../../shared/src/automationModels';
@@ -9,7 +10,7 @@ import { configSnapshot } from '../../../shared/src/configSnapshot';
 import { mergeClientAutomationSection, selectClientAutomationSection, type ClientAutomationSection } from '../../../shared/src/clientAutomationSections';
 
 export const useClientAutomationConfig = (client: Client) => {
-  const draft = useClientDraft<ClientAutomationConfig | null>(`${client.id}:automation`, client.automation ?? null);
+  const draft = useClientDraft<ClientAutomationConfig | null>(`${client.id}:automation`, client.automation ?? null, isAutomationDraft);
   const value: ClientAutomationConfig = { ...draft.value, enabled: draft.value?.enabled ?? true };
   const setValue = (next: ClientAutomationConfig | ((current: ClientAutomationConfig) => ClientAutomationConfig)) => draft.setValue(current => typeof next === 'function' ? next({ ...current, enabled: current?.enabled ?? true }) : next);
   const folders = (value.driveFolderIds || []).join('\n');
@@ -20,7 +21,7 @@ export const useClientAutomationConfig = (client: Client) => {
   const saving = savingSection !== null;
   const toast = useToast();
   useEffect(() => { setPresetName(client.automation?.defaultPreset || ''); }, [client.id]);
-  useEffect(() => subscribeToModels(setModels, (error) => toast({ tone: 'error', title: 'No se pudieron cargar los modelos', description: error.message })), []);
+  useEffect(() => subscribeToModels(setModels, (error) => toast({ tone: 'error', title: 'No se pudieron cargar los modelos', description: error.message }), { clientId: client.id }), [client.id]);
   const preset = value.presets?.[presetName] || {};
   const availableModels = models.filter(model => model.clientId === client.id && model.active !== false && model.status !== 'archived');
   const genderDefaults = getClientGenderModelDefaults(client.id!, value, availableModels);

@@ -1,3 +1,5 @@
+import { cleanupEmulatorDatabase } from './support/cleanupEmulator';
+process.env.FIRESTORE_DATABASE_ID = 'test-manglarmcp';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -35,7 +37,7 @@ test('Manglar OAuth and MCP authorization against emulators', { skip: !enabled }
   const projectId = 'demo-manglar-automation';
   process.env.GCLOUD_PROJECT = projectId;
   admin.initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` });
-  const db = admin.firestore(); const { Timestamp } = admin.firestore;
+  const db = require('../functions/lib/functions/src/firebase/appFirestore.js').getAppFirestore(); const { Timestamp } = admin.firestore;
   const oauth = require('../functions/lib/functions/src/automation/mcpOAuth.js');
   const mcp = require('../functions/lib/functions/src/automation/mcp.js');
   const principalRef = db.collection('automationPrincipals').doc('chatgpt-work');
@@ -179,5 +181,5 @@ test('Manglar OAuth and MCP authorization against emulators', { skip: !enabled }
       const read = await nativeFetch(`http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/${projectId}/databases/(default)/documents/automationOAuth/${record}`, { headers: { Authorization: `Bearer ${idToken}` } });
       assert.equal(read.status, 403);
     });
-  } finally { globalThis.fetch = nativeFetch; await db.terminate(); await admin.app().delete(); }
+  } finally { globalThis.fetch = nativeFetch; await cleanupEmulatorDatabase(db); await db.terminate(); await admin.app().delete(); }
 });

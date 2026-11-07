@@ -224,7 +224,7 @@ test('batch callable stores each approved prompt verbatim and rejects old client
   const stored = new Map<string, any>();
   stored.set('clients/client', { name: 'Client', status: 'active' });
   stored.set('models/model', { name: 'Model', clientId: 'client', poseCount: 1, identityTraits: { hairColor: 'do not inject' }, poses: [{ id: 'pose', fileName: 'pose.jpg', storagePath: 'model/pose.jpg', aiClassification: { usableForGarmentViews: ['front'], framing: 'full_body', orientationGroup: 'front', bodyFocus: 'full_body' } }] });
-  stored.set('users/user', { displayName: 'Operator', role: 'operador', active: true });
+  stored.set('users/user', { displayName: 'Operator', role: 'operador', active: true, clientAccess: { mode: 'global' } });
   let sequence = 0;
   const collection = (path: string): any => ({ doc: (id = `generated-${++sequence}`) => ({
     id, path: `${path}/${id}`,

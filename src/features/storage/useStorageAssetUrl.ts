@@ -1,8 +1,10 @@
+import { useAuth } from '../auth/AuthProvider';
 import { useEffect, useState } from 'react';
 import { FirebaseError } from 'firebase/app';
 import { resolveStorageAssetUrl } from './assets';
 
 export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
+  const { user, appUser } = useAuth();
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(storagePath));
   const [error, setError] = useState<unknown>(null);
@@ -20,6 +22,7 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
       };
     }
 
+    setUrl(null);
     setLoading(true);
     setError(null);
 
@@ -55,7 +58,7 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
       isMounted = false;
       revokeObjectUrl?.();
     };
-  }, [storagePath]);
+  }, [storagePath, user?.uid, appUser]);
 
   return { url, loading, error };
 };

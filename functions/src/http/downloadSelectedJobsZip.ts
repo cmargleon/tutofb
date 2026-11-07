@@ -1,3 +1,4 @@
+import { authorizeHumanInput, loadHumanClientIds } from '../auth/clientAccess';
 import * as admin from 'firebase-admin';
 import { HttpsError, onRequest } from 'firebase-functions/v2/https';
 import { assertUserRoles } from '../auth/roles';
@@ -16,6 +17,7 @@ export const downloadSelectedJobsZip = onRequest({ timeoutSeconds: 300, cors: tr
     await assertUserRoles(decoded.uid, decoded.role, ['admin','operador','revisor']);
     const body = parseBody(request.body) as unknown as ManglarZipRequest;
     if (!Array.isArray(body.jobIds) || !body.jobIds.length) throw new HttpsError('invalid-argument', 'Indica al menos un job.');
+    await authorizeHumanInput(decoded.uid, body, await loadHumanClientIds(decoded.uid));
     const archive = await createBatchArchive(body);
     response.set('Content-Type','application/zip');
     response.set('Content-Disposition',`attachment; filename="${archive.filename}"`);

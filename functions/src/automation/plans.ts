@@ -1,3 +1,4 @@
+import { assertHumanClientAccess } from '../auth/clientAccess';
 import { automationPolling } from './polling';
 import type { AutomationJob, AutomationPlanSummary } from '../../../shared/src/types';
 import { createHash } from 'node:crypto';
@@ -20,6 +21,7 @@ import { authorizeMachineJob } from './machineAuth';
 
 export const prepareAutomationPlan = async (input: unknown, uid: string, role: string): Promise<AutomationPlan> => {
   const data = validateAutomationInput(input, uid);
+  if (role !== 'automation') await assertHumanClientAccess(uid, data.clientId);
   if (role === 'automation') await authorizeMachineJob(uid, data.clientId, data.jobType);
   if (!data.inputImages?.length) throw new HttpsError('failed-precondition', 'Proporciona itemId y archivos explícitos. Una carpeta sola no permite asociar fotos a artículos.');
   const db = getAppFirestore();
@@ -85,6 +87,7 @@ export const readAutomationPlan = async (id: string, uid: string, role: string):
   const plan = (await getAppFirestore().collection('automationPlans').doc(id).get()).data() as AutomationPlan | undefined;
   if (!plan || !canReadAutomation(plan, uid, role)) throw new HttpsError('not-found', 'Plan no encontrado.');
   if (role === 'automation') await authorizeMachineJob(uid, plan.clientId, plan.request.jobType);
+  if (role !== 'automation') await assertHumanClientAccess(uid, plan.clientId);
   return plan;
 };
 export const publicAutomationPlan = (plan: AutomationPlan): AutomationPlanSummary => ({ planId: plan.id, clientId: plan.clientId, clientName: plan.clientName,

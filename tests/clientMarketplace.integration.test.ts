@@ -13,10 +13,10 @@ test('marketplaces persist independently and client rules reject browser writes 
   try {
     await db.collection('clients').doc(clientId).set({ name: 'Emulator fixture', status: 'active', automation: { enabled: false } });
     await Promise.all([
-      saveClientMarketplace({ clientId, marketplaceId: 'amazon', enabled: true }, db),
-      saveClientMarketplace({ clientId, marketplaceId: 'shein', settings: { region: 'MX' } }, db),
-      saveClientMarketplace({ clientId, marketplaceId: 'mercado-libre', settings: { sellerId: 'seller' } }, db),
-      saveClientMarketplace({ clientId, marketplaceId: 'tiktok-shop', enabled: true }, db),
+      saveClientMarketplace({ clientId, marketplaceId: 'amazon', enabled: true, expected: { enabled: false } }, db),
+      saveClientMarketplace({ clientId, marketplaceId: 'shein', settings: { region: 'MX' }, expected: { region: '' } }, db),
+      saveClientMarketplace({ clientId, marketplaceId: 'mercado-libre', settings: { sellerId: 'seller' }, expected: { sellerId: '' } }, db),
+      saveClientMarketplace({ clientId, marketplaceId: 'tiktok-shop', enabled: true, expected: { enabled: false } }, db),
     ]);
     const saved = (await db.collection('clients').doc(clientId).get()).data();
     assert.equal(saved.marketplaces.amazon.enabled, true);
@@ -37,6 +37,11 @@ test('marketplaces persist independently and client rules reject browser writes 
     const automation = await saveClientAutomation({ clientId, section: 'automation', expectedAutomation: sources, automation: { enabled: false, defaultBudgetUsd: 6 } }, db);
     assert.deepEqual(automation.driveFolderIds, ['marketplace-folder-b']);
     assert.equal(automation.defaultBudgetUsd, 6);
+    const automationFirst = await saveClientAutomation({ clientId, section: 'automation', expectedAutomation: automation, automation: { enabled: false, defaultBudgetUsd: 5 } }, db);
+    const sourcesSecond = await saveClientAutomation({ clientId, section: 'sources', expectedAutomation: automation, automation: { driveFolderIds: ['marketplace-folder-b', 'marketplace-folder-c'] } }, db);
+    assert.equal(automationFirst.defaultBudgetUsd, 5);
+    assert.equal(sourcesSecond.defaultBudgetUsd, 5);
+    assert.deepEqual(sourcesSecond.driveFolderIds, ['marketplace-folder-b', 'marketplace-folder-c']);
     await db.collection('organizers').doc(clientId).set({ sourceIds: ['marketplace-folder-b'] });
     await assert.rejects(() => saveClientAutomation({ clientId, section: 'sources', automation: { driveFolderIds: [] } }, db), { code: 'failed-precondition' });
 
@@ -57,7 +62,7 @@ test('marketplaces persist independently and client rules reject browser writes 
       assert.equal(create.status, 403);
     }
     const allowedName = await fetch(`${endpoint}/${clientId}?updateMask.fieldPaths=name`, { method: 'PATCH', headers, body: JSON.stringify({ fields: { name: { stringValue: 'Updated emulator fixture' } } }) });
-    assert.equal(allowedName.status, 200);
+    assert.equal(allowedName.status, 403);
     await db.collection('users').doc(uid).update({ role: 'operador' });
     await admin.auth().setCustomUserClaims(uid, { role: 'operador' });
     const operator = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=emulator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'marketplace@example.test', password: 'emulator-only-password', returnSecureToken: true }) });
@@ -66,5 +71,5 @@ test('marketplaces persist independently and client rules reject browser writes 
     const denied = await fetch(`${endpoint}/${clientId}?updateMask.fieldPaths=marketplaces`, { method: 'PATCH', headers, body: JSON.stringify({ fields: { marketplaces: { mapValue: { fields: {} } } } }) });
     assert.equal(denied.status, 403);
     assert.equal((await db.collection('jobs').where('clientId', '==', clientId).get()).size, 0);
-  } finally { await app.delete(); }
+  } finally { await db.recursiveDelete(db.collection('clients').doc(clientId)); await db.recursiveDelete(db.collection('organizers').doc(clientId)); await app.delete(); }
 });

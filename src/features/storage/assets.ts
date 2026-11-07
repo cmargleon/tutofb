@@ -1,6 +1,6 @@
 import { FirebaseError } from 'firebase/app';
-import { getDownloadURL, ref } from 'firebase/storage';
-import { storage } from '../../firebase';
+import { getBlob, ref } from 'firebase/storage';
+import { auth, storage } from '../../firebase';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 export const isRemoteAssetUrl = (value: string): boolean =>
@@ -84,15 +84,19 @@ const wait = async (delayMs: number): Promise<void> =>
 
 const fetchStorageAssetUrl = async (storagePath: string): Promise<ResolvedStorageAsset> => {
   if (isGeneratedStoragePath(storagePath)) {
-    return { url: buildPublicGeneratedImageUrl(storagePath) };
+    const user = auth.currentUser;
+    if (!user) throw new Error('Debes iniciar sesión para ver la imagen.');
+    const response = await scheduleStorageUrlRequest(async () => fetch(buildPublicGeneratedImageUrl(storagePath), { headers: { Authorization: `Bearer ${await user.getIdToken()}` } }));
+    if (!response.ok) throw new Error('No se pudo acceder a la imagen.');
+    return { url: URL.createObjectURL(await response.blob()) };
   }
 
   let attempt = 0;
 
   while (true) {
     try {
-      const url = await scheduleStorageUrlRequest(() => getDownloadURL(ref(storage, storagePath)));
-      return { url };
+      const blob = await scheduleStorageUrlRequest(() => getBlob(ref(storage, storagePath)));
+      return { url: URL.createObjectURL(blob) };
     } catch (error) {
       const nextDelayMs = STORAGE_URL_RETRY_DELAYS_MS[attempt];
       if (!nextDelayMs || !isRetriableStorageError(error)) {
@@ -109,6 +113,7 @@ const rememberStorageAssetPromise = (storagePath: string, promise: Promise<Resol
   if (storageAssetPromiseCache.size >= STORAGE_URL_CACHE_LIMIT) {
     const oldestKey = storageAssetPromiseCache.keys().next().value;
     if (oldestKey) {
+      void storageAssetPromiseCache.get(oldestKey)?.then(asset => URL.revokeObjectURL(asset.url));
       storageAssetPromiseCache.delete(oldestKey);
     }
   }
@@ -121,16 +126,22 @@ export const resolveStorageAssetUrl = async (storagePath: string): Promise<Resol
     return { url: storagePath };
   }
 
-  const cachedPromise = storageAssetPromiseCache.get(storagePath);
+  const key = `${auth.currentUser?.uid ?? ''}:${storagePath}`;
+  const cachedPromise = storageAssetPromiseCache.get(key);
   if (cachedPromise) {
     return cachedPromise;
   }
 
   const promise = fetchStorageAssetUrl(storagePath).catch((error) => {
-    storageAssetPromiseCache.delete(storagePath);
+    storageAssetPromiseCache.delete(key);
     throw error;
   });
 
-  rememberStorageAssetPromise(storagePath, promise);
+  rememberStorageAssetPromise(key, promise);
   return promise;
+};
+
+export const clearStorageAssetCache = () => {
+  for (const promise of storageAssetPromiseCache.values()) void promise.then(asset => URL.revokeObjectURL(asset.url), () => undefined);
+  storageAssetPromiseCache.clear();
 };

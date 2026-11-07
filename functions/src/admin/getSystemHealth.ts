@@ -1,3 +1,5 @@
+import { loadHumanClientIds } from '../auth/clientAccess';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { onCall } from 'firebase-functions/v2/https';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
@@ -216,6 +218,7 @@ export const getSystemHealth = onCall(
   },
   async (request): Promise<SystemHealthSnapshot> => {
     await assertCallableRoles(request, ['admin', 'revisor']);
+    if (await loadHumanClientIds(request.auth!.uid) !== null) throw new HttpsError('permission-denied', 'Se necesita alcance global para consultar métricas globales.');
 
     const [falHealth, geminiHealth, queue, settings, todayCostUsd] = await Promise.all([
       checkFalHealth(),

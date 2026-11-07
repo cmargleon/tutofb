@@ -78,7 +78,7 @@ test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera
     await root.collection('manifest').doc(digest([item.entry.id, item.entry.version])).set({ copiedId: `copy-${item.entry.id}`, parentId: 'managed-folder' });
   };
   try {
-    await db.collection('users').doc(uid).set({ uid, active: true, role: 'operador' });
+    await db.collection('users').doc(uid).set({ uid, active: true, role: 'operador', clientAccess: { mode: 'global' } });
     await db.collection('users').doc('admin').set({ active: true, role: 'admin' });
     await db.collection('clients').doc(root.id).set({ name: 'Cliente', status: 'active', batchCount: 0, automation: { enabled: true } });
     const system = db.collection('system_config').doc('main');

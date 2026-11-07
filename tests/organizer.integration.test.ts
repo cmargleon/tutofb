@@ -1,3 +1,5 @@
+import { cleanupEmulatorDatabase } from './support/cleanupEmulator';
+process.env.FIRESTORE_DATABASE_ID = 'test-organizer-integration';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
@@ -12,7 +14,7 @@ const local = [process.env.FIRESTORE_EMULATOR_HOST, process.env.FIREBASE_STORAGE
 test('organizador de extremo a extremo con Firestore local, Drive y Gemini simulados', { skip: !local, timeout: 120_000 }, async (t) => {
   const { mock } = t;
   const admin: typeof import('../functions/node_modules/firebase-admin') = requireFunctions('firebase-admin');
-  const app = admin.initializeApp({ projectId: 'demo-tutofb-organizer', storageBucket: 'demo-tutofb-organizer.appspot.com' });
+  const app = admin.initializeApp({ projectId: 'demo-manglar-automation', storageBucket: 'demo-manglar-automation.appspot.com' });
   const { OrganizerDrive, FOLDER, SHEET } = requireFunctions('./lib/functions/src/organizer/drive.js') as typeof import('../functions/src/organizer/drive');
   const { defaultConfig, clientRef, enqueue, runRef } = requireFunctions('./lib/functions/src/organizer/store.js') as typeof import('../functions/src/organizer/store');
   const { reserveOrganizerBudget, settleOrganizerBudget, reconcileReservations, holdFor } = requireFunctions('./lib/functions/src/organizer/vision.js') as typeof import('../functions/src/organizer/vision');
@@ -21,7 +23,7 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
   const { tickOrganizer } = requireFunctions('./lib/functions/src/organizer/worker.js') as typeof import('../functions/src/organizer/worker');
   const { executeOrganizer } = requireFunctions('./lib/functions/src/organizer/api.js') as typeof import('../functions/src/organizer/api');
   const sharp: typeof import('../functions/node_modules/sharp') = requireFunctions('sharp');
-  const db = admin.firestore();
+  const db = requireFunctions('./lib/functions/src/firebase/appFirestore.js').getAppFirestore();
   const clientId = 'client-fixture';
   const owner = [{ permissionId: 'private-owner' }];
   const folder = (id: string, parents: string[]): DriveFile => ({ id, name: id, mimeType: FOLDER, parents, owners: owner, capabilities: { canAddChildren: true } });
@@ -102,7 +104,9 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
   });
   const actor = { uid: 'operator', role: 'operador' as const };
   try {
-    await db.collection('users').doc(actor.uid).set({ uid: actor.uid, active: true, role: actor.role });
+    await db.collection('users').doc(actor.uid).set({ uid: actor.uid, active: true, role: actor.role, clientAccess: { mode: 'global' } });
+    await db.collection('users').doc('admin').set({ role: 'admin', active: true });
+    await db.collection('users').doc('other').set({ role: 'operador', active: true, clientAccess: { mode: 'global' } });
     await db.collection('clients').doc(clientId).set({ name: 'Fixture', status: 'active', automation: { driveFolderIds: ['another-origin'] } });
     await clientRef(clientId).set(defaultConfig(clientId, 'Fixture', settings));
     const adminActor = { uid: 'admin', role: 'admin' as const };
@@ -416,5 +420,5 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
       await assert.rejects(() => watch(f.drive, before), { status: 503 });
       assert.deepEqual(await f.config(), before);
     });
-  } finally { await app.delete(); }
+  } finally { await cleanupEmulatorDatabase(db); await app.delete(); }
 });

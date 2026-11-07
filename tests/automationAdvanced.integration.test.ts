@@ -1,3 +1,5 @@
+import { cleanupEmulatorDatabase } from './support/cleanupEmulator';
+process.env.FIRESTORE_DATABASE_ID = 'test-automationadvanced-integration';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -11,9 +13,9 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
   process.env.GEMINI_API_KEY = 'test-only'; process.env.FAL_KEY = 'test-only'; process.env.JOB_AUTO_REVIEW_MAX_ATTEMPTS = '3';
   const admin = require('../functions/node_modules/firebase-admin');
   admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT, storageBucket: `${process.env.GCLOUD_PROJECT}.appspot.com` });
-  const db = admin.firestore(); const bucket = admin.storage().bucket();
+  const db = require('../functions/lib/functions/src/firebase/appFirestore.js').getAppFirestore(); const bucket = admin.storage().bucket();
   const uid = 'advanced-operator'; const adminUid = 'advanced-admin';
-  await db.collection('users').doc(uid).set({ uid, active: true, role: 'operador' });
+  await db.collection('users').doc(uid).set({ uid, active: true, role: 'operador', clientAccess: { mode: 'global' } });
   await db.collection('users').doc(adminUid).set({ uid: adminUid, active: true, role: 'admin' });
   const { DEFAULT_AUTOMATION_BUDGET } = require('../functions/lib/shared/src/automationPolicy.js');
   const systemRef = db.collection('system_config').doc('main');
@@ -495,5 +497,5 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       assert.equal((await ref.collection('outputs').get()).size, history + 1);
       assert.deepEqual((await db.collection('automationJobs').doc(current.id).get()).data().budget, budgetBefore);
     });
-  } finally { globalThis.fetch = originalFetch; await admin.app().delete(); }
+  } finally { globalThis.fetch = originalFetch; await cleanupEmulatorDatabase(db); await admin.app().delete(); }
 });

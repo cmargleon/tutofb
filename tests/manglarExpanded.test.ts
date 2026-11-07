@@ -1,3 +1,5 @@
+import { cleanupEmulatorDatabase } from './support/cleanupEmulator';
+process.env.FIRESTORE_DATABASE_ID = 'test-manglarexpanded';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -6,7 +8,7 @@ const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREB
 test('Full Manglar delegated MCP, with Firebase emulators and mocked providers', { skip: !enabled }, async (t) => {
     for (const key of ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST'])
         assert.match(process.env[key]!, /^(127\.0\.0\.1|localhost):/);
-    const projectId = `demo-manglar-${Date.now()}`;
+    const projectId = 'demo-manglar-automation';
     process.env.GCLOUD_PROJECT = projectId;
     process.env.GEMINI_API_KEY = 'emulator-only';
     process.env.FAL_KEY = 'emulator-only';
@@ -18,7 +20,7 @@ test('Full Manglar delegated MCP, with Firebase emulators and mocked providers',
     process.env.GEMINI_IMAGE_REVIEW_MODEL = 'gemini-mock';
     const admin = require('../functions/node_modules/firebase-admin');
     admin.initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` });
-    const db = admin.firestore();
+    const db = require('../functions/lib/functions/src/firebase/appFirestore.js').getAppFirestore();
     const { Timestamp } = admin.firestore;
     const oauth = require('../functions/lib/functions/src/automation/mcpOAuth.js');
     const helper = require('../functions/lib/functions/src/automation/mcpOAuth.helpers.js');
@@ -75,7 +77,7 @@ test('Full Manglar delegated MCP, with Firebase emulators and mocked providers',
     const write = (caller: any, domain: string, action: string, data: any) => call(caller, domain, action, data, { idempotencyKey: `write-${++serial}` });
     try {
         for (const [uid, role] of [['expanded-admin', 'admin'], ['expanded-operator', 'operador'], ['expanded-other', 'operador'], ['expanded-reviewer', 'revisor']])
-            await db.collection('users').doc(uid).set({ uid, email: `${uid}@example.test`, displayName: uid, role, active: true, status: 'active', createdAt: Timestamp.now() });
+            await db.collection('users').doc(uid).set({ uid, email: `${uid}@example.test`, displayName: uid, role, active: true, clientAccess: { mode: 'global' }, status: 'active', createdAt: Timestamp.now() });
         for (const id of ['expanded-client', 'expanded-foreign'])
             await db.collection('clients').doc(id).set({ name: id, status: 'active', createdByUid: 'expanded-admin', createdAt: Timestamp.now() });
         for (const uid of ['expanded-operator', 'expanded-other', 'expanded-reviewer'])
@@ -117,13 +119,21 @@ test('Full Manglar delegated MCP, with Firebase emulators and mocked providers',
             assert.equal(flag.flagged, true);
             assert.equal((await db.collection('jobs').doc('expanded-owned').get()).data().manuallyFlaggedByUid, r.caller.uid);
         });
+        await t.test('human scope reductions invalidate earlier grants and already captured delegated callers', async () => {
+            await db.collection('users').doc(r.caller.uid).update({ clientAccess: { mode: 'assigned', clientIds: [] } });
+            try {
+                await assert.rejects(() => oauth.verifyManglarMcpToken(`Bearer ${r.tokens.access_token}`), { code: 'unauthenticated' });
+                await assert.rejects(() => call(r.caller, 'clients', 'get', { id: 'expanded-client' }), { code: 'permission-denied' });
+                await assert.rejects(() => mcp.executeManglarTool('manglar_capabilities', {}, r.caller), { code: 'permission-denied' });
+            } finally { await db.collection('users').doc(r.caller.uid).update({ clientAccess: { mode: 'global' } }); }
+        });
         await t.test('client creation and edits reuse business services and exact-key idempotency', async () => {
             const input = { name: 'Cliente creado por MCP', generationPromptBase: 'Prompt autorizado' };
             const first = await call(a.caller, 'clients', 'save', input, { idempotencyKey: 'client-create-once' });
             const again = await call(a.caller, 'clients', 'save', input, { idempotencyKey: 'client-create-once' });
             assert.equal(first.id, again.id);
             await assert.rejects(() => call(a.caller, 'clients', 'save', { ...input, name: 'otro' }, { idempotencyKey: 'client-create-once' }), { code: 'permission-denied' });
-            await write(a.caller, 'clients', 'save', { id: first.id, name: 'Cliente editado' });
+            await write(a.caller, 'clients', 'save', { id: first.id, name: 'Cliente editado', expected: { name: input.name } });
             assert.equal((await call(a.caller, 'clients', 'get', { id: first.id })).name, 'Cliente editado');
             await write(a.caller, 'clients', 'archive', { id: first.id });
             await write(a.caller, 'clients', 'restore', { id: first.id });
@@ -337,7 +347,7 @@ test('Full Manglar delegated MCP, with Firebase emulators and mocked providers',
         globalThis.fetch = nativeFetch;
         provider.generateWithNewFalModel = originalProvider;
         filePrototype.getSignedUrl = originalSignedUrl;
-        await db.terminate();
+        await cleanupEmulatorDatabase(db); await db.terminate();
         await admin.app().delete();
     }
 });

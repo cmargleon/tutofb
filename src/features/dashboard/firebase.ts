@@ -1,3 +1,4 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
 import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { AnalyticsSummary, Batch, Client, Job, Model } from '../../../shared/src/types';
 import { db } from '../../firebase';
@@ -29,8 +30,9 @@ export const subscribeToDashboardData = (
   };
 
   const unsubscribers = [
-    onSnapshot(
+    subscribeHumanQuery(
       query(collection(db, 'clients'), orderBy('createdAt', 'desc')),
+      '__name__',
       (snapshot) => {
         latestClients = snapshot.docs
           .map((doc) => ({ id: doc.id, ...doc.data() } as Client))
@@ -39,8 +41,9 @@ export const subscribeToDashboardData = (
       },
       onError,
     ),
-    onSnapshot(
+    subscribeHumanQuery(
       query(collection(db, 'models'), orderBy('createdAt', 'desc')),
+      'clientId',
       (snapshot) => {
         latestModels = snapshot.docs
           .map((doc) => ({ id: doc.id, ...doc.data() } as Model))
@@ -49,16 +52,18 @@ export const subscribeToDashboardData = (
       },
       onError,
     ),
-    onSnapshot(
+    subscribeHumanQuery(
       query(collection(db, 'batches'), orderBy('createdAt', 'desc'), limit(20)),
+      'clientId',
       (snapshot) => {
         latestBatches = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Batch));
         emit();
       },
       onError,
     ),
-    onSnapshot(
+    subscribeHumanQuery(
       query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(50)),
+      'clientId',
       (snapshot) => {
         latestJobs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Job));
         emit();

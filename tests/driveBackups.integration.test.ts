@@ -7,7 +7,7 @@ test('backup persistence, authorization and Firestore security rules (local emul
   process.env.DRIVE_BACKUPS_ENABLED = 'true';
   const admin: typeof import('../functions/node_modules/firebase-admin') = require('firebase-admin');
   const projectId = process.env.GCLOUD_PROJECT || 'demo-tuto-drive-backups';
-  const app = admin.initializeApp({ projectId }); const db = admin.firestore();
+  const app = admin.initializeApp({ projectId }); const db = require('../functions/lib/functions/src/firebase/appFirestore.js').getAppFirestore();
   const { FirestoreBackupStore, backupRef } = require('./lib/functions/src/backups/store.js') as typeof import('../functions/src/backups/store');
   const { manageDriveBackup, agentDriveWorkspace } = require('./lib/functions/src/backups/functions.js') as typeof import('../functions/src/backups/functions');
   const { withManglarContext } = require('./lib/functions/src/manglar/context.js') as typeof import('../functions/src/manglar/context');
@@ -26,7 +26,7 @@ test('backup persistence, authorization and Firestore security rules (local emul
       await assert.rejects(() => manageDriveBackup.run(request(`admin-${suffix}`, { action: 'configure', settings: { ...settings, sourceFolderId: 'unauthorized' } })), /Autoriza/);
       await assert.rejects(() => manageDriveBackup.run(request(`admin-${suffix}`, { action: 'configure', settings: { ...settings, backupFolderId: 'another-root' } })), /inmutables/);
       await assert.rejects(() => agentDriveWorkspace.run(request(`op-${suffix}`, { action: 'trash', clientId, fileId: settings.backupFolderId }, 'operador')), { code: 'permission-denied' });
-      await db.collection('users').doc(`op-${suffix}`).set({ active: true, role: 'operador' });
+      await db.collection('users').doc(`op-${suffix}`).set({ active: true, role: 'operador', clientAccess: { mode: 'global' } });
       await backupRef(clientId).update({ enabled: true });
       // The client is active, but this operator has no assignment. Rejected before any Google request.
       await assert.rejects(() => agentDriveWorkspace.run(request(`op-${suffix}`, { action: 'trash', clientId, fileId: settings.backupFolderId }, 'operador')), /no autorizado/);

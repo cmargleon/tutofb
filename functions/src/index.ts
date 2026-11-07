@@ -6,6 +6,8 @@ admin.initializeApp();
 setGlobalOptions({ maxInstances: 10 });
 
 // Export callables
+export { setUserClientAccess } from './callables/setUserClientAccess';
+export { listClients } from './callables/listClients';
 export * from './callables/updateClientMarketplace';
 export * from './callables/createGenerationBatch';
 export * from './callables/createProductGenerationBatch';

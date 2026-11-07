@@ -5172,11 +5172,32 @@
             "maxLength": 30000
           }
         ]
+      },
+      "expected": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "generationPromptBase": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 30000
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "maxProperties": 100
       }
     },
-    "required": [
-      "name"
-    ],
+    "required": [],
     "additionalProperties": false,
     "maxProperties": 100
   },
@@ -8343,6 +8364,222 @@
     "required": [
       "planId",
       "confirmedBudgetUsd"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "UpdateClientMarketplaceRequest": {
+    "type": "object",
+    "properties": {
+      "clientId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "marketplaceId": {
+        "type": "string",
+        "enum": [
+          "amazon",
+          "shein",
+          "tiktok-shop",
+          "mercado-libre"
+        ]
+      },
+      "enabled": {
+        "anyOf": [
+          {
+            "const": false,
+            "type": "boolean"
+          },
+          {
+            "const": true,
+            "type": "boolean"
+          }
+        ]
+      },
+      "settings": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "sellerId": {
+            "type": "string",
+            "maxLength": 30000
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "maxProperties": 100
+      },
+      "expected": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "const": false,
+                "type": "boolean"
+              },
+              {
+                "const": true,
+                "type": "boolean"
+              }
+            ]
+          },
+          "region": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "sellerId": {
+            "type": "string",
+            "maxLength": 30000
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "maxProperties": 100
+      }
+    },
+    "required": [
+      "clientId",
+      "marketplaceId"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "ListClientsRequest": {
+    "type": "object",
+    "properties": {
+      "search": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "all",
+          "active",
+          "archived"
+        ]
+      },
+      "showArchived": {
+        "anyOf": [
+          {
+            "const": false,
+            "type": "boolean"
+          },
+          {
+            "const": true,
+            "type": "boolean"
+          }
+        ]
+      },
+      "page": {
+        "type": "number"
+      }
+    },
+    "required": [],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "SetUserClientAccessRequest": {
+    "type": "object",
+    "properties": {
+      "uid": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "clientAccess": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "const": "global",
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "const": "assigned",
+                "type": "string"
+              },
+              "clientIds": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "string",
+                  "maxLength": 30000
+                }
+              }
+            },
+            "required": [
+              "mode",
+              "clientIds"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          }
+        ]
+      },
+      "expected": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "const": "global",
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "const": "assigned",
+                "type": "string"
+              },
+              "clientIds": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "string",
+                  "maxLength": 30000
+                }
+              }
+            },
+            "required": [
+              "mode",
+              "clientIds"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          }
+        ]
+      }
+    },
+    "required": [
+      "uid",
+      "clientAccess",
+      "expected"
     ],
     "additionalProperties": false,
     "maxProperties": 100

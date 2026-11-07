@@ -1,3 +1,4 @@
+import { subscribeHumanQuery } from '../auth/scopedQuery';
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import type { OrderByDirection, Unsubscribe } from 'firebase/firestore';
 import type { Batch, Job } from '../../../shared/src/types';
@@ -38,8 +39,9 @@ export const subscribeToCatalogBatchJobs = (
   onData: (jobs: Job[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe => subscribeWhileActive(
-  (next, error) => onSnapshot(
+  (next, error) => subscribeHumanQuery(
     query(collection(db, 'jobs'), where('batchId', '==', batchId), orderBy('createdAt', sortOrder)),
+    'clientId',
     (snapshot) => next(snapshot.docs.map((job) => ({ id: job.id, ...job.data() } as Job))),
     error,
   ),

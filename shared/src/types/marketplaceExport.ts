@@ -36,7 +36,10 @@ export interface StoredMasterProduct {
 export interface TemplateColumnMapping { source: string; valueMap?: Record<string, string>; required?: boolean; dataType?: 'text' | 'number' }
 export interface MarketplaceTemplateConfig {
   marketplaceId: MarketplaceId;
+  /** Zero while pending; released versions count activations only. */
   version: number; replacesTemplateId?: string | null; legacyTemplateIds?: string[];
+  /** Superseded versions remain exportable for products already linked to them. */
+  supersededByTemplateId?: string | null;
   operation: 'new_product' | 'existing_catalog' | 'listing';
   validationStatus: 'needs_configuration' | 'compatible' | 'incompatible';
   validationMessages: string[];
@@ -60,4 +63,5 @@ export interface ConfigureMarketplaceTemplateRequest {
   clientId: string; templateId: string; marketplaceId: MarketplaceId;
   operation: MarketplaceTemplateConfig['operation']; layouts?: Record<string, { rowStart: number }>; mappings: MarketplaceTemplateConfig['mappings'];
 }
+/** Marketplaces is a patch: omitted channels are preserved; disabled channels cannot change. */
 export interface SaveMasterProductRequest extends MarketplaceExportScope { productId: string; authorizePublicImages?: boolean; expectedRevision: number; values: MasterProduct['values']; variants: MasterVariant[]; marketplaces: MasterProduct['marketplaces'] }

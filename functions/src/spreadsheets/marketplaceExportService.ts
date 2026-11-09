@@ -55,13 +55,18 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
   return { scope, client, products, templates, categories };
 }
 type Context = Awaited<ReturnType<typeof loadExportContext>>;
-export const templateUsable = (t: SpreadsheetTemplate, channel: MarketplaceId) => t.status !== 'archived' && t.exportConfig?.marketplaceId === channel && t.exportConfig.validationStatus === 'compatible';
+// Supersession retires a default, while explicit archival revokes use (including history).
+export const templateUsable = (t: SpreadsheetTemplate, channel: MarketplaceId, historicallyLinked = false) =>
+  (t.status !== 'archived' || (historicallyLinked && !!t.exportConfig?.supersededByTemplateId))
+  && t.exportConfig?.marketplaceId === channel && t.exportConfig.validationStatus === 'compatible';
 export function previewExportContext(context: Context): MarketplaceExportPreview {
   const { client, products, templates, categories } = context;
   const channels = MARKETPLACES.filter(m => client.marketplaces?.[m.id]?.enabled).map(({ id }) => {
-    const available = templates.filter(t => templateUsable(t, id));
+    // Readiness is scoped to these products, including their linked history even
+    // when no current version remains available for new assignments.
+    const available = templates.filter(t => templateUsable(t, id, products.some(p => p.marketplaces[id]?.templateId === t.id)));
     const issues = products.flatMap(p => {
-      const data = p.marketplaces[id]; const template = available.find(t => t.id === data?.templateId);
+      const data = p.marketplaces[id]; const template = templates.find(t => t.id === data?.templateId && templateUsable(t, id, true));
       const category = categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
       if (!template || !category) return [{ marketplaceId: id, productId: p.id, productName: p.values.name || p.garmentId, code: !available.length ? 'template' : 'category', message: !available.length ? 'Falta plantilla compatible activa.' : 'Selecciona plantilla y categoría para este producto.' }];
       return MARKETPLACE_ADAPTERS[id].prepare(p, template, category).issues;
@@ -76,7 +81,7 @@ export function previewExportContext(context: Context): MarketplaceExportPreview
 export async function validateTemplateCoordinates(context: Context, channel: MarketplaceId) {
   const groups = new Map<string, Array<{ product: MasterProduct; category: SpreadsheetTemplateCategory; rows: ReturnType<typeof MARKETPLACE_ADAPTERS[MarketplaceId]['prepare']>['rows'] }>>();
   for (const product of context.products) {
-    const data = product.marketplaces[channel]; const template = context.templates.find(t => t.id === data?.templateId && templateUsable(t, channel));
+    const data = product.marketplaces[channel]; const template = context.templates.find(t => t.id === data?.templateId && templateUsable(t, channel, true));
     const category = context.categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
     if (!template || !category) throw new Error('Plantilla o categoría no disponible.');
     const adapted = MARKETPLACE_ADAPTERS[channel].prepare(product, template, category);

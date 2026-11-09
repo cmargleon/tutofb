@@ -1,4 +1,6 @@
 import * as admin from 'firebase-admin';
+import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { ConfigureMarketplaceTemplateRequest, DownloadMarketplaceExportRequest, MarketplaceExportScope, SaveMasterProductRequest, SpreadsheetTemplate, StoredMasterProduct } from '../../../shared/src/types';
 import { PRODUCT_FIELDS, VARIANT_FIELDS } from '../../../shared/src/types';
@@ -7,10 +9,18 @@ import { safePublicImageUrl, normalizeMarketplaceColumnKey } from '../../../shar
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { validId } from '../manglar/access';
-import { downloadMarketplaceExport, loadExportContext, previewMarketplaceExport } from '../spreadsheets/marketplaceExportService';
+import { downloadMarketplaceExport, loadExportContext, previewMarketplaceExport, templateUsable } from '../spreadsheets/marketplaceExportService';
 import { analyzeMarketplaceTemplate, assertTemplateDocumentLimits } from '../spreadsheets/marketplaceTemplates';
 
 const options = { timeoutSeconds: 540, memory: '1GiB' as const, concurrency: 1 };
+const rethrowTransactionConflict = (error: unknown): never => {
+  const failure = error as { code?: number; message?: string };
+  // Exhausted Firestore contention and the emulator's closed-transaction response
+  // both require a fresh read, rather than exposing an internal callable error.
+  if (failure.code === 10 || (failure.code === 3 && /transaction is invalid or closed/i.test(failure.message || '')))
+    throw new HttpsError('aborted', 'La información cambió durante el guardado. Actualiza antes de reintentar.');
+  throw error;
+};
 export const previewMarketplaceExports = onCall<MarketplaceExportScope>(options, async request => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
   return previewMarketplaceExport(request.data, request.auth!.uid);
@@ -39,8 +49,10 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
   if (new Set(variants.map(v => v.id)).size !== variants.length) throw new HttpsError('invalid-argument', 'Variantes duplicadas.');
   const marketplaces: StoredMasterProduct['marketplaces'] = {};
   for (const [channel, data] of Object.entries(request.data.marketplaces || {})) {
-    if (!isMarketplaceId(channel) || !data || !context.client.marketplaces?.[channel]?.enabled) throw new HttpsError('invalid-argument', 'Marketplace no disponible.');
-    const template = context.templates.find(t => t.id === data.templateId && t.exportConfig?.marketplaceId === channel);
+    if (!isMarketplaceId(channel) || !data) throw new HttpsError('invalid-argument', 'Marketplace no disponible.');
+    // Disabled payloads are compared with persisted data inside the transaction.
+    if (!context.client.marketplaces?.[channel]?.enabled) continue;
+    const template = context.templates.find(t => t.id === data.templateId && templateUsable(t, channel, product.marketplaces[channel]?.templateId === t.id));
     const category = context.categories.find(c => c.id === data.categoryId && c.templateId === template?.id);
     if (!template || !category) throw new HttpsError('invalid-argument', 'Plantilla/categoría fuera del cliente o canal.');
     if (data.rows && (!Array.isArray(data.rows) || data.rows.length > 200)) throw new HttpsError('invalid-argument', 'Filas inválidas.');
@@ -63,17 +75,41 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
     }
     marketplaces[channel] = { templateId: template!.id!, categoryId: category.id!, rows, imageUrls, ...(requirements ? { requirements } : {}) };
   }
-  const ref = getAppFirestore().collection('clients').doc(context.scope.clientId).collection('products').doc(product.id);
+  const db = getAppFirestore();
+  const clientRef = db.collection('clients').doc(context.scope.clientId);
+  const ref = clientRef.collection('products').doc(product.id);
+  if (!Number.isInteger(request.data.expectedRevision) || request.data.expectedRevision < 0) throw new HttpsError('invalid-argument', 'Revisión inválida.');
   const revision = await getAppFirestore().runTransaction(async tx => {
-    const snap = await tx.get(ref); const current = snap.get('revision') || 0;
+    const [snap, client] = await Promise.all([tx.get(ref), tx.get(clientRef)]);
+    if (!client.exists || client.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente no disponible.');
+    const current = snap.get('revision') || 0;
     if (current !== request.data.expectedRevision) throw new HttpsError('aborted', 'El producto cambió. Actualiza antes de guardar.');
-    const data: StoredMasterProduct = { clientId: context.scope.clientId, values, variants, marketplaces, revision: current + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedByUid: request.auth!.uid };
+    const templateSnapshots = await Promise.all(Object.entries(marketplaces).map(async ([channel, data]) => ({
+      channel, snapshot: await tx.get(clientRef.collection('spreadsheetTemplates').doc(data!.templateId)),
+    })));
+    for (const { channel, snapshot } of templateSnapshots) {
+      if (isMarketplaceId(channel) && client.get(`marketplaces.${channel}.enabled`)
+        && (!snapshot.exists || !templateUsable({ ...snapshot.data(), id: snapshot.id } as SpreadsheetTemplate, channel, product.marketplaces[channel]?.templateId === snapshot.id)))
+        throw new HttpsError('aborted', 'La plantilla cambió. Actualiza antes de guardar.');
+    }
+    const merged: StoredMasterProduct['marketplaces'] = { ...snap.get('marketplaces') };
+    for (const [channel, incoming] of Object.entries(request.data.marketplaces || {})) {
+      if (!isMarketplaceId(channel)) throw new HttpsError('invalid-argument', 'Marketplace no disponible.');
+      if (!client.get(`marketplaces.${channel}.enabled`)) {
+        if (!isDeepStrictEqual(incoming, merged[channel])) throw new HttpsError('invalid-argument', 'No puedes modificar un marketplace deshabilitado.');
+        continue;
+      }
+      // If it was enabled after prevalidation, retry with a fresh channel context.
+      if (!marketplaces[channel]) throw new HttpsError('aborted', 'Los canales del cliente cambiaron. Actualiza antes de guardar.');
+      merged[channel] = marketplaces[channel];
+    }
+    const data: StoredMasterProduct = { clientId: context.scope.clientId, values, variants, marketplaces: merged, revision: current + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedByUid: request.auth!.uid };
     tx.set(ref, data); return current + 1;
-  });
+  }).catch(rethrowTransactionConflict);
   return { success: true, revision };
 });
 
-/** Activation and legacy association create a new immutable version; old documents remain intact. */
+/** Pending uploads activate in place; revisions of released/legacy templates are additive. */
 export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateRequest>(options, async request => {
   await assertCallableRoles(request, ['admin']);
   const { clientId, templateId, marketplaceId, operation } = request.data;
@@ -105,25 +141,87 @@ export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateR
     }
   }
   assertTemplateDocumentLimits({ ...analyzed.template, mappings }, analyzed.categories);
-  const next = clientRef.collection('spreadsheetTemplates').doc();
-  const immutablePath = `client_spreadsheets/${clientId}/${next.id}/${template.originalFileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  await admin.storage().bucket().file(template.storagePath).copy(admin.storage().bucket().file(immutablePath));
+  const pending = !!template.exportConfig && template.exportConfig.validationStatus !== 'compatible';
+  // A stable destination serializes even two associations of an unchanged legacy source.
+  const next = pending ? ref : !template.exportConfig
+    ? clientRef.collection('spreadsheetTemplates').doc(`marketplace-${createHash('sha256').update(`${templateId}\0${marketplaceId}`).digest('hex').slice(0, 40)}`)
+    : clientRef.collection('spreadsheetTemplates').doc();
+  const predecessorId = pending ? template.exportConfig?.replacesTemplateId : template.exportConfig ? templateId : null;
+  const predecessorRef = predecessorId ? clientRef.collection('spreadsheetTemplates').doc(validId(predecessorId)) : null;
+  // Legacy templates can still be deleted by their original administration flow.
+  // Give the additive export association its own protected copy of the original.
+  const storagePath = template.exportConfig ? template.storagePath
+    : `client_spreadsheets/${clientId}/${next.id}/${template.originalFileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+  if (!template.exportConfig) {
+    const destination = admin.storage().bucket().file(storagePath);
+    try {
+      await admin.storage().bucket().file(template.storagePath).copy(destination, { preconditionOpts: { ifGenerationMatch: 0 } });
+    } catch (error) {
+      if ((error as { code?: number }).code !== 412) throw error;
+      const [existing] = await destination.download();
+      if (!existing.equals(buffer)) throw new HttpsError('aborted', 'El original de la asociación cambió. Revisa la plantilla.');
+    }
+  }
   const now = admin.firestore.FieldValue.serverTimestamp();
   const { id: _id, ...base } = analyzed.template;
-  const batch = db.batch();
-  batch.set(next, { ...base, storagePath: immutablePath, status: 'active', createdAt: now, updatedAt: now, exportConfig: { ...analyzed.template.exportConfig, operation, mappings, validationStatus: 'compatible', validationMessages: ['Estructura y asociaciones verificadas por el administrador. Validación final de carga pendiente en el marketplace.'], version: (template.exportConfig?.version || 0) + 1, replacesTemplateId: templateId, legacyTemplateIds: [...new Set([templateId, ...(template.exportConfig?.legacyTemplateIds || [])])], confirmedAt: now } });
-  for (const category of analyzed.categories) batch.set(next.collection('categories').doc(category.id!), { ...category, templateId: next.id, createdAt: now, updatedAt: now });
-  // Archive only the superseded export version. Legacy generation templates remain usable.
-  if (template.exportConfig) batch.update(ref, { status: 'archived', archivedAt: now, archivedByUid: request.auth!.uid, updatedAt: now });
-  await batch.commit();
+  await db.runTransaction(async tx => {
+    // Complete each read before the next: an aborted lock acquisition must not leave
+    // parallel reads using a closed transaction while Firestore retries it.
+    const currentClient = await tx.get(clientRef);
+    const source = await tx.get(ref);
+    const predecessor = predecessorRef ? predecessorRef.isEqual(ref) ? source : await tx.get(predecessorRef) : null;
+    const sourceCategories = await tx.get(ref.collection('categories'));
+    const ancestorIds = [...new Set<string>([
+      ...(template.exportConfig?.legacyTemplateIds || []), ...(predecessor?.get('exportConfig.legacyTemplateIds') || []),
+    ])].filter(id => id !== ref.id && id !== predecessorRef?.id);
+    const ancestors = ancestorIds.length ? await tx.getAll(...ancestorIds.map(id => ref.parent.doc(validId(id)))) : [];
+    const association = !template.exportConfig ? await tx.get(next) : null;
+    const legacyAssociations = !template.exportConfig ? await tx.get(ref.parent.where('exportConfig.legacyTemplateIds', 'array-contains', templateId)) : null;
+    if (!currentClient.exists || currentClient.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente no disponible.');
+    if (!source.updateTime?.isEqual(snapshot.updateTime!) || source.get('status') === 'archived'
+      || sourceCategories.size !== cs.size || sourceCategories.docs.some(d => { const before = cs.docs.find(c => c.id === d.id); return !before || !d.updateTime.isEqual(before.updateTime); }))
+      throw new HttpsError('aborted', 'La plantilla cambió. Actualiza antes de activar.');
+    if (association?.exists || legacyAssociations?.docs.some(d => d.get('exportConfig.marketplaceId') === marketplaceId))
+      throw new HttpsError('aborted', 'La plantilla heredada ya está asociada. Revisa su versión de exportación.');
+    if (predecessorRef && (!predecessor?.exists || predecessor.get('status') === 'archived'
+      || predecessor.get('exportConfig.marketplaceId') !== marketplaceId || predecessor.get('exportConfig.validationStatus') !== 'compatible'))
+      throw new HttpsError('aborted', 'La versión reemplazada ya no está vigente. Actualiza antes de activar.');
+    const lineage = [...new Set([
+      ...(template.exportConfig?.legacyTemplateIds || []),
+      ...(predecessor?.get('exportConfig.legacyTemplateIds') || []),
+      ...(predecessorId ? [predecessorId] : []),
+      ...(!template.exportConfig ? [templateId] : []),
+    ])].filter(id => id !== next.id);
+    // Released export revisions reuse their protected immutable original.
+    tx.set(next, { ...base, storagePath, status: 'active', createdAt: pending ? source.get('createdAt') : now, updatedAt: now,
+      exportConfig: { ...analyzed.template.exportConfig, operation, mappings, validationStatus: 'compatible',
+        validationMessages: ['Estructura y asociaciones verificadas por el administrador. Validación final de carga pendiente en el marketplace.'],
+        version: (predecessor?.get('exportConfig.version') || 0) + 1, replacesTemplateId: predecessorId || null,
+        legacyTemplateIds: lineage, confirmedAt: now } });
+    for (const category of analyzed.categories) tx.set(next.collection('categories').doc(category.id!), { ...category, templateId: next.id, createdAt: pending ? source.get('createdAt') : now, updatedAt: now });
+    // Older activations could leave a released ancestor current. Retire only
+    // explicit ancestors in this lineage; never revive archived or legacy templates.
+    for (const ancestor of ancestors) {
+      if (ancestor.exists && ancestor.get('status') !== 'archived' && ancestor.get('exportConfig.marketplaceId') === marketplaceId
+        && ancestor.get('exportConfig.validationStatus') === 'compatible')
+        tx.update(ancestor.ref, { status: 'archived', archivedAt: now, archivedByUid: request.auth!.uid,
+          'exportConfig.supersededByTemplateId': next.id, updatedAt: now });
+    }
+    if (predecessorRef) tx.update(predecessorRef, { status: 'archived', archivedAt: now, archivedByUid: request.auth!.uid,
+      'exportConfig.supersededByTemplateId': next.id, updatedAt: now });
+  }).catch(rethrowTransactionConflict);
   return { success: true, templateId: next.id };
 });
 export const archiveMarketplaceTemplate = onCall<{ clientId: string; templateId: string }>(async request => {
   await assertCallableRoles(request, ['admin']);
   const db = getAppFirestore(); const client = db.collection('clients').doc(validId(request.data.clientId));
-  if ((await client.get()).get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente archivado.');
   const ref = client.collection('spreadsheetTemplates').doc(validId(request.data.templateId));
-  if (!(await ref.get()).exists) throw new HttpsError('not-found', 'Plantilla no disponible.');
-  await ref.update({ status: 'archived', archivedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), archivedByUid: request.auth!.uid });
+  await db.runTransaction(async tx => {
+    const [clientSnap, template] = await Promise.all([tx.get(client), tx.get(ref)]);
+    if (!clientSnap.exists || clientSnap.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente archivado.');
+    if (!template.exists) throw new HttpsError('not-found', 'Plantilla no disponible.');
+    tx.update(ref, { status: 'archived', archivedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), archivedByUid: request.auth!.uid,
+      ...(template.get('exportConfig') ? { 'exportConfig.supersededByTemplateId': null } : {}) });
+  }).catch(rethrowTransactionConflict);
   return { success: true };
 });

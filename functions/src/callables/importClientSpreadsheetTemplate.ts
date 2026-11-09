@@ -77,9 +77,10 @@ export const importClientSpreadsheetTemplate = onCall<
     const analyzed = await analyzeMarketplaceTemplate(buffer, request.data.marketplaceId, parsed.template, parsed.categories as SpreadsheetTemplateCategory[]);
     parsed = analyzed;
     if (request.data.replacesTemplateId) {
-      const previous = await clientRef.collection('spreadsheetTemplates').doc(request.data.replacesTemplateId).get();
-      if (!previous.exists || previous.get('exportConfig.marketplaceId') !== request.data.marketplaceId) throw new HttpsError('invalid-argument', 'Versión anterior inválida.');
-      parsed.template.exportConfig!.version = (previous.get('exportConfig.version') || 1) + 1;
+      const previous = await clientRef.collection('spreadsheetTemplates').doc(validId(request.data.replacesTemplateId)).get();
+      if (!previous.exists || previous.get('status') === 'archived' || previous.get('exportConfig.validationStatus') !== 'compatible' || previous.get('exportConfig.marketplaceId') !== request.data.marketplaceId) throw new HttpsError('invalid-argument', 'Versión anterior inválida.');
+      // Pending uploads have no released version; activation assigns it transactionally.
+      parsed.template.exportConfig!.version = 0;
       parsed.template.exportConfig!.replacesTemplateId = previous.id;
       parsed.template.exportConfig!.legacyTemplateIds = [...new Set([previous.id, ...(previous.get('exportConfig.legacyTemplateIds') || [])])];
     }

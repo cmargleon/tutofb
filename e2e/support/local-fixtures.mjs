@@ -92,11 +92,14 @@ if (window.__marketplaceClientEnabled) {
   const tiktok = records['clients/local-client/spreadsheetTemplates'].find(t => t.exportConfig.marketplaceId === 'tiktok-shop');
   records['clients/local-client/spreadsheetTemplates'].push({ ...tiktok, id: 'tiktok-shoes', name: 'Calzado TikTok', categories: [{ id: 'shoes', label: 'Calzado' }], status: 'archived' });
 }
-const marketplacePreview = () => ({ clientName: 'Cliente local', products: [masterFixture], templates: exportTemplates, categories: exportCategories,
-  channels: (marketplaceScenario === 'none' ? [] : marketplaceScenario === 'missing' ? ['shein', 'tiktok-shop'] : ['shein', 'mercado-libre', 'tiktok-shop', 'amazon']).map((marketplaceId, i) => ({ marketplaceId, compatibleTemplates: marketplaceScenario === 'missing' && i === 0 ? 0 : 1, ready: marketplaceScenario !== 'missing', issues: marketplaceScenario === 'missing' ? [{ marketplaceId, code: i === 0 ? 'template' : 'required', message: i === 0 ? 'Falta plantilla compatible.' : 'Falta SKU de la variante.' }] : [] })) });
+const marketplacePreview = () => ({ clientName: 'Cliente local', products: [masterFixture], templates: marketplaceScenario === 'historical' ? [
+  ...exportTemplates.map(t => t.id === 'export-shein' ? { ...t, status: 'archived', exportConfig: { ...t.exportConfig, supersededByTemplateId: 'export-shein-next' } } : t),
+  { ...exportTemplates[0], id: 'export-shein-next', exportConfig: { ...exportTemplates[0].exportConfig, version: 2 } },
+] : exportTemplates, categories: exportCategories,
+  channels: (marketplaceScenario === 'none' ? [] : marketplaceScenario === 'amazon-disabled' ? ['shein'] : marketplaceScenario === 'missing' ? ['shein', 'tiktok-shop'] : ['shein', 'mercado-libre', 'tiktok-shop', 'amazon']).map((marketplaceId, i) => ({ marketplaceId, compatibleTemplates: marketplaceScenario === 'missing' && i === 0 ? 0 : 1, ready: marketplaceScenario !== 'missing', issues: marketplaceScenario === 'missing' ? [{ marketplaceId, code: i === 0 ? 'template' : 'required', message: i === 0 ? 'Falta plantilla compatible.' : 'Falta SKU de la variante.' }] : [] })) });
 export const httpsCallable = (_, name) => async input => {
   (window.__localCalls ||= []).push({ name, input });
-  if (name === 'saveMasterProduct') { masterFixture = { ...masterFixture, values: input.values, variants: input.variants, marketplaces: input.marketplaces, revision: masterFixture.revision + 1 }; return { data: { success: true, revision: masterFixture.revision } }; }
+  if (name === 'saveMasterProduct') { masterFixture = { ...masterFixture, values: input.values, variants: input.variants, marketplaces: { ...masterFixture.marketplaces, ...input.marketplaces }, revision: masterFixture.revision + 1 }; return { data: { success: true, revision: masterFixture.revision } }; }
   if (name === 'previewMarketplaceExports') return { data: marketplacePreview() };
   if (name === 'downloadMarketplaceExports') return { data: { fileName: input.marketplaceIds.length === 1 ? 'fixture.xlsx' : 'fixture.zip', downloadUrl: '/__tuto_fixture.svg', expiresAt: Date.now() + 900000, failures: [], exportedMarketplaces: input.marketplaceIds } };
   if (name === 'listClients') return { data: { clients: records.clients, page: 1, hasMore: false } };

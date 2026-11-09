@@ -47,7 +47,7 @@ test('multichannel export, immutable versions, lazy migration, isolation, concur
       const activated = await handlers.configureMarketplaceTemplate.run(request({ clientId, templateId: ref.id, marketplaceId: channel, operation: 'listing', mappings: draftTemplate.exportConfig.mappings }));
       templates[channel] = activated.templateId;
       const active = await ref.parent.doc(activated.templateId).get(); files.push(active.get('storagePath'));
-      assert.equal(active.get('exportConfig.validationStatus'), 'compatible'); assert.equal((await ref.get()).get('status'), 'archived');
+      assert.equal(active.get('exportConfig.validationStatus'), 'compatible'); assert.equal(activated.templateId, ref.id); assert.equal((await ref.get()).get('status'), 'active'); assert.equal(active.get('exportConfig.version'), 1);
       assert.deepEqual((await bucket.file(path).download())[0], buffer);
       assert.deepEqual((await bucket.file(active.get('storagePath')).download())[0], buffer);
     }

@@ -106,3 +106,51 @@ test('enabled client channels display multiple template versions, categories and
     expect(await page.evaluate(() => ((window as any).__localCalls || []).some((call: any) => call.name === 'downloadMarketplaceExports'))).toBe(false);
   } finally { await isolated.close(); }
 });
+
+test('editing master fields sends enabled channels and retains disabled Amazon data when re-enabled', async () => {
+  const isolated = await openIsolatedBrowser(chromium);
+  try {
+    const { page, baseURL } = isolated;
+    await page.goto(`${baseURL}/catalogo?clientId=local-client&batchId=local-batch`);
+    await page.evaluate(() => (window as any).__setMarketplaceFixture('amazon-disabled'));
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
+    await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
+    await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Nombre con Amazon deshabilitado');
+    await drawer.getByRole('textbox', { name: 'Marca', exact: true }).fill('Otra marca');
+    await drawer.getByRole('button', { name: 'Guardar y volver a validar', exact: true }).click();
+    await expect(drawer.getByText('Nombre con Amazon deshabilitado', { exact: true })).toBeVisible();
+    const save = await page.evaluate(() => (window as any).__localCalls.find((c: any) => c.name === 'saveMasterProduct'));
+    expect(Object.keys(save.input.marketplaces)).toEqual(['shein']);
+    expect(save.input.expectedRevision).toBe(0);
+    await drawer.getByRole('button', { name: 'Cerrar exportación', exact: true }).click();
+    await page.evaluate(() => (window as any).__setMarketplaceFixture('ready'));
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
+    await drawer.getByText('Amazon · plantilla y datos de salida', { exact: true }).click();
+    const amazon = drawer.locator('details').filter({ has: page.getByText('Amazon · plantilla y datos de salida', { exact: true }) });
+    await expect(amazon.getByRole('combobox', { name: 'Plantilla', exact: true })).toHaveValue('export-amazon');
+    expect(await page.evaluate(() => (window as any).__localCalls.some((c: any) => c.name === 'downloadMarketplaceExports'))).toBe(false);
+  } finally { await isolated.close(); }
+});
+
+test('a linked historical template remains selected alongside the current version', async () => {
+  const isolated = await openIsolatedBrowser(chromium);
+  try {
+    const { page, baseURL } = isolated;
+    await page.goto(`${baseURL}/catalogo?clientId=local-client&batchId=local-batch`);
+    await page.evaluate(() => (window as any).__setMarketplaceFixture('historical'));
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
+    await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
+    await drawer.getByText('SHEIN · plantilla y datos de salida', { exact: true }).click();
+    const shein = drawer.locator('details').filter({ has: page.getByText('SHEIN · plantilla y datos de salida', { exact: true }) });
+    const template = shein.getByRole('combobox', { name: 'Plantilla', exact: true });
+    await expect(template).toHaveValue('export-shein');
+    await expect(template.locator('option:checked')).toHaveText('Plantilla shein · v1 · Histórica vinculada');
+    await expect(template.locator('option[value="export-shein-next"]')).toHaveText('Plantilla shein · v2');
+    await drawer.getByRole('button', { name: 'Guardar y volver a validar', exact: true }).click();
+    const save = await page.evaluate(() => (window as any).__localCalls.find((c: any) => c.name === 'saveMasterProduct'));
+    expect(save.input.marketplaces.shein.templateId).toBe('export-shein');
+  } finally { await isolated.close(); }
+});

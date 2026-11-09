@@ -126,6 +126,10 @@ service cloud.firestore {
       allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['automation', 'marketplaces', 'name', 'generationPromptBase']);
       allow delete: if false;
 
+      match /products/{productId} {
+        allow read: if canAccessClient(clientId);
+        allow write: if false;
+      }
       match /spreadsheetTemplates/{templateId} {
         allow read: if canAccessClient(clientId);
         allow write: if false;

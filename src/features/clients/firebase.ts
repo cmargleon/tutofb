@@ -100,9 +100,11 @@ const sanitizeFileName = (fileName: string) => fileName.replace(/[^a-zA-Z0-9._-]
 export const importClientSpreadsheetTemplate = async (
   clientId: string,
   file: File,
+  options: Pick<ImportClientSpreadsheetTemplateRequest, 'marketplaceId' | 'replacesTemplateId'> = {},
 ): Promise<ImportClientSpreadsheetTemplateResponse> => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
+  if (file.size >= 20 * 1024 * 1024 || !(options.marketplaceId ? /\.xlsx$/i : /\.xlsx?$/i).test(file.name)) throw new Error('Sube un archivo Excel de menos de 20 MB; las plantillas de marketplaces requieren XLSX.');
   const storagePath = `client_spreadsheets/${clientId}/${crypto.randomUUID()}/${sanitizeFileName(file.name)}`;
   const storageRef = ref(storage, storagePath);
   await uploadBytes(storageRef, file, { contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -118,6 +120,7 @@ export const importClientSpreadsheetTemplate = async (
       clientId,
       storagePath,
       originalFileName: file.name,
+      ...options,
     });
 
     return result.data;

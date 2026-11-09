@@ -99,7 +99,7 @@ export const useGenerateWizardCatalog = ({
     const unsubscribe = subscribeToClientSpreadsheetTemplates(
       selectedClientId,
       (nextTemplates) => {
-        setSpreadsheetTemplates(nextTemplates.filter((template) => template.status !== 'archived'));
+        setSpreadsheetTemplates(nextTemplates.filter((template) => template.status !== 'archived' && !template.exportConfig));
         setLoadingSpreadsheetTemplates(false);
       },
       (loadError) => {

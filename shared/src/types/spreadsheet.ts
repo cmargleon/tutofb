@@ -17,6 +17,7 @@ export interface SpreadsheetTemplateOriginOption {
 }
 
 export interface SpreadsheetTemplate {
+  exportConfig?: import('./marketplaceExport').MarketplaceTemplateConfig;
   id?: string;
   clientId: string;
   clientNameSnapshot: string;
@@ -51,6 +52,7 @@ export interface SpreadsheetTemplateCategoryColumn {
   validation: string | null;
   dropdownOptions?: string[];
   dropdownFormula?: string | null;
+  dropdownDependency?: { columnKey: string; optionsByValue: Record<string, string[]> };
 }
 
 export interface SpreadsheetTemplateCategoryAttribute {
@@ -62,6 +64,7 @@ export interface SpreadsheetTemplateCategoryAttribute {
 }
 
 export interface SpreadsheetTemplateCategory {
+  validationMode?: 'template';
   id?: string;
   templateId: string;
   clientId: string;
@@ -187,6 +190,8 @@ export interface ImportClientSpreadsheetTemplateRequest {
   clientId: string;
   storagePath: string;
   originalFileName: string;
+  marketplaceId?: import('../marketplaces').MarketplaceId;
+  replacesTemplateId?: string;
 }
 
 export interface ImportClientSpreadsheetTemplateResponse {

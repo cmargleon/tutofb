@@ -1,3 +1,4 @@
+import { patchWorkbookCells, type SheetPatch } from './ooxmlWorkbook';
 import { createHash } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import * as XLSX from 'xlsx';
@@ -608,31 +609,6 @@ export const parseStoredSpreadsheetTemplateWorkbook = async ({
   });
 };
 
-const loadWorkbookFromStorage = async (storagePath: string): Promise<XLSX.WorkBook> => {
-  const [buffer] = await bucket.file(storagePath).download();
-  return XLSX.read(buffer, { type: 'buffer' });
-};
-
-const clearCategorySheetData = (
-  worksheet: XLSX.WorkSheet,
-  columns: SpreadsheetTemplateCategoryColumn[],
-  rowStart: number,
-): void => {
-  const ref = worksheet['!ref'];
-  if (!ref) {
-    return;
-  }
-
-  const range = XLSX.utils.decode_range(ref);
-  const firstDataRowIndex = Math.max(0, rowStart - 1);
-
-  for (let rowIndex = firstDataRowIndex; rowIndex <= range.e.r; rowIndex += 1) {
-    columns.forEach((column) => {
-      delete worksheet[XLSX.utils.encode_cell({ c: column.index, r: rowIndex })];
-    });
-  }
-}
-
 const sortGeneratedImages = (draft: ProductDraft): ProductDraft['generatedImages'] =>
   [...(draft.generatedImages || [])].sort((left, right) => toMillisOrZero(left.selectedAt) - toMillisOrZero(right.selectedAt));
 
@@ -816,61 +792,38 @@ export const exportBatchSpreadsheetWorkbook = async ({
   categoriesById: Map<string, SpreadsheetTemplateCategory>;
   productDrafts: ProductDraft[];
 }): Promise<Buffer> => {
-  const workbook = await loadWorkbookFromStorage(templateStoragePath);
-  const draftsByCategoryId = productDrafts.reduce<Map<string, ProductDraft[]>>((result, draft) => {
-    const current = result.get(draft.categoryId) || [];
-    current.push(draft);
-    result.set(draft.categoryId, current);
-    return result;
-  }, new Map());
-  const imageFallbacksByDraftId = new Map(
-    await Promise.all(
-      productDrafts.map(async (draft) => [draft.id || draft.garmentId, await buildDraftImageFallbacks(draft)] as const),
-    ),
-  );
-
-  draftsByCategoryId.forEach((drafts, categoryId) => {
-    const category = categoriesById.get(categoryId);
-    if (!category) {
-      throw new Error(`La categoría ${categoryId} ya no existe en la plantilla original.`);
-    }
-
+  const [originalBuffer] = await bucket.file(templateStoragePath).download();
+  const workbook = XLSX.read(originalBuffer, { type: 'buffer' });
+  const patches: SheetPatch[] = [];
+  for (const [categoryId, category] of categoriesById) {
+    const drafts = productDrafts.filter(d => d.categoryId === categoryId);
+    if (!drafts.length) continue;
     const worksheet = workbook.Sheets[category.sheetName];
-    if (!worksheet) {
-      throw new Error(`La hoja ${category.sheetName} ya no existe en la plantilla original.`);
+    if (!worksheet) throw new Error(`La hoja ${category.sheetName} ya no existe en la plantilla original.`);
+    const valuesByAddress = new Map<string, string>();
+    // Clear existing data cells only. Formula cells and their cached results remain intact.
+    for (const [address, cell] of Object.entries(worksheet)) {
+      if (address.startsWith('!') || cell.f) continue;
+      const at = XLSX.utils.decode_cell(address);
+      if (at.r >= category.rowStart - 1 && category.columns.some(c => c.index === at.c)) valuesByAddress.set(address, '');
     }
-
-    clearCategorySheetData(worksheet, category.columns, category.rowStart);
-
-    let exportRowIndex = category.rowStart - 1;
-    drafts.forEach((draft) => {
-      const imageFallbacks = imageFallbacksByDraftId.get(draft.id || draft.garmentId) || {};
-      draft.rows.forEach((row) => {
-        category.columns.forEach((column) => {
-          const value = resolveCellValue(draft, row, column, category, imageFallbacks);
-          if (!value) {
-            return;
-          }
-
-          worksheet[XLSX.utils.encode_cell({ c: column.index, r: exportRowIndex })] = {
-            t: 's',
-            v: value,
-          };
-        });
-        exportRowIndex += 1;
-      });
-    });
-
-    const currentRange = worksheet['!ref']
-      ? XLSX.utils.decode_range(worksheet['!ref'])
-      : { s: { c: 0, r: 0 }, e: { c: 0, r: 0 } };
-    const maxColumnIndex = Math.max(currentRange.e.c, ...category.columns.map((column) => column.index));
-    const maxRowIndex = Math.max(currentRange.e.r, Math.max(category.rowStart - 1, exportRowIndex - 1));
-    worksheet['!ref'] = XLSX.utils.encode_range({
-      s: { c: 0, r: 0 },
-      e: { c: maxColumnIndex, r: maxRowIndex },
-    });
-  });
-
+    let rowIndex = category.rowStart - 1;
+    for (const draft of drafts) {
+      const images = await buildDraftImageFallbacks(draft);
+      for (const row of draft.rows) {
+        for (const column of category.columns) {
+          const address = XLSX.utils.encode_cell({ c: column.index, r: rowIndex });
+          if (worksheet[address]?.f) continue;
+          valuesByAddress.set(address, resolveCellValue(draft, row, column, category, images));
+        }
+        rowIndex++;
+      }
+    }
+    patches.push({ sheetName: category.sheetName, styleRow: category.rowStart, cells: [...valuesByAddress].map(([address, value]) => ({ address, value })) });
+  }
+  if (originalBuffer[0] === 0x50 && originalBuffer[1] === 0x4B) return patchWorkbookCells(originalBuffer, patches);
+  // Binary XLS imports predate OOXML export. Retain their legacy conversion only;
+  // marketplace versions explicitly require XLSX and never take this branch.
+  for (const patch of patches) for (const cell of patch.cells) workbook.Sheets[patch.sheetName][cell.address] = { t: 's', v: cell.value };
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 };

@@ -18,7 +18,7 @@ async function instrumentSubscriptions(page: Page) {
         export const onSnapshot = (reference, callback, onError) => {
           const entry = { reference, callback, onError, active: true };
           window.__catalogListeners.push(entry);
-          const emit = () => callback(snapshot(reference));
+          const emit = () => { if (entry.active) callback(snapshot(reference)); };
           listeners.add(emit);
           if (!(window.__catalogHoldPaths || []).includes(reference.path)
             || reference.kind !== 'doc' && reference.constraints.some(value => value.field === 'status')) queueMicrotask(emit);
@@ -63,9 +63,9 @@ test('typed catalog helpers preserve queries, ID precedence, null, errors and un
         api.subscribeToCatalogJob('probe-job', (data: any) => events.job.push(data), (error: Error) => events.errors.push(error.message)),
       ];
       // Let initial missing/empty snapshots settle, then assert explicit payloads.
-      await Promise.resolve();
+      await Promise.resolve(); await Promise.resolve();
       events.batch = []; events.jobs = []; events.job = [];
-      const entries = (window as any).__catalogListeners.slice(start);
+      const entries = (window as any).__catalogListeners.slice(start).filter((entry: any) => !entry.reference.path.startsWith('users/')).sort((a: any, b: any) => { const rank = (ref: any) => ref.path === 'batches/probe-batch' ? 0 : ref.path === 'jobs' ? 1 : 2; return rank(a.reference) - rank(b.reference); });
       const document = { id: 'snapshot-id', exists: () => true, data: () => ({ id: 'stored-id', status: 'pending' }) };
       entries[0].callback(document);
       entries[1].callback({ docs: [document] });

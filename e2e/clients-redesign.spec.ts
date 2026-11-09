@@ -68,6 +68,7 @@ async function setup(page: Page, role = 'admin') {
     export const subscribeToClients = (callback, onError) => sub('clients', null, callback, onError);
     export const subscribeToClient = (id, callback, onError) => sub('client', id, callback, onError);
     export const subscribeToClientSpreadsheetTemplates = (id, callback, onError) => sub('templates', id, callback, onError);
+    export const subscribeToSpreadsheetTemplateCategories = (clientId, templateId, callback) => { callback([]); return () => {}; };
     export const createClient = (name, prompt) => mutate('create', { name, prompt });
     export const updateClient = (id, patch) => mutate('update', { id, ...patch });
     export const archiveClient = id => mutate('archive', { id });
@@ -130,7 +131,7 @@ test('detail preserves shared automation drafts, channel settings and general se
   await page.goto('/clients/client-0?tab=fuentes&list=q%3DCliente%2B00');
   const folders = page.getByRole('textbox', { name: 'Carpetas autorizadas de Google Drive' });
   await expect(folders).toHaveValue('folder-a');
-  await expect(page.getByText('Plantilla real simulada')).toBeVisible();
+  await expect(page.getByText('Plantilla real simulada', { exact: true })).toBeVisible();
   await folders.fill('folder-a\nfolder-b');
   await page.getByRole('button', { name: 'Automatizaciones', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Presupuesto por pedido (USD)' }).fill('6');

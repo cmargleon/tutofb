@@ -116,6 +116,7 @@ export const getProductDraftColumnDefaultValue = (
   category: SpreadsheetTemplateCategory,
   column: Pick<SpreadsheetTemplateCategoryColumn, 'key'>,
 ): string | null => {
+  if (category.validationMode === 'template') return null;
   const specMetadata = getSpecificationKeyMetadata(column.key);
   if (!specMetadata || specMetadata.type !== 'name') {
     return null;
@@ -138,9 +139,17 @@ export const getProductDraftSpecificationAttributeName = (
 
 export const getProductDraftColumnAllowedValues = (
   category: SpreadsheetTemplateCategory,
-  column: Pick<SpreadsheetTemplateCategoryColumn, 'key' | 'label' | 'validation' | 'guidance' | 'dropdownOptions'>,
+  column: Pick<SpreadsheetTemplateCategoryColumn, 'key' | 'label' | 'validation' | 'guidance' | 'dropdownOptions' | 'dropdownDependency'>,
   rowValues: Record<string, string> = {},
 ): string[] => {
+  if (column.dropdownDependency) {
+    const options = column.dropdownDependency.optionsByValue[rowValues[column.dropdownDependency.columnKey] || ''];
+    return Array.isArray(options) ? options : [];
+  }
+  if (category.validationMode === 'template') {
+    const options = getColumnDropdownOptions(column);
+    return options.length ? options : findAttributeByName(category, column.label)?.values || [];
+  }
   const specMetadata = getSpecificationKeyMetadata(column.key);
   if (specMetadata?.type === 'name') {
     const attributeName = getSpecificationNameByIndex(category, specMetadata.specIndex);
@@ -201,7 +210,7 @@ export const resolveProductDraftColumnValue = ({
   candidates,
 }: {
   category: SpreadsheetTemplateCategory;
-  column: Pick<SpreadsheetTemplateCategoryColumn, 'key' | 'label' | 'validation' | 'guidance' | 'dropdownOptions'>;
+  column: Pick<SpreadsheetTemplateCategoryColumn, 'key' | 'label' | 'validation' | 'guidance' | 'dropdownOptions' | 'dropdownDependency'>;
   rowValues?: Record<string, string>;
   candidates: Array<string | null | undefined>;
 }): string => {
@@ -218,7 +227,7 @@ export const resolveProductDraftColumnValue = ({
 
 export const isProductDraftDropdownColumn = (
   category: SpreadsheetTemplateCategory,
-  column: Pick<SpreadsheetTemplateCategoryColumn, 'key' | 'label' | 'validation' | 'guidance' | 'dropdownOptions'>,
+  column: Pick<SpreadsheetTemplateCategoryColumn, 'key' | 'label' | 'validation' | 'guidance' | 'dropdownOptions' | 'dropdownDependency'>,
   rowValues: Record<string, string> = {},
 ): boolean => {
   return getProductDraftColumnAllowedValues(category, column, rowValues).length > 0;

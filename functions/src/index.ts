@@ -86,3 +86,5 @@ export { organizerAction } from './organizer/api';
 export { organizerScheduler } from './organizer/worker';
 
 export { manageDriveBackup, scheduledDriveBackup, driveBackupWorker, agentDriveWorkspace } from "./backups/functions";
+export { previewMarketplaceExports, downloadMarketplaceExports, saveMasterProduct, configureMarketplaceTemplate, archiveMarketplaceTemplate } from './callables/marketplaceExports';
+export { cleanupMarketplaceExportsOnSchedule } from './spreadsheets/cleanupMarketplaceExports';

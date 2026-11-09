@@ -73,8 +73,11 @@ service firebase.storage {
 
     match /client_spreadsheets/{clientId}/{templateId}/{fileName} {
       allow read: if canAccessClient(clientId);
-      allow write: if isAdmin() && isSpreadsheetUpload();
-      allow delete: if isAdmin();
+      allow create: if isAdmin() && isSpreadsheetUpload()
+        && !firestore.exists(/databases/(default)/documents/clients/$(clientId)/spreadsheetTemplates/$(templateId))
+        && firestore.get(/databases/(default)/documents/clients/$(clientId)).data.get('status', 'active') != 'archived';
+      allow update: if false;
+      allow delete: if isAdmin() && !firestore.exists(/databases/(default)/documents/clients/$(clientId)/spreadsheetTemplates/$(templateId));
     }
 
     match /wizard_source_spreadsheets/{uid}/{uploadId}/{fileName} {

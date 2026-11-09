@@ -27,7 +27,7 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
           Spreadsheets del cliente
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          Se usan en el wizard y luego se exportan completos por lote.
+          Plantillas heredadas del wizard. Administra las nuevas plantillas de salida en Marketplaces; los archivos Excel fuente se cargan por separado durante la generación.
         </p>
       </div>
       {!isArchivedCatalogEntity(client) ? (

@@ -36,6 +36,7 @@ export const deleteClientSpreadsheetTemplate = onCall<
   }
 
   const template = { id: templateSnapshot.id, ...templateSnapshot.data() } as SpreadsheetTemplate;
+  if (template.exportConfig) throw new HttpsError('failed-precondition', 'Las versiones de marketplace se archivan; no se eliminan.');
   const batchesUsingTemplateSnapshot = await db
     .collection('batches')
     .where('spreadsheetTemplateId', '==', templateId)

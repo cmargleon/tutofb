@@ -79,8 +79,26 @@ window.__setFixtureIdentity = uid => {
   for (const callback of authListeners) callback(user);
 };
 export const onAuthStateChanged = (_, callback) => { authListeners.add(callback); callback(user); return () => authListeners.delete(callback); };
+let marketplaceScenario = 'ready';
+window.__setMarketplaceFixture = scenario => { marketplaceScenario = scenario; };
+const fixtureChannels = ['shein', 'mercado-libre', 'tiktok-shop', 'amazon'];
+let masterFixture = { id: 'local-master', clientId: 'local-client', garmentId: 'local-garment', batchIds: ['local-batch'], values: { name: 'Artículo local', brand: 'Marca local' }, variants: [{ id: 'local-variant', values: { sku: 'LOCAL-001' } }], evidence: {}, legacyDrafts: [], originalImages: [], approvedImages: [{ jobId: 'local-job', outputId: 'local-output', storagePath: 'fixtures/catalog.svg' }], pendingImages: 0, revision: 0, marketplaces: Object.fromEntries(fixtureChannels.map(channel => [channel, { templateId: `export-${channel}`, categoryId: 'products' }])) };
+const exportCategories = fixtureChannels.map(channel => ({ id: 'products', templateId: `export-${channel}`, clientId: 'local-client', sheetName: 'Products', label: 'Productos', rowStart: 2, columns: [{ key: 'sku', label: 'SKU', index: 0, letter: 'A', required: true }, { key: 'name', label: 'Nombre de salida', index: 1, letter: 'B', required: true }], attributes: [] }));
+const exportTemplates = fixtureChannels.map(channel => ({ id: `export-${channel}`, clientId: 'local-client', name: `Plantilla ${channel}`, status: 'active', createdAt: stamp, updatedAt: stamp, exportConfig: { marketplaceId: channel, version: 1, operation: 'listing', validationStatus: 'compatible', mappings: { products: { sku: { source: 'variant.sku' }, name: { source: 'product.name' } } } } }));
+if (window.__marketplaceClientEnabled) {
+  client.marketplaces = Object.fromEntries(fixtureChannels.map(id => [id, { enabled: true }]));
+  records['clients/local-client/spreadsheetTemplates'] = exportTemplates.map(template => ({ ...template, originalFileName: 'fixture.xlsx', storagePath: 'fixtures/template.xlsx', categories: [{ id: 'products', label: 'Productos' }], categoryIds: ['products'], exportConfig: { ...template.exportConfig, validationMessages: [] } }));
+  for (const category of exportCategories) records[`clients/local-client/spreadsheetTemplates/${category.templateId}/categories`] = [category];
+  const tiktok = records['clients/local-client/spreadsheetTemplates'].find(t => t.exportConfig.marketplaceId === 'tiktok-shop');
+  records['clients/local-client/spreadsheetTemplates'].push({ ...tiktok, id: 'tiktok-shoes', name: 'Calzado TikTok', categories: [{ id: 'shoes', label: 'Calzado' }], status: 'archived' });
+}
+const marketplacePreview = () => ({ clientName: 'Cliente local', products: [masterFixture], templates: exportTemplates, categories: exportCategories,
+  channels: (marketplaceScenario === 'none' ? [] : marketplaceScenario === 'missing' ? ['shein', 'tiktok-shop'] : ['shein', 'mercado-libre', 'tiktok-shop', 'amazon']).map((marketplaceId, i) => ({ marketplaceId, compatibleTemplates: marketplaceScenario === 'missing' && i === 0 ? 0 : 1, ready: marketplaceScenario !== 'missing', issues: marketplaceScenario === 'missing' ? [{ marketplaceId, code: i === 0 ? 'template' : 'required', message: i === 0 ? 'Falta plantilla compatible.' : 'Falta SKU de la variante.' }] : [] })) });
 export const httpsCallable = (_, name) => async input => {
   (window.__localCalls ||= []).push({ name, input });
+  if (name === 'saveMasterProduct') { masterFixture = { ...masterFixture, values: input.values, variants: input.variants, marketplaces: input.marketplaces, revision: masterFixture.revision + 1 }; return { data: { success: true, revision: masterFixture.revision } }; }
+  if (name === 'previewMarketplaceExports') return { data: marketplacePreview() };
+  if (name === 'downloadMarketplaceExports') return { data: { fileName: input.marketplaceIds.length === 1 ? 'fixture.xlsx' : 'fixture.zip', downloadUrl: '/__tuto_fixture.svg', expiresAt: Date.now() + 900000, failures: [], exportedMarketplaces: input.marketplaceIds } };
   if (name === 'listClients') return { data: { clients: records.clients, page: 1, hasMore: false } };
   if (name === 'generateModelPose') return { data: {
     photos: Array.from({ length: input.count }, (_, i) => ({ storagePath: `fixtures/${input.stage}-${i}.svg`, contentType: 'image/svg+xml' })),

@@ -1,3 +1,4 @@
+import { MarketplaceExportAction } from '../features/marketplaces/MarketplaceExportDrawer';
 import { remainingAutomationBudget } from '../../shared/src/automationPolicy';
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -96,7 +97,8 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         <p className="text-sm">{selected.progress.completed} / {selected.progress.total} completados · {selected.progress.failed} fallidos · preset {selected.requestedPreset || 'default'}</p>
         {selected.driveUrl && <a className="text-sm text-indigo-600" href={selected.driveUrl} target="_blank" rel="noreferrer">Abrir fuente de Drive</a>}
         {(selected.sourceImages || selected.inputImages).filter((image) => image.url).map((image, index) => <a key={index} className="block text-sm text-indigo-600" href={image.url} target="_blank" rel="noreferrer">Fuente: {image.fileName}</a>)}
-        {(selected.batchIds || (selected.batchId ? [selected.batchId] : [])).map(batchId => <Link key={batchId} className="block text-sm text-indigo-600" to={`/catalogo?clientId=${selected.clientId}&batchId=${batchId}`}>Batch: {batchId}</Link>)}
+        {(selected.batchIds || (selected.batchId ? [selected.batchId] : [])).map(batchId => <Link key={batchId} className="block text-sm text-indigo-600" to={`/catalogo?clientId=${selected.clientId}&batchId=${batchId}`}>Ver resultados · lote {batchId}</Link>)}
+        {(selected.batchIds?.length || selected.batchId) && <MarketplaceExportAction key={selected.id} scope={{ clientId: selected.clientId, batchIds: selected.batchIds?.length ? selected.batchIds : [selected.batchId!] }} />}
         {selected.error && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{selected.error.code}: {selected.error.message}</p>}
         {!selected.batchId && ['failed', 'needs_attention'].includes(selected.status) && <div className="flex flex-wrap gap-3">
           <Button variant="secondary" loading={state.busy} disabled={selected.retryCount >= 2} onClick={() => void state.retry(selected)}>Reintentar entrada</Button>

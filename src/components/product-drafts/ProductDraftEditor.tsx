@@ -105,6 +105,15 @@ const getFieldState = (
   const dropdownChoices = resolveDropdownChoices?.(activeDraft, row, column, activeCategory)
     ?.filter((choice) => choice.value.trim().length > 0)
     || allowedValues.map((option) => ({ label: option, value: option }));
+  if (activeCategory.validationMode === 'template') {
+    return {
+      dropdownChoices,
+      resolvedValue: row.values[column.key] || '',
+      isDropdown: dropdownChoices.length > 0 || Boolean((column as SpreadsheetTemplateCategoryColumn).dropdownFormula),
+      isFixedDropdown: false,
+      placeholder: column.guidance || column.validation || '',
+    };
+  }
   const resolvedChoiceValue = dropdownChoices.length > 0
     ? dropdownChoices.find((choice) => {
       const normalizedChoiceValue = normalizeComparable(choice.value);
@@ -236,6 +245,8 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
     if (isDropdown) {
       return (
         <select
+          aria-label={column.label}
+          aria-required={column.required || undefined}
           value={resolvedValue}
           onChange={(event) => updateValue(event.target.value)}
           disabled={isFixedDropdown}
@@ -272,6 +283,8 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
         ) : null}
         <input
           type="text"
+          aria-label={column.label}
+          aria-required={column.required || undefined}
           value={displayValue}
           onChange={(event) => updateValue(event.target.value)}
           className={INPUT_CLASS}

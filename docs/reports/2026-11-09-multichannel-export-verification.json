@@ -1,0 +1,210 @@
+{
+  "date": "2026-11-09",
+  "baseRevision": "df1587e",
+  "project": "tutofb-260320-1003",
+  "verificationScope": "Local emulator integrations, isolated browser E2E, read-only real template inspection and remote release smoke checks. No paid generation, marketplace publication or authenticated production export was executed.",
+  "checks": {
+    "frontendTypecheck": "passed",
+    "frontendBuild": "passed",
+    "functionsTypecheck": "passed",
+    "functionsBuild": "passed",
+    "unitAndEmulatorIntegration": {
+      "passed": 383,
+      "failed": 0,
+      "skipped": 0
+    },
+    "browserE2E": {
+      "passed": 38,
+      "failed": 0
+    },
+    "browserIsolation": {
+      "passed": 4,
+      "failed": 0
+    },
+    "explicitDownloadOnly": "Manual and automated generation completed with simulated providers: zero export artifacts until explicit download, then first XLSX, without further provider calls or budget mutation."
+  },
+  "environment": {
+    "hostNode": "25.8.1",
+    "deployedNode": "22",
+    "emulatorProject": "demo-manglar-automation",
+    "guardAdaptation": "Temporary copy removed only Node 22 assertion; demo-project, loopback and external-network guards retained. Dependencies and runtime unchanged."
+  },
+  "realTemplates": {
+    "marketplace": "shein",
+    "files": 2,
+    "categories": 18,
+    "validationsPreserved": 445,
+    "dependentColumnsResolved": 54,
+    "details": "2026-11-09-marketplace-templates.json",
+    "otherMarketplaces": "Adapters implemented and synthetic fixtures tested; official Amazon, Mercado Libre and TikTok Shop templates unavailable. Final compatibility pending.",
+    "knownOriginalIssue": "origin_code references an untruncated sheet name absent from both originals; unknown list values are blocked.",
+    "marketplaceUploadCertified": false
+  },
+  "deployment": {
+    "functions": [
+      {
+        "id": "archiveMarketplaceTemplate",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "cleanupMarketplaceExportsOnSchedule",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "configureMarketplaceTemplate",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "deleteClientSpreadsheetTemplate",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "downloadMarketplaceExports",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "editBatchSpreadsheet",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "exportBatchSpreadsheet",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "importClientSpreadsheetTemplate",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "manglarMcp",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "previewMarketplaceExports",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "previewProductDrafts",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      },
+      {
+        "id": "saveMasterProduct",
+        "region": "us-central1",
+        "runtime": "nodejs22",
+        "state": "ACTIVE",
+        "platform": "gcfv2"
+      }
+    ],
+    "firestoreRules": "released",
+    "storageRules": "released",
+    "hosting": "https://tutofb-260320-1003.web.app",
+    "indexes": "unchanged",
+    "imageWorkers": "not redeployed",
+    "retries": "Transient transport failures recovered by sequential cohorts; all twelve affected functions verified ACTIVE."
+  },
+  "remoteSmoke": {
+    "hosting": [
+      {
+        "asset": "index.html",
+        "httpStatus": 200,
+        "sha256": "1d0202461f664a72b8df8420ede6d8e031f8ee8963442ccdd52ddd2a7f01e3e0",
+        "matchesBuild": true
+      },
+      {
+        "asset": "assets/MarketplaceExportDrawer-DjfK9OaQ.js",
+        "httpStatus": 200,
+        "sha256": "f5ff1109459d4cc715e17b465dd256a17bf7ac725b0ad9c79530c90e05daa63f",
+        "matchesBuild": true
+      },
+      {
+        "route": "/.well-known/oauth-protected-resource",
+        "httpStatus": 200,
+        "jsonResponse": true
+      },
+      {
+        "route": "/.well-known/oauth-authorization-server",
+        "httpStatus": 200,
+        "jsonResponse": true
+      },
+      {
+        "route": "/api/automation/jobs/nonexistent-release-smoke",
+        "httpStatus": 401,
+        "jsonResponse": true
+      }
+    ],
+    "unauthenticatedCallables": [
+      {
+        "function": "previewMarketplaceExports",
+        "httpStatus": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "function": "downloadMarketplaceExports",
+        "httpStatus": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "function": "saveMasterProduct",
+        "httpStatus": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "function": "configureMarketplaceTemplate",
+        "httpStatus": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "function": "archiveMarketplaceTemplate",
+        "httpStatus": 401,
+        "error": "UNAUTHENTICATED"
+      }
+    ]
+  },
+  "migration": {
+    "mode": "Additive, explicit administrator association; no automatic production backfill",
+    "legacyTemplatesAndDrafts": "Preserved; original files unchanged; historical batches projected without rewriting",
+    "collections": [
+      "clients/{clientId}/products/{productId}",
+      "marketplaceExportRequests/{requestHash}"
+    ],
+    "temporaryArtifactPolicy": "15-minute signed download links, hourly scoped cleanup; failed requests expire after 24 hours"
+  },
+  "manualFollowUp": [
+    "Enable client channels and review/associate legacy templates without guessing marketplace.",
+    "Upload official templates for Amazon, Mercado Libre and TikTok Shop; confirm categories, fields and operation, then perform marketplace upload validation.",
+    "Obtain corrected SHEIN origin list if that field must be completed.",
+    "Complete unknown commercial data, externally verified authorizations/exemptions and authorized stable URLs for approved images where required."
+  ]
+}

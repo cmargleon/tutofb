@@ -1,3 +1,4 @@
+import { MarketplaceExportAction } from '../features/marketplaces/MarketplaceExportDrawer';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight, Download, ExternalLink, Images, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
@@ -619,10 +620,12 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
             </div>
           )}
 
+          {selectedBatch && !error && !batchLinkError && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4"><p className="text-sm text-slate-600">Completa los datos y prepara los archivos de los destinos de este cliente.</p><MarketplaceExportAction scope={{ clientId: selectedBatch.clientId, batchIds: [selectedBatch.id!] }} /></div>}
+
           {selectedBatch?.spreadsheetTemplateId && !error && (
             <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-700">Excel del lote</p>
+                <p className="text-sm font-medium text-gray-700">Excel heredado del lote</p>
                 <p className="text-xs text-gray-400">
                   Plantilla: {selectedBatch.spreadsheetTemplateNameSnapshot || 'Sin nombre'}
                   {selectedBatch.spreadsheetCategoryNameSnapshot ? ` · ${selectedBatch.spreadsheetCategoryNameSnapshot}` : ''}
@@ -654,7 +657,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
                     {isExportingSpreadsheet
                       ? <span className="app-spinner app-spinner-sm" aria-hidden="true" />
                       : <Download className="h-4 w-4" />}
-                    {isExportingSpreadsheet ? 'Exportando...' : 'Exportar Excel'}
+                    {isExportingSpreadsheet ? 'Exportando...' : 'Descargar Excel del lote'}
                   </button>
                 </div>
                 {spreadsheetEditError && (

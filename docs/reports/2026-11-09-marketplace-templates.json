@@ -1,0 +1,140 @@
+{
+  "verification": "read-only local structural verification, not marketplace upload certification",
+  "sourceRevision": "df1587e",
+  "templates": [
+    {
+      "name": "barbie",
+      "categories": [
+        "Blusas Niñas (8-12)(7401-2002)",
+        "Vestidos Niñas (8...(5925-2003)",
+        "Pantalones Niñas ...(9601-2007)",
+        "Shorts Niñas (8-12)(1503-2008)",
+        "Faldas Niñas (8-12)(9837-2009)",
+        "Sudaderas Niñas (...(9335-2011)",
+        "Abrigos de Inviern...(777-2836)",
+        "Conjuntos de ro...(10945-15263)"
+      ],
+      "sheetCount": 28,
+      "originalValidations": 210,
+      "rebuiltValidations": 0,
+      "dependentColumnsResolved": 24,
+      "unresolvedStaticLists": [
+        {
+          "category": "Blusas Niñas (8-12)(7401-2002)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Vestidos Niñas (8...(5925-2003)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Pantalones Niñas ...(9601-2007)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Shorts Niñas (8-12)(1503-2008)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Faldas Niñas (8-12)(9837-2009)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Sudaderas Niñas (...(9335-2011)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Abrigos de Inviern...(777-2836)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Conjuntos de ro...(10945-15263)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        }
+      ],
+      "preservation": "all non-target ZIP parts identical; validations, formulas, merges identical in target sheets",
+      "publishingValidation": "not performed"
+    },
+    {
+      "name": "vans",
+      "categories": [
+        "Camisetas deportiv...(252-2183)",
+        "Sudadera deportiva...(253-2184)",
+        "Pantalones cortos ...(255-2186)",
+        "Pantalones deporti...(257-2187)",
+        "Shorts deportivos ...(426-2423)",
+        "Gafas Deportivas(1281-3706)",
+        "Zapatos deportivo...(1852-4455)",
+        "Gorra deportiva(2510-5455)",
+        "Zapatos Tenis Hombre(4545-7737)",
+        "Camisetas depor...(11138-15486)"
+      ],
+      "sheetCount": 34,
+      "originalValidations": 235,
+      "rebuiltValidations": 0,
+      "dependentColumnsResolved": 30,
+      "unresolvedStaticLists": [
+        {
+          "category": "Camisetas deportiv...(252-2183)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Sudadera deportiva...(253-2184)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Pantalones cortos ...(255-2186)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Pantalones deporti...(257-2187)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Shorts deportivos ...(426-2423)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Gafas Deportivas(1281-3706)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Zapatos deportivo...(1852-4455)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Gorra deportiva(2510-5455)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Zapatos Tenis Hombre(4545-7737)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        },
+        {
+          "category": "Camisetas depor...(11138-15486)",
+          "column": "origin_code",
+          "formula": "'Lista de lugares de origen válidos'!$A$2:$A$255"
+        }
+      ],
+      "preservation": "all non-target ZIP parts identical; validations, formulas, merges identical in target sheets",
+      "publishingValidation": "not performed"
+    }
+  ]
+}

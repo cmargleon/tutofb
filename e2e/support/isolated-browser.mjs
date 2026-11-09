@@ -40,7 +40,11 @@ export async function startIsolatedFrontend({ realAuth = false } = {}) {
         if (!realAuth && path === `${root}src/features/auth/AuthProvider.tsx`) return `
           import { humanClientIds } from '/shared/src/clientAccess.ts';
           import { user } from ${JSON.stringify(fixturePath)};
-          export const useAuth = () => ({ user, appUser: { ...user, role: 'admin', active: true }, loading: false });
+          let fixtureIdentity; let fixtureAppUser;
+          export const useAuth = () => {
+            if (fixtureIdentity !== user) { fixtureIdentity = user; fixtureAppUser = user ? { ...user, role: 'admin', active: true } : null; }
+            return { user, appUser: fixtureAppUser, loading: false };
+          };
           export const AuthProvider = ({ children }) => children;
           ${role}`;
       },

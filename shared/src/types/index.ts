@@ -20,3 +20,4 @@ export * from './productGeneration';
 export * from './manglar';
 
 export * from './organizer';
+export * from './marketplaceExport';

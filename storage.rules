@@ -7,6 +7,8 @@ service firebase.storage {
 
     // Storage cross-service rules support only the default Firestore database.
     // Release verification rejects a configured named database; never fall back to stale claims.
+    // The Storage service agent also needs roles/firebaserules.firestoreServiceAgent;
+    // scripts/verify-storage-release.mjs verifies that IAM grant before deployment.
     function userData() {
       return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
     }

@@ -87,9 +87,21 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
             </Button>
           </div>
         </div>
-        <div className="mt-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <select
+            aria-label="Filtrar modelos por cliente"
+            value={catalog.clientFilter}
+            onChange={(event) => catalog.handleClientFilterChange(event.target.value)}
+            className="w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm transition-colors focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">Todos</option>
+            {activeClients.map((client) => (
+              <option key={client.id} value={client.id}>{client.name}</option>
+            ))}
+          </select>
           <input
             type="search"
+            aria-label="Buscar modelo por nombre"
             value={catalog.modelSearch}
             onChange={(event) => catalog.handleModelSearchChange(event.target.value)}
             placeholder="Buscar modelo por nombre..."
@@ -103,7 +115,9 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
       ) : catalog.filteredModelsCount === 0 ? (
         <EmptyState
           title="No hay modelos"
-          description="Todavía no hay modelos registrados. Crea el primero desde la vista Generar o importa un ZIP existente."
+          description={catalog.clientFilter || catalog.modelSearch.trim()
+            ? 'No se encontraron modelos con los filtros seleccionados.'
+            : 'Todavía no hay modelos registrados. Crea el primero desde la vista Generar o importa un ZIP existente.'}
           icon={<UserSquare2 className="h-6 w-6" />}
           action={(
             <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">

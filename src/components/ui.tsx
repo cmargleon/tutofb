@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, AlertTriangle, Clock, MinusCircle, Loader2, X } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Clock, MinusCircle, Loader2, X, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStorageAssetUrl } from '../features/storage/useStorageAssetUrl';
 
 // ─── Button ─────────────────────────────────────────────────────────────────
@@ -14,22 +14,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.ElementType;
 }
 
-const BUTTON_BASE =
-  'inline-flex cursor-pointer items-center justify-center gap-2 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+export const buttonClasses = (variant: ButtonVariant = 'primary', size: ButtonSize = 'md') =>
+  `tuto-button tuto-button--${variant} tuto-button--${size}`;
 
-const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary:   'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500 border border-transparent shadow-sm',
-  secondary: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus:ring-indigo-500 shadow-sm',
-  ghost:     'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:ring-slate-400 border border-transparent',
-  danger:    'bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500 border border-transparent shadow-sm',
-  warning:   'bg-amber-600 text-white hover:bg-amber-700 focus:ring-amber-500 border border-transparent shadow-sm',
-};
-
-const BUTTON_SIZES: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs rounded-lg',
-  md: 'px-4 py-2 text-sm rounded-xl',
-  lg: 'px-5 py-2.5 text-sm rounded-xl',
-};
+export const INPUT_CLASS = 'tuto-field';
 
 export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
@@ -43,7 +31,8 @@ export const Button: React.FC<ButtonProps> = ({
 }) => (
   <button
     disabled={disabled || loading}
-    className={`${BUTTON_BASE} ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`}
+    aria-busy={loading || undefined}
+    className={`${buttonClasses(variant as ButtonVariant, size as ButtonSize)} ${className}`}
     {...props}
   >
     {loading ? (
@@ -61,26 +50,53 @@ interface PageHeaderProps {
   title: string;
   description?: string;
   icon?: React.ElementType;
+  actions?: React.ReactNode;
 }
 
-export const PageHeader: React.FC<PageHeaderProps> = ({ title, description, icon: Icon }) => (
-  <div className="mb-8 flex items-start gap-4">
+export const PageHeader: React.FC<PageHeaderProps> = ({ title, description, icon: Icon, actions }) => (
+  <header className="tuto-page-header">
+   <div className="flex min-w-0 items-start gap-3">
     {Icon ? (
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-        <Icon className="h-5 w-5" />
+      <div className="tuto-page-icon">
+        <Icon className="h-5 w-5" aria-hidden="true" />
       </div>
     ) : null}
-    <div>
-      <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
-      {description && <p className="mt-1.5 text-sm text-gray-500">{description}</p>}
+    <div className="min-w-0">
+      <h1>{title}</h1>
+      {description && <p>{description}</p>}
     </div>
-  </div>
+   </div>
+   {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+  </header>
 );
+
+export const Surface = ({ className = '', ...props }: React.HTMLAttributes<HTMLDivElement>) =>
+  <div className={`tuto-surface ${className}`} {...props} />;
+
+export const Breadcrumbs = ({ children, label = 'Ruta de navegación' }: { children: React.ReactNode; label?: string }) =>
+  <nav aria-label={label} className="tuto-breadcrumbs">{children}</nav>;
+
+export const SearchInput = ({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) =>
+  <div className="tuto-search"><Search aria-hidden="true" /><input type="search" className={`${INPUT_CLASS} ${className}`} {...props} /></div>;
+
+export const FilterBar = ({ children }: { children: React.ReactNode }) => <div className="tuto-filter-bar">{children}</div>;
+
+export const DataTable = ({ children, caption, className = '' }: { children: React.ReactNode; caption: string; className?: string }) =>
+  <div className="tuto-table-scroll" role="region" aria-label={caption} tabIndex={0}><table className={`tuto-table ${className}`}><caption className="sr-only">{caption}</caption>{children}</table></div>;
+
+export const TableSkeleton = ({ message = 'Cargando datos…' }: { message?: string }) => <div role="status" aria-label={message} className="space-y-5 p-5"><span className="sr-only">{message}</span>{Array.from({ length: 5 }, (_, index) => <div key={index} aria-hidden="true" className="grid grid-cols-3 gap-8"><div className="app-skeleton h-9 rounded" /><div className="app-skeleton h-9 rounded" /><div className="app-skeleton h-9 rounded" /></div>)}</div>;
+
+export const Pagination = ({ page, hasMore, loading, onPageChange, children }: {
+  page: number; hasMore: boolean; loading: boolean; onPageChange: (page: number) => void; children?: React.ReactNode;
+}) => <nav aria-label="Paginación" className="tuto-pagination"><div aria-live="polite">{children}</div><div className="tuto-pagination-controls"><Button variant="secondary" size="sm" icon={ChevronLeft} disabled={page <= 1 || loading} onClick={() => onPageChange(page - 1)}>Anterior</Button><span className="tuto-pagination-page">Página {page}</span><Button variant="secondary" size="sm" disabled={!hasMore || loading} onClick={() => onPageChange(page + 1)}>Siguiente<ChevronRight className="h-4 w-4" aria-hidden="true" /></Button></div></nav>;
+
+export const SectionNav = ({ items, active, onSelect, label }: { items: readonly (readonly [string, string])[]; active: string; onSelect: (id: string) => void; label: string }) =>
+  <nav aria-label={label} className="tuto-section-nav">{items.map(([id, name]) => <button key={id} type="button" aria-current={active === id ? 'page' : undefined} onClick={() => onSelect(id)}>{name}</button>)}</nav>;
 
 // ─── LoadingBlock ─────────────────────────────────────────────────────────────
 
 export const LoadingBlock: React.FC<{ message?: string }> = ({ message }) => (
-  <div className="app-loading-block">
+  <div className="app-loading-block" role="status" aria-label={message || 'Cargando'}>
     <span className="app-spinner app-spinner-lg" aria-hidden="true" />
     {message ? <p className="text-sm text-gray-500">{message}</p> : null}
   </div>
@@ -96,7 +112,7 @@ interface EmptyStateProps {
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ title, description, icon, action }) => (
-  <div className="text-center p-12 bg-white rounded-xl border border-gray-100 shadow-sm">
+  <div className="tuto-empty">
     {icon && (
       <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 text-indigo-600 mb-4">
         {icon}
@@ -118,6 +134,8 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIG: Record<string, StatusConfig> = {
+  active:        { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Activo', icon: CheckCircle2 },
+  archived:      { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Archivado', icon: MinusCircle },
   importing:      { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Importando', icon: Loader2 },
   review:         { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Revisión', icon: Clock },
   needs_attention: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Requiere atención', icon: AlertTriangle },

@@ -22,6 +22,8 @@ export interface UseModelsCatalogResult {
   setShowArchived: (value: boolean) => void;
   modelSearch: string;
   handleModelSearchChange: (value: string) => void;
+  clientFilter: string;
+  handleClientFilterChange: (value: string) => void;
   modelsPage: number;
   setModelsPage: (value: number) => void;
   modelsTotalPages: number;
@@ -39,6 +41,7 @@ export const useModelsCatalog = (modelId?: string): UseModelsCatalogResult => {
   const [error, setError] = useState<string | null>(null);
   const showArchived = params.get('archived') === '1';
   const modelSearch = params.get('q') ?? '';
+  const clientFilter = params.get('clientId') ?? '';
   const pageParam = Number(params.get('page'));
   const requestedPage = Number.isSafeInteger(pageParam) && pageParam > 0 ? pageParam : 1;
   const includeArchived = !modelId && showArchived;
@@ -96,9 +99,11 @@ export const useModelsCatalog = (modelId?: string): UseModelsCatalogResult => {
   const filteredModels = useMemo(() => {
     const query = modelSearch.trim().toLowerCase();
     return models.filter((model) =>
-      (showArchived || !isArchivedCatalogEntity(model)) && model.name.toLowerCase().includes(query),
+      (showArchived || !isArchivedCatalogEntity(model))
+      && (!clientFilter || model.clientId === clientFilter)
+      && model.name.toLowerCase().includes(query),
     );
-  }, [models, modelSearch, showArchived]);
+  }, [models, modelSearch, clientFilter, showArchived]);
 
   const modelsTotalPages = Math.max(1, Math.ceil(filteredModels.length / MODELS_PAGE_SIZE));
   const modelsPage = Math.min(requestedPage, modelsTotalPages);
@@ -130,6 +135,14 @@ export const useModelsCatalog = (modelId?: string): UseModelsCatalogResult => {
     setParams(next);
   };
 
+  const handleClientFilterChange = (value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set('clientId', value);
+    else next.delete('clientId');
+    next.delete('page');
+    setParams(next, { preventScrollReset: true });
+  };
+
   const applyOptimisticModels = useCallback((updater: (prev: Model[]) => Model[]) => {
     setModels(updater);
   }, []);
@@ -145,6 +158,8 @@ export const useModelsCatalog = (modelId?: string): UseModelsCatalogResult => {
     setShowArchived,
     modelSearch,
     handleModelSearchChange,
+    clientFilter,
+    handleClientFilterChange,
     modelsPage,
     setModelsPage,
     modelsTotalPages,

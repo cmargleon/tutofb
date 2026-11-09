@@ -1,0 +1,143 @@
+/* Tuto: shared visual tokens. No network fonts or additional UI runtime. */
+@theme {
+  --font-sans: "Avenir Next", "Segoe UI", sans-serif;
+  --color-indigo-50: #eef7f5;
+  --color-indigo-100: #d9eee8;
+  --color-indigo-200: #b2dcd0;
+  --color-indigo-300: #84c2b1;
+  --color-indigo-400: #53a38f;
+  --color-indigo-500: #2b8572;
+  --color-indigo-600: #176a60;
+  --color-indigo-700: #12574e;
+  --color-indigo-800: #10463f;
+  --color-indigo-900: #103b36;
+}
+
+:root {
+  color-scheme: light;
+  --color-bg-base: #f6f7f9;
+  --color-bg-surface: #fff;
+  --color-bg-elevated: #f3f5f6;
+  --color-bg-hover: #edf1f2;
+  --color-bg-active: #eef7f5;
+  --color-border-subtle: #e5e9ec;
+  --color-border-default: #ccd4d9;
+  --color-border-focus: #176a60;
+  --color-accent: #176a60;
+  --color-accent-light: #12574e;
+  --color-accent-dot: #2b8572;
+  --color-text-primary: #202c35;
+  --color-text-secondary: #475661;
+  --color-text-muted: #62717d;
+  --color-text-dim: #74818b;
+  --color-success: #15734f;
+  --color-warning: #996018;
+  --color-danger: #bc364b;
+  --app-bg: var(--color-bg-base);
+  --app-surface: var(--color-bg-surface);
+  --app-surface-muted: var(--color-bg-elevated);
+  --app-surface-soft: var(--color-bg-hover);
+  --app-border: var(--color-border-subtle);
+  --app-border-strong: var(--color-border-default);
+  --app-text: var(--color-text-primary);
+  --app-text-muted: var(--color-text-secondary);
+  --app-text-soft: var(--color-text-muted);
+  --tuto-space-1: .25rem;
+  --tuto-space-2: .5rem;
+  --tuto-space-3: .75rem;
+  --tuto-space-4: 1rem;
+  --tuto-space-5: 1.25rem;
+  --tuto-space-6: 1.5rem;
+  --tuto-space-8: 2rem;
+  --tuto-radius-control: .5rem;
+  --tuto-radius-panel: .75rem;
+  --tuto-control-height: 2.5rem;
+  --tuto-content-width: 90rem;
+  --tuto-shadow: 0 1px 3px rgb(23 40 49 / .035);
+  --tuto-shadow-popover: 0 12px 40px rgb(23 40 49 / .12);
+  --tuto-focus: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  --tuto-text-xs: .75rem;
+  --tuto-text-sm: .875rem;
+  --tuto-text-title: clamp(1.5rem, 2vw, 1.875rem);
+}
+
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 3px;
+}
+input[type="checkbox"], input[type="radio"] { accent-color: var(--color-accent); }
+
+.tuto-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--tuto-space-2);
+  min-height: var(--tuto-control-height); border: 1px solid transparent;
+  border-radius: var(--tuto-radius-control); padding: .5rem 1rem;
+  font-size: var(--tuto-text-sm); font-weight: 600; line-height: 1.4; text-decoration: none;
+  transition: background-color 120ms, border-color 120ms, color 120ms;
+}
+.tuto-button:disabled { opacity: .5; cursor: not-allowed; }
+.tuto-button--primary { background: var(--color-accent); color: #fff; box-shadow: var(--tuto-shadow); }
+.tuto-button--primary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 85%, #000); }
+.tuto-button--secondary { background: var(--color-bg-surface); border-color: var(--color-border-default); color: var(--color-text-secondary); box-shadow: var(--tuto-shadow); }
+.tuto-button--secondary:hover:not(:disabled), .tuto-button--ghost:hover:not(:disabled) { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.tuto-button--ghost { background: transparent; color: var(--color-text-secondary); }
+.tuto-button--danger { background: var(--color-danger); color: #fff; }
+.tuto-button--warning { background: var(--color-warning); color: #fff; }
+.tuto-button--danger:hover:not(:disabled), .tuto-button--warning:hover:not(:disabled) { filter: brightness(.9); }
+.tuto-button--sm { min-height: 2rem; padding: .375rem .625rem; font-size: var(--tuto-text-xs); }
+.tuto-button--lg { min-height: 2.75rem; padding: .625rem 1.25rem; }
+.tuto-surface { border: 1px solid var(--color-border-subtle); border-radius: var(--tuto-radius-panel); background: var(--color-bg-surface); box-shadow: var(--tuto-shadow); }
+.tuto-page-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: var(--tuto-space-4); margin-bottom: var(--tuto-space-6); }
+.tuto-page-header h1 { overflow-wrap: anywhere; font-size: var(--tuto-text-title); font-weight: 650; letter-spacing: -.035em; line-height: 1.25; color: var(--color-text-primary); }
+.tuto-page-header p { margin-top: var(--tuto-space-2); max-width: 42rem; font-size: var(--tuto-text-sm); line-height: 1.65; color: var(--color-text-muted); }
+.tuto-page-icon { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; flex-shrink: 0; border: 1px solid var(--color-border-subtle); border-radius: var(--tuto-radius-panel); background: var(--color-bg-surface); color: var(--color-accent-light); }
+.tuto-field { display: block; width: 100%; min-height: var(--tuto-control-height); border: 1px solid var(--color-border-default); border-radius: var(--tuto-radius-control); background: var(--color-bg-surface); color: var(--color-text-primary); padding: .5rem .75rem; font-size: var(--tuto-text-sm); line-height: 1.5; }
+.tuto-field::placeholder { color: var(--color-text-muted); }
+.tuto-field:focus { border-color: var(--color-border-focus); outline: none; box-shadow: var(--tuto-focus); }
+.tuto-field:disabled, fieldset:disabled .tuto-field { cursor: not-allowed; background: var(--color-bg-elevated); color: var(--color-text-muted); }
+.tuto-search { position: relative; min-width: 12rem; }
+.tuto-search > svg { position: absolute; left: .75rem; top: .75rem; width: 1rem; height: 1rem; color: var(--color-text-muted); pointer-events: none; }
+.tuto-search .tuto-field { padding-left: 2.25rem; }
+.tuto-filter-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--tuto-space-4); padding: var(--tuto-space-5); border-bottom: 1px solid var(--color-border-subtle); }
+.tuto-table-scroll { overflow-x: auto; }
+.tuto-table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--tuto-text-sm); }
+.tuto-table th, .tuto-table td { padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border-subtle); vertical-align: middle; }
+.tuto-table thead { background: var(--color-bg-elevated); color: var(--color-text-muted); font-size: var(--tuto-text-xs); }
+.tuto-table thead th { font-weight: 600; white-space: nowrap; }
+.tuto-table tbody tr:last-child > * { border-bottom: 0; }
+.tuto-table tbody tr:hover, .tuto-table tbody tr:focus-within { background: var(--color-bg-active); }
+.tuto-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--tuto-space-3); padding: var(--tuto-space-4) var(--tuto-space-5); border-top: 1px solid var(--color-border-subtle); font-size: var(--tuto-text-xs); color: var(--color-text-muted); }
+.tuto-pagination-controls { display: flex; align-items: center; gap: var(--tuto-space-2); }
+.tuto-pagination-page { padding: .25rem .5rem; font-variant-numeric: tabular-nums; }
+.tuto-breadcrumbs { display: flex; align-items: center; gap: var(--tuto-space-2); min-width: 0; font-size: var(--tuto-text-xs); color: var(--color-text-muted); }
+.tuto-breadcrumbs a:hover { color: var(--color-accent-light); text-decoration: underline; }
+.tuto-section-nav { display: flex; overflow-x: auto; border-bottom: 1px solid var(--color-border-subtle); gap: var(--tuto-space-5); }
+.tuto-section-nav > :is(button, a) { flex-shrink: 0; min-height: 2.75rem; padding: .625rem .125rem; border-bottom: 2px solid transparent; font-size: var(--tuto-text-sm); color: var(--color-text-muted); font-weight: 500; }
+.tuto-section-nav > [aria-current="page"] { border-bottom-color: var(--color-accent); color: var(--color-accent-light); font-weight: 650; }
+.tuto-section-nav > :is(button, a):hover { color: var(--color-accent-light); }
+.tuto-empty { padding: 3.5rem 1.5rem; text-align: center; }
+.tuto-avatar { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; flex-shrink: 0; border: 1px solid var(--color-border-subtle); border-radius: var(--tuto-radius-control); background: var(--color-bg-active); color: var(--color-accent-light); font-size: var(--tuto-text-xs); font-weight: 650; }
+.tuto-sidebar { background: var(--color-bg-surface); border-color: var(--color-border-subtle); }
+.tuto-brand { font-size: 1.75rem; font-weight: 750; letter-spacing: -.065em; color: var(--color-text-primary); }
+.tuto-brand-mark { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .625rem; background: var(--color-accent); color: #fff; font-weight: 700; font-size: 1.25rem; }
+.tuto-nav-label { margin: 1.25rem .75rem .625rem; color: var(--color-text-muted); font-size: .625rem; font-weight: 650; letter-spacing: .13em; text-transform: uppercase; }
+.tuto-nav-link { min-height: 2.5rem; }
+.tuto-nav-link[aria-current="page"] { background: var(--color-bg-active); color: var(--color-accent-light); }
+.tuto-topbar { min-height: 4.5rem; background: var(--color-bg-surface); border-bottom: 1px solid var(--color-border-subtle); }
+.tuto-content { width: 100%; max-width: var(--tuto-content-width); margin-inline: auto; padding: 2rem; }
+.tuto-skip-link { position: fixed; top: .5rem; left: .5rem; z-index: 100; transform: translateY(-200%); background: var(--color-bg-surface); padding: .75rem; border-radius: var(--tuto-radius-control); }
+.tuto-skip-link:focus { transform: translateY(0); }
+.tuto-marketplace { padding: var(--tuto-space-5); border: 1px solid var(--color-border-subtle); border-radius: var(--tuto-radius-panel); }
+.tuto-switch { position: relative; width: 2.75rem; height: 1.5rem; border-radius: 999px; background: var(--color-border-default); }
+.tuto-switch[aria-checked="true"] { background: var(--color-accent); }
+.tuto-switch > span { position: absolute; top: .125rem; left: .125rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; background: #fff; box-shadow: var(--tuto-shadow); transition: transform 120ms; }
+.tuto-switch[aria-checked="true"] > span { transform: translateX(1.25rem); }
+.tuto-switch:disabled { opacity: .5; }
+@media (max-width: 639px) {
+  .tuto-content { padding: 1.25rem 1rem; }
+  .tuto-filter-bar { padding: var(--tuto-space-4); }
+  .tuto-page-header { gap: var(--tuto-space-3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

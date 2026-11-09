@@ -88,7 +88,10 @@
     ]
   },
   "storage": {
-    "rules": "storage.rules"
+    "rules": "storage.rules",
+    "predeploy": [
+      "node scripts/verify-storage-release.mjs"
+    ]
   },
   "emulators": {
     "auth": {

@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { Client } from '../../shared/src/types';
-import { LoadingBlock, EmptyState } from '../components/ui';
+import { LoadingBlock, EmptyState, SectionNav, Surface } from '../components/ui';
 import { useClientManagement } from '../features/clients/useClientManagement';
 import { useClientAutomationConfig } from '../features/automation/useClientAutomationConfig';
 import { clientListUrl } from '../features/clients/clientListState';
@@ -24,8 +24,8 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
   const templates = management.sortedTemplatesByClientId[client.id!] || [];
   return <div className="mx-auto max-w-6xl space-y-6">
     <ClientDetailHeader client={client} backUrl={clientListUrl(params)} onArchive={() => void management.handleArchive(client)} onRestore={() => void management.handleRestore(client)} onEdit={() => changeTab('configuracion')} />
-    <nav aria-label="Secciones del cliente" className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">{TABS.map(([id, label]) => <button key={id} type="button" aria-current={active === id ? 'page' : undefined} onClick={() => changeTab(id)} className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${active === id ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>)}</nav>
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+    <SectionNav label="Secciones del cliente" items={TABS} active={active} onSelect={changeTab} />
+    <Surface className="rounded-2xl p-4 sm:p-6">
       <section hidden={active !== 'resumen'} aria-label="Resumen"><h2 className="mb-4 text-lg font-semibold">Resumen</h2><ClientOverview client={client} templates={templates} /></section>
       <section hidden={active !== 'productos'} aria-label="Productos"><h2 className="mb-4 text-lg font-semibold">Productos</h2><Link className="text-sm font-medium text-indigo-700 hover:underline" to={`/catalogo?clientId=${encodeURIComponent(client.id!)}`}>Abrir catálogo de {client.name} →</Link>{active === 'productos' && <Suspense fallback={<LoadingBlock />}><ClientCatalog client={client} /></Suspense>}</section>
       <section hidden={active !== 'marketplaces'} aria-label="Marketplaces"><h2 className="mb-4 text-lg font-semibold">Marketplaces</h2><ClientMarketplaces client={client} /></section>
@@ -33,7 +33,7 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
       <section hidden={active !== 'automatizaciones'} aria-label="Automatizaciones"><h2 className="mb-4 text-lg font-semibold">Automatizaciones</h2><p className="text-sm text-slate-500">Guarda los ajustes de esta pestaña de forma independiente. La generación posterior al Organizador sigue controlada globalmente desde Configuración.</p><ClientAutomationFields client={client} state={automation} /><ClientAutomationSave state={automation} section="automation" disabled={client.status === 'archived'} /></section>
       <section hidden={active !== 'configuracion'} aria-label="Configuración"><h2 className="mb-4 text-lg font-semibold">Configuración</h2><ClientSettings client={client} /></section>
       <section hidden={active !== 'historial'} aria-label="Historial"><EmptyState title="Historial de eventos no disponible" description="No hay una fuente de eventos de cliente adecuada para esta ficha. El catálogo conserva los lotes y productos existentes." /></section>
-    </div>
+    </Surface>
   </div>;
 };
 

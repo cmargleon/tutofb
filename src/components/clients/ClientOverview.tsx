@@ -13,5 +13,5 @@ export const ClientOverview = ({ client, templates }: { client: Client; template
     ['Lotes de generación', Number.isFinite(client.batchCount) ? String(client.batchCount) : 'No disponible'],
     ['Último lote creado', client.lastBatchCreatedAt ? formatDateTimeLong(client.lastBatchCreatedAt) : 'Sin lotes registrados'],
   ];
-  return <dl className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-3">{fields.map(([label, value]) => <div key={label} className="bg-white p-5"><dt className="text-xs font-medium text-slate-500">{label}</dt><dd className="mt-2 break-words text-sm font-semibold text-slate-900">{value}</dd></div>)}</dl>;
+  return <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">{fields.map(([label, value]) => <div key={label} className="min-w-0 border-b border-slate-100 pb-5"><dt className="text-xs font-medium text-slate-500">{label}</dt><dd className="mt-2 break-words text-sm font-semibold text-slate-900">{value}</dd></div>)}</dl>;
 };

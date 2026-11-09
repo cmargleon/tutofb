@@ -6,7 +6,7 @@ test('Catalog keeps the exact automation batch while subscriptions load and perf
   const router = module.match(/from ["']([^"']*react-router-dom\.js[^"']*)["']/)?.[1];
   if (!router) throw new Error('Vite router module not found');
   await page.route('https://**/*', (route) => route.abort());
-  await page.route('**/src/pages/Catalogo.tsx*', async (route) => {
+  await page.route('**/src/features/catalog/firebase.ts*', async (route) => {
     const response = await route.fetch();
     const source = (await response.text()).replace(/from ["'][^"']*firebase_firestore\.js[^"']*["']/, 'from "/catalog-firestore-mock.js"');
     await route.fulfill({ response, body: source });
@@ -28,7 +28,7 @@ test('Catalog keeps the exact automation batch while subscriptions load and perf
   await page.route('**/src/components/catalog/CatalogLightbox.tsx*', (route) => route.fulfill({ contentType: 'application/javascript', body: 'export const CatalogLightbox = () => null;' }));
   await page.route('**/src/features/auth/AuthProvider.tsx*', (route) => route.fulfill({ contentType: 'application/javascript', body: 'export const useRole = () => ({ canRegenerate: true }); export const useAuth = () => ({ user: null });' }));
   await page.route('**/src/features/system/useSystemConfig.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: 'export const useSystemConfig = () => ({ config: { disabledProviders: [] }, loading: false });' }));
-  await page.route('**/src/features/clients/firebase.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `export const subscribeToClients = (callback) => { const timer = setTimeout(() => callback([{ id: 'client', name: 'Cliente de prueba' }]), 200); return () => clearTimeout(timer); };` }));
+  await page.route('**/src/features/clients/firebase.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `export const subscribeToClient = () => () => {}; export const subscribeToClients = (callback) => { const timer = setTimeout(() => callback([{ id: 'client', name: 'Cliente de prueba' }]), 200); return () => clearTimeout(timer); };` }));
   await page.route('**/src/features/evaluation/firebase.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `
     export const cancelBatchProcessing = async () => { window.__cancelCalls = (window.__cancelCalls || 0) + 1; throw new Error('Unexpected cancellation'); };
     export const cancelJobGeneration = async () => {}; export const deleteJob = async () => {}; export const regenerateJob = async () => {}; export const retryJobAutoReview = async () => {}; export const selectJobOutput = async () => {}; export const setJobManualFlag = async () => {}; export const updateBatchProductDraft = async () => {};

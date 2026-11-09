@@ -130,6 +130,7 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
 
 export const isNavigationEntryActive = (pathname: string, entry: NavigationEntry) => {
   if (entry.type === 'group') {
+    if (entry.name === 'Clientes' && isPathActive(pathname, '/clients')) return true;
     return entry.children.some((child) => isPathActive(pathname, child.path));
   }
 
@@ -143,6 +144,7 @@ export const getCurrentPageTitle = (pathname: string, entries: NavigationEntry[]
       if (activeChild) {
         return `${entry.name} / ${activeChild.name}`;
       }
+      if (isNavigationEntryActive(pathname, entry)) return `${entry.name} / Ficha del cliente`;
       continue;
     }
 

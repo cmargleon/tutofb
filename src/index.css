@@ -1,18 +1,9 @@
 @import "tailwindcss";
 
-/* ════════════════════════════════════════════════════════════════
-   MIDNIGHT BLUE DESIGN SYSTEM
-   4-Layer Depth Hierarchy
-   ─────────────────────────────────────────────────────────────
-   Capa 1 #0B0F1A  fondo de página        (deepest)
-   Capa 2 #0F1422  sidebar · topbar · cards
-   Capa 3 #131929  inputs · dropdowns · empty states
-   Capa 4 #1A2035  hover states · selecciones
-   Capa 5 #1E2A50  nav activo · stepper activo (tinted blue)
-   ════════════════════════════════════════════════════════════════ */
+@import "./styles/design-system.css";
 
-/* ─── Dark theme tokens (default) ─────────────────────────────── */
-:root {
+/* Existing dark palette remains available for saved preferences. */
+html.theme-dark {
   color-scheme: dark;
 
   /* Backgrounds */
@@ -20,23 +11,23 @@
   --color-bg-surface:  #0F1422;
   --color-bg-elevated: #131929;
   --color-bg-hover:    #1A2035;
-  --color-bg-active:   #1E2A50;
+  --color-bg-active:   #18312f;
 
   /* Borders */
   --color-border-subtle:  #1E2640;
   --color-border-default: #2B3561;
-  --color-border-focus:   #4F6BDE;
+  --color-border-focus:   #65bcaa;
 
   /* Accent */
-  --color-accent:       #4F6BDE;
-  --color-accent-light: #7B9FFF;
-  --color-accent-dot:   #5B7FFF;
+  --color-accent:       #24786c;
+  --color-accent-light: #8ed6c4;
+  --color-accent-dot:   #65bcaa;
 
   /* Text */
   --color-text-primary:   #E8EEFF;
   --color-text-secondary: #BFC7E0;
-  --color-text-muted:     #6B7A9E;
-  --color-text-dim:       #3A4560;
+  --color-text-muted:     #9aaac4;
+  --color-text-dim:       #8192ae;
 
   /* Semantic */
   --color-success: #6EE3B0;
@@ -44,45 +35,6 @@
   --color-danger:  #E85D5D;
 
   /* Legacy aliases — consumed by body & base styles */
-  --app-bg:            var(--color-bg-base);
-  --app-surface:       var(--color-bg-surface);
-  --app-surface-muted: var(--color-bg-elevated);
-  --app-surface-soft:  var(--color-bg-hover);
-  --app-border:        var(--color-border-subtle);
-  --app-border-strong: var(--color-border-default);
-  --app-text:          var(--color-text-primary);
-  --app-text-muted:    var(--color-text-secondary);
-  --app-text-soft:     var(--color-text-muted);
-}
-
-/* ─── Light theme overrides ────────────────────────────────────── */
-html.theme-light {
-  color-scheme: light;
-
-  --color-bg-base:     #f8fafc;
-  --color-bg-surface:  #ffffff;
-  --color-bg-elevated: #f1f5f9;
-  --color-bg-hover:    #e8eef6;
-  --color-bg-active:   #eef2ff;
-
-  --color-border-subtle:  #e2e8f0;
-  --color-border-default: #cbd5e1;
-  --color-border-focus:   #4f6bde;
-
-  --color-accent:       #4f6bde;
-  --color-accent-light: #3b4fd4;
-  --color-accent-dot:   #5b7fff;
-
-  --color-text-primary:   #0f172a;
-  --color-text-secondary: #334155;
-  --color-text-muted:     #64748b;
-  --color-text-dim:       #94a3b8;
-
-  --color-success: #059669;
-  --color-warning: #d97706;
-  --color-danger:  #dc2626;
-
-  /* Legacy aliases */
   --app-bg:            var(--color-bg-base);
   --app-surface:       var(--color-bg-surface);
   --app-surface-muted: var(--color-bg-elevated);
@@ -334,12 +286,6 @@ input[type="radio"]:not(:disabled) {
   background-color: rgb(244 63 94);
 }
 
-* {
-  transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity, transform;
-  transition-duration: 200ms;
-  transition-timing-function: ease;
-}
-
 /* ─── Dark mode body gradient ──────────────────────────────────── */
 .theme-dark body {
   background:
@@ -438,7 +384,7 @@ input[type="radio"]:not(:disabled) {
   background-color: var(--color-accent);
 }
 .theme-dark .hover\:bg-indigo-700:hover {
-  background-color: #3d57c4;
+  background-color: color-mix(in srgb, var(--color-accent) 85%, #000);
 }
 .theme-dark .bg-indigo-500 {
   background-color: var(--color-accent-light);

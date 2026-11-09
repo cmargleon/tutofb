@@ -8,11 +8,12 @@ const initialClients = () => Array.from({ length: 45 }, (_, index) => ({
 async function setup(page: Page, role = 'admin') {
   const routerSource = await (await page.request.get('/src/app/AppRouter.tsx')).text();
   const routerImport = routerSource.match(/from ["']([^"']*react-router-dom[^"']*)/)![1];
-  const controls = { rejectMarketplace: false, readError: false };
+  const controls = { rejectMarketplace: false, readError: false, readDelayMs: 0 };
   const clients: any[] = initialClients();
   const calls: { name: string; input: any }[] = [];
   const reads: any[] = [];
-  await page.exposeFunction('__clientsRead', (kind: string, id?: string) => {
+  await page.exposeFunction('__clientsRead', async (kind: string, id?: string) => {
+    if (controls.readDelayMs) await new Promise(resolve => setTimeout(resolve, controls.readDelayMs));
     reads.push({ kind, id });
     if (controls.readError) throw new Error('Lectura no disponible');
     if (kind === 'page') {
@@ -366,4 +367,23 @@ test('general settings conflict retains name and reviews remote prompt before re
   await expect(page.getByRole('status')).toHaveText('Datos generales guardados');
   expect(state.clients[0].name).toBe('Mi nombre'); expect(state.clients[0].generationPromptBase).toBe('Prompt remoto');
   expect(state.calls.at(-1)!.input.generationPromptBase).toBeUndefined();
+});
+
+
+test('directory presents loading, empty and read errors without losing filter controls', async ({ page }) => {
+  const state = await setup(page);
+  state.controls.readDelayMs = 500;
+  await page.goto('/clients/lista');
+  await expect(page.getByRole('status', { name: 'Cargando datos…' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
+  await expect(page.locator('tbody tr')).toHaveCount(20);
+  await page.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('Sin coincidencias');
+  await expect(page.getByRole('heading', { name: 'No hay clientes que mostrar' })).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: 'Buscar por nombre' })).toHaveValue('Sin coincidencias');
+  await expect(page.getByRole('button', { name: 'Siguiente' })).toBeDisabled();
+  state.controls.readError = true;
+  await page.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('Cliente');
+  await expect(page.getByRole('alert')).toContainText('Lectura no disponible');
+  await expect(page.getByRole('heading', { name: 'No se pudo cargar el directorio' })).toBeVisible();
+  expect(state.calls).toEqual([]);
 });

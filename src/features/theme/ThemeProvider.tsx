@@ -15,11 +15,11 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const getInitialTheme = (): ThemeMode => {
   if (typeof window === 'undefined') {
-    return 'dark';
+    return 'light';
   }
 
   const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return savedTheme === 'light' ? 'light' : 'dark';
+  return savedTheme === 'dark' ? 'dark' : 'light';
 };
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

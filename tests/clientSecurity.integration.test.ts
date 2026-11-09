@@ -28,6 +28,19 @@ test('current human permissions, direct Firebase access, transaction conflicts a
   const base = `http://127.0.0.1:${server.address().port}`;
   const rest = `http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/${projectId}/databases/(default)/documents`;
   const files: string[] = [];
+  const clientAssets = (id: string) => [
+    `models/${id}/${id}/poses/upload.jpg`,
+    `model_generations/${id}/legacy/image.jpg`,
+    `model_generations/${id}/${id}/identity/session/image.jpg`,
+    `model_generations/${id}/${id}/pose/session/image.jpg`,
+    `client_spreadsheets/${id}/template/source.xlsx`,
+    `client_spreadsheet_exports/${id}/${id}/export.xlsx`,
+  ];
+  const ownDrafts = [
+    `garments/drafts/${uid}/draft/photo.jpg`,
+    `garments/drafts/${uid}/draft/item/photo.jpg`,
+    `wizard_source_spreadsheets/${uid}/upload/source.xlsx`,
+  ];
   const setUser = (patch = {}) => userRef.set({ uid, role: 'admin', active: true, status: 'active', ...patch });
   let token: string;
   const headers = () => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' });
@@ -50,6 +63,14 @@ test('current human permissions, direct Firebase access, transaction conflicts a
       await db.collection('batches').doc(id).collection('productDrafts').doc('product').set({ name: 'Product' });
       const path = `generated/${id}/${id}/${id}/image.jpg`; files.push(path);
       await admin.storage().bucket().file(path).save(Buffer.from('emulator-fixture'), { metadata: { contentType: 'image/jpeg' } });
+      for (const assetPath of clientAssets(id)) {
+        files.push(assetPath);
+        await admin.storage().bucket().file(assetPath).save(Buffer.from('emulator-fixture'));
+      }
+    }
+    for (const path of ownDrafts) {
+      files.push(path);
+      await admin.storage().bucket().file(path).save(Buffer.from('emulator-fixture'));
     }
     await t.test('old admin token cannot edit clients or restore its role after demotion', async () => {
       assert.equal((await get(`clients/${clientA}`)).status, 200);
@@ -67,10 +88,14 @@ test('current human permissions, direct Firebase access, transaction conflicts a
         assert.equal((await get(`${collection}/${clientA}${suffix}`)).status, 200, `A ${collection}${suffix}`);
         assert.equal((await get(`${collection}/${clientB}${suffix}`)).status, 403, `B ${collection}${suffix}`);
       }
-      assert.equal((await asset(files[0])).status, 200); assert.equal((await asset(files[1])).status, 403);
+      assert.equal((await asset(files[0])).status, 200);
+      assert.equal((await asset(`generated/${clientB}/${clientB}/${clientB}/image.jpg`)).status, 403);
+      for (const path of clientAssets(clientA)) assert.equal((await asset(path)).status, 200, path);
+      for (const path of clientAssets(clientB)) assert.equal((await asset(path)).status, 403, path);
+      for (const path of ownDrafts) assert.equal((await asset(path)).status, 200, path);
       assert.equal((await asset(files[0], false)).status, 403);
       assert.equal((await fetch(`${base}/image/${files[0]}`, { headers: headers() })).status, 200);
-      assert.equal((await fetch(`${base}/image/${files[1]}`, { headers: headers() })).status, 403);
+      assert.equal((await fetch(`${base}/image/generated/${clientB}/${clientB}/${clientB}/image.jpg`, { headers: headers() })).status, 403);
       assert.equal((await fetch(`${base}/image/${files[0]}`)).status, 401);
       const { selectJobOutput } = require('../functions/lib/functions/src/callables/selectJobOutput.js');
       await assert.rejects(() => selectJobOutput.run({ auth: { uid, token: { role: 'admin' } }, data: { clientId: clientA, jobId: clientB, outputId: 'x' } }), { code: 'permission-denied' });
@@ -86,6 +111,8 @@ test('current human permissions, direct Firebase access, transaction conflicts a
         if (state) await setUser(state); else await userRef.delete();
         assert.equal((await get(`clients/${clientA}`)).status, 403);
         assert.equal((await asset(files[0])).status, 403);
+        for (const path of clientAssets(clientA)) assert.equal((await asset(path)).status, 403, path);
+        if (state?.role !== 'operador') for (const path of ownDrafts) assert.equal((await asset(path)).status, 403, path);
         assert.equal((await patch(`users/${uid}`, 'role', { stringValue: 'admin' })).status, 403);
         assert.equal((await post('marketplace', { clientId: clientA, marketplaceId: 'amazon', enabled: true, expected: { enabled: false } })).status, 403);
       }

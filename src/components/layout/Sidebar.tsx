@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   ChevronDown,
@@ -40,6 +40,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navigation = buildNavigation(role);
   const collapsed = isDesktop && isSidebarCollapsed;
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (isDesktop || !isMobileMenuOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const sidebar = sidebarRef.current;
+    const focusable = (): HTMLElement[] => sidebar ? Array.from(sidebar.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)')) : [];
+    focusable()[0]?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onCloseMobile(); }
+      if (event.key !== 'Tab') return;
+      const elements = focusable();
+      const first = elements[0];
+      const last = elements.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    sidebar?.addEventListener('keydown', onKey);
+    return () => { sidebar?.removeEventListener('keydown', onKey); previous?.focus({ preventScroll: true }); };
+  }, [isDesktop, isMobileMenuOpen, onCloseMobile]);
 
   useEffect(() => {
     setOpenGroups((current) => {
@@ -79,17 +99,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-white border-r border-gray-200 transition-transform duration-200 xl:static xl:translate-x-0 xl:transition-[width] ${
+      ref={sidebarRef}
+      aria-label="Menú principal"
+      role={!isDesktop && isMobileMenuOpen ? 'dialog' : undefined}
+      aria-modal={!isDesktop && isMobileMenuOpen ? true : undefined}
+      inert={!isDesktop && !isMobileMenuOpen}
+      className={`tuto-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r transition-transform duration-200 xl:static xl:translate-x-0 xl:transition-[width] ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
       } ${sidebarWidthClass}`}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 min-h-[73px]">
-        <div className="min-w-0">
-          <h1 className={`font-bold text-indigo-600 ${collapsed ? 'text-base' : 'text-xl'}`}>
-            {collapsed ? 'VT' : 'Virtual Try-On'}
-          </h1>
-        </div>
+      <div className={`flex min-h-[72px] items-center px-4 ${collapsed ? 'flex-col gap-1 py-3' : 'justify-between'}`}>
+        <Link to="/" aria-label="Tuto · Inicio" className="flex min-w-0 items-center gap-2.5">
+          <span className="tuto-brand-mark" aria-hidden="true">t</span>
+          {!collapsed && <span className="tuto-brand">tuto<span className="text-indigo-600">.</span></span>}
+        </Link>
         {!isDesktop ? (
           <button
             type="button"
@@ -112,8 +136,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-        {navigation.map((entry) => {
+      <nav aria-label="Módulos" className="flex-1 px-3 pb-3 space-y-0.5 overflow-y-auto">
+        {!collapsed && <p className="tuto-nav-label">Espacio de trabajo</p>}
+        {navigation.map((entry, index) => {
           const active = isNavigationEntryActive(location.pathname, entry);
 
           if (entry.type === 'group') {
@@ -121,11 +146,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             return (
               <div key={entry.name} className="space-y-1">
+                {!collapsed && navigation[index - 1]?.type === 'item' && <p className="tuto-nav-label">Administración</p>}
                 <button
                   type="button"
                   onClick={() => toggleGroup(entry)}
                   title={collapsed ? entry.name : undefined}
-                  className={`flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  aria-label={entry.name}
+                  className={`tuto-nav-link flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     collapsed ? 'justify-center' : 'gap-3'
                   } ${
                     active
@@ -154,6 +181,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <Link
                           key={child.path}
                           to={child.path}
+                          aria-current={childActive ? 'page' : undefined}
                           className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                             childActive
                               ? 'bg-indigo-50 text-indigo-700'
@@ -180,8 +208,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Link
               key={entry.path}
               to={entry.path}
+              aria-label={entry.name}
+              aria-current={active ? 'page' : undefined}
               title={collapsed ? entry.name : undefined}
-              className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`tuto-nav-link flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 collapsed ? 'justify-center' : 'gap-3'
               } ${
                 active

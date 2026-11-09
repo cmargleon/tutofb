@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useRole } from '../features/auth/AuthProvider';
 import { useNotifications } from '../features/notifications/useNotifications';
@@ -24,6 +24,7 @@ export const Layout: React.FC = () => {
     setIsSidebarCollapsed,
     setIsMobileMenuOpen,
   } = useResponsiveSidebar();
+  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), [setIsMobileMenuOpen]);
 
   const notificationsState = useNotifications();
   const { onBellClick, onCloseNotif } = notificationsState;
@@ -56,7 +57,7 @@ export const Layout: React.FC = () => {
 
   const currentPageTitle = getCurrentPageTitle(location.pathname, navigation);
   const shellClassName = [
-    'app-shell flex h-screen overflow-hidden bg-gray-50',
+    'app-shell flex h-dvh overflow-hidden bg-[var(--color-bg-base)]',
     isDesktop ? 'app-shell--desktop' : 'app-shell--mobile',
     isDesktop && isSidebarCollapsed ? 'app-shell--collapsed' : 'app-shell--expanded',
   ].join(' ');
@@ -106,6 +107,7 @@ export const Layout: React.FC = () => {
 
   return (
     <div className={shellClassName}>
+      <a href="#main-content" className="tuto-skip-link">Saltar al contenido</a>
       {!isDesktop && isMobileMenuOpen ? (
         <div
           className="fixed inset-0 z-40 bg-gray-900/40 xl:hidden"
@@ -119,10 +121,10 @@ export const Layout: React.FC = () => {
         isSidebarCollapsed={isSidebarCollapsed}
         isMobileMenuOpen={isMobileMenuOpen}
         onToggleSidebar={() => setIsSidebarCollapsed((value) => !value)}
-        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onCloseMobile={closeMobileMenu}
       />
 
-      <main className="flex-1 overflow-auto min-w-0">
+      <main className="flex-1 overflow-auto min-w-0" inert={!isDesktop && isMobileMenuOpen}>
         <Topbar
           currentPageTitle={currentPageTitle}
           isDesktop={isDesktop}
@@ -137,7 +139,7 @@ export const Layout: React.FC = () => {
           onRetryFailedBatch={(batchId) => void handleRetryFailedBatch(batchId)}
         />
 
-        <div className="p-4 sm:p-6 xl:p-8">
+        <div id="main-content" tabIndex={-1} className="tuto-content">
           <Outlet />
         </div>
       </main>

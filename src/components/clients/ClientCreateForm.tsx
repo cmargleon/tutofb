@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, Plus } from 'lucide-react';
-import { Button } from '../ui';
+import { Button, Surface } from '../ui';
 import { INPUT_BASE } from './clientUtils';
 
 interface ClientCreateFormProps {
@@ -18,7 +18,7 @@ export const ClientCreateForm: React.FC<ClientCreateFormProps> = ({
   newClientPrompt, setNewClientPrompt,
   isCreating, createSuccess, onSubmit,
 }) => (
-  <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+  <Surface className="p-6">
     <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
       <Plus className="w-4 h-4 text-indigo-600" />
       Nuevo cliente
@@ -35,7 +35,7 @@ export const ClientCreateForm: React.FC<ClientCreateFormProps> = ({
           value={newClientName}
           onChange={(e) => setNewClientName(e.target.value)}
           className={INPUT_BASE}
-          placeholder="Ej. Zara, H&M..."
+          placeholder="Nombre comercial o razón social"
           disabled={isCreating}
         />
       </div>
@@ -73,5 +73,5 @@ export const ClientCreateForm: React.FC<ClientCreateFormProps> = ({
         </p>
       )}
     </form>
-  </div>
+  </Surface>
 );

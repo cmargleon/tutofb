@@ -10,6 +10,7 @@ export interface ProviderRequest {
 }
 
 export interface ProviderResponse {
+  preparedPhoto?: { bytes: Buffer; contentType: string; storedImage?: import('../../../shared/src/types').StoredPhotoMetadata };
   provider: Provider;
   contentType: string;
   imageBytes: Buffer;

@@ -29,7 +29,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     promptBase: trimmedPrompt,
     promptCaseKey: job.promptCaseKey ?? null,
     promptCaseText: job.promptCaseText ?? null,
-    finalPrompt: isApprovedPrompt ? trimmedPrompt : job.generationKind === 'product' ? `${PRODUCT_IDENTITY_RULES}\n${trimmedPrompt}` : buildFinalGenerationPrompt(
+    finalPrompt: job.photoTask ? `${trimmedPrompt}\nObligaciones invariables del plan:\n${job.photoTask.instructions}` : isApprovedPrompt ? trimmedPrompt : job.generationKind === 'product' ? `${PRODUCT_IDENTITY_RULES}\n${trimmedPrompt}` : buildFinalGenerationPrompt(
       trimmedPrompt,
       job.garmentReferenceImageType || (job.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
       job.promptCaseText,

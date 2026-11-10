@@ -89,3 +89,5 @@ export { manageDriveBackup, scheduledDriveBackup, driveBackupWorker, agentDriveW
 export { previewMarketplaceExports, downloadMarketplaceExports, saveMasterProduct, configureMarketplaceTemplate, archiveMarketplaceTemplate } from './callables/marketplaceExports';
 export { cleanupMarketplaceExportsOnSchedule } from './spreadsheets/cleanupMarketplaceExports';
 export { publishMarketplaceImages } from './callables/publishMarketplaceImages';
+
+export { previewMarketplacePhotoPlan, createMarketplacePhotoBatch, verifyMarketplacePhotoBases } from './callables/createMarketplacePhotoBatch';

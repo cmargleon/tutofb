@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import * as admin from 'firebase-admin';
 import { Pose, PoseFraming, PoseOrientationDetail } from '../../../shared/src/types';
 import {
@@ -8,6 +9,7 @@ import {
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 
 export interface PoseClassificationResult {
+  photoObservation?: import('../../../shared/src/types').PhotoBaseObservation;
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
   faceVisible: boolean;
@@ -16,6 +18,7 @@ export interface PoseClassificationResult {
 }
 
 interface GeminiPoseClassificationPayload {
+  photoObservation?: any;
   orientationDetail?: unknown;
   framing?: unknown;
   faceVisible?: unknown;
@@ -26,6 +29,14 @@ interface GeminiPoseClassificationPayload {
 const POSE_CLASSIFICATION_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
+    photoObservation: { type: 'object', properties: {
+      audience: { type: 'string', enum: ['baby', 'child', 'adult'] },
+      orientation: { type: 'string', enum: ['front', 'back', 'side'] },
+      posture: { type: 'string', enum: ['standing', 'other'] },
+      framing: { type: 'string', enum: ['upper_body', 'lower_body', 'full_body'] },
+      background: { type: 'string', enum: ['white', 'neutral', 'context'] },
+      garmentVisible: { type: 'boolean' }, accessories: { type: 'boolean' }, evidence: { type: 'string' },
+    }, required: ['audience', 'orientation', 'posture', 'framing', 'background', 'garmentVisible', 'accessories', 'evidence'] },
     orientationDetail: {
       type: 'string',
       enum: [
@@ -59,7 +70,7 @@ const POSE_CLASSIFICATION_RESPONSE_SCHEMA = {
       description: 'Very short explanation in Spanish.',
     },
   },
-  required: ['orientationDetail', 'framing', 'faceVisible', 'confidence', 'reasoning'],
+  required: ['photoObservation', 'orientationDetail', 'framing', 'faceVisible', 'confidence', 'reasoning'],
 };
 
 const mimeTypeFromStoragePath = (storagePath: string): string => {
@@ -120,7 +131,7 @@ export const classifyPoseWithGemini = async ({
 
   const prompt = [
     'Clasifica una imagen de pose de modelo para un sistema de catalogo de moda.',
-    'Solo debes analizar la orientacion del cuerpo y el encuadre de la pose.',
+    'Analiza orientación, postura, encuadre, fondo observado (white solo si visualmente puro), visibilidad de la prenda base, accesorios ajenos y público del modelo. Registra evidencia visible por photoObservation. La receta o el nombre del archivo no acreditan cumplimiento.',
     'NO analices la prenda. NO inventes detalles fuera de la imagen.',
     'Reglas:',
     '- front: cuerpo mayormente de frente',
@@ -178,8 +189,17 @@ export const classifyPoseWithGemini = async ({
   });
 
   const parsed = JSON.parse(extractResponseText(payload)) as GeminiPoseClassificationPayload;
+  let whiteRgbVerified = false;
+  if (parsed.photoObservation?.background === 'white') {
+    const { data, info } = await sharp(image.bytes).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    whiteRgbVerified = [[0, 0], [info.width - 8, 0], [0, info.height - 8], [info.width - 8, info.height - 8]].every(([x, y]) => {
+      for (let row = y; row < y + 8; row++) for (let col = x; col < x + 8; col++) for (let c = 0; c < 3; c++) if (data[(row * info.width + col) * info.channels + c] !== 255) return false;
+      return true;
+    });
+  }
 
   return {
+    ...(parsed.photoObservation ? { photoObservation: { ...parsed.photoObservation, whiteRgbVerified, verified: (clampConfidence(parsed.confidence) || 0) >= .8, performer: pose.storagePath.startsWith('model_generations/') ? 'synthetic' as const : pose.photoObservation?.performer || 'unknown' as const } } : {}),
     orientationDetail: isPoseOrientationDetail(parsed.orientationDetail)
       ? parsed.orientationDetail
       : 'ambiguous',

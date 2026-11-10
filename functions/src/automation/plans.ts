@@ -1,3 +1,4 @@
+import { activePhotoChannels } from '../../../shared/src/marketplacePhotoPlan';
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { automationPolling } from './polling';
 import type { AutomationJob, AutomationPlanSummary } from '../../../shared/src/types';
@@ -46,13 +47,17 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   };
   let sceneIds: string[];
   let modelOptions: AutomationModelOption[] | undefined;
-  if (data.jobType === 'garment') {
+  const photoChannels = activePhotoChannels(client.marketplaces);
+  if (data.jobType === 'garment' && !photoChannels.length) {
     try { modelOptions = await loadAutomationModelOptions(data.clientId, client, data.modelId || resolved.config.modelId, preset.poseIds); }
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
     // Until classification, estimate using the model with the most poses per item.
     sceneIds = modelOptions.reduce<string[]>((largest, option) => option.poseIds.length > largest.length ? option.poseIds : largest, []);
-  } else sceneIds = preset.scenes!.map((scene) => scene.type);
-  const modelId = modelOptions?.length === 1 ? modelOptions[0].modelId : null;
+  } else sceneIds = photoChannels.length ? (data.jobType === 'garment' ? ['front-white-model', 'front-white-flat', 'front-neutral-model', 'front-neutral-flat', 'back-neutral-model', 'back-neutral-flat', 'back-white-flat', 'side-neutral-model', 'side-neutral-flat', 'side-white-flat', 'real-detail'] : ['front-white', 'front-neutral', ...(preset.scenes || defaults.scenes).map(s => s.type), 'available-back', 'available-side', 'real-detail']) : preset.scenes!.map((scene) => scene.type);
+  const modelId = modelOptions?.length === 1 ? modelOptions[0].modelId : photoChannels.length ? resolved.modelId : null;
+  const photoModel = modelId && photoChannels.length ? (await db.doc(`models/${modelId}`).get()).data() as import('../../../shared/src/types').Model | undefined : undefined;
+  if (modelId && photoChannels.length && (!photoModel || photoModel.clientId !== data.clientId || photoModel.active === false || photoModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo del plan no disponible.');
+  const photoBases = (photoModel?.poses || []).filter(p => p.active !== false && (!preset.poseIds || preset.poseIds.includes(p.id))).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) }));
   const inputs: NonNullable<CreateAutomationJobRequest['inputImages']> = [];
   for (const image of data.inputImages) {
     if (image.driveFile) {
@@ -67,13 +72,13 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   if (itemIds.length * sceneIds.length > system.batchMaxJobs) throw new HttpsError('invalid-argument', 'El plan excede el límite de jobs por lote.');
   const items = itemIds.map((itemId) => {
     const count = inputs.filter((image) => image.itemId === itemId).length;
-    const generation = estimateGenerationHold(provider, normalized.imageConfig, data.jobType === 'product' ? count : 2);
+    const generation = estimateGenerationHold(provider, normalized.imageConfig, photoChannels.length ? count + 1 : data.jobType === 'product' ? count : 2);
     return { itemId, imageCount: count, sceneIds,
-      estimatedCostUsd: usd(sceneIds.length * (generation.holdUsd + GEMINI_OPERATION_HOLD_USD) * (policy.maxReviewAttempts + policy.maxOperationalRetries) + (data.jobType === 'garment' ? GEMINI_OPERATION_HOLD_USD * (policy.maxOperationalRetries + 1) : 0)) };
+      estimatedCostUsd: usd(sceneIds.length * (generation.holdUsd + GEMINI_OPERATION_HOLD_USD) * (policy.maxReviewAttempts + policy.maxOperationalRetries) + (data.jobType === 'garment' || photoChannels.length ? GEMINI_OPERATION_HOLD_USD * (policy.maxOperationalRetries + 1) : 0)) };
   });
-  const plan: AutomationPlan = { photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
+  const plan: AutomationPlan = { photoBases, photoModelId: modelId, photoMarketplaces: client.marketplaces || {}, photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
     request: { ...data, inputImages: inputs, preset: resolved.name },
-    presetName: resolved.name, preset, policy, modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment',
+    presetName: resolved.name, preset, policy, modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment' || photoChannels.length > 0,
     estimatedCostUsd: usd(items.reduce((sum, item) => sum + item.estimatedCostUsd, 0)),
     costGuarantee: 'estimated_authorization_required', createdAt: FieldValue.serverTimestamp(), executedJobId: null };
   if (!plan.request.modelId) delete plan.request.modelId;

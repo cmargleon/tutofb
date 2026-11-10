@@ -1,3 +1,4 @@
+import { PHOTO_ATTRIBUTE_VALUES, normalizePhotoAttributes } from '../../../shared/src/photoAttributes';
 import type { GeminiUsageContext } from '../analytics/geminiUsage';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -24,6 +25,7 @@ import {
 import { getAppFirestore } from '../firebase/appFirestore';
 
 interface GeminiGarmentPhotoClassificationPayload {
+  isDetail?: unknown;
   photoId?: unknown;
   view?: unknown;
   confidence?: unknown;
@@ -32,6 +34,7 @@ interface GeminiGarmentPhotoClassificationPayload {
 }
 
 interface GeminiGarmentClassificationPayload {
+  photoAttributes?: unknown;
   itemKind?: unknown;
   itemKindConfidence?: unknown;
   itemKindReasoning?: unknown;
@@ -54,6 +57,12 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
     itemKind: { type: ['string', 'null'], enum: ['garment', 'product', null] },
+    photoAttributes: { type: 'object', properties: Object.fromEntries([...Object.keys(PHOTO_ATTRIBUTE_VALUES), 'transparency', 'components', 'color'].map(key => [key, {
+      type: 'object', properties: {
+        value: key === 'transparency' ? { type: ['boolean', 'null'] } : { type: ['string', 'null'], ...(key in PHOTO_ATTRIBUTE_VALUES ? { enum: [...PHOTO_ATTRIBUTE_VALUES[key as keyof typeof PHOTO_ATTRIBUTE_VALUES], null] } : {}) },
+        confidence: { type: ['number', 'null'] }, evidence: { type: 'string' },
+      }, required: ['value', 'confidence', 'evidence'],
+    }])), required: [...Object.keys(PHOTO_ATTRIBUTE_VALUES), 'transparency', 'components', 'color'] },
     itemKindConfidence: { type: 'number' },
     itemKindReasoning: { type: 'string' },
     itemLabel: { type: ['string', 'null'] },
@@ -66,6 +75,7 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
         type: 'object',
         properties: {
           photoId: { type: 'string' },
+          isDetail: { type: 'boolean' },
           view: {
             type: 'string',
             enum: ['front', 'back', 'side'],
@@ -73,7 +83,7 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
           confidence: { type: 'number' },
           reasoning: { type: 'string' },
         },
-        required: ['photoId', 'view', 'confidence', 'reasoning'],
+        required: ['photoId', 'view', 'isDetail', 'confidence', 'reasoning'],
       },
     },
     bodyArea: {
@@ -104,6 +114,7 @@ const GARMENT_CLASSIFICATION_RESPONSE_SCHEMA = {
     },
   },
   required: [
+    'photoAttributes',
     'itemKind',
     'itemKindConfidence',
     'itemKindReasoning',
@@ -399,6 +410,8 @@ export const classifyGarmentWithGemini = async ({
     `Categorías disponibles: ${categoryLines.join(' || ')}`,
     fallbackCategoryId ? `Categoría fallback sugerida por el usuario: ${fallbackCategoryId}` : 'Sin categoría fallback del usuario.',
     ...(organizer ? ['Evalúa quality de cada foto entre 0 y 1 para su uso como referencia.'] : []),
+    'En cada foto indica isDetail=true solo si es un detalle real localizado (textura, costura, logo); no lo confundas con una vista completa frontal/trasera/lateral.',
+    'photoAttributes: categoría funcional ordinary/underwear/swimwear/bodysuit/fitted_child/accessory/object; público baby/child/adult; bodyArea; género comercial; packaging unit/set/multipack; transparency; components con cantidades exactas; color/variante. Para cada atributo devuelve value, confidence y evidence visible. No deduzcas edad del producto por la persona fotografiada. Prioriza etiquetas e información comercial explícita. Si falta evidencia usa null; no inventes detalles ocultos.',
     'Devuelve solo JSON con el schema solicitado.',
   ].join('\n');
 
@@ -461,6 +474,7 @@ export const classifyGarmentWithGemini = async ({
       view: parsedPhoto?.view === 'back' || parsedPhoto?.view === 'side' ? parsedPhoto.view : 'front',
       confidence: clampConfidence(parsedPhoto?.confidence),
       reasoning: normalizeText(parsedPhoto?.reasoning),
+      isDetail: parsedPhoto?.isDetail === true,
       classifiedBy: 'gemini',
     };
   });
@@ -474,6 +488,7 @@ export const classifyGarmentWithGemini = async ({
   );
 
   return {
+    photoAttributes: normalizePhotoAttributes(parsed.photoAttributes),
     garmentId: garment.garmentId,
     garmentName: garment.garmentName,
     photos: classifiedPhotos,

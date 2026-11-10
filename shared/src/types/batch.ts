@@ -31,6 +31,7 @@ export interface BatchModelSnapshot {
 }
 
 export interface Batch {
+  photoPlan?: import('./photoPlan').PhotoPlan;
   photoProfile?: import('./provider').CommercialPhotoProfile;
   promptFormat?: 'approved-try-on-v1';
   automationJobId?: string;

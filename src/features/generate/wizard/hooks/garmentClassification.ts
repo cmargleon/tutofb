@@ -1,3 +1,4 @@
+import { mergePhotoAttributes } from '../../../../../shared/src/photoAttributes';
 import * as garmentViewMatchingNamespace from '../../../../../shared/src/utils/garmentViewMatching';
 import { classifyGarmentViewsWithGemini } from '../../firebase';
 import { UploadedGarmentDraft } from '../../types';
@@ -45,6 +46,7 @@ export const mergeGarmentClassificationResults = (
     const photosById = new Map(classifiedGarment.photos.map((photo) => [photo.id, photo]));
     return {
       ...garment,
+      photoAttributes: mergePhotoAttributes(classifiedGarment.photoAttributes, garment.photoAttributes),
       ...(!preserveVisualClassification ? {
         analysisStatus: 'ready' as const,
         analysisError: null,
@@ -72,6 +74,7 @@ export const mergeGarmentClassificationResults = (
           ...photo,
           classification: {
             status: 'classified',
+            isDetail: classifiedPhoto.isDetail === true,
             view: classifiedPhoto.view,
             confidence: classifiedPhoto.confidence ?? null,
             reasoning: classifiedPhoto.reasoning ?? null,

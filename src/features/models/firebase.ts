@@ -447,3 +447,6 @@ export const getImageUrl = async (storagePath: string): Promise<string> => {
     return '';
   }
 };
+
+export const verifyMarketplacePhotoBases = async (modelId: string, poseIds: string[]) =>
+  (await httpsCallable<{ modelId: string; poseIds: string[] }, { modelId: string; observations: Record<string, import('../../../shared/src/types').PhotoBaseObservation> }>(functions, 'verifyMarketplacePhotoBases', { timeout: 300000 })({ modelId, poseIds })).data;

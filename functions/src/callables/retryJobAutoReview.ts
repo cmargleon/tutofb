@@ -1,3 +1,4 @@
+import { validatePlannedPhotoReview } from '../media/photoPlanFile';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Job, JobAutoReview, JobOutput, RetryJobAutoReviewRequest, RetryJobAutoReviewResponse } from '../../../shared/src/types';
@@ -39,6 +40,7 @@ const buildStoredReview = (
   review: Awaited<ReturnType<typeof reviewGeneratedImageWithGemini>>,
   attemptNumber: number,
 ): JobAutoReview => ({
+  ...(review.photoValidation ? { photoValidation: review.photoValidation } : {}),
   model: review.model,
   verdict: review.verdict,
   summary: review.summary,
@@ -99,6 +101,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
       const review = await reviewGeneratedImageWithGemini({
         ...(job.automationManaged ? { exactAutomationPrompt: true,
           ...(job.generationKind !== 'product' ? { productReferences: [poseReference, ...await Promise.all((job.automationReferencePaths || [job.garmentFilePath]).map(downloadStorageImage))] } : {}) } : {}),
+        ...(job.photoTask ? { photoTask: job.photoTask } : {}),
         generationKind: job.generationKind,
         ...(job.generationKind === 'product' ? { productReferences: await Promise.all((job.productReferencePaths || [job.poseImagePath]).map(downloadStorageImage)) } : {}),
         apiKey: GEMINI_API_KEY.value(),
@@ -126,6 +129,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
         signal: AbortSignal.timeout(120000),
       });
 
+      if (job.photoTask) await validatePlannedPhotoReview(generatedImage.bytes, job.photoTask, review);
       const storedReview = buildStoredReview(review, attemptNumber);
       const failureInfo = review.verdict === 'approved'
         ? null
@@ -145,6 +149,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
       const now = admin.firestore.FieldValue.serverTimestamp();
       const updatedOutput: JobOutput = {
         ...output,
+        ...(review.photoValidation ? { photoValidation: review.photoValidation } : {}),
         autoReview: storedReview,
         failureInfo: withFailureOutputId(failureInfo, output.id),
       };
@@ -167,7 +172,9 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
       }
 
       await db.runTransaction(async (transaction) => {
-        transaction.set(outputRef, { autoReview: storedReview }, { merge: true });
+        const latest = await transaction.get(jobRef);
+        if (latest.get('currentOutputId') !== output.id || ['processing', 'pending'].includes(latest.get('status'))) throw new HttpsError('aborted', 'El resultado cambió durante la revisión.');
+        transaction.set(outputRef, { ...(review.photoValidation ? { photoValidation: review.photoValidation } : {}), autoReview: storedReview }, { merge: true });
         transaction.update(jobRef, jobPatch);
         transaction.set(jobRef.collection('logs').doc(), {
           type: 'quality_review',

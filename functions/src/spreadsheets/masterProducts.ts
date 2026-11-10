@@ -16,8 +16,8 @@ export function projectMasterProducts(clientId: string, batches: Batch[], jobs: 
   for (const item of [...drafts, ...jobs]) {
     const batch = batchMap.get(item.batchId);
     if (!batch || item.clientId !== clientId) throw new Error('Relación de producto fuera del cliente o lote.');
-    const id = masterProductId(batch, item.garmentId);
-    if (!products.has(id)) products.set(id, { id, clientId, garmentId: item.garmentId, batchIds: [], values: { name: item.garmentName || '' }, evidence: {}, variants: [], legacyDrafts: [], originalImages: [], generatedImages: [], approvedImages: [], pendingImages: 0, marketplaces: {}, revision: 0 });
+    const id = 'photoTask' in item && item.photoTask ? createHash('sha256').update(`${clientId}\0photo-product\0${item.photoTask.productId}`).digest('hex').slice(0, 40) : masterProductId(batch, item.garmentId);
+    if (!products.has(id)) products.set(id, { id, clientId, garmentId: 'photoTask' in item && item.photoTask ? item.photoTask.productId : item.garmentId, batchIds: [], values: { name: item.garmentName || '' }, evidence: {}, variants: [], legacyDrafts: [], originalImages: [], generatedImages: [], approvedImages: [], pendingImages: 0, marketplaces: {}, revision: 0 });
     const p = products.get(id)!;
     if (!p.batchIds.includes(item.batchId)) p.batchIds.push(item.batchId);
     if ('rows' in item) {
@@ -31,6 +31,13 @@ export function projectMasterProducts(clientId: string, batches: Batch[], jobs: 
       p.originalImages.push(...(item.originalImages || []).map(i => ({ storagePath: i.storagePath, fileName: i.fileName })));
     } else {
       const output = resolveApprovedJobOutput(item);
+      if (item.photoTask) {
+        const task = item.photoTask;
+        p.photoAssignments ??= [];
+        for (const d of task.destinations) p.photoAssignments.push({ ...d, taskId: task.id, angle: task.sceneId || task.view, jobId: item.id!, outputId: output?.id || null,
+          eligible: isApprovedMasterProductOutput(item, output) && output?.photoValidation?.fidelity === true && output.photoValidation.destinations.some(v => v.channel === d.channel && v.position === d.position && v.passed) });
+        if (!p.variants.some(v => v.id === task.variantId)) p.variants.push({ id: task.variantId, values: { color: batch.photoPlan?.articles.find(a => a.itemId === task.itemId)?.attributes.color?.value || '' } });
+      }
       // A manual selection is an explicit approval in the existing review flow.
       const approved = isApprovedMasterProductOutput(item, output);
       if (output?.id && output.resultImagePath && !p.generatedImages!.some(i => i.outputId === output.id)) p.generatedImages!.push({ outputId: output.id, jobId: item.id!, storagePath: output.resultImagePath, approved: Boolean(approved) });

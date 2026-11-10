@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createGenerationBatch, createProductGenerationBatch } from '../../firebase';
+import { createMarketplacePhotoBatch, createGenerationBatch, createProductGenerationBatch } from '../../firebase';
 import { uploadGarmentDrafts } from '../../storage';
 import { GenerateSubmitStage, UploadSummary, WizardState } from '../../types';
 import {
@@ -18,6 +18,7 @@ import {
 } from '../state';
 
 interface UseGenerateWizardSubmitParams {
+  photoPlanInput?: import('../../../../../shared/src/types').PhotoPlanInput & { modelId?: string | null };
   state: WizardState;
   draftBatchId: string | null;
   totalJobs: number;
@@ -39,6 +40,7 @@ export interface UseGenerateWizardSubmitReturn {
 
 export const useGenerateWizardSubmit = ({
   state,
+  photoPlanInput,
   draftBatchId,
   totalJobs,
   uploadSummary,
@@ -75,13 +77,13 @@ export const useGenerateWizardSubmit = ({
 
   const handleSubmit = async () => {
     const isProduct = state.generationKind === 'product';
-    const requiresSpreadsheet = !isProduct && state.outputMode === 'spreadsheet';
+    const requiresSpreadsheet = !photoPlanInput && !isProduct && state.outputMode === 'spreadsheet';
 
     if (
       ![1, 2, 3].every((step) => isGenerateWizardStepComplete(state, step)) ||
       !state.generationKind ||
       !state.selectedClientId ||
-      (!isProduct && (!state.selectedModelId || state.selectedPoseIds.length === 0)) ||
+      (!photoPlanInput && !isProduct && (!state.selectedModelId || state.selectedPoseIds.length === 0)) ||
       (isProduct && (!state.productScenes.length || state.productScenes.some((scene) => !scene.prompt.trim()))) ||
       state.garments.length === 0 ||
       (requiresSpreadsheet && !state.selectedSpreadsheetTemplateId) ||
@@ -198,6 +200,14 @@ export const useGenerateWizardSubmit = ({
         return;
       }
 
+      if (photoPlanInput && state.marketplacePhotoPlan) {
+        const signature = JSON.stringify([state.marketplacePhotoPlan.id, state.prompt]);
+        if (productSubmission.current?.signature !== signature) productSubmission.current = { signature, id: crypto.randomUUID() };
+        setSubmitStage('creating-batch');
+        const result = await createMarketplacePhotoBatch({ ...photoPlanInput, requestId: productSubmission.current.id, approvedPlanId: state.marketplacePhotoPlan.id, prompt: state.prompt });
+        navigate(`/catalogo?clientId=${state.selectedClientId}&batchId=${result.batchId}`);
+        return;
+      }
       if (isProduct) {
         const request = {
           clientId: state.selectedClientId,

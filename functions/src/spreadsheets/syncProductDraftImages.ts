@@ -137,7 +137,7 @@ export const syncProductDraftImagesForGarment = async ({
     : await db.collection('batches').doc(batchId).get();
   const resolvedBatch = batch || (batchSnapshot?.exists ? ({ id: batchSnapshot.id, ...batchSnapshot.data() } as Batch) : null);
 
-  if (!resolvedBatch?.spreadsheetTemplateId) {
+  if (resolvedBatch?.photoPlan || !resolvedBatch?.spreadsheetTemplateId) {
     return;
   }
 

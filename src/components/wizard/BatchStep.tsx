@@ -66,7 +66,7 @@ export const BatchStep: React.FC<Props> = ({
   const selectedProviderDisabled = Boolean(disabledProviders?.includes(state.provider));
   const sourceSpreadsheetPending = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'uploading';
   const sourceSpreadsheetFailed = state.outputMode === 'spreadsheet' && sourceSpreadsheet?.status === 'failed';
-  const invalidPrompt = state.generationKind === 'garment' && state.garments.some((garment) => {
+  const invalidPrompt = !state.marketplacePhotoPlan && state.generationKind === 'garment' && state.garments.some((garment) => {
     try { validateApprovedTryOnPrompt(composeApprovedTryOnPrompt(state.prompt, state.tryOnPromptBlocks, garment.garmentBodyArea)); return false; }
     catch { return true; }
   });
@@ -75,9 +75,9 @@ export const BatchStep: React.FC<Props> = ({
     invalidPrompt ||
     isSubmitting
     || totalJobs === 0
-    || spreadsheetPreparationPending
-    || spreadsheetPreparationFailed
-    || (state.outputMode === 'spreadsheet' && state.productDrafts.length !== state.garments.length)
+    || (!state.marketplacePhotoPlan && spreadsheetPreparationPending)
+    || (!state.marketplacePhotoPlan && spreadsheetPreparationFailed)
+    || (!state.marketplacePhotoPlan && state.outputMode === 'spreadsheet' && state.productDrafts.length !== state.garments.length)
     || sourceSpreadsheetPending
     || sourceSpreadsheetFailed
     || selectedProviderDisabled
@@ -88,8 +88,8 @@ export const BatchStep: React.FC<Props> = ({
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Revisar y generar</h2>
-          <p className="mt-1 text-sm text-slate-600">{clientName} · {state.garments.length} artículo(s){state.generationKind === 'garment' ? ` · ${modelName} · ${state.selectedPoseIds.length} poses seleccionadas` : ` · ${state.productScenes.length} escenas por artículo`}</p>
-          <p className="mt-1 text-xs text-slate-500">{state.outputMode === 'spreadsheet' ? 'Fotos + spreadsheet' : 'Solo fotos'}</p>
+          <p className="mt-1 text-sm text-slate-600">{clientName} · {state.garments.length} artículo(s){state.marketplacePhotoPlan ? ' · Plan de marketplaces' : state.generationKind === 'garment' ? ` · ${modelName} · ${state.selectedPoseIds.length} poses seleccionadas` : ` · ${state.productScenes.length} escenas por artículo`}</p>
+          <p className="mt-1 text-xs text-slate-500">{state.marketplacePhotoPlan ? 'Fotos y selección por marketplace · exportación desde Catálogo' : state.outputMode === 'spreadsheet' ? 'Fotos + spreadsheet' : 'Solo fotos'}</p>
         </div>
         <p className="text-2xl font-semibold text-emerald-700">{totalJobs} <span className="text-sm font-normal">imágenes</span></p>
       </div>
@@ -172,7 +172,7 @@ export const BatchStep: React.FC<Props> = ({
               onChange={onProviderImageConfigChange}
             />
           </div>
-          {state.generationKind === 'product' ? <>
+          {state.marketplacePhotoPlan ? <details className="rounded-2xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Ajustes avanzados · Instrucciones generales</summary><div className="mt-4"><ProductPromptField value={state.prompt} scenes={[]} defaultPrompt={defaultProductPrompt} disabled={isSubmitting} onChange={onPromptChange} /></div><p className="mt-2 text-sm text-slate-600">Se añaden las instrucciones y obligaciones de cada fotografía que muestra el plan. Se mantienen en los reintentos.</p></details> : state.generationKind === 'product' ? <>
             <p className="text-sm font-semibold text-slate-900">{state.garments.length} objeto(s) × {state.productScenes.length} escena(s) = {totalJobs} imágenes · Solo fotos</p>
             {[...new Set(state.garments.map((item) => item.originalPhotos.length))].sort().map((references) => <ProviderCostEstimate key={references}
               config={state.providerImageConfigs[state.provider]} referenceCount={references}

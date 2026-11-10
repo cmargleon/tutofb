@@ -17,6 +17,7 @@ export const shouldBackstopPendingJob = (job: Pick<Job, 'status' | 'retryNotBefo
 
 // Use Gemini's correction for the next attempt while retaining the original requested prompt.
 export const buildAutomaticRetryPromptPatch = (job: Job, nextPromptBase?: string): Partial<Job> => {
+  if (job.photoTask) return nextPromptBase?.trim() ? { promptBase: nextPromptBase, finalPrompt: `${job.requestedPromptBase || job.promptBase}\nCorrección: ${nextPromptBase}\nObligaciones invariables del plan:\n${job.photoTask.instructions}` } : {};
   const promptBase = job.automationManaged ? nextPromptBase : nextPromptBase?.trim();
   if (job.automationManaged && promptBase?.trim()) return { promptBase, finalPrompt: promptBase };
   if (!promptBase) return {};

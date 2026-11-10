@@ -153,6 +153,7 @@ const controlledEncoder = (metadata: { width?: number; height?: number }, candid
   // CommonJS wrapper permits injection at Sharp's boundary, isolated from the real module cache.
   const wrapper = runInNewContext(`(function(require, module, exports) { ${readFileSync(modulePath, 'utf8')}\n})`, { Buffer });
   wrapper((id: string) => {
+    if (id === './photoPlanFile') return require('./lib/functions/src/media/photoPlanFile.js');
     if (id.endsWith('shared/src/commercialPhoto')) return require('./lib/shared/src/commercialPhoto.js');
     if (id.endsWith('shared/src/providerImageConfig')) return require('./lib/shared/src/providerImageConfig.js');
     assert.ok(id === 'sharp' || id === require.resolve('sharp'), id);

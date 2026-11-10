@@ -1,3 +1,4 @@
+import { withDeclaredModelAge } from '../../../shared/src/photoAttributes';
 import { withManglarContext } from '../manglar/context';
 import * as admin from 'firebase-admin';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
@@ -68,7 +69,7 @@ export const onModelWrite = onDocumentWritten(
 
         const idx = updatedPoses.findIndex((p) => p.id === pose.id);
         if (idx !== -1) {
-          updatedPoses[idx] = { ...updatedPoses[idx], aiClassification };
+          updatedPoses[idx] = { ...updatedPoses[idx], aiClassification, ...(result.photoObservation ? { photoObservation: withDeclaredModelAge(result.photoObservation, model.identityTraits) } : {}) };
           classifiedCount++;
           console.log(
             `[onModelWrite] pose=${pose.id} (${pose.fileName}) → ${aiClassification.autoCategory}`,
@@ -92,7 +93,7 @@ export const onModelWrite = onDocumentWritten(
         const classified = updatedPoses.find((item) => item.id === pose.id && item.storagePath === pose.storagePath);
         if (pose.aiClassification || !classified?.aiClassification) return pose;
         changed = true;
-        return { ...pose, aiClassification: classified.aiClassification };
+        return { ...pose, aiClassification: classified.aiClassification, ...(classified.photoObservation ? { photoObservation: classified.photoObservation } : {}) };
       });
       if (changed) tx.update(modelRef, { poses, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
     });

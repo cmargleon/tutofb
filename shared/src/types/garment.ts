@@ -17,6 +17,7 @@ export interface GarmentPhotoAssetInput {
 }
 
 export interface UploadedGarmentPhotoInput extends GarmentPhotoAssetInput {
+  isDetail?: boolean;
   view: GarmentView;
   confidence?: number | null;
   reasoning?: string | null;
@@ -24,6 +25,9 @@ export interface UploadedGarmentPhotoInput extends GarmentPhotoAssetInput {
 }
 
 export interface UploadedGarmentInput {
+  photoAttributes?: Partial<import('./photoPlan').PhotoArticleAttributes>;
+  photoProductId?: string;
+  photoVariantId?: string;
   id: string;
   name: string;
   storagePath: string;
@@ -61,6 +65,7 @@ export interface ClassifiedGarmentPhoto extends UploadedGarmentPhotoInput {
 }
 
 export interface ClassifiedGarmentViewsGarmentResult {
+  photoAttributes?: Partial<import('./photoPlan').PhotoArticleAttributes>;
   garmentId: string;
   garmentName: string;
   photos: ClassifiedGarmentPhoto[];

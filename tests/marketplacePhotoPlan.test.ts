@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { wizardPhotoPlanInput } from '../src/features/generate/wizard/marketplacePlan';
-import type { PhotoPlanInput, PhotoArticle, Job, Batch, MasterProduct } from '../shared/src/types';
+import type { PhotoPlanInput, PhotoArticle, Job, Batch, MasterProduct, PhotoAssignment } from '../shared/src/types';
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const sharp = require('sharp');
 const { buildMarketplacePhotoPlan, manualPhotoAttribute: attr, PHOTO_RULES } = require('./lib/shared/src/marketplacePhotoPlan.js') as typeof import('../shared/src/marketplacePhotoPlan');
@@ -132,8 +132,8 @@ test('master products stay together across batches and variant assignments remai
     p.marketplaces[channel] = { templateId: 't', categoryId: 'c', imageUrls: Object.fromEntries(p.approvedImages.map(i => [i.outputId, `https://example.com/${i.outputId}.jpg`])) };
     const template: any = { id: 't', exportConfig: { marketplaceId: channel, operation: 'listing', mappings: { c: { main: { source: 'image.0' }, detail: { source: 'image.1' }, image_type: { source: 'assignment.imageType' }, image_sort: { source: 'assignment.imageSort' } } } } };
     const result = MARKETPLACE_ADAPTERS[channel].prepare(p, template, { id: 'c', attributes: [], columns: [{ key: 'main', label: 'main' }, { key: 'detail', label: 'detail' }, { key: 'image_type', label: 'type' }, { key: 'image_sort', label: 'sort' }] });
-    if (channel === 'amazon') { assert.ok(result.issues.some(i => i.code === 'gallery_pending')); assert.equal(result.rows[0].values.main, ''); }
-    else { assert.equal(result.rows[0].values.image_type, '1'); assert.equal(result.rows[0].values.image_sort, '1'); const main = p.photoAssignments!.find(a => a.channel === 'shein' && a.position === 1)!; assert.equal(result.rows[0].values.main, `https://example.com/${main.outputId}.jpg`); assert.notEqual(result.rows[0].values.main, result.rows[0].values.detail); }
+    if (channel === 'amazon') { assert.ok(result.issues.some((i: { code: string }) => i.code === 'gallery_pending')); assert.equal(result.rows[0].values.main, ''); }
+    else { assert.equal(result.rows[0].values.image_type, '1'); assert.equal(result.rows[0].values.image_sort, '1'); const main: PhotoAssignment = p.photoAssignments!.find(a => a.channel === 'shein' && a.position === 1)!; assert.equal(result.rows[0].values.main, `https://example.com/${main.outputId}.jpg`); assert.notEqual(result.rows[0].values.main, result.rows[0].values.detail); }
   }
 });
 

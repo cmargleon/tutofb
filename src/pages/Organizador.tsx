@@ -240,7 +240,7 @@ export function Organizador() {
           {state.view === 'tabs' && (state.page.items as OrganizerTab[]).map(item => <li key={item.id} className="py-4">
             <h3 className="font-semibold">{item.name}</h3><p className="text-sm text-slate-600">{item.fileName} · {item.imported} filas importadas · {item.skipped} omitidas</p>
             {item.issue && <p className="text-sm text-amber-800">{item.issue}</p>}
-            {item.samples?.length > 0 && <details className="mt-2"><summary className="cursor-pointer text-sm text-indigo-700">Muestra original y columnas</summary>
+            {item.samples && item.samples.length > 0 && <details className="mt-2"><summary className="cursor-pointer text-sm text-indigo-700">Muestra original y columnas</summary>
               <div className="mt-2 overflow-x-auto"><table className="text-xs"><tbody>{item.samples.map((row, index) => <tr key={index}>
                 <th className="border p-2">{(item.sampleStartRow || 1) + index}</th>{row.values.map((value, column) => <td className="max-w-xs border p-2" key={column} title={String(row.originalValues?.[column] ?? value)}>{value}</td>)}
               </tr>)}</tbody></table></div>

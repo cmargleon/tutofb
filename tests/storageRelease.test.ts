@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { assertStorageCors, assertStorageFirestoreAccess } from '../scripts/verify-storage-release.mjs';
+import { assertStorageCors, assertStorageFirestoreAccess, type StorageCorsRule } from '../scripts/verify-storage-release.mjs';
 
 const role = 'roles/firebaserules.firestoreServiceAgent';
 const member = 'serviceAccount:service-123@gcp-sa-firebasestorage.iam.gserviceaccount.com';
@@ -20,7 +20,7 @@ test('Storage release requires an unconditional grant to the correct project ser
 });
 
 test('Storage release catches missing local CORS origins without depending on rule order', () => {
-  const expected = JSON.parse(fs.readFileSync(new URL('../cors.json', import.meta.url), 'utf8'));
+  const expected: Required<StorageCorsRule>[] = JSON.parse(fs.readFileSync(new URL('../cors.json', import.meta.url), 'utf8'));
   for (const host of ['localhost', '127.0.0.1']) for (const port of [3000, 3001, 3002]) {
     const origin = `http://${host}:${port}`;
     assert.ok(expected.some(rule => rule.origin.includes(origin)), origin);

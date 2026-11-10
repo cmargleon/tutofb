@@ -12,7 +12,7 @@ export interface UseNotificationsReturn {
   notifications: BatchNotificationItem[];
   unreadCount: number;
   isNotifOpen: boolean;
-  notifRef: React.RefObject<HTMLDivElement>;
+  notifRef: React.RefObject<HTMLDivElement | null>;
   onBellClick: () => void;
   onCloseNotif: () => void;
 }

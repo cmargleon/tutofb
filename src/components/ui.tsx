@@ -315,7 +315,7 @@ export const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 // ─── ImageThumb ───────────────────────────────────────────────────────────────
 
 interface ImageThumbProps {
-  storagePath: string;
+  storagePath: string | null | undefined;
   alt?: string;
   fit?: 'cover' | 'contain';
   imgClassName?: string;

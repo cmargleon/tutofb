@@ -122,7 +122,7 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
     const dryRun = (await runRef(clientId, preview.id).get()).data() as StoredRun;
     assert.equal(dryRun.status, 'completed');
     assert.equal(dryRun.counts.photos, 2);
-    assert.deepEqual(writes, []);
+    assert.deepEqual<string[]>(writes, []);
     assert.equal(geminiCalls, 0);
     const run = (await executeOrganizer({ action: 'start', clientId, mode: 'classify', requestId: 'manual', confirmedBudgetUsd: 40, planRunId: preview.id }, actor)) as StoredRun;
     assert.equal((await enqueue(clientId, 'classify', 'manual', actor.uid, { confirmedBudgetUsd: 40, planRunId: preview.id }))?.id, run.id);
@@ -348,8 +348,8 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
       assert.equal(observed.activeRunId, null);
       assert.equal(observed.watcherError, null);
       assert.ok(observed.lastFullScanAt && observed.lastPollAt && observed.observedAt);
-      const controlFields = ['observedFingerprint', 'observedAt', 'lastPollAt', 'changeCursor', 'watcherError', 'lastFullScanAt', 'watcher'];
-      for (const key of Object.keys(before)) if (!controlFields.includes(key)) assert.deepEqual(observed[key], before[key], key);
+      const controlFields: string[] = ['observedFingerprint', 'observedAt', 'lastPollAt', 'changeCursor', 'watcherError', 'lastFullScanAt', 'watcher'];
+      for (const key of Object.keys(before) as (keyof typeof before)[]) if (!controlFields.includes(key)) assert.deepEqual(observed[key], before[key], key);
       assert.equal(await watch(f.drive, observed), undefined);
       assert.equal((await f.config()).observedAt, observed.observedAt, 'El mismo inventario conserva el inicio del debounce');
       const observedAt = Date.now() - 3 * 60_000;

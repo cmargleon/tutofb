@@ -15,7 +15,7 @@ import {
   SEEDREAM_5_IMAGE_SIZE_PRESET_VALUES,
   SEEDREAM_IMAGE_SIZE_PRESET_VALUES,
 } from '../../../shared/src/providerImageConfig';
-import { Provider } from '../../../shared/src/types';
+import { FalGPTImage25ImageConfig, GPTImage2Quality, Provider } from '../../../shared/src/types';
 import { WizardProviderImageConfig } from '../../features/generate/types';
 
 interface ProviderImageConfigSelectionProps {
@@ -263,7 +263,7 @@ const ProviderImageConfigControls: React.FC<ProviderImageConfigSelectionProps> =
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {GPT_IMAGE_2_IMAGE_SIZE_PRESET_VALUES.map((preset) => {
               const copy = getGPTImage2PresetCopy(preset);
-              if (commercial && preset !== 'auto' && preset !== 'square' && provider !== 'openai-gpt-image-1.5') { const size = commercialPhotoSize(provider, resolveAspectRatioForImageConfig({ provider: 'fal-gpt-image-2', imageSize: preset, quality: 'medium', outputFormat: 'jpeg' })); copy.description = `${size.width} × ${size.height} solicitados al proveedor.`; }
+              if (commercial && preset !== 'auto' && preset !== 'square') { const size = commercialPhotoSize(provider, resolveAspectRatioForImageConfig({ provider: 'fal-gpt-image-2', imageSize: preset, quality: 'medium', outputFormat: 'jpeg' })); copy.description = `${size.width} × ${size.height} solicitados al proveedor.`; }
               return renderChoiceButton({
                 keyValue: preset,
                 title: copy.title,
@@ -337,7 +337,11 @@ const ProviderImageConfigControls: React.FC<ProviderImageConfigSelectionProps> =
           label: 'Calidad',
           values: value.provider === 'fal-gpt-image-2' ? GPT_IMAGE_2_QUALITY_VALUES : GPT_IMAGE_25_QUALITY_VALUES,
           selected: value.quality,
-          onSelect: (quality) => onChange({ ...value, quality: quality as typeof value.quality }),
+          onSelect: (quality) => onChange(
+            value.provider === 'fal-gpt-image-2'
+              ? { ...value, quality: quality as GPTImage2Quality }
+              : { ...value, quality: quality as FalGPTImage25ImageConfig['quality'] },
+          ),
           labels: { ...GPT_IMAGE_2_QUALITY_LABELS, xhigh: 'Extra alta', max: 'Máxima' },
         })}
 
@@ -361,7 +365,7 @@ const ProviderImageConfigControls: React.FC<ProviderImageConfigSelectionProps> =
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {presets.map((preset) => renderChoiceButton({
             keyValue: preset,
-            title: preset === 'auto_1K' ? 'Auto 1K' : getSeedreamPresetCopy(preset === 'auto_1K' ? 'auto_2K' : preset).title,
+            title: preset === 'auto_1K' ? 'Auto 1K' : getSeedreamPresetCopy(preset).title,
             description: preset.startsWith('auto_') ? 'Resolución automática según la referencia.' : getSeedreamPresetCopy(preset === 'auto_1K' ? 'auto_2K' : preset).description,
             selected: isSizeSelected(preset),
             onClick: () => {

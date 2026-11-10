@@ -32,7 +32,7 @@ async function setup(page: Page, role = 'admin') {
     if (name === 'archive' || name === 'restore') client.status = name === 'archive' ? 'archived' : 'active';
     if (name === 'create') clients.unshift({ ...initialClients()[0], id: 'new-client', name: input.name, generationPromptBase: input.prompt });
     if (name === 'update') {
-      const current = { name: client.name, generationPromptBase: client.generationPromptBase ?? null };
+      const current: Record<string, unknown> = { name: client.name, generationPromptBase: client.generationPromptBase ?? null };
       const patch = Object.fromEntries(['name', 'generationPromptBase'].filter(key => key in input).map(key => [key, input[key]]));
       if (Object.keys(patch).some(key => input.expected?.[key] !== current[key])) return { _conflict: { current } };
     }
@@ -44,7 +44,7 @@ async function setup(page: Page, role = 'admin') {
     if (name === 'marketplace') {
       client.marketplaces ??= {};
       const previous = client.marketplaces[input.marketplaceId];
-      const current = { enabled: previous?.enabled === true, region: previous?.settings?.region ?? '', sellerId: previous?.settings?.sellerId ?? '' };
+      const current: Record<string, unknown> = { enabled: previous?.enabled === true, region: previous?.settings?.region ?? '', sellerId: previous?.settings?.sellerId ?? '' };
       const patch = { ...input.settings, ...('enabled' in input ? { enabled: input.enabled } : {}) };
       if (Object.keys(patch).some(key => input.expected?.[key] !== current[key])) return { _conflict: { current } };
       client.marketplaces[input.marketplaceId] = { enabled: false, ...previous, ...('enabled' in input ? { enabled: input.enabled } : {}), ...('settings' in input ? { settings: { ...previous?.settings, ...Object.fromEntries(Object.entries(input.settings).map(([key, value]) => [key, (value as string).trim()])) } } : {}) };

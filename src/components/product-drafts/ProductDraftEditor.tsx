@@ -350,7 +350,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
         </div>
       </div>
 
-      {showGeneratedImagesSummary && activeDraft.generatedImages && activeDraft.generatedImages.length > 0 ? (
+      {showGeneratedImagesSummary && 'generatedImages' in activeDraft && activeDraft.generatedImages && activeDraft.generatedImages.length > 0 ? (
         <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
           <p className="text-xs font-semibold text-emerald-800">Imágenes aprobadas disponibles</p>
           <div className="mt-2 flex flex-wrap gap-2">

@@ -22,7 +22,7 @@ test('shared automation editor preserves folders, presets, model defaults and bu
   const state = fixture(); const original = structuredClone(state.automation);
   const next = await saveClientAutomation({ clientId: 'client', expectedAutomation: original, automation: { ...original, defaultBudgetUsd: 6, driveFolderIds: undefined } }, state.db);
   assert.equal(next.defaultBudgetUsd, 6);
-  for (const key of ['driveFolderIds', 'defaultModelId', 'defaultMaleModelId', 'defaultFemaleModelId', 'maxOperationalRetries', 'presets']) assert.deepEqual(next[key], original[key]);
+  for (const key of ['driveFolderIds', 'defaultModelId', 'defaultMaleModelId', 'defaultFemaleModelId', 'maxOperationalRetries', 'presets'] as const) assert.deepEqual(next[key], original[key]);
   assert.equal(state.writes.length, 1);
 });
 test('a stale baseline refuses a concurrent overwrite, including concurrent presets and folder changes', async () => {

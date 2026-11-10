@@ -241,13 +241,16 @@ export const useGarmentPreparation = ({
       const { garments: uploadedGarments } = await ensureGarmentsUploaded();
       if (latestDraftSignature.current !== signature) return;
       const latestState = stateRef.current;
-      const classificationKey = JSON.stringify([latestState.selectedClientId, latestState.selectedSpreadsheetTemplateId, latestState.selectedSpreadsheetCategoryId]);
+      const spreadsheetTemplateId = latestState.selectedSpreadsheetTemplateId;
+      // The signature includes the template, so a match means it is still the one checked above.
+      if (!spreadsheetTemplateId) return;
+      const classificationKey = JSON.stringify([latestState.selectedClientId, spreadsheetTemplateId, latestState.selectedSpreadsheetCategoryId]);
       const needsCategories = uploadedGarments.filter((garment) => garment.spreadsheetClassificationKey !== classificationKey);
       let preparedGarments = uploadedGarments;
       if (needsCategories.length > 0) {
         const classification = await classifyGarmentViewsWithGemini({
           clientId: latestState.selectedClientId,
-          spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId,
+          spreadsheetTemplateId,
           fallbackCategoryId: latestState.selectedSpreadsheetCategoryId,
           garments: classificationInput(needsCategories),
         });
@@ -264,7 +267,7 @@ export const useGarmentPreparation = ({
       const result = await previewProductDrafts({
         clientId: selectedClient.id!,
         modelId: selectedModel.id!,
-        spreadsheetTemplateId: latestState.selectedSpreadsheetTemplateId,
+        spreadsheetTemplateId,
         fallbackCategoryId: latestState.selectedSpreadsheetCategoryId || null,
         garments: buildProductDraftPreviewGarments(preparedGarments),
         sourceSpreadsheet:

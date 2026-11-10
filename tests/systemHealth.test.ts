@@ -12,7 +12,6 @@ const { computeOverallHealth } = require('../functions/lib/functions/src/admin/s
 const provider = (
   overrides: Partial<ProviderHealthCheck> & Pick<ProviderHealthCheck, 'provider'>,
 ): ProviderHealthCheck => ({
-  provider: overrides.provider,
   status: 'healthy',
   ok: true,
   httpStatus: 200,

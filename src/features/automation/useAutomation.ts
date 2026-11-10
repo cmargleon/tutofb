@@ -43,7 +43,10 @@ export const useAutomation = (resumeJobId?: string, selectedJobId?: string) => {
   const [submission, setSubmission] = useState<{ externalId: string; inputImages?: import('../../../shared/src/types').AutomationInput[] }>({ externalId: crypto.randomUUID() });
   useEffect(() => subscribeToClients(setClients, (error) => setError(error.message)), []);
   useEffect(() => subscribeToModels(setModels, (error) => setError(error.message)), []);
-  useEffect(() => user && subscribeToAutomationJobs(user.uid, appUser?.role === 'admin', setJobs, (error) => setError(error.message)), [user?.uid, appUser?.role]);
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToAutomationJobs(user.uid, appUser?.role === 'admin', setJobs, (error) => setError(error.message));
+  }, [user?.uid, appUser?.role]);
   useEffect(() => setPreparedPlan(null), [clientId, jobType, modelId, preset, provider, files, budgetUsd, allowEstimatedCosts, authorizeClassification, inputSource, driveRows, sameItem]);
   useEffect(() => {
     setSelectedJob(null);

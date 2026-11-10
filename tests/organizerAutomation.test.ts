@@ -85,11 +85,12 @@ test('el control del cliente impide generar, envía su preset y conserva referen
     assert.equal(requests.length, 2);
     assert.equal(Object.hasOwn(requests[1], 'preset'), false, 'Sin configurar se conserva la elección actual de preset');
     organizerGeneration = { preset: 'deleted-preset' };
-    creationError = new AutomationAttentionError('Preset de producto no disponible. Revisa el preset en Cliente → Automatizaciones.');
+    const presetError = new AutomationAttentionError('Preset de producto no disponible. Revisa el preset en Cliente → Automatizaciones.');
+    creationError = presetError;
     writes.length = 0;
     await invoke();
     assert.equal(requests[2].preset, 'deleted-preset');
-    assert.deepEqual(writes, [{ path: 'generationHandoffs', value: { status: 'needs_attention', photoIds: ['unit-front'], issue: creationError.message } }]);
+    assert.deepEqual(writes, [{ path: 'generationHandoffs', value: { status: 'needs_attention', photoIds: ['unit-front'], issue: presetError.message } }]);
     assert.match(writes[0].value.issue, /Cliente → Automatizaciones/);
     assert.equal(writes.some(write => write.path === 'generationSources'), false, 'No consume referencias cuando falta el preset');
     creationError = new Error('Error operativo');

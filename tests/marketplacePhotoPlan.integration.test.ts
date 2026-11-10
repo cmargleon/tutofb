@@ -39,7 +39,7 @@ test('photo plan: authoritative creation, replay, frozen channels, automation pa
     const created = await service.createMarketplacePhotoBatchCore(request, uid);
     const replay = await service.createMarketplacePhotoBatchCore(request, uid); assert.deepEqual(replay, created);
     await assert.rejects(service.createMarketplacePhotoBatchCore({ ...request, prompt: 'changed' }, uid), /otra entrada/);
-    const jobs = (await db.collection('jobs').where('batchId', '==', created.batchId).get()).docs;
+    const jobs: import('../functions/node_modules/firebase-admin/lib/firestore/index').QueryDocumentSnapshot[] = (await db.collection('jobs').where('batchId', '==', created.batchId).get()).docs;
     const worker = require('../functions/lib/functions/src/workers/jobWorker.js');
     for (const j of jobs) await worker.processJob(j.id, 'create', { skipBacklogSweep: true });
     assert.equal(generations, 2);

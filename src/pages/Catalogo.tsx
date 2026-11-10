@@ -614,7 +614,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
                 <div>
                   <p className="font-medium">El catálogo se actualiza solo a medida que salen imágenes nuevas.</p>
                   <p className="text-indigo-700">
-                    {selectedBatch.completedJobs} de {selectedBatch.totalJobs} jobs completados en este lote.
+                    {selectedBatch?.completedJobs} de {selectedBatch?.totalJobs} jobs completados en este lote.
                   </p>
                 </div>
               </div>

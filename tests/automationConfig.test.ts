@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_AUTOMATION_RULES, resolveAutomationRules, resolveAutomationPresetName, resolveEffectiveAutomationConfig, validateAutomationRules } from '../shared/src/automationConfig';
-import { DEFAULT_AUTOMATION_BUDGET } from '../shared/src/automationPolicy';
+import { createRequire } from 'node:module';
 import type { ClientAutomationConfig, Model } from '../shared/src/types';
+
+// shared/ has no "type" field, so tsx loads its .ts files as CommonJS and static
+// named imports fail. Load the compiled build like the other shared-runtime tests.
+const require = createRequire(new URL('../functions/package.json', import.meta.url));
+const { DEFAULT_AUTOMATION_RULES, resolveAutomationRules, resolveAutomationPresetName, resolveEffectiveAutomationConfig, validateAutomationRules } =
+  require('./lib/shared/src/automationConfig.js') as typeof import('../shared/src/automationConfig');
+const { DEFAULT_AUTOMATION_BUDGET } = require('./lib/shared/src/automationPolicy.js') as typeof import('../shared/src/automationPolicy');
 
 test('automation decision rules inherit each missing field without changing legacy defaults', () => {
   assert.deepEqual(resolveAutomationRules(), { garmentGenderMinConfidence: 0.65, classificationMinConfidence: 0.65 });

@@ -381,7 +381,8 @@ export const PoseView: React.FC<PoseViewProps> = ({
                 output={output}
                 label={formatOutputLabel(output, outputIndex)}
                 active={displayedOutput?.id === output.id}
-                userApproved={selectedOutputId === output.id}
+                effectivelySelected={approvedOutputId === output.id}
+                geminiApproved={output.autoReview?.verdict === 'approved'}
                 onSelect={() => onSelectOutput?.(output.id, output)}
               />
             ))}

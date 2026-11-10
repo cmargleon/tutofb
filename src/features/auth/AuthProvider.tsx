@@ -79,9 +79,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setAppUser(null);
         setLoading(false);
-        if (unsubscribeDoc) {
-          unsubscribeDoc();
-        }
       }
     });
 

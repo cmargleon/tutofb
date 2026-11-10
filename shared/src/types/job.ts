@@ -162,6 +162,8 @@ export interface JobOutput {
   aspectRatio: AspectRatio;
   imageConfig?: ProviderImageConfig | null;
   resultImagePath: string;
+  /** JPEG preview (max 480px side) next to resultImagePath. Absent on outputs created before thumbnails existed. */
+  thumbnailPath?: string;
   contentType: string;
   remoteUrl: string | null;
   requestId: string | null;

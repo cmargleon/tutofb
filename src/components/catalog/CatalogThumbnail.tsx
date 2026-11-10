@@ -2,7 +2,7 @@ import React from 'react';
 import { Ban, Download, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
-import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
+import { useCatalogPreviewUrl } from '../../features/catalog/useCatalogPreviewUrl';
 import { getCatalogDisplayFailureInfo, isFailureCancellation } from '../../features/catalog/errorMessage';
 
 interface CatalogThumbnailProps {
@@ -33,7 +33,7 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   const isFailed = Boolean(failureInfo);
   const isCancelled = isFailureCancellation(failureInfo);
   const failureMessage = failureInfo?.userMessage || failureInfo?.technicalMessage || failureInfo?.title || 'Abre el detalle para revisar el error.';
-  const { url, error } = useStorageAssetUrl(resultPath || null);
+  const { url, error } = useCatalogPreviewUrl(approvedOutput);
   const loadError = Boolean(error);
   const showRegenerationOverlay = regenerationPending && Boolean(url);
   const showCancelAction = Boolean(onCancel) && (regenerationPending || isGenerating);

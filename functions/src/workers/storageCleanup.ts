@@ -53,6 +53,7 @@ export const cleanupOldOutputStorage = async (): Promise<{
 
     try {
       await bucket.file(output.resultImagePath).delete({ ignoreNotFound: true });
+      if (output.thumbnailPath) await bucket.file(output.thumbnailPath).delete({ ignoreNotFound: true });
       await doc.ref.update({ storageDeletedAt: Timestamp.now() });
       deleted++;
     } catch (e) {

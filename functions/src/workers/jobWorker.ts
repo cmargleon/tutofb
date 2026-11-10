@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { compressGeneratedImageIfNeeded } from '../media/compressGeneratedImage';
+import { createGeneratedThumbnail } from '../media/generatedThumbnail';
 import { getProviderCostUsd } from '../../../shared/src/constants/providerCosts';
 import { Job, JobAutoReview, JobLog, JobOutput, Provider } from '../../../shared/src/types';
 import { normalizeProviderImageConfig, summarizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
@@ -203,6 +204,7 @@ const persistGeneratedAttempt = async ({
       cacheControl: 'private, max-age=31536000',
     },
   });
+  const thumbnailPath = reuseOutput ? null : await createGeneratedThumbnail({ bucket, bytes: storedImage.bytes, resultImagePath: destinationPath });
 
   const costUsd = reuseOutput || claimedJob.photoTask?.composition === 'reference' ? 0 : getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
   const persistedFailureInfo = withFailureOutputId(failureInfo, outputId);
@@ -229,6 +231,7 @@ const persistGeneratedAttempt = async ({
     ...(claimedJob.photoProfile ? { photoProfile: claimedJob.photoProfile } : {}),
     ...(storedImage.storedImage ? { storedImage: storedImage.storedImage } : {}),
     resultImagePath: destinationPath,
+    ...(thumbnailPath ? { thumbnailPath } : {}),
     contentType: storedImage.contentType,
     remoteUrl: providerResult.remoteUrl,
     requestId: providerResult.requestId,
@@ -385,6 +388,7 @@ const persistGeneratedAttempt = async ({
   if (!committed && !reuseOutput) {
     try {
       await bucket.file(destinationPath).delete();
+      if (thumbnailPath) await bucket.file(thumbnailPath).delete({ ignoreNotFound: true });
     } catch (cleanupError) {
       console.warn('Could not delete discarded generated file:', cleanupError);
     }

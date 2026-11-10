@@ -23,7 +23,7 @@ export const onModelDelete = onDocumentDeleted('models/{modelId}', async (event)
   ]);
 
   const outputPaths = extractLiveOutputPaths(
-    outputsSnapshot.docs.map((docSnapshot) => docSnapshot.data() as { resultImagePath?: string; storageDeletedAt?: unknown }),
+    outputsSnapshot.docs.map((docSnapshot) => docSnapshot.data() as { resultImagePath?: string; thumbnailPath?: string; storageDeletedAt?: unknown }),
   );
 
   await recursiveDeleteDocuments(jobsSnapshot.docs);

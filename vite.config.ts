@@ -5,6 +5,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Keep the running app's optimized dependencies separate from test servers.
+    cacheDir: 'node_modules/.vite/dev',
     plugins: [react(), tailwindcss()],
     build: {
       rollupOptions: {

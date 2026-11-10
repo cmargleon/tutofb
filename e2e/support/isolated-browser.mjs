@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -26,6 +28,8 @@ export async function startIsolatedFrontend({ realAuth = false } = {}) {
   const fixtures = await readFile(fixturePath, 'utf8');
   const server = await createServer({
     root, configFile: false, envFile: false, logLevel: 'error',
+    // Each server must own its prebundle, including when tests run concurrently.
+    cacheDir: join(tmpdir(), 'tuto-vite-e2e', nonce),
     plugins: [{
       name: 'tuto-isolated-browser-fixtures', enforce: 'pre',
       resolveId(source) {

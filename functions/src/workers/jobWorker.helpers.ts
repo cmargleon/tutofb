@@ -30,3 +30,16 @@ export const buildAutomaticRetryPromptPatch = (job: Job, nextPromptBase?: string
         job.promptCaseText, job.modelIdentityTraitsSnapshot || null),
   };
 };
+
+export const extensionForContentType = (contentType: string): string => {
+  if (contentType.includes('jpeg')) return 'jpg';
+  if (contentType.includes('webp')) return 'webp';
+  return 'png';
+};
+
+export const mimeTypeFromStoragePath = (storagePath: string): string => {
+  const normalized = storagePath.toLowerCase();
+  if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
+  if (normalized.endsWith('.webp')) return 'image/webp';
+  return 'image/png';
+};

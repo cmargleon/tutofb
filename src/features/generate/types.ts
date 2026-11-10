@@ -45,6 +45,7 @@ export const createInitialGarmentUploadState = (): GarmentUploadState => ({
 export type GarmentPhotoClassificationStatus = 'idle' | 'classifying' | 'classified' | 'failed';
 
 export interface GarmentPhotoClassificationState {
+  isDetail?: boolean;
   status: GarmentPhotoClassificationStatus;
   view: GarmentView | null;
   confidence: number | null;
@@ -75,6 +76,9 @@ export interface GarmentOriginalPhotoDraft {
 }
 
 export interface UploadedGarmentDraft {
+  photoProductId?: string;
+  photoVariantId?: string;
+  photoAttributes?: Partial<import('../../../shared/src/types').PhotoArticleAttributes>;
   id: string;
   name: string;
   sourceType: SourceType;
@@ -149,6 +153,7 @@ export interface UploadSummary {
 }
 
 export interface WizardState {
+  marketplacePhotoPlan?: import('../../../shared/src/types').PhotoPlan;
   step: GenerateWizardStepId;
   generationKind: NonNullable<Batch['generationKind']> | null;
   productScenes: ProductSceneInput[];

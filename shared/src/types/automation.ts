@@ -46,6 +46,10 @@ export interface CreateAutomationJobRequest {
   allowEstimatedCosts?: boolean;
 }
 export interface AutomationJob extends CreateAutomationJobRequest {
+  photoBases?: import('./photoPlan').PhotoBase[];
+  photoModelId?: string | null;
+  photoMarketplaces?: import('./client').Client['marketplaces'];
+  photoPlan?: import('./photoPlan').PhotoPlan;
   photoProfile?: import('./provider').CommercialPhotoProfile;
   manglarAuthorization?: { uid: string; connectionId: string; role: import('./common').Role; accessVersion: number };
   id: string;
@@ -131,6 +135,9 @@ export interface AutomationItemState {
   scenes: AutomationSceneState[];
 }
 export interface AutomationPlan {
+  photoBases?: import('./photoPlan').PhotoBase[];
+  photoModelId?: string | null;
+  photoMarketplaces?: import('./client').Client['marketplaces'];
   photoProfile?: import('./provider').CommercialPhotoProfile;
   id: string; createdByUid: string; clientId: string; clientName: string;
   request: CreateAutomationJobRequest; presetName: string; preset: AutomationPreset;

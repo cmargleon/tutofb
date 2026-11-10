@@ -21,3 +21,5 @@ export * from './manglar';
 
 export * from './organizer';
 export * from './marketplaceExport';
+
+export * from './photoPlan';

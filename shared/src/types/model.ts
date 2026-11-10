@@ -38,6 +38,7 @@ export interface ModelIdentityTraits {
 }
 
 export interface Pose {
+  photoObservation?: import('./photoPlan').PhotoBaseObservation;
   id: string;
   active?: boolean;
   storagePath: string;

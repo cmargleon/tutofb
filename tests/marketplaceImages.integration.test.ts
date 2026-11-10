@@ -52,7 +52,7 @@ test('approved photo publication, stable direct URLs, automatic Excel links, iso
     const first = await publishMarketplaceImages.run(req(input));
     assert.deepEqual(first.failures, []); assert.equal(first.images.length, 1);
     const image = first.images[0];
-    assert.equal(image.width, image.height); assert.equal(image.contentType, 'image/jpeg'); assert.ok(image.bytes < 3_000_000);
+    assert.equal(image.width / image.height, 3 / 4); assert.equal(image.contentType, 'image/jpeg'); assert.ok(image.bytes < 3_000_000);
     assert.equal(image.url, `https://storage.googleapis.com/${publishedBucket.name}/${image.storagePath}`);
     assert.equal(new URL(image.url).search, ''); assert.ok(image.url.endsWith('.jpg'));
     assert.deepEqual((await bucket.file(path).download())[0], source);

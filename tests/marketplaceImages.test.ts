@@ -18,19 +18,19 @@ test('publication produces a small RGB JPEG and preserves portrait framing for A
   assert.deepEqual(bytes, original);
 });
 
-test('SHEIN square publication adds white borders without cutting the top or bottom of the product', async () => {
+test('SHEIN publication preserves framing without an unverified square requirement', async () => {
   const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200"><rect width="900" height="1200" fill="green"/><rect width="900" height="100" fill="red"/><rect y="1100" width="900" height="100" fill="blue"/></svg>');
   const { bytes, width, height } = await prepareMarketplaceImage(svg, 'shein');
-  assert.equal(width, 1200); assert.equal(height, 1200);
+  assert.equal(width, 900); assert.equal(height, 1200);
   const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
   const pixel = (x: number, y: number) => [...data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 3)];
-  assert.ok(pixel(600, 30)[0] > 220); assert.ok(pixel(600, 1170)[2] > 220);
-  assert.ok(pixel(20, 600).every(value => value > 245));
+  assert.ok(pixel(450, 30)[0] > 220); assert.ok(pixel(450, 1170)[2] > 220);
+  assert.ok(pixel(20, 600)[1] > 80);
 });
 
-test('unsupported TikTok aspect ratio is padded; oversized Mercado Libre images are reduced without enlargement', async () => {
+test('unsupported TikTok aspect ratio is rejected; oversized Mercado Libre images are reduced without enlargement', async () => {
   const bytes = await sharp({ create: { width: 2600, height: 1000, channels: 3, background: 'white' } }).png().toBuffer();
-  const tiktok = await prepareMarketplaceImage(bytes, 'tiktok-shop'); assert.equal(tiktok.width, tiktok.height);
+  await assert.rejects(prepareMarketplaceImage(bytes, 'tiktok-shop'), /3:4 o 4:3/);
   const mercado = await prepareMarketplaceImage(bytes, 'mercado-libre'); assert.equal(mercado.width, 1920); assert.ok(mercado.height >= 500);
 });
 

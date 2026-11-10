@@ -1,3 +1,5 @@
+import { neutralWhiteBackground } from '../media/neutralWhiteBackground';
+import { validatePlannedPhotoReview } from '../media/photoPlanFile';
 import { withManglarJobBudget } from '../manglar/budget';
 import { AutomationBudgetError, reserveAutomationOperation, settleAutomationOperation, pauseAutomationGeneration } from '../automation/budget';
 import { estimateGenerationHold } from '../costs/generationEstimates';
@@ -142,6 +144,7 @@ const buildStoredReview = (
   review: Awaited<ReturnType<typeof reviewGeneratedImageWithGemini>>,
   attemptNumber: number,
 ): JobAutoReview => ({
+  ...(review.photoValidation ? { photoValidation: review.photoValidation } : {}),
   model: review.model,
   verdict: review.verdict,
   summary: review.summary,
@@ -185,7 +188,7 @@ const persistGeneratedAttempt = async ({
     claimedJob.imageConfig,
     claimedJob.aspectRatio,
   );
-  const storedImage = reuseOutput ? { bytes: providerResult.imageBytes, contentType: claimedJob.currentOutput!.contentType, storedImage: claimedJob.currentOutput!.storedImage } : await compressGeneratedImageIfNeeded({
+  const storedImage = reuseOutput ? { bytes: providerResult.imageBytes, contentType: claimedJob.currentOutput!.contentType, storedImage: claimedJob.currentOutput!.storedImage } : providerResult.preparedPhoto || await compressGeneratedImageIfNeeded({
     bytes: providerResult.imageBytes,
     contentType: providerResult.contentType,
     photoProfile: claimedJob.photoProfile, imageConfig: normalizedImageConfig.imageConfig,
@@ -201,10 +204,11 @@ const persistGeneratedAttempt = async ({
     },
   });
 
-  const costUsd = reuseOutput ? 0 : getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
+  const costUsd = reuseOutput || claimedJob.photoTask?.composition === 'reference' ? 0 : getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
   const persistedFailureInfo = withFailureOutputId(failureInfo, outputId);
 
   const currentOutput: JobOutput = {
+    ...(autoReview?.photoValidation ? { photoValidation: autoReview.photoValidation } : {}),
     id: outputId,
     jobId,
     batchId: claimedJob.batchId,
@@ -674,7 +678,7 @@ const processJobCore = async (
     });
 
     const generationHold = estimateGenerationHold(claimedJob.provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
-    const budgetOperation = !resumeReview && claimedJob.automationManaged && claimedJob.automationJobId
+    const budgetOperation = !resumeReview && claimedJob.photoTask?.composition !== 'reference' && claimedJob.automationManaged && claimedJob.automationJobId
       ? await reserveAutomationOperation(claimedJob.automationJobId, `generation:${jobId}:${claimedJob.claimToken}`, 'generation', generationHold.holdUsd, { id: jobId, claimToken: claimedJob.claimToken }) : null;
     let providerResult: Awaited<ReturnType<typeof generateWithProvider>>;
     try {
@@ -682,7 +686,7 @@ const processJobCore = async (
       provider: claimedJob.currentOutput!.provider, imageBytes: (await downloadStorageImage(claimedJob.currentOutput!.resultImagePath)).bytes,
       contentType: claimedJob.currentOutput!.contentType, remoteUrl: claimedJob.currentOutput!.remoteUrl,
       requestId: claimedJob.currentOutput!.requestId, responseSummary: claimedJob.currentOutput!.providerResponseSummary || {},
-    } : await generateWithProvider(
+    } : claimedJob.photoTask?.composition === 'reference' ? { provider: claimedJob.provider, imageBytes: (await downloadStorageImage(claimedJob.garmentFilePath)).bytes, contentType: 'image/jpeg', remoteUrl: null, requestId: null, responseSummary: { reusedReference: true } } : await generateWithProvider(
       claimedJob.provider as Provider,
       {
         poseImageUrl,
@@ -712,6 +716,14 @@ const processJobCore = async (
     const generationAttempt = resumeReview ? claimedJob.generationAttemptCount || 1 : (claimedJob.generationAttemptCount || 0) + 1;
     const maxAutoReviewAttempts = claimedJob.autoReviewMaxAttempts || getJobAutoReviewMaxAttempts();
 
+    if (claimedJob.photoTask && !resumeReview) {
+      const corrected = claimedJob.photoTask.backgroundCorrection ? await neutralWhiteBackground(providerResult.imageBytes) : { bytes: providerResult.imageBytes, correctedPixels: 0 };
+      providerResult.responseSummary = { ...providerResult.responseSummary, backgroundCorrectedPixels: corrected.correctedPixels };
+      providerResult.preparedPhoto = await compressGeneratedImageIfNeeded({ bytes: corrected.bytes, contentType: providerResult.contentType,
+        photoProfile: claimedJob.photoProfile, imageConfig: normalizedImageConfig.imageConfig, plannedPhoto: true, syntheticPerformer: claimedJob.photoTask.syntheticPerformer });
+      providerResult.imageBytes = providerResult.preparedPhoto.bytes;
+      providerResult.contentType = providerResult.preparedPhoto.contentType;
+    }
     let review: Awaited<ReturnType<typeof reviewGeneratedImageWithGemini>>;
     try {
       const [poseReference, garmentReference] = await Promise.all([
@@ -726,6 +738,7 @@ const processJobCore = async (
           automation: { id: claimedJob.automationJobId, key: `review:${jobId}:${claimedJob.claimToken}`, kind: 'review' as const, generation: { id: jobId, claimToken: claimedJob.claimToken } },
           ...(claimedJob.generationKind !== 'product' ? { productReferences: [poseReference, ...await Promise.all((claimedJob.automationReferencePaths || [claimedJob.garmentFilePath]).map(downloadStorageImage))] } : {}),
         } : {}),
+        ...(claimedJob.photoTask ? { photoTask: claimedJob.photoTask } : {}),
         generationKind: claimedJob.generationKind,
         ...(claimedJob.generationKind === 'product' ? { productReferences: await Promise.all((claimedJob.productReferencePaths || [claimedJob.poseImagePath]).map(downloadStorageImage)) } : {}),
         apiKey: GEMINI_API_KEY.value(),
@@ -766,6 +779,7 @@ const processJobCore = async (
       });
       return;
     }
+    if (claimedJob.photoTask) await validatePlannedPhotoReview(providerResult.imageBytes, claimedJob.photoTask, review);
     const storedReview = buildStoredReview(review, generationAttempt);
 
     if (review.verdict === 'approved') {

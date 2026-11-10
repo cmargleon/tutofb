@@ -48,3 +48,6 @@ export const previewProductDrafts = async (
 
 export const createProductGenerationBatch = async (data: CreateProductGenerationBatchRequest): Promise<CreateGenerationBatchResponse> =>
   (await httpsCallable<CreateProductGenerationBatchRequest, CreateGenerationBatchResponse>(functions, 'createProductGenerationBatch')(data)).data;
+
+export const createMarketplacePhotoBatch = async (data: import('../../../shared/src/types').CreateMarketplacePhotoBatchRequest): Promise<CreateGenerationBatchResponse> =>
+  (await httpsCallable<import('../../../shared/src/types').CreateMarketplacePhotoBatchRequest, CreateGenerationBatchResponse>(functions, 'createMarketplacePhotoBatch')(data)).data;

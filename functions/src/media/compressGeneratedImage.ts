@@ -1,3 +1,4 @@
+import { addSyntheticPerformerXmp } from './photoPlanFile';
 import sharp from 'sharp';
 import { COMMERCIAL_PHOTO_PROFILE, COMMERCIAL_PHOTO_STORAGE } from '../../../shared/src/commercialPhoto';
 import { resolveAspectRatioForImageConfig } from '../../../shared/src/providerImageConfig';
@@ -9,14 +10,16 @@ const OUTPUT_LONGEST_SIDES = [2200, 2000, 1800, 1600, 1400, 1200, 1000] as const
 
 export const compressGeneratedImageIfNeeded = async ({
   bytes,
-  contentType, photoProfile, imageConfig,
+  contentType, photoProfile, imageConfig, syntheticPerformer, plannedPhoto,
 }: {
   bytes: Buffer;
   contentType: string;
+  syntheticPerformer?: boolean;
+  plannedPhoto?: boolean;
   photoProfile?: CommercialPhotoProfile;
   imageConfig?: ProviderImageConfig | null;
 }): Promise<{ bytes: Buffer; contentType: string; storedImage?: StoredPhotoMetadata }> => {
-  if (photoProfile === COMMERCIAL_PHOTO_PROFILE) return normalizeCommercialPhoto(bytes, imageConfig);
+  if (photoProfile === COMMERCIAL_PHOTO_PROFILE) return normalizeCommercialPhoto(bytes, imageConfig, syntheticPerformer, plannedPhoto);
   if (bytes.length <= MAX_STORED_OUTPUT_BYTES) {
     return { bytes, contentType };
   }
@@ -73,8 +76,8 @@ export const compressGeneratedImageIfNeeded = async ({
 
 // Resolution first, then quality: all qualities at a size precede a 10% reduction.
 // Every candidate decodes the original; no candidate JPEG is ever recompressed.
-const normalizeCommercialPhoto = async (bytes: Buffer, imageConfig?: ProviderImageConfig | null) => {
-  const policy = COMMERCIAL_PHOTO_STORAGE;
+const normalizeCommercialPhoto = async (bytes: Buffer, imageConfig?: ProviderImageConfig | null, syntheticPerformer = false, plannedPhoto = false) => {
+  const policy = plannedPhoto ? { ...COMMERCIAL_PHOTO_STORAGE, maxSide: 1920 } : COMMERCIAL_PHOTO_STORAGE;
   const original = await sharp(bytes, { failOn: 'warning' }).metadata();
   if (!original.width || !original.height || (original.pages || 1) > 1) throw new Error('Imagen generada inválida o animada.');
   const swapped = [5, 6, 7, 8].includes(original.orientation || 1);
@@ -91,11 +94,12 @@ const normalizeCommercialPhoto = async (bytes: Buffer, imageConfig?: ProviderIma
     if (!attempted.has(key)) {
       attempted.add(key);
       for (const quality of policy.qualities) {
-        const candidate = await sharp(bytes, { failOn: 'warning' }).rotate()
+        let candidate = await sharp(bytes, { failOn: 'warning' }).rotate()
           .resize({ width: side, height: side, fit: 'inside', withoutEnlargement: true })
           .toColourspace('srgb').flatten({ background: '#ffffff' })
           .withIccProfile('srgb')
           .jpeg({ quality, mozjpeg: true }).toBuffer();
+        if (syntheticPerformer) candidate = addSyntheticPerformerXmp(candidate);
         if (candidate.length > policy.maxBytes) continue;
         const actual = await sharp(candidate, { failOn: 'warning' }).metadata();
         if (actual.format !== 'jpeg' || actual.depth !== 'uchar' || actual.space !== 'srgb'

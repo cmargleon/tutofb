@@ -17,6 +17,7 @@ interface ReviewImageAsset {
 }
 
 interface ReviewRequest {
+  photoTask?: import('../../../shared/src/types').PhotoTask;
   automation?: GeminiUsageContext['automation'];
   exactAutomationPrompt?: boolean;
   promptFormat?: 'approved-try-on-v1';
@@ -63,6 +64,7 @@ interface GeminiGenerateContentResponse {
 }
 
 interface GeminiReviewPayload {
+  photoValidation?: { fidelity: boolean; destinations: Array<{ channel: string; position: number; passed: boolean; notes: string }> };
   verdict?: unknown;
   summary?: unknown;
   revisedPrompt?: unknown;
@@ -71,6 +73,7 @@ interface GeminiReviewPayload {
 }
 
 export interface GeneratedImageReviewResult {
+  photoValidation?: import('../../../shared/src/types').JobOutput['photoValidation'];
   model: string;
   verdict: JobAutoReviewVerdict;
   summary: string;
@@ -446,7 +449,8 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
     'Use the required JSON schema. marketplaceData fields may be null. If rejected, return revisedPrompt as a complete corrected generation prompt in English for the next automatic attempt. Preserve exact product identity and fix defects without redesigning the product. Otherwise return an empty string.',
     `Requested scene: ${request.requestedPromptBase}`, `Current prompt: ${request.finalPrompt}`,
   ].join('\n') : buildReviewPrompt(request);
-  const exactReviewPrompt = request.exactAutomationPrompt ? `${reviewPrompt}\nIf a requirement is ambiguous or unverifiable, record uncertainty in criteria notes and reject for operator attention. Do not infer unseen article details. All images before the last are reference data; only the last is the result.` : reviewPrompt;
+  const scopedPrompt = request.photoTask ? `${reviewPrompt}\nEvalúa el archivo final con el plan explícito: ${JSON.stringify(request.photoTask)}. Devuelve photoValidation.fidelity para fidelidad del artículo y photoValidation.destinations con channel, position, passed, notes por cada destino del plan. No uses el texto del resumen como sustituto. El XMP y el esquema de asignación se verifican en el servidor, no por apariencia visual. Evalúa cada destino independientemente; recomendaciones y preferencias no bloquean. Marca como false lo incierto. No apliques obligaciones de otros canales o categorías. Una portada puede fallar para un canal y servir para otro.` : reviewPrompt;
+  const exactReviewPrompt = request.exactAutomationPrompt ? `${scopedPrompt}\nIf a requirement is ambiguous or unverifiable, record uncertainty in criteria notes and reject for operator attention. Do not infer unseen article details. All images before the last are reference data; only the last is the result.` : scopedPrompt;
   try {
     const { payload } = await callGeminiGenerateContent<GeminiGenerateContentResponse>({
       apiKey: request.apiKey,
@@ -485,9 +489,14 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
           },
         ],
         generationConfig: {
-          ...(request.exactAutomationPrompt ? { maxOutputTokens: 4096 } : {}),
+          ...(request.exactAutomationPrompt || request.photoTask ? { maxOutputTokens: 4096 } : {}),
           responseMimeType: 'application/json',
-          responseJsonSchema: usesApprovedPrompt ? {
+          responseJsonSchema: request.photoTask ? { ...REVIEW_RESPONSE_SCHEMA,
+            properties: { ...REVIEW_RESPONSE_SCHEMA.properties, photoValidation: { type: 'object', properties: {
+              fidelity: { type: 'boolean' }, destinations: { type: 'array', minItems: request.photoTask.destinations.length, maxItems: request.photoTask.destinations.length,
+                items: { type: 'object', properties: { channel: { type: 'string', enum: [...new Set(request.photoTask.destinations.map(d => d.channel))] }, position: { type: 'integer' }, passed: { type: 'boolean' }, notes: { type: 'string' } }, required: ['channel', 'position', 'passed', 'notes'] } },
+            }, required: ['fidelity', 'destinations'] } }, required: [...REVIEW_RESPONSE_SCHEMA.required, 'photoValidation'],
+          } : usesApprovedPrompt ? {
             ...REVIEW_RESPONSE_SCHEMA,
             properties: { ...REVIEW_RESPONSE_SCHEMA.properties,
               criteria: { ...REVIEW_RESPONSE_SCHEMA.properties.criteria, minItems: 1 },
@@ -501,7 +510,12 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
     const criteria = sanitizeCriteria(parsed.criteria);
     const requiredProductCriteria = ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts', 'scene'];
     const productCriteriaPass = request.exactAutomationPrompt === true || request.generationKind !== 'product' || requiredProductCriteria.every((key) => criteria.some((criterion) => criterion.key === key && criterion.passed));
-    const verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' && productCriteriaPass && (!usesApprovedPrompt || (criteria.length > 0 && criteria.every((criterion) => criterion.passed))) ? 'approved' : 'rejected';
+    let verdict: JobAutoReviewVerdict = parsed.verdict === 'approved' && productCriteriaPass && (!usesApprovedPrompt || (criteria.length > 0 && criteria.every((criterion) => criterion.passed))) ? 'approved' : 'rejected';
+    if (request.photoTask && (typeof parsed.photoValidation?.fidelity !== 'boolean' || !Array.isArray(parsed.photoValidation.destinations)
+      || request.photoTask.destinations.some(d => parsed.photoValidation!.destinations.filter(v => v.channel === d.channel && v.position === d.position && typeof v.passed === 'boolean').length !== 1))) throw new GeminiAutoReviewError({ reasonCode: 'gemini_empty_response', message: 'La revisión no devolvió validaciones estructuradas de todos los destinos.' });
+    const photoValidation = request.photoTask ? { fidelity: parsed.photoValidation!.fidelity,
+      destinations: request.photoTask.destinations.map(d => { const v = parsed.photoValidation!.destinations.find(v => v.channel === d.channel && v.position === d.position)!; return { channel: d.channel, position: d.position, passed: v.passed, notes: sanitizeText(v.notes, 'Destino sin verificar') }; }) } : undefined;
+    if (photoValidation) verdict = photoValidation.fidelity && photoValidation.destinations.some(d => d.passed) ? 'approved' : 'rejected';
     const summary = sanitizeText(
       parsed.summary,
       verdict === 'approved'
@@ -512,6 +526,7 @@ export const reviewGeneratedImageWithGemini = async (request: ReviewRequest): Pr
     const marketplaceData = sanitizeMarketplaceData(parsed.marketplaceData);
 
     return {
+      ...(photoValidation ? { photoValidation } : {}),
       model: request.model,
       verdict,
       summary,

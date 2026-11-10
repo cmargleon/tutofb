@@ -1,0 +1,512 @@
+{
+  "date": "2026-11-10",
+  "firebaseProject": "tutofb-260320-1003",
+  "clientId": "automation-e2e-test",
+  "provider": "fal-gpt-image-2.5-flare",
+  "rulesVersion": "marketplace-photo-v1",
+  "paidVerification": {
+    "models": 2,
+    "productGenerations": 16,
+    "totalImages": 18,
+    "estimatedProductCostUsd": 0.5154,
+    "estimatedModelCostUsd": 0.0182,
+    "estimatedGeminiCostUsd": 0.044084,
+    "estimatedTotalUsd": 0.577684,
+    "basis": "Tuto rate-card and recorded Gemini usage estimates, not provider invoice"
+  },
+  "models": [
+    {
+      "id": "t7BhNPM28IyL6Cw3Sr6n",
+      "audience": "adult",
+      "orientation": "front",
+      "posture": "standing",
+      "framing": "upper_body",
+      "performer": "synthetic",
+      "visualObservationVerified": true,
+      "whiteRgbVerified": false
+    },
+    {
+      "id": "A4Xtjjbl0c7xRDJPbNjy",
+      "audience": "child",
+      "orientation": "front",
+      "posture": "standing",
+      "framing": "upper_body",
+      "performer": "synthetic",
+      "visualObservationVerified": true,
+      "whiteRgbVerified": false
+    }
+  ],
+  "tests": {
+    "npmTest": {
+      "passed": 274,
+      "skipped": 20,
+      "failed": 0
+    },
+    "focusedIntegrationSuites": {
+      "passed": 87,
+      "skipped": 0,
+      "failed": 0
+    },
+    "latestPhotoPlanIntegration": {
+      "passed": 1,
+      "skipped": 0,
+      "failed": 0
+    },
+    "photoPlanUnitTests": {
+      "passed": 17,
+      "failed": 0
+    },
+    "fullEmulatorRunner": "Blocked before running by existing Node 22 requirement; installed host Node is 25.8.1",
+    "typechecks": true,
+    "frontendBuild": true,
+    "functionsBuild": true,
+    "wizardSmoke": "client/photos → setup → review; two shared unique photos for four active channels"
+  },
+  "deployment": {
+    "functions": true,
+    "hosting": true,
+    "firestoreRulesChanged": false,
+    "storageRulesChanged": false,
+    "indexesChanged": false,
+    "secretsChanged": false,
+    "dependenciesChanged": false
+  },
+  "limitations": [
+    "Test client has no configured marketplace workbook templates. Real export preview correctly reports template configuration pending; workbook exports and public copy authorization were verified in emulators, without publishing real sample copies.",
+    "White-background preparation is deliberately limited to eligible opaque non-light products. Ambiguous, translucent and light products retain validation/attention requirements.",
+    "Complementary back/side/detail photographs require faithful references. Max gallery sizes are not production targets.",
+    "Early rejected outputs are retained; their destinations remain pending. Successful later samples have separate immutable plans."
+  ],
+  "cases": [
+    {
+      "itemId": "qa-adult-gray",
+      "jobId": "photo-126773cd5ba85ab5fea0d50aff69eaf9385c25e77e3e6c81aa10dc33c7ec3e0d-7f8632b58c544125",
+      "batchId": "photo-126773cd5ba85ab5fea0d50aff69eaf9385c25e77e3e6c81aa10dc33c7ec3e0d",
+      "automationJobId": null,
+      "planId": "2e5f075643dc53ee",
+      "taskId": "7f8632b58c544125",
+      "composition": "model",
+      "referenceCount": 1,
+      "modelIdentityBase": null,
+      "status": "completed",
+      "generationCount": 1,
+      "estimatedGenerationCostUsd": 0.0291,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "mercado-libre",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con las reglas del canal."
+          },
+          {
+            "channel": "shein",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con las reglas del canal."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 231391,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "aa0775ad6fe52073a1144795086b38c93b579e2d8b6626ced8b3a7856d89aaab",
+        "syntheticPerformerXmp": true,
+        "backgroundCorrectedPixels": 0
+      }
+    },
+    {
+      "itemId": "qa-adult-gray",
+      "jobId": "photo-126773cd5ba85ab5fea0d50aff69eaf9385c25e77e3e6c81aa10dc33c7ec3e0d-c8fcf35b1ac55227",
+      "batchId": "photo-126773cd5ba85ab5fea0d50aff69eaf9385c25e77e3e6c81aa10dc33c7ec3e0d",
+      "automationJobId": null,
+      "planId": "2e5f075643dc53ee",
+      "taskId": "c8fcf35b1ac55227",
+      "composition": "model",
+      "referenceCount": 1,
+      "modelIdentityBase": "7dbd09ef-a5ad-4b68-bb83-f0ad44ac2fb6",
+      "status": "failed",
+      "generationCount": 3,
+      "estimatedGenerationCostUsd": 0.11220000000000001,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "amazon",
+            "position": 1,
+            "passed": false,
+            "notes": "Cumple con los requisitos de fidelidad y estándar de imagen principal. Archivo final: revisar resolución, proporción, blanco RGB o XMP requerido."
+          },
+          {
+            "channel": "tiktok-shop",
+            "position": 1,
+            "passed": false,
+            "notes": "Cumple con las especificaciones para imagen de catálogo. Archivo final: revisar resolución, proporción, blanco RGB o XMP requerido."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 228482,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "c07290175889bf46bdf9650d69b54883b20cbbffda728e15d5d875907ecf24db",
+        "syntheticPerformerXmp": true,
+        "backgroundCorrectedPixels": 0
+      }
+    },
+    {
+      "itemId": "qa-pack-final",
+      "jobId": "photo-389c274211829a77d5729064e6e58921b073e403e75fe419f29aa3343972f971-0d6a59639818f62b",
+      "batchId": "photo-389c274211829a77d5729064e6e58921b073e403e75fe419f29aa3343972f971",
+      "automationJobId": null,
+      "planId": "063c3cd1eacfe031",
+      "taskId": "0d6a59639818f62b",
+      "composition": "flat_lay",
+      "referenceCount": 1,
+      "modelIdentityBase": null,
+      "status": "completed",
+      "generationCount": 1,
+      "estimatedGenerationCostUsd": 0.0291,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "amazon",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con las normas de pack para Amazon."
+          },
+          {
+            "channel": "mercado-libre",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con el estándar de imagen principal."
+          },
+          {
+            "channel": "tiktok-shop",
+            "position": 1,
+            "passed": true,
+            "notes": "Apto para el feed de TikTok Shop."
+          },
+          {
+            "channel": "shein",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con los requisitos de fondo y composición de Shein."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 269737,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "96f0fb7c79a6948842ef5679e79e2aee043bfd15eceb10611dba571b4bcd1dfe",
+        "syntheticPerformerXmp": false,
+        "backgroundCorrectedPixels": 1798245
+      }
+    },
+    {
+      "itemId": "qa-child-final",
+      "jobId": "photo-483843972e8764dc905e99b872954d0a916e4a251f12e5cc0769ec3005ea7a3d-8d4067c8d17fc1ee",
+      "batchId": "photo-483843972e8764dc905e99b872954d0a916e4a251f12e5cc0769ec3005ea7a3d",
+      "automationJobId": "Q1R4jPlYqymv3VwePlT2",
+      "planId": "0280f3788257b3fc",
+      "taskId": "8d4067c8d17fc1ee",
+      "composition": "model",
+      "referenceCount": 1,
+      "modelIdentityBase": "ca712d99-2f9e-4bbf-b81b-988470bc954c",
+      "status": "completed",
+      "generationCount": 1,
+      "estimatedGenerationCostUsd": 0.0374,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "mercado-libre",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con las reglas de fidelidad y esquema."
+          },
+          {
+            "channel": "shein",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con los estándares de contexto y esquema."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 172515,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "7138f4008b0c49aa51a54c1a1e19f00d60820d810cdd4c914dd5422b0ef8943e",
+        "syntheticPerformerXmp": true,
+        "backgroundCorrectedPixels": 0
+      }
+    },
+    {
+      "itemId": "qa-child-final",
+      "jobId": "photo-483843972e8764dc905e99b872954d0a916e4a251f12e5cc0769ec3005ea7a3d-93a4b7560aea00fc",
+      "batchId": "photo-483843972e8764dc905e99b872954d0a916e4a251f12e5cc0769ec3005ea7a3d",
+      "automationJobId": "Q1R4jPlYqymv3VwePlT2",
+      "planId": "0280f3788257b3fc",
+      "taskId": "93a4b7560aea00fc",
+      "composition": "model",
+      "referenceCount": 1,
+      "modelIdentityBase": "ca712d99-2f9e-4bbf-b81b-988470bc954c",
+      "status": "completed",
+      "generationCount": 1,
+      "estimatedGenerationCostUsd": 0.0374,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "amazon",
+            "position": 1,
+            "passed": true,
+            "notes": "La imagen cumple con los estándares para Amazon."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 154090,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "8564a6ee1bca16af87ffbde9b52bbf257373b59b4f49591741a0b3abcb864f10",
+        "syntheticPerformerXmp": true,
+        "backgroundCorrectedPixels": 1834080
+      }
+    },
+    {
+      "itemId": "qa-child-final",
+      "jobId": "photo-483843972e8764dc905e99b872954d0a916e4a251f12e5cc0769ec3005ea7a3d-ef04cd046737d3b4",
+      "batchId": "photo-483843972e8764dc905e99b872954d0a916e4a251f12e5cc0769ec3005ea7a3d",
+      "automationJobId": "Q1R4jPlYqymv3VwePlT2",
+      "planId": "0280f3788257b3fc",
+      "taskId": "ef04cd046737d3b4",
+      "composition": "flat_lay",
+      "referenceCount": 1,
+      "modelIdentityBase": null,
+      "status": "completed",
+      "generationCount": 1,
+      "estimatedGenerationCostUsd": 0.0291,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "tiktok-shop",
+            "position": 1,
+            "passed": true,
+            "notes": "La imagen cumple con todos los requisitos para ser utilizada como portada en TikTok Shop."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 135419,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "7cb5169e93bfbd733f0b9326fa135478e8d0fabae99b50590106c1e1c30c82b2",
+        "syntheticPerformerXmp": false,
+        "backgroundCorrectedPixels": 1930056
+      }
+    },
+    {
+      "itemId": "qa-child-blue",
+      "jobId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c-7b8c5a42c1345db6",
+      "batchId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c",
+      "automationJobId": "xko10fbvlMjQPmmvm3qw",
+      "planId": "1a6339db6a5cbb23",
+      "taskId": "7b8c5a42c1345db6",
+      "composition": "flat_lay",
+      "referenceCount": 1,
+      "modelIdentityBase": null,
+      "status": "failed",
+      "generationCount": 4,
+      "estimatedGenerationCostUsd": 0.1164,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "tiktok-shop",
+            "position": 1,
+            "passed": false,
+            "notes": "La imagen cumple con todos los estándares solicitados para el canal. Archivo final: revisar resolución, proporción, blanco RGB o XMP requerido."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 201586,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "ba51f2b3abeb14dc50ba5c4187d4826fd08e505f7403c9facb36e26e8cbc07e8",
+        "syntheticPerformerXmp": false,
+        "backgroundCorrectedPixels": 0
+      }
+    },
+    {
+      "itemId": "qa-child-blue",
+      "jobId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c-7d3214f5944e1403",
+      "batchId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c",
+      "automationJobId": "xko10fbvlMjQPmmvm3qw",
+      "planId": "1a6339db6a5cbb23",
+      "taskId": "7d3214f5944e1403",
+      "composition": "model",
+      "referenceCount": 1,
+      "modelIdentityBase": null,
+      "status": "completed",
+      "generationCount": 1,
+      "estimatedGenerationCostUsd": 0.0291,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "mercado-libre",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con las normas para la imagen principal."
+          },
+          {
+            "channel": "shein",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con el esquema requerido para Shein."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 183354,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "66df6f2a172c8224ffebd77efe70c78cb0975c8676f0f94648f0cecd133986b6",
+        "syntheticPerformerXmp": true,
+        "backgroundCorrectedPixels": 0
+      }
+    },
+    {
+      "itemId": "qa-child-blue",
+      "jobId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c-e35369cd1f1f6d99",
+      "batchId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c",
+      "automationJobId": "xko10fbvlMjQPmmvm3qw",
+      "planId": "1a6339db6a5cbb23",
+      "taskId": "e35369cd1f1f6d99",
+      "composition": "model",
+      "referenceCount": 1,
+      "modelIdentityBase": "ca712d99-2f9e-4bbf-b81b-988470bc954c",
+      "status": "failed",
+      "generationCount": 1,
+      "estimatedGenerationCostUsd": 0.0374,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "amazon",
+            "position": 1,
+            "passed": false,
+            "notes": "La imagen cumple con los estándares para el canal Amazon, incluyendo la fidelidad del producto y los requisitos de XMP. Archivo final: revisar resolución, proporción, blanco RGB o XMP requerido."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 143948,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "a216c067647207615dac5d7e2264e6953b37514eb29f764b09687a8c09f1848a",
+        "syntheticPerformerXmp": true,
+        "backgroundCorrectedPixels": 0
+      }
+    },
+    {
+      "itemId": "qa-gray-pack",
+      "jobId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c-e5fa31089538ab5c",
+      "batchId": "photo-71e5bb780464f1ef2f3c5d065601c96dc11b3e05fc1911a884d4e938603dab3c",
+      "automationJobId": "xko10fbvlMjQPmmvm3qw",
+      "planId": "1a6339db6a5cbb23",
+      "taskId": "e5fa31089538ab5c",
+      "composition": "flat_lay",
+      "referenceCount": 1,
+      "modelIdentityBase": null,
+      "status": "completed",
+      "generationCount": 2,
+      "estimatedGenerationCostUsd": 0.0582,
+      "validation": {
+        "fidelity": true,
+        "destinations": [
+          {
+            "channel": "amazon",
+            "position": 1,
+            "passed": false,
+            "notes": "Cumple con los requisitos de flat lay para Amazon. Archivo final: revisar resolución, proporción, blanco RGB o XMP requerido."
+          },
+          {
+            "channel": "mercado-libre",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con las normas de fondo blanco y presentación de producto."
+          },
+          {
+            "channel": "tiktok-shop",
+            "position": 1,
+            "passed": false,
+            "notes": "Imagen clara y apta para venta en TikTok Shop. Archivo final: revisar resolución, proporción, blanco RGB o XMP requerido."
+          },
+          {
+            "channel": "shein",
+            "position": 1,
+            "passed": true,
+            "notes": "Cumple con el esquema de producto solicitado para Shein."
+          }
+        ]
+      },
+      "finalFile": {
+        "width": 1440,
+        "height": 1920,
+        "bytes": 184012,
+        "format": "jpeg",
+        "space": "srgb",
+        "depth": "uchar",
+        "hasIcc": true,
+        "sha256": "049cb3303e65e8b5b5e445e543111d27ec5260bcce56fc5eba7878206211e450",
+        "syntheticPerformerXmp": false,
+        "backgroundCorrectedPixels": 0
+      }
+    }
+  ]
+}

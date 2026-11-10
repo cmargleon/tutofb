@@ -318,7 +318,8 @@ export const useGarmentPreparation = ({
 
   useEffect(() => {
     if (
-      state.generationKind !== 'garment'
+      state.marketplacePhotoPlan
+      || state.generationKind !== 'garment'
       || state.step !== 2
       || !selectedModel
       || state.garments.length === 0

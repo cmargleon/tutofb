@@ -1,3 +1,5 @@
+import { activePhotoChannels, buildMarketplacePhotoPlan } from '../../../../../shared/src/marketplacePhotoPlan';
+import { wizardPhotoPlanInput } from '../marketplacePlan';
 import { seedTryOnPrompt } from '../../../../../shared/src/approvedTryOnPrompt';
 import { createDefaultProductGeneration } from '../../../../../shared/src/productGeneration';
 import { useToast } from '../../../feedback/FeedbackProvider';
@@ -286,7 +288,13 @@ export const useGenerateWizard = () => {
     [selectedModel],
   );
 
+  const marketplacePlan = useMemo(() => selectedClient && state.generationKind && activePhotoChannels(selectedClient.marketplaces).length
+    ? buildMarketplacePhotoPlan(wizardPhotoPlanInput(state, selectedClient, selectedModel)) : undefined, [selectedClient, selectedModel, state]);
+  useEffect(() => {
+    if (state.marketplacePhotoPlan?.id !== marketplacePlan?.id) setState(current => ({ ...current, marketplacePhotoPlan: marketplacePlan }));
+  }, [marketplacePlan, state.marketplacePhotoPlan?.id]);
   const totalJobs = useMemo(() => {
+    if (marketplacePlan) return marketplacePlan.tasks.length;
     const accessoryInferenceTexts = [selectedSpreadsheetCategory?.label ?? null];
     const garmentsForMatching = state.garments.map((garment) => ({
       availableViews: getGarmentAvailableViews(garment),
@@ -360,6 +368,7 @@ export const useGenerateWizard = () => {
 
   const submit = useGenerateWizardSubmit({
     state,
+    photoPlanInput: selectedClient && marketplacePlan ? wizardPhotoPlanInput(state, selectedClient, selectedModel) : undefined,
     draftBatchId,
     totalJobs,
     uploadSummary,
@@ -731,6 +740,8 @@ export const useGenerateWizard = () => {
     goToStep,
     handleStepSelect,
     canSelectStep,
+    handlePhotoIdentityChange: (itemId: string, productId: string, variantId: string) => setState(current => ({ ...current, garments: current.garments.map(g => g.id === itemId ? { ...g, photoProductId: productId, photoVariantId: variantId } : g) })),
+    handlePhotoAttributesChange: (itemId: string, attributes: import('../../../../../shared/src/types').PhotoArticle['attributes']) => setState(current => ({ ...current, garments: current.garments.map(g => g.id === itemId ? { ...g, photoAttributes: attributes } : g) })),
     handleFiles: product.handleFiles,
     handleRetryAnalysis,
     removeGarment,

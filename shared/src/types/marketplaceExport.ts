@@ -23,6 +23,7 @@ export interface ProductMarketplaceData {
   imageUrls?: Record<string, string>; // approved output ID -> operator-authorized public URL
 }
 export interface MasterProduct {
+  photoAssignments?: import('./photoPlan').PhotoAssignment[];
   id: string; clientId: string; batchIds: string[]; garmentId: string;
   values: Partial<Record<ProductField, string>>;
   variants: MasterVariant[];

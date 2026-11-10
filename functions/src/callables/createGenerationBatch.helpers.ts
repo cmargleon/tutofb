@@ -1,3 +1,4 @@
+import { normalizePhotoAttributes } from '../../../shared/src/photoAttributes';
 import { resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { APPROVED_TRY_ON_PROMPT_FORMAT, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -97,6 +98,7 @@ const normalizeGarmentPhoto = (
   }
 
   return {
+    isDetail: photo.isDetail === true,
     id: requireNonEmptyString(photo.id, `El id de una foto de ${garment.name}`),
     fileName,
     storagePath,
@@ -132,6 +134,9 @@ export const normalizeGarment = (value: unknown): UploadedGarmentInput => {
   const garmentBodyArea = isGarmentBodyArea(garment.garmentBodyArea) ? garment.garmentBodyArea : null;
 
   return {
+    photoAttributes: normalizePhotoAttributes(garment.photoAttributes, true),
+    ...(garment.photoProductId ? { photoProductId: garment.photoProductId } : {}),
+    ...(garment.photoVariantId ? { photoVariantId: garment.photoVariantId } : {}),
     id,
     name,
     storagePath,

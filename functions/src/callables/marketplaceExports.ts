@@ -133,7 +133,7 @@ export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateR
     mappings[category.id!] = {};
     for (const column of category.columns) {
       const m = incoming[column.key];
-      if (!m || typeof m.source !== 'string' || m.source.length > 500 || !/^(?:|(?:product|variant|attribute|legacy|image|literal)\..+)$/.test(m.source) || !['text', 'number'].includes(m.dataType || 'text')) throw new HttpsError('invalid-argument', `Asociación inválida: ${column.label}.`);
+      if (!m || typeof m.source !== 'string' || m.source.length > 500 || !/^(?:|(?:product|variant|attribute|legacy|image|literal|assignment)\..+)$/.test(m.source) || !['text', 'number'].includes(m.dataType || 'text')) throw new HttpsError('invalid-argument', `Asociación inválida: ${column.label}.`);
       if (m.source.startsWith('product.') && !PRODUCT_FIELDS.includes(m.source.slice(8) as never)) throw new HttpsError('invalid-argument', 'Campo maestro desconocido.');
       if (m.source.startsWith('variant.') && !VARIANT_FIELDS.includes(m.source.slice(8) as never)) throw new HttpsError('invalid-argument', 'Campo de variante desconocido.');
       if ((column.required || m.required) && !m.source) throw new HttpsError('invalid-argument', `Asocia el campo obligatorio ${column.label}.`);

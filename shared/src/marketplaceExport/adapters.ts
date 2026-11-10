@@ -32,7 +32,15 @@ const sourceValue = (source: string, p: MasterProduct, v: MasterVariant, data: P
   if (kind === 'variant') return v.values[key as keyof typeof v.values] ?? p.values[key as keyof typeof p.values] ?? '';
   if (kind === 'attribute') return v.attributes?.[key] ?? '';
   if (kind === 'literal') return key;
-  if (kind === 'image') return data.imageUrls?.[p.approvedImages[Number(key) || 0]?.outputId] || '';
+  if (kind === 'assignment') { const main = p.photoAssignments?.find(a => a.channel === template.exportConfig?.marketplaceId && a.variantId === v.id && a.position === 1 && a.eligible); return key === 'imageType' ? String(main?.imageType ?? '') : key === 'imageSort' ? String(main?.imageSort ?? '') : ''; }
+  if (kind === 'image') {
+    if (p.photoAssignments) {
+      const channel = template.exportConfig?.marketplaceId;
+      const assignment = p.photoAssignments.find(a => a.channel === channel && a.variantId === v.id && a.position === (Number(key) || 0) + 1 && a.eligible);
+      return assignment?.outputId ? data.imageUrls?.[assignment.outputId] || '' : '';
+    }
+    return data.imageUrls?.[p.approvedImages[Number(key) || 0]?.outputId] || '';
+  }
   if (kind === 'legacy') {
     const draft = p.legacyDrafts.find(d => (d.templateId === data.templateId || d.templateId === template.exportConfig?.replacesTemplateId || template.exportConfig?.legacyTemplateIds?.includes(d.templateId)) && d.categoryId === data.categoryId);
     return draft?.rows[rowIndex]?.values[key] || '';
@@ -48,6 +56,15 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
     const data = product.marketplaces[id];
     if (!data || data.templateId !== template.id || data.categoryId !== category.id) { issue('category', 'Categoría sin configurar.'); return { rows: [], issues }; }
     if (!product.approvedImages.length) issue('images_pending', 'Imágenes pendientes de aprobación.');
+    if (product.photoAssignments) for (const variant of product.variants) {
+      const assignments = product.photoAssignments.filter(a => a.channel === id && a.variantId === variant.id).sort((a, b) => a.position - b.position);
+      const eligible = assignments.filter(a => a.eligible && a.outputId);
+      if (!assignments.some(a => a.role === 'main' && a.position === 1 && a.eligible) || assignments.some(a => a.required && !a.eligible)) issue('gallery_pending', `Variante ${variant.id}: portada o fotografía obligatoria pendiente para ${id}.`);
+      const limit = id === 'amazon' || id === 'tiktok-shop' ? 9 : id === 'shein' ? 11 : 10;
+      if (eligible.length > limit) issue('gallery_limit', `La galería de ${variant.id} supera ${limit} imágenes.`);
+      if (new Set(eligible.map(a => a.outputId)).size !== eligible.length || new Set(assignments.map(a => a.position)).size !== assignments.length) issue('gallery_duplicate', `Archivo o posición repetida en ${variant.id}.`);
+      if (id === 'tiktok-shop' && new Set(eligible.map(a => a.angle)).size !== eligible.length) issue('gallery_angle', `Ángulo repetido en ${variant.id}.`);
+    }
     const mappings = template.exportConfig?.mappings[category.id!] || {};
     const publishedUrls = Object.values(product.publishedImages?.[id] || {}).map(image => image.url);
     const nonemptySkus = product.variants.map(v => v.values.sku || product.values.sku || '').filter(Boolean);
@@ -70,6 +87,7 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         if (value && allowed.length && !allowed.includes(value)) issue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
         if (value && column.dropdownFormula && !allowed.length) issue('unresolved_list', `${column.label}: lista dependiente sin resolver; requiere un adaptador específico.`, column.key);
         if (value && (isImageField(column.key) || isImageField(column.label) || mapping?.source.startsWith('image.')) && (!safePublicImageUrl(value, publishedUrls) || !product.approvedImages.some(img => data.imageUrls?.[img.outputId] === value))) issue('image_url', `${column.label}: publica la fotografía aprobada o configura su URL pública permanente; las URLs privadas o temporales no son válidas.`, column.key);
+        if (value && product.photoAssignments && mapping?.source.startsWith('image.') && value !== sourceValue(mapping.source, product, variant, data, rowIndex, template)) issue('image_assignment', `${column.label}: imagen fuera de la asignación aprobada de variante/canal/posición.`, column.key);
         if (value && mapping?.dataType === 'number' && (!/^-?\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)))) issue('number', `${column.label}: número inválido.`, column.key);
         if (value && (mapping?.source === 'variant.gtin' || /^(gtin|ean|upc|universal_product_code|codigo_universal)$/.test(normalizedKey)) && !isValidGtin(value)) issue('gtin', `${column.label}: GTIN inválido; no se generará uno automáticamente.`, column.key);
         if (value && (mapping?.source === 'variant.asin' || normalizedKey === 'asin') && !/^[A-Z0-9]{10}$/.test(value)) issue('asin', `${column.label}: ASIN inválido.`, column.key);
@@ -96,7 +114,7 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
   },
 });
 export const MARKETPLACE_ADAPTERS: Record<MarketplaceId, MarketplaceAdapter> = {
-  shein: createAdapter('shein', { supplier_code: 'variant.spu', skc: 'variant.skc', sku_code: 'variant.sku', goods_name: 'product.name', goods_description: 'product.description', main_attribute_value: 'variant.color', secondary_attribute_1_value: 'variant.size', main_img: 'image.0', detail_img_1: 'image.1' }),
+  shein: createAdapter('shein', { image_type: 'assignment.imageType', image_sort: 'assignment.imageSort', supplier_code: 'variant.spu', skc: 'variant.skc', sku_code: 'variant.sku', goods_name: 'product.name', goods_description: 'product.description', main_attribute_value: 'variant.color', secondary_attribute_1_value: 'variant.size', main_img: 'image.0', detail_img_1: 'image.1' }),
   'mercado-libre': createAdapter('mercado-libre', { sku_del_vendedor: 'variant.sku', codigo_universal: 'variant.gtin', titulo: 'product.name', seller_sku: 'variant.sku', seller_custom_field: 'variant.sku', title: 'product.name', available_quantity: 'variant.inventory', catalog_product_id: 'variant.catalogId', picture: 'image.0' }),
   'tiktok-shop': createAdapter('tiktok-shop', { seller_sku: 'variant.sku', product_name: 'product.name', product_description: 'product.description', retail_price: 'variant.price', quantity: 'variant.inventory', main_image: 'image.0' }),
   amazon: createAdapter('amazon', { item_sku: 'variant.sku', item_name: 'product.name', brand_name: 'product.brand', product_description: 'product.description', standard_price: 'variant.price', quantity: 'variant.inventory', external_product_id: 'variant.gtin', asin: 'variant.asin', parent_sku: 'variant.parentSku', parent_child: 'variant.parentage', relationship_type: 'variant.relationshipType', variation_theme: 'variant.variationTheme', main_image_url: 'image.0' }),

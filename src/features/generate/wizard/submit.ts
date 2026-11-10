@@ -110,6 +110,7 @@ export const getUploadedGarmentsForBatch = (
           fileName: photo.fileName,
           storagePath: photo.upload.storagePath,
           sourceIndex: photo.sourceIndex,
+          isDetail: photo.classification.isDetail === true,
           view: photo.classification.view || 'front',
           confidence: photo.classification.confidence,
           reasoning: photo.classification.reasoning,
@@ -122,6 +123,7 @@ export const getUploadedGarmentsForBatch = (
       const accessoryInferenceTexts = accessoryInferenceTextsByGarmentId.get(garment.id) || [];
 
       return {
+        photoAttributes: garment.photoAttributes,
         id: garment.id,
         name: garment.name,
         storagePath: photos[0]?.storagePath || garment.upload.storagePath!,

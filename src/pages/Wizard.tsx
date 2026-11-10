@@ -1,3 +1,4 @@
+import { MarketplacePhotoPlanPanel } from '../features/generate/MarketplacePhotoPlanPanel';
 import { ProductScenesStep } from '../components/wizard/ProductScenesStep';
 import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -50,6 +51,8 @@ export const Wizard: React.FC = () => {
     canSelectStep,
     handleFiles,
     handleRetryAnalysis,
+    handlePhotoAttributesChange,
+    handlePhotoIdentityChange,
     removeGarment,
     handleSubmit,
     handleClientChange,
@@ -173,12 +176,15 @@ export const Wizard: React.FC = () => {
         />}
       </div>}
 
+      {state.marketplacePhotoPlan && <MarketplacePhotoPlanPanel plan={state.marketplacePhotoPlan} disabled={isWizardBusy} onAttributesChange={handlePhotoAttributesChange} onIdentityChange={handlePhotoIdentityChange} />}
+
       {state.step === 2 && state.generationKind === 'product' && <ProductScenesStep
         scenes={state.productScenes} defaultScenes={product.defaultScenes} disabled={isWizardBusy} onToggle={product.toggleScene} onPromptChange={product.changeScenePrompt} />}
 
       {state.step === 2 && state.generationKind === 'garment' && <div className="space-y-6">
-        {contextSection('model')}
-        <PoseSelectionStep
+        {state.marketplacePhotoPlan && <p className="text-sm text-slate-600">El modelo es opcional. El plan usa sus bases verificadas cuando son compatibles; las tomas planas no requieren personas. Las fotos y sus destinos se proponen en el plan.</p>}
+        {(!state.marketplacePhotoPlan || state.marketplacePhotoPlan.tasks.some(t => t.composition === 'model')) && contextSection('model')}
+        {!state.marketplacePhotoPlan && <PoseSelectionStep
           selectedModel={selectedModel}
           garments={state.garments}
           selectedPoseIds={state.selectedPoseIds}
@@ -191,11 +197,11 @@ export const Wizard: React.FC = () => {
           onPoseToggle={handlePoseToggle}
           onToggleAllPoses={handleToggleAllPoses}
           onRetrySuggestions={handleRetryPoseSuggestions}
-        />
+        />}
       </div>}
 
       {state.step === 3 && <div className="space-y-6">
-        {contextSection('output')}
+        {!state.marketplacePhotoPlan && contextSection('output')}
         <BatchStep
           clientName={selectedClient?.name}
           modelName={selectedModel?.name}

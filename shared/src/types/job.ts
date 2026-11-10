@@ -45,6 +45,7 @@ export interface JobAutoReviewMarketplaceData {
 }
 
 export interface JobAutoReview {
+  photoValidation?: NonNullable<JobOutput['photoValidation']>;
   model: string;
   verdict: JobAutoReviewVerdict;
   summary: string;
@@ -140,6 +141,7 @@ export interface JobFailureInfo {
 }
 
 export interface JobOutput {
+  photoValidation?: { fidelity: boolean; destinations: Array<{ channel: import('../marketplaces').MarketplaceId; position: number; passed: boolean; notes: string }> };
   storedImage?: import('./provider').StoredPhotoMetadata;
   photoProfile?: import('./provider').CommercialPhotoProfile;
   promptFormat?: 'approved-try-on-v1';
@@ -175,6 +177,8 @@ export interface JobOutput {
 }
 
 export interface Job {
+  photoPlanId?: string;
+  photoTask?: import('./photoPlan').PhotoTask;
   photoProfile?: import('./provider').CommercialPhotoProfile;
   manglarBudgetId?: string;
   promptFormat?: 'approved-try-on-v1';

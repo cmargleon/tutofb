@@ -1,0 +1,1055 @@
+{
+  "date": "2026-11-10",
+  "clientId": "automation-e2e-test",
+  "scope": "Four additional synthetic model identities, declared ages 2,16,35,65, three standing orientations per model and full-length trouser production",
+  "models": [
+    {
+      "name": "toddler",
+      "declaredAge": 2,
+      "sex": "female",
+      "modelId": "lqkBt8JOU2xpL9H4ZMoG",
+      "referencePoses": [
+        {
+          "view": "front",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320822940-toddler-front/0.jpg"
+        },
+        {
+          "view": "back",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320844141-toddler-back/0.jpg"
+        },
+        {
+          "view": "side",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320859383-toddler-side/0.jpg"
+        }
+      ],
+      "observations": {
+        "modelId": "lqkBt8JOU2xpL9H4ZMoG",
+        "observations": {
+          "9f93c143-9d7b-424c-870c-793f98d9fde2": {
+            "audience": "child",
+            "orientation": "front",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Se observa a una niña de pie, orientada de frente, con cuerpo completo y fondo blanco liso.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "785f8110-dcd7-4c9b-baff-91e7fdfe32e0": {
+            "audience": "child",
+            "orientation": "back",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Se observa a una niña de espaldas vistiendo camiseta gris y pantalón oscuro, fondo blanco puro.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "72c5148a-98e1-44a3-b2e2-b600bc8c958f": {
+            "audience": "child",
+            "orientation": "side",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Child model standing in profile on a white background, wearing a grey t-shirt and blue trousers, full body is visible.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          }
+        }
+      },
+      "finalReceipt": {
+        "jobId": "2eg2HS3YdYKoeJG2G5R9",
+        "status": "pending",
+        "duplicate": false,
+        "createdAt": "2026-11-10T14:34:13.661Z",
+        "pollingDeadlineAt": "2026-11-10T15:04:13.661Z",
+        "pollAfterSeconds": 20,
+        "pollingTimedOut": false,
+        "pollingPolicy": {
+          "initialIntervalSeconds": 20,
+          "initialWindowSeconds": 300,
+          "subsequentIntervalSeconds": 60,
+          "timeoutSeconds": 1800
+        }
+      },
+      "finalStatus": {
+        "status": "completed",
+        "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+        "progress": {
+          "total": 7,
+          "completed": 7,
+          "failed": 0
+        },
+        "error": null
+      }
+    },
+    {
+      "name": "teen",
+      "declaredAge": 16,
+      "sex": "male",
+      "modelId": "WcwepxnSRSFAr2N0qJEn",
+      "referencePoses": [
+        {
+          "view": "front",
+          "storagePath": "model_generations/automation-e2e-test/age-matrix-teen-v2-1794320875947-front/0.jpg"
+        },
+        {
+          "view": "back",
+          "storagePath": "model_generations/automation-e2e-test/age-matrix-teen-v2-1794320888976-back/0.jpg"
+        },
+        {
+          "view": "side",
+          "storagePath": "model_generations/automation-e2e-test/age-matrix-teen-v2-1794320906123-side/0.jpg"
+        }
+      ],
+      "observations": {
+        "modelId": "WcwepxnSRSFAr2N0qJEn",
+        "observations": {
+          "7b999afe-dc16-409e-a57f-49858bfed03c": {
+            "audience": "child",
+            "orientation": "front",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "El modelo se muestra de frente, en posición de pie y cuerpo completo sobre fondo blanco puro. Edad declarada del modelo: 16; prevalece sobre la inferencia visual de público.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "d1d9e62c-cd79-480b-ab7e-b7ff862b6f7d": {
+            "audience": "child",
+            "orientation": "back",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Modelo visto de espaldas, cuerpo completo, sobre fondo blanco. Edad declarada del modelo: 16; prevalece sobre la inferencia visual de público.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "52737388-f5e3-4f13-8024-3fbefc3afac5": {
+            "audience": "child",
+            "orientation": "side",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "El modelo se encuentra en posición de perfil, de cuerpo entero sobre un fondo blanco puro. Edad declarada del modelo: 16; prevalece sobre la inferencia visual de público.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          }
+        }
+      },
+      "finalReceipt": {
+        "jobId": "uAouavib8W6Pzky2JMtA",
+        "status": "pending",
+        "duplicate": false,
+        "createdAt": "2026-11-10T14:34:14.843Z",
+        "pollingDeadlineAt": "2026-11-10T15:04:14.843Z",
+        "pollAfterSeconds": 20,
+        "pollingTimedOut": false,
+        "pollingPolicy": {
+          "initialIntervalSeconds": 20,
+          "initialWindowSeconds": 300,
+          "subsequentIntervalSeconds": 60,
+          "timeoutSeconds": 1800
+        }
+      },
+      "finalStatus": {
+        "status": "completed",
+        "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+        "progress": {
+          "total": 7,
+          "completed": 7,
+          "failed": 0
+        },
+        "error": null
+      }
+    },
+    {
+      "name": "adult",
+      "declaredAge": 35,
+      "sex": "male",
+      "modelId": "ugtu901YQA4qBoFCdzyH",
+      "referencePoses": [
+        {
+          "view": "front",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320822940-adult-front/0.jpg"
+        },
+        {
+          "view": "back",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320845981-adult-back/0.jpg"
+        },
+        {
+          "view": "side",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320860773-adult-side/0.jpg"
+        }
+      ],
+      "observations": {
+        "modelId": "ugtu901YQA4qBoFCdzyH",
+        "observations": {
+          "ef41830f-6d7a-49e1-bbfc-bfa1114fc8e1": {
+            "audience": "adult",
+            "orientation": "front",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Modelo masculino adulto en pose frontal de pie sobre fondo blanco. Se observa la vestimenta completa de pies a cabeza.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "974e17fb-2b14-4585-af9e-4db330a0b92b": {
+            "audience": "adult",
+            "orientation": "back",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Modelo adulto visto de espalda, de pie en cuerpo completo sobre fondo blanco puro.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "bcd4c639-4bde-43ad-a7a1-963b1dcaa489": {
+            "audience": "adult",
+            "orientation": "side",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Modelo masculino de perfil sobre fondo blanco, de pie, cuerpo completo, sin accesorios visibles.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          }
+        }
+      },
+      "finalReceipt": {
+        "batchId": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb",
+        "createdJobs": 4
+      }
+    },
+    {
+      "name": "senior",
+      "declaredAge": 65,
+      "sex": "female",
+      "modelId": "u54EMQI44KlHwGg1N5Pl",
+      "referencePoses": [
+        {
+          "view": "front",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320822940-senior-front/0.jpg"
+        },
+        {
+          "view": "back",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320844225-senior-back/0.jpg"
+        },
+        {
+          "view": "side",
+          "storagePath": "model_generations/automation-e2e-test/pose-age-matrix-1794320861480-senior-side/0.jpg"
+        }
+      ],
+      "observations": {
+        "modelId": "u54EMQI44KlHwGg1N5Pl",
+        "observations": {
+          "84fadbdd-8a8f-4dac-9a72-4108d3126d39": {
+            "audience": "adult",
+            "orientation": "front",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "La modelo es una mujer adulta de pie, vista de frente de cuerpo completo sobre un fondo blanco puro.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "51e17f95-130a-4753-b163-b2503cbd8649": {
+            "audience": "adult",
+            "orientation": "back",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "El modelo se encuentra de espaldas, de pie sobre un fondo blanco puro, mostrando el cuerpo completo.",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          },
+          "4720a20a-8e9d-467e-96e4-37cf7298efd9": {
+            "audience": "adult",
+            "orientation": "side",
+            "posture": "standing",
+            "framing": "full_body",
+            "background": "white",
+            "garmentVisible": true,
+            "accessories": false,
+            "evidence": "Modelo de edad avanzada en pose lateral completa sobre fondo blanco",
+            "whiteRgbVerified": false,
+            "verified": true,
+            "performer": "synthetic"
+          }
+        }
+      },
+      "finalReceipt": {
+        "batchId": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40",
+        "createdJobs": 4
+      }
+    }
+  ],
+  "finalCases": [
+    {
+      "name": "toddler",
+      "declaredAge": 2,
+      "jobs": [
+        {
+          "id": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8-04a803b521004169",
+          "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+          "view": "front",
+          "composition": "flat_lay",
+          "referencePose": null,
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "tiktok-shop",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con los requisitos de flat lay y ausencia de personas para TikTok Shop."
+              }
+            ]
+          },
+          "sha256": "fc9a889b241af63d8c523239e789842784487538e5da700b0aee89afe7b48c4c"
+        },
+        {
+          "id": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8-1500f228f4f48754",
+          "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+          "view": "side",
+          "composition": "flat_lay",
+          "referencePose": null,
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "tiktok-shop",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con el requisito de ser una imagen flat lay sin personas."
+              }
+            ]
+          },
+          "sha256": "8f8399b1140101251194053c58a084ce1f44828eebed414976a626336e9559fb"
+        },
+        {
+          "id": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8-24a58fc135373101",
+          "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+          "view": "back",
+          "composition": "model",
+          "referencePose": "back",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con las normas de fidelidad del producto para Amazon."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de imagen para Mercado Libre."
+              },
+              {
+                "channel": "shein",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con las especificaciones técnicas para Shein."
+              }
+            ]
+          },
+          "sha256": "bc5888918e1a9c95172fa3662e1623764c4d98e22b2f12d312a9ca14f19d7871"
+        },
+        {
+          "id": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8-3331788a9fa020d0",
+          "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "mercado-libre",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad y posición para el canal."
+              },
+              {
+                "channel": "shein",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad y posición para el canal."
+              }
+            ]
+          },
+          "sha256": "36fe9c12a6e5dcd933d12a8e691bb2b52ce2c5d764685b2339b20efef8277d7a"
+        },
+        {
+          "id": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8-93b62e92710a03d6",
+          "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+          "view": "back",
+          "composition": "flat_lay",
+          "referencePose": null,
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "tiktok-shop",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con las especificaciones para la plataforma."
+              }
+            ]
+          },
+          "sha256": "a1da45bc3aed06b6fcfb99d8ad3b1e38d88e44bd2254db97bc8be20dfa4f946f"
+        },
+        {
+          "id": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8-c858d88a5f710cd2",
+          "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+          "view": "side",
+          "composition": "model",
+          "referencePose": "side",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Amazon."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Mercado Libre."
+              },
+              {
+                "channel": "shein",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Shein."
+              }
+            ]
+          },
+          "sha256": "41ad5b18c0579bc4db84b436dacc490973ab0b353f5c03b691cad768272af58b"
+        },
+        {
+          "id": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8-dc321d5c8afe52ba",
+          "batchId": "photo-28d29cddc0b7e597c7e932aa8a53b9fe8823393f4f7105cd3f14ee5eec943be8",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 1,
+                "passed": true,
+                "notes": "La imagen cumple con los criterios de fidelidad y los requisitos técnicos para Amazon."
+              }
+            ]
+          },
+          "sha256": "87796ef6a3d3d8e13ebbc161577ee68863c2fc8d8e1cf7ab4f28158d6a80bee0"
+        }
+      ]
+    },
+    {
+      "name": "teen",
+      "declaredAge": 16,
+      "jobs": [
+        {
+          "id": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098-515e005672d8f8e2",
+          "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+          "view": "side",
+          "composition": "model",
+          "referencePose": "side",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Amazon."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Mercado Libre."
+              },
+              {
+                "channel": "shein",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Shein."
+              }
+            ]
+          },
+          "sha256": "27cdb9d90f9724a030a7e0c224530518840385ff50fd82d5ea7341b2a0c318ec"
+        },
+        {
+          "id": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098-5b78de8c4a3f5e64",
+          "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "mercado-libre",
+                "position": 1,
+                "passed": true,
+                "notes": "La imagen cumple con los estándares para Mercado Libre."
+              },
+              {
+                "channel": "shein",
+                "position": 1,
+                "passed": true,
+                "notes": "La imagen cumple con los estándares para Shein."
+              }
+            ]
+          },
+          "sha256": "3f38276bf1b26fade27f1c63e884db0bca09840171751dc4f6471b276645a160"
+        },
+        {
+          "id": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098-62821e7554ce0c07",
+          "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+          "view": "back",
+          "composition": "model",
+          "referencePose": "back",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Amazon."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Mercado Libre."
+              },
+              {
+                "channel": "shein",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad para Shein."
+              }
+            ]
+          },
+          "sha256": "4d9cb13438e2ecc0809798938a5e020c18c1562cacaac920c5b52e7430cc014a"
+        },
+        {
+          "id": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098-6d523beb1789d1dd",
+          "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+          "view": "front",
+          "composition": "flat_lay",
+          "referencePose": null,
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "tiktok-shop",
+                "position": 1,
+                "passed": true,
+                "notes": "La imagen es apta para su uso en el catálogo."
+              }
+            ]
+          },
+          "sha256": "f4bbb794b6e9f168a7c97fbe7b3478401896021e818f171074728b91ae25d5eb"
+        },
+        {
+          "id": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098-abaa0a4ad370ab16",
+          "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+          "view": "side",
+          "composition": "flat_lay",
+          "referencePose": null,
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "tiktok-shop",
+                "position": 3,
+                "passed": true,
+                "notes": "La imagen cumple con los estándares para el canal de venta."
+              }
+            ]
+          },
+          "sha256": "05ae50b36a4703f95749c949229dadfa40ea9e3ea497d53a12ada49e4f858c07"
+        },
+        {
+          "id": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098-bee46c0bc702ce77",
+          "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+          "view": "back",
+          "composition": "flat_lay",
+          "referencePose": null,
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "tiktok-shop",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con las directrices de flat lay para el canal."
+              }
+            ]
+          },
+          "sha256": "15b0e90cde693e3506a1a6fe72f4f1332566f2cb8c64df7ae948e6d34bd5b4ff"
+        },
+        {
+          "id": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098-fa9217329808ad96",
+          "batchId": "photo-7ea4462d6584ee0c3d4ccfaf63c353962c0c27e2817c3f03a167c8dd4cd9a098",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con los requisitos para Amazon, incluyendo la fidelidad del producto y las especificaciones del plan."
+              }
+            ]
+          },
+          "sha256": "75738e42932e660924dbc931d7ec82e8fe7b93dfa9dc5a973108a0006035bafe"
+        }
+      ]
+    },
+    {
+      "name": "adult",
+      "declaredAge": 35,
+      "jobs": [
+        {
+          "id": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb-29ce955f99b90c6b",
+          "batchId": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb",
+          "view": "back",
+          "composition": "model",
+          "referencePose": "back",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 2,
+                "passed": true,
+                "notes": "Imagen apta para Amazon."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 2,
+                "passed": true,
+                "notes": "Imagen apta para Mercado Libre."
+              },
+              {
+                "channel": "tiktok-shop",
+                "position": 2,
+                "passed": true,
+                "notes": "Imagen apta para TikTok Shop."
+              },
+              {
+                "channel": "shein",
+                "position": 2,
+                "passed": true,
+                "notes": "Imagen apta para Shein."
+              }
+            ]
+          },
+          "sha256": "672cb5056a3b8146aad413ec02bc8662792706d50ee734643bf039abd358e229"
+        },
+        {
+          "id": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb-7e3951d758f9c1ed",
+          "batchId": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb",
+          "view": "side",
+          "composition": "model",
+          "referencePose": "side",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los estándares de calidad de catálogo."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con las especificaciones de formato."
+              },
+              {
+                "channel": "tiktok-shop",
+                "position": 3,
+                "passed": true,
+                "notes": "Cumple con los requerimientos visuales."
+              },
+              {
+                "channel": "shein",
+                "position": 3,
+                "passed": true,
+                "notes": "Imagen adecuada para la plataforma."
+              }
+            ]
+          },
+          "sha256": "27742c5dc5fe657e7e28048e86e97fa3420afb37a1a0b34830b92c6732cfd8e8"
+        },
+        {
+          "id": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb-d6e292abf00c7025",
+          "batchId": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "mercado-libre",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con las reglas de fidelidad de Mercado Libre."
+              },
+              {
+                "channel": "shein",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con el esquema de Shein."
+              }
+            ]
+          },
+          "sha256": "68673ea370eac4276e5031e51373662286c60c4d985561c88fffbdcbd7c412fe"
+        },
+        {
+          "id": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb-e9c11db56166c2af",
+          "batchId": "photo-ad2c3468ce887b11e9e6909d8a623bbfc9b675c5f7a4794637754352315596eb",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con las especificaciones de Amazon."
+              },
+              {
+                "channel": "tiktok-shop",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con las especificaciones de TikTok Shop."
+              }
+            ]
+          },
+          "sha256": "685b9438f3bfd8c534f8759cc7bab79c9c782d5c7410219775259890760d627b"
+        }
+      ]
+    },
+    {
+      "name": "senior",
+      "declaredAge": 65,
+      "jobs": [
+        {
+          "id": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40-6ef3b0a07c2ade6c",
+          "batchId": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40",
+          "view": "side",
+          "composition": "model",
+          "referencePose": "side",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 3,
+                "passed": true,
+                "notes": "Fidelidad y requerimientos técnicos cumplidos."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 3,
+                "passed": true,
+                "notes": "Fidelidad y requerimientos técnicos cumplidos."
+              },
+              {
+                "channel": "tiktok-shop",
+                "position": 3,
+                "passed": true,
+                "notes": "Fidelidad y requerimientos técnicos cumplidos."
+              },
+              {
+                "channel": "shein",
+                "position": 3,
+                "passed": true,
+                "notes": "Fidelidad y requerimientos técnicos cumplidos."
+              }
+            ]
+          },
+          "sha256": "3b1fb8cb6893fae7406bc1868031220f25b8b880d3a51866a9648bccf1be278f"
+        },
+        {
+          "id": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40-ad424ccc8f779f48",
+          "batchId": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40",
+          "view": "back",
+          "composition": "model",
+          "referencePose": "back",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad."
+              },
+              {
+                "channel": "mercado-libre",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad."
+              },
+              {
+                "channel": "tiktok-shop",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad."
+              },
+              {
+                "channel": "shein",
+                "position": 2,
+                "passed": true,
+                "notes": "Cumple con los requisitos de fidelidad."
+              }
+            ]
+          },
+          "sha256": "cae5f6e1258269c09ce60eb5d9a4c6fca4fc885fe4d41b8be7cb2fa2be7455fe"
+        },
+        {
+          "id": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40-d47abb1b646a7f2b",
+          "batchId": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "amazon",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con todos los requisitos para Amazon."
+              },
+              {
+                "channel": "tiktok-shop",
+                "position": 1,
+                "passed": true,
+                "notes": "Cumple con todos los requisitos para TikTok Shop."
+              }
+            ]
+          },
+          "sha256": "be92d364ecdeaa4dea287481b0a180d6f995c7c2d8ebd8bf12719bba62e37ef2"
+        },
+        {
+          "id": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40-fe57c999f5b558a9",
+          "batchId": "photo-3e2c3adb4463b2af7a0c886b422e50945dcc25004c964c53c016b5acb3167a40",
+          "view": "front",
+          "composition": "model",
+          "referencePose": "front",
+          "status": "completed",
+          "validation": {
+            "fidelity": true,
+            "destinations": [
+              {
+                "channel": "mercado-libre",
+                "position": 1,
+                "passed": true,
+                "notes": "La imagen cumple con los estándares de calidad de Mercado Libre."
+              },
+              {
+                "channel": "shein",
+                "position": 1,
+                "passed": true,
+                "notes": "La imagen se ajusta a las directrices de estilo de catálogo de Shein."
+              }
+            ]
+          },
+          "sha256": "df43d2dfe9a791c4dafba327a563011eaffacb7927b36b4f3e2f3c6b8b853374"
+        }
+      ]
+    }
+  ],
+  "initialPass": {
+    "jobs": [
+      {
+        "id": "photo-075ac6a6ab5a99852e34ba0a114251d7e82cbb453fa4bd7445fc80dd1e228536-169ce16aaec4163c",
+        "status": "failed",
+        "error": "Gemini bloqueó la validación: Gemini rechazó el prompt de validación y no devolvió un resultado interpretable."
+      },
+      {
+        "id": "photo-075ac6a6ab5a99852e34ba0a114251d7e82cbb453fa4bd7445fc80dd1e228536-19fba1e4af8d92c4",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-075ac6a6ab5a99852e34ba0a114251d7e82cbb453fa4bd7445fc80dd1e228536-5172dacbc598974d",
+        "status": "failed",
+        "error": "Gemini bloqueó la validación: Gemini rechazó el prompt de validación y no devolvió un resultado interpretable."
+      },
+      {
+        "id": "photo-075ac6a6ab5a99852e34ba0a114251d7e82cbb453fa4bd7445fc80dd1e228536-7779f7a63ceae186",
+        "status": "failed",
+        "error": "Gemini bloqueó la validación: Gemini rechazó el prompt de validación y no devolvió un resultado interpretable."
+      },
+      {
+        "id": "photo-39d8c673e9b64ad5b64eab1411222b229cb067fd2df6c6428e95ad60f597c66b-6907db351296f5ab",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-39d8c673e9b64ad5b64eab1411222b229cb067fd2df6c6428e95ad60f597c66b-6e3856aee899dfc2",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-39d8c673e9b64ad5b64eab1411222b229cb067fd2df6c6428e95ad60f597c66b-95340e17015454e1",
+        "status": "failed",
+        "error": "El proveedor devolvió un error: El proveedor devolvió un error durante la generación."
+      },
+      {
+        "id": "photo-49f3bdc32d1e069ec168439cbbbbdb8dc2fe6db9f679edd2d0ed406c61a279f2-c1d3edbaae51da90",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-49f3bdc32d1e069ec168439cbbbbdb8dc2fe6db9f679edd2d0ed406c61a279f2-cfdb3281dad2ba8f",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-49f3bdc32d1e069ec168439cbbbbdb8dc2fe6db9f679edd2d0ed406c61a279f2-ec0e054bcf02db07",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-49f3bdc32d1e069ec168439cbbbbdb8dc2fe6db9f679edd2d0ed406c61a279f2-f9d6637b2aec623d",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-ea16f5bd9783be88b42068fbca9edb0ae9c00c2511e3c9b99ec74ba2ba3ff47a-0a9105d1685551a9",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-ea16f5bd9783be88b42068fbca9edb0ae9c00c2511e3c9b99ec74ba2ba3ff47a-1ec4d0f93ee3e00f",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-ea16f5bd9783be88b42068fbca9edb0ae9c00c2511e3c9b99ec74ba2ba3ff47a-824d4aeb106115b5",
+        "status": "completed",
+        "error": null
+      },
+      {
+        "id": "photo-ea16f5bd9783be88b42068fbca9edb0ae9c00c2511e3c9b99ec74ba2ba3ff47a-ca22831079b5fb66",
+        "status": "completed",
+        "error": null
+      }
+    ]
+  },
+  "paid": {
+    "modelImages": 12,
+    "productionOutputsIncludingRetries": 40,
+    "estimatedModelUsd": 0.31600000000000006,
+    "estimatedProductionUsd": 1.4711000000000005,
+    "estimatedGeminiUsd": 0.11924900000000008,
+    "estimatedTotalUsd": 1.906349
+  },
+  "fixes": [
+    "Select the matching rear/lateral identity reference when reframing full-body bases.",
+    "Declared model age overrides visual audience inference; a declared 16-year-old remains a minor.",
+    "Automation accepts operator-confirmed referenceViews by filename and blocks uncertain uncorrected views.",
+    "Generation prompts explicitly require rear or side orientation rather than front substitution."
+  ],
+  "checks": {
+    "npmTest": {
+      "passed": 276,
+      "skipped": 20,
+      "failed": 0
+    },
+    "specificIntegration": "passed with commercial back/side override assertions",
+    "frontendTypecheck": true,
+    "functionsTypecheck": true,
+    "frontendBuild": true,
+    "functionsBuild": true,
+    "functionsDeploy": true,
+    "hostingDeploy": true
+  },
+  "limitations": [
+    "Synthetic controlled outfit references, not independently photographed commercial SKUs.",
+    "Three standing orientations per model; does not validate every posture, body type or garment category.",
+    "A provider moderation rejection and early review failures are retained; no approval was forced."
+  ]
+}

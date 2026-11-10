@@ -1,3 +1,4 @@
+import { usePhotoBaseVerification } from '../../features/models/hooks/usePhotoBaseVerification';
 import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -30,6 +31,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
   clients,
   library,
 }) => {
+  const photoBases = usePhotoBaseVerification(model);
   const hasPoses = model.poses && model.poses.length > 0;
   const isArchived = isArchivedCatalogEntity(model);
   const { search } = useLocation();
@@ -131,6 +133,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
           </div>
         </div>
 
+        {!isArchived && photoBases.pending > 0 && <div className="mt-3 flex items-center gap-3"><Button size="sm" loading={photoBases.busy} onClick={photoBases.verify}>Verificar bases con Gemini ({Math.min(8, photoBases.pending)})</Button><span className="text-xs text-slate-500">Analiza fondo, postura, encuadre y visibilidad de las fotos guardadas.</span></div>}
         {isEditing ? (
           <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4">
             <div className="flex items-center gap-2">

@@ -167,10 +167,12 @@ export const isGenerateWizardStepComplete = (state: WizardState, stepId: number)
         && resolveWizardGenerationKind(state.garments) === state.generationKind,
       );
     case 2:
+      if (state.marketplacePhotoPlan) return state.marketplacePhotoPlan.tasks.length > 0 && !state.marketplacePhotoPlan.issues.some(i => i.blocking);
       return state.generationKind === 'product'
         ? state.productScenes.length > 0 && state.productScenes.every((scene) => Boolean(scene.prompt.trim()))
         : state.generationKind === 'garment' && Boolean(state.selectedModelId) && state.selectedPoseIds.length > 0;
     case 3:
+      if (state.marketplacePhotoPlan) return !state.marketplacePhotoPlan.issues.some(i => i.blocking);
       return state.outputMode === 'photos_only' || Boolean(state.selectedSpreadsheetTemplateId);
     default:
       return false;

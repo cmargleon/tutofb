@@ -1,3 +1,5 @@
+import { dispatchMarketplacePhotos } from './marketplacePhotos';
+import { activePhotoChannels } from '../../../shared/src/marketplacePhotoPlan';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
 import { randomUUID } from 'node:crypto';
@@ -45,7 +47,8 @@ export const processAutomation = async (jobId: string): Promise<void> => {
       const legacyConfig = client.automation?.presets?.[preset.name];
       preset.config = { ...preset.config, photoProfile: undefined, ...normalizeProviderImageConfig(preset.config.provider!, legacyConfig?.imageConfig, legacyConfig?.aspectRatio || '3:4') };
     }
-    const modelOptions = job.jobType === 'garment'
+    const marketplacePhotos = job.photoMarketplaces !== undefined && activePhotoChannels(job.photoMarketplaces).length > 0;
+    const modelOptions = job.jobType === 'garment' && !marketplacePhotos
       ? job.modelOptions || await loadAutomationModelOptions(job.clientId, client, job.modelId || preset.config.modelId, preset.config.poseIds)
       : undefined;
     const inputImages = await importImagesForAutomationJob(job);
@@ -59,7 +62,8 @@ export const processAutomation = async (jobId: string): Promise<void> => {
     logger.info('automation import completed', { jobId, count: inputImages.length });
     const prepared = { ...job, inputImages, modelOptions };
     logger.info('automation generation started', { jobId, jobType: job.jobType });
-    if (job.jobType === 'garment') await dispatchGarment(prepared, client, preset.config, modelOptions!);
+    if (marketplacePhotos) await dispatchMarketplacePhotos(prepared, client, preset.config);
+    else if (job.jobType === 'garment') await dispatchGarment(prepared, client, preset.config, modelOptions!);
     else await dispatchProduct(prepared, client, preset.config);
     await refreshAutomation(jobId);
   } catch (error) {
@@ -98,6 +102,7 @@ export const refreshAutomation = async (jobId: string): Promise<AutomationJob | 
     const batchIds = job.batchIds || [job.batchId];
     const missing = jobs.length !== job.generationJobIds.length || jobs.some((scene) => scene.clientId !== job.clientId || scene.automationJobId !== job.id || !batchIds.includes(scene.batchId));
     const summary = missing ? { status: 'needs_attention' as const, progress: job.progress, outputImages: [] } : summarizeAutomation(jobs);
+    if (summary.status === 'completed' && jobs.some(scene => scene.photoTask?.destinations.some(d => d.required && !scene.currentOutput?.photoValidation?.destinations.some(v => v.channel === d.channel && v.position === d.position && v.passed)))) summary.status = 'needs_attention';
     if (summary.status === 'completed' && itemIssues.length) summary.status = 'needs_attention';
     const error = missing ? { code: 'missing-generation-job', message: 'Un job de generación fue eliminado.' }
       : summary.progress.failed ? { code: jobs.some((scene) => scene.automationGate === 'budget') ? 'automation-budget-paused' : 'generation-review-failed', message: jobs.find((scene) => scene.automationGate === 'budget')?.lastError || 'Hay imágenes fallidas o rechazadas. Revisa los jobs y sus intentos en el batch.' }

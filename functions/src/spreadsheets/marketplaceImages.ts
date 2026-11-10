@@ -16,21 +16,21 @@ export function marketplaceImageBucketName(): string {
   return `${projectId}-marketplace-images`;
 }
 
-const publicationId = (product: MasterProduct, image: ApprovedImage, channel: MarketplaceId) => createHash('sha256')
-  .update(JSON.stringify([product.clientId, product.id, image.jobId, image.outputId, image.storagePath, channel, MARKETPLACE_IMAGE_PROFILE_VERSION])).digest('hex');
+const publicationId = (product: MasterProduct, image: ApprovedImage, channel: MarketplaceId, version = MARKETPLACE_IMAGE_PROFILE_VERSION) => createHash('sha256')
+  .update(JSON.stringify([product.clientId, product.id, image.jobId, image.outputId, image.storagePath, channel, version])).digest('hex');
 export const marketplaceImageClientPrefix = (clientId: string) => `images/${createHash('sha256').update(clientId).digest('hex')}/`;
 const publicationRef = (product: MasterProduct, channel: MarketplaceId) => getAppFirestore()
   .doc(`clients/${product.clientId}/products/${product.id}/marketplaceImages/${channel}`);
 
 export function isMatchingMarketplacePublication(record: PublishedMarketplaceImage | undefined, product: MasterProduct, image: ApprovedImage, channel: MarketplaceId): record is PublishedMarketplaceImage {
   if (!record) return false;
-  const prefix = `${marketplaceImageClientPrefix(product.clientId)}${publicationId(product, image, channel)}/`;
+  const prefix = `${marketplaceImageClientPrefix(product.clientId)}${publicationId(product, image, channel, record.profileVersion)}/`;
   return record.marketplaceId === channel && record.outputId === image.outputId && record.jobId === image.jobId
-    && record.sourceStoragePath === image.storagePath && record.profileVersion === MARKETPLACE_IMAGE_PROFILE_VERSION
+    && record.sourceStoragePath === image.storagePath && ['jpeg-v1', MARKETPLACE_IMAGE_PROFILE_VERSION].includes(record.profileVersion)
     && record.bucket === marketplaceImageBucketName() && record.storagePath.startsWith(prefix)
     && /^[a-f0-9]{64}\.jpg$/.test(record.storagePath.slice(prefix.length))
     && record.url === `https://storage.googleapis.com/${record.bucket}/${record.storagePath}`
-    && record.contentType === 'image/jpeg' && record.bytes > 0 && record.bytes <= MARKETPLACE_IMAGE_MAX_BYTES;
+    && record.contentType === 'image/jpeg' && (channel !== 'tiktok-shop' || Math.abs(record.width / record.height - .75) < .002 || Math.abs(record.width / record.height - 4 / 3) < .002) && record.bytes > 0 && record.bytes <= MARKETPLACE_IMAGE_MAX_BYTES;
 }
 
 /** Read-only projection. Publication is never a side effect of opening a preview or downloading an Excel. */
@@ -64,9 +64,10 @@ const assertCurrentImage = (product: MasterProduct, image: ApprovedImage, channe
     throw new HttpsError('failed-precondition', 'Cliente o marketplace no disponible.');
   const job = snapshot.exists ? { ...snapshot.data(), id: snapshot.id } as Job : null;
   const output = job && resolveApprovedJobOutput(job);
-  if (!job || job.clientId !== product.clientId || job.garmentId !== product.garmentId || !product.batchIds.includes(job.batchId)
+  if (!job || job.clientId !== product.clientId || (job.photoTask?.productId || job.garmentId) !== product.garmentId || !product.batchIds.includes(job.batchId)
     || !isApprovedMasterProductOutput(job, output) || output?.id !== image.outputId || output.resultImagePath !== image.storagePath)
     throw new HttpsError('failed-precondition', 'La fotografía cambió o dejó de estar aprobada. Actualiza antes de publicarla.');
+  if (job.photoTask && !output?.photoValidation?.destinations.some(d => d.channel === channel && d.passed) || job.photoTask && !output?.photoValidation?.fidelity) throw new HttpsError('failed-precondition', 'La fotografía no está validada para este canal.');
   if (!image.storagePath.startsWith(`generated/${product.clientId}/${job.batchId}/${image.jobId}/`)
     || /[\\%?#\x00-\x1f]/.test(image.storagePath) || image.storagePath.split('/').some(part => !part || part === '.' || part === '..'))
     throw new HttpsError('permission-denied', 'La fotografía no pertenece a este trabajo.');

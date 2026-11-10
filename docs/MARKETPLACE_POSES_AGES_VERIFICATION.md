@@ -1,6 +1,6 @@
 # Ampliación real: edades, poses y pantalones
 
-10 de noviembre de 2026. Cliente `automation-e2e-test`, Firebase real. Esta ronda amplía la prueba inicial de camiseta infantil. [Evidencia por modelo, pose, job, destino y hash](MARKETPLACE_POSES_AGES_VERIFICATION.json).
+10 de noviembre de 2026. Cliente `automation-e2e-test`, Firebase real. Esta ronda amplía la prueba inicial de camiseta infantil. [Evidencia por modelo, pose, job, destino y hash](reports/MARKETPLACE_POSES_AGES_VERIFICATION.json).
 
 Se crearon cuatro identidades sintéticas nuevas con edades **declaradas** de 2, 16, 35 y 65 años, dos masculinas y dos femeninas. Cada modelo tiene tres fotografías propias: frente, espalda y perfil lateral, de pie y con cuerpo completo. Son 12 bases nuevas, observadas por Gemini y revisadas visualmente. Una edad exacta de una persona sintética es un atributo solicitado, no una medición biológica verificable de sus píxeles.
 

@@ -70,7 +70,7 @@ Publicado y verificado en `tutofb-260320-1003`, base `(default)`:
 | Hosting | Publicado; HTML y 11 assets referenciados coinciden byte a byte con el build local |
 | Acceso anónimo remoto | `listClients`, `saveClient` e imágenes: 401; Firestore y un archivo generado existente en Storage: 403 |
 
-El límite temporal 429 durante el despliegue final se resolvió con los reintentos de Firebase; no quedan revisiones pendientes. No se modificaron expresiones cron ni configuración de horarios. Los controles con tokens anteriores a cambios de usuario se probaron en emuladores; no se degradaron cuentas reales ni se crearon fixtures en producción. Evidencia resumida y hashes de assets: [CLIENTS_VERIFICATION.json](CLIENTS_VERIFICATION.json).
+El límite temporal 429 durante el despliegue final se resolvió con los reintentos de Firebase; no quedan revisiones pendientes. No se modificaron expresiones cron ni configuración de horarios. Los controles con tokens anteriores a cambios de usuario se probaron en emuladores; no se degradaron cuentas reales ni se crearon fixtures en producción. Evidencia resumida y hashes de assets: [CLIENTS_VERIFICATION.json](reports/CLIENTS_VERIFICATION.json).
 
 ## Archivos modificados
 
@@ -78,7 +78,7 @@ El límite temporal 429 durante el despliegue final se resolvió con los reinten
 | --- | --- |
 | `.firebase/hosting.ZGlzdA.cache` | Pruebas y verificación de autorización y Clientes. |
 | `docs/CLIENTS_TECHNICAL_FIXES.md` | Informe técnico, compatibilidad, pruebas, límites y estado de despliegue. |
-| `docs/CLIENTS_VERIFICATION.json` | Evidencia resumida de despliegues y comprobaciones remotas, sin tokens ni secretos. |
+| `docs/reports/CLIENTS_VERIFICATION.json` | Evidencia resumida de despliegues y comprobaciones remotas, sin tokens ni secretos. |
 | `e2e/client-identity-products.spec.ts` | Regresiones de interfaz, identidad, conflictos y catálogo; dobles locales sin acceso externo. |
 | `e2e/clients-redesign.spec.ts` | Regresiones de interfaz, identidad, conflictos y catálogo; dobles locales sin acceso externo. |
 | `e2e/support/isolated-browser.mjs` | Regresiones de interfaz, identidad, conflictos y catálogo; dobles locales sin acceso externo. |

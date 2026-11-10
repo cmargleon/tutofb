@@ -8,7 +8,7 @@ La ampliación existe y tiene una cobertura amplia: **23 herramientas y 97 opera
 
 Corrección posterior de la auditoría: la comparación original de prompts invocó directamente `createGenerationBatchCore`, saltándose la validación de la entrada pública. No demuestra que el wizard ni `wizard.createGarment` sustituyan silenciosamente un prompt aprobado. La entrada pública exige `approved-try-on-v1` y rechaza peticiones sin ese formato. El hallazgo 3 se acota a continuación.
 
-La conexión de Manglar disponible en este chat expone solamente las siete herramientas históricas. Su llamada real a `manglar_capabilities` funcionó, pero devolvió la respuesta histórica, sin `identity` ni `discoveryTool`. Esto coincide con el camino de compatibilidad de la identidad técnica; esta conexión no acredita el uso de las nuevas operaciones ni la identidad individual. El propio registro `MANGLAR_V2_VERIFICATION.json` conserva `nativeChatGPTLinkCompleted: false` y `delegatedSecondChatGPTAccountVerified: false`.
+La conexión de Manglar disponible en este chat expone solamente las siete herramientas históricas. Su llamada real a `manglar_capabilities` funcionó, pero devolvió la respuesta histórica, sin `identity` ni `discoveryTool`. Esto coincide con el camino de compatibilidad de la identidad técnica; esta conexión no acredita el uso de las nuevas operaciones ni la identidad individual. El propio registro `reports/MANGLAR_V2_VERIFICATION.json` conserva `nativeChatGPTLinkCompleted: false` y `delegatedSecondChatGPTAccountVerified: false`.
 
 ## Defectos comprobados
 

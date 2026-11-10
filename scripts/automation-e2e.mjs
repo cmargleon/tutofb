@@ -7,7 +7,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { ManglarAutomationClient } from './manglar-work-client.mjs';
 const require = createRequire(import.meta.url);
 const sharp = require('../functions/node_modules/sharp');
-const reportPath = new URL('../docs/AUTOMATION_E2E_RESULT.json', import.meta.url);
+const reportPath = new URL('../docs/reports/AUTOMATION_E2E_RESULT.json', import.meta.url);
 const sourcePage = 'https://commons.wikimedia.org/wiki/File:A_white_mug_filled_with_warm_coffee.jpg';
 const imageUrl = 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/81/A_white_mug_filled_with_warm_coffee.jpg/1280px-A_white_mug_filled_with_warm_coffee.jpg';
 async function getClientSecret() {

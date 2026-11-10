@@ -13,7 +13,7 @@ Se amplía el servidor y el plugin existentes: 23 herramientas, 97 operaciones p
 - Suite completa en emuladores limpios: 187 aprobadas; cero fallos y cero omitidas.
 - Playwright aislado: 12 aprobadas (consentimiento, wizard y adaptadores frontend compartidos).
 - No se realizaron generaciones pagadas ni operaciones destructivas sobre datos reales. El spec antiguo de modelos que usa credenciales reales falló en el login; fue excluido y sustituido por validación aislada.
-- Producción: despliegue completado el 3 de noviembre de 2026; 86 Functions activas, 39 índices compuestos `READY` y Hosting publicado. Se verificaron descubrimiento, 23 herramientas, OAuth/CIMD, consentimiento, rechazo anónimo y la conexión nativa histórica mediante `manglar_capabilities`. Evidencia: [MANGLAR_V2_VERIFICATION.json](MANGLAR_V2_VERIFICATION.json).
+- Producción: despliegue completado el 3 de noviembre de 2026; 86 Functions activas, 39 índices compuestos `READY` y Hosting publicado. Se verificaron descubrimiento, 23 herramientas, OAuth/CIMD, consentimiento, rechazo anónimo y la conexión nativa histórica mediante `manglar_capabilities`. Evidencia: [MANGLAR_V2_VERIFICATION.json](reports/MANGLAR_V2_VERIFICATION.json).
 
 ## Alcance de las pruebas
 
@@ -29,7 +29,7 @@ La segunda persona debe consentir OAuth desde su sesión. Los archivos locales r
 - [docs/MANGLAR_COVERAGE.md](../docs/MANGLAR_COVERAGE.md)
 - [docs/MANGLAR_IMPLEMENTATION_RESULT.md](../docs/MANGLAR_IMPLEMENTATION_RESULT.md)
 - [docs/MANGLAR_TOOL_INVENTORY.md](../docs/MANGLAR_TOOL_INVENTORY.md)
-- [docs/MANGLAR_V2_VERIFICATION.json](../docs/MANGLAR_V2_VERIFICATION.json)
+- [docs/reports/MANGLAR_V2_VERIFICATION.json](reports/MANGLAR_V2_VERIFICATION.json)
 - [e2e/manglar-connect.spec.ts](../e2e/manglar-connect.spec.ts)
 - [e2e/manglar-services.spec.ts](../e2e/manglar-services.spec.ts)
 - [e2e/wizard-products.spec.ts](../e2e/wizard-products.spec.ts)

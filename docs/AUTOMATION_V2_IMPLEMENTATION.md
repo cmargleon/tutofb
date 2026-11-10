@@ -32,7 +32,7 @@ Los módulos principales nuevos son:
 - `tests/automationPolicy.test.ts`, `tests/automationAdvanced.integration.test.ts`.
 - `e2e/automation-navigation.spec.ts`, `e2e/automation-settings.spec.ts`.
 
-Se ampliaron los contratos de automatización, cliente, job y SystemConfig; los módulos existentes de automatización; los cores de batches con overrides exclusivos para automatización; worker, helpers de regeneración, revisión y registro Gemini; configuración global; reglas; cliente HTTP y script administrativo. Se modificaron las pantallas de Automatización, Configuración y Catálogo, junto a sus accesos Firebase y componentes de clientes. El registro completo de archivos está en `AUTOMATION_V2_VERIFICATION.json`.
+Se ampliaron los contratos de automatización, cliente, job y SystemConfig; los módulos existentes de automatización; los cores de batches con overrides exclusivos para automatización; worker, helpers de regeneración, revisión y registro Gemini; configuración global; reglas; cliente HTTP y script administrativo. Se modificaron las pantallas de Automatización, Configuración y Catálogo, junto a sus accesos Firebase y componentes de clientes. El registro completo de archivos está en `reports/AUTOMATION_V2_VERIFICATION.json`.
 
 No se editaron los componentes, hooks, estado, submit, prompts, defaults ni pasos del wizard. La prueba E2E de prompts ahora espera la persistencia efectiva antes de recargar, en vez de reutilizar un toast anterior como señal.
 
@@ -212,7 +212,7 @@ No se creó un conector MCP, scheduler Gmail ni herramienta externa de Work desd
 
 ## 12. Validación
 
-Validación final: **121 pruebas generales aprobadas**, dos integraciones omitidas en esa ejecución y ejecutadas aparte; **34 pruebas de integración aprobadas** en emuladores; **13 pruebas de navegador aprobadas**. Typechecks frontend/Functions y builds correctos. Los comandos y evidencia se registran en `AUTOMATION_V2_VERIFICATION.json`. Las integraciones usan exclusivamente `demo-manglar-automation`, emuladores de Auth/Firestore/Storage y proveedores simulados. No se ejecutaron generaciones pagadas reales.
+Validación final: **121 pruebas generales aprobadas**, dos integraciones omitidas en esa ejecución y ejecutadas aparte; **34 pruebas de integración aprobadas** en emuladores; **13 pruebas de navegador aprobadas**. Typechecks frontend/Functions y builds correctos. Los comandos y evidencia se registran en `reports/AUTOMATION_V2_VERIFICATION.json`. Las integraciones usan exclusivamente `demo-manglar-automation`, emuladores de Auth/Firestore/Storage y proveedores simulados. No se ejecutaron generaciones pagadas reales.
 
 Cobertura: multicliente/scopes, carpetas por ID, pertenencia de archivos, versiones y caché; planificación gratuita y concurrencia de ejecución; reservas simultáneas y conciliación idempotente; lectura inmediata de límites globales; clasificación autorizada y caché; escenas independientes con fallo parcial; prompts sucesivos exactos; costos Gemini; ZIP y manifiesto; pausa/reanudación; reintento de revisión sin regenerar; regresión manual y protección de automatizaciones antiguas sin presupuesto.
 
@@ -220,7 +220,7 @@ Los tests de navegador aíslan Firebase y proveedores. Se verifican configuraci�
 
 ## 13. Despliegues
 
-El registro definitivo figura en `AUTOMATION_V2_VERIFICATION.json`. No se realizaron commits, pushes, instalaciones, cambios de dependencias, migraciones ni cambios de permisos de clientes reales. Despliegue completado de **24 Functions afectadas**, reglas de Firestore y Hosting en `tutofb-260320-1003`. Se actualizaron nuevamente cinco de esas Functions y Hosting tras los últimos controles de aislamiento. La API desplegada respondió con versión 2, rechazó una consulta anónima con HTTP 401 y no expuso controles eliminados; el HTML servido coincide con el build local. Firebase CLI guardó el parámetro no secreto de Drive como `disabled`. La identidad técnica mantiene acceso únicamente a `automation-e2e-test`, sin ampliación de permisos.
+El registro definitivo figura en `reports/AUTOMATION_V2_VERIFICATION.json`. No se realizaron commits, pushes, instalaciones, cambios de dependencias, migraciones ni cambios de permisos de clientes reales. Despliegue completado de **24 Functions afectadas**, reglas de Firestore y Hosting en `tutofb-260320-1003`. Se actualizaron nuevamente cinco de esas Functions y Hosting tras los últimos controles de aislamiento. La API desplegada respondió con versión 2, rechazó una consulta anónima con HTTP 401 y no expuso controles eliminados; el HTML servido coincide con el build local. Firebase CLI guardó el parámetro no secreto de Drive como `disabled`. La identidad técnica mantiene acceso únicamente a `automation-e2e-test`, sin ampliación de permisos.
 
 ## 14. Configuración externa pendiente
 
@@ -248,4 +248,4 @@ El helper previo de Google Sheets usa acceso de escritura y puede delegar un usu
 
 Implementado y desplegado el aislamiento descrito en la sección 8. Validación: typechecks de frontend y Functions, builds de ambos, 121 pruebas generales aprobadas (las dos suites de emuladores se ejecutan aparte), 37 pruebas de integración aprobadas y una prueba de navegador para mostrar la incidencia junto a un artículo completado. Las pruebas usan emuladores y proveedores simulados. No se generaron imágenes pagadas en producción.
 
-Se desplegaron primero `automationApi` y `automationGenerationProgress`, y luego `automationIntakeWorker` y Hosting. Las tres Functions quedaron `ACTIVE`; el HTML publicado coincide con el build local y la API sigue rechazando consultas anónimas con HTTP 401. El registro `classificationIsolation` en `AUTOMATION_V2_VERIFICATION.json` conserva los resultados de este seguimiento. El wizard manual no cambió.
+Se desplegaron primero `automationApi` y `automationGenerationProgress`, y luego `automationIntakeWorker` y Hosting. Las tres Functions quedaron `ACTIVE`; el HTML publicado coincide con el build local y la API sigue rechazando consultas anónimas con HTTP 401. El registro `classificationIsolation` en `reports/AUTOMATION_V2_VERIFICATION.json` conserva los resultados de este seguimiento. El wizard manual no cambió.

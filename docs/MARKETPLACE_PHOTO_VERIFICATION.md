@@ -1,6 +1,6 @@
 # Verificación de fotografías por marketplace
 
-Fecha: 10 de noviembre de 2026. Proyecto real: `tutofb-260320-1003`. Cliente exclusivo de pruebas: `automation-e2e-test` (Manglar Automation E2E). [Evidencia estructurada](MARKETPLACE_PHOTO_VERIFICATION.json).
+Fecha: 10 de noviembre de 2026. Proyecto real: `tutofb-260320-1003`. Cliente exclusivo de pruebas: `automation-e2e-test` (Manglar Automation E2E). [Evidencia estructurada](reports/MARKETPLACE_PHOTO_VERIFICATION.json).
 
 ## Resultado implementado
 

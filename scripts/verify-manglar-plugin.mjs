@@ -67,5 +67,5 @@ const report = { checkedAt: new Date().toISOString(), resource, discoveryPassed:
   tools: tools.map((tool) => tool.name), anonymousCallsRejected: true, invalidTokenExchangeRejected: true,
   realChatGPTMetadataVerified: true, consentPageServed: true, anonymousConsentRejected: true,
   nativeChatGPTLinkCompleted: false, pending: 'Refresh the existing plugin and reconnect for delegated user access. A second real ChatGPT account requires its own Tuto consent; backend verification does not prove that link.', paidGeneration: false, credentialsPrinted: false };
-await writeFile(new URL('../docs/MANGLAR_V2_VERIFICATION.json', import.meta.url), `${JSON.stringify(report, null, 2)}\n`);
+await writeFile(new URL('../docs/reports/MANGLAR_V2_VERIFICATION.json', import.meta.url), `${JSON.stringify(report, null, 2)}\n`);
 console.log(JSON.stringify(report));

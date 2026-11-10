@@ -4,7 +4,7 @@
 
 ## Actualización del 1 de noviembre de 2026
 
-La automatización incorpora planes, preferencias multicliente y Drive, presupuestos transaccionales y escenas independientes. Cada escena tiene tres intentos de calidad por defecto y no depende de la aprobación de otra. Contratos, precedencia, ejemplos, configuración externa, límites y validación: [implementación actual](AUTOMATION_V2_IMPLEMENTATION.md) y [registro de verificación](AUTOMATION_V2_VERIFICATION.json). Los apartados siguientes conservan contexto del intake original; la especificación actual prevalece en las capacidades ampliadas.
+La automatización incorpora planes, preferencias multicliente y Drive, presupuestos transaccionales y escenas independientes. Cada escena tiene tres intentos de calidad por defecto y no depende de la aprobación de otra. Contratos, precedencia, ejemplos, configuración externa, límites y validación: [implementación actual](AUTOMATION_V2_IMPLEMENTATION.md) y [registro de verificación](reports/AUTOMATION_V2_VERIFICATION.json). Los apartados siguientes conservan contexto del intake original; la especificación actual prevalece en las capacidades ampliadas.
 
 ## Arquitectura encontrada
 
@@ -298,6 +298,6 @@ Referencias oficiales de las garantías utilizadas: [verificación de ID tokens]
 - API publicada: GET sin token devuelve `401 unauthenticated` tanto en Hosting como en la URL directa de Functions.
 - Ruta de intake sin sesión: redirige a login.
 
-La verificación inicial usó proveedores simulados. La prueba real posterior de la identidad técnica sí ejecutó generación y revisión: ver [AUTOMATION_AUTH.md](AUTOMATION_AUTH.md) y [AUTOMATION_E2E_RESULT.json](AUTOMATION_E2E_RESULT.json).
+La verificación inicial usó proveedores simulados. La prueba real posterior de la identidad técnica sí ejecutó generación y revisión: ver [AUTOMATION_AUTH.md](AUTOMATION_AUTH.md) y [AUTOMATION_E2E_RESULT.json](reports/AUTOMATION_E2E_RESULT.json).
 
 Despliegue completado en `tutofb-260320-1003`: Functions (incluidos worker y revisión manual), reglas e índice de Firestore y Hosting. `AUTOMATION_IMPORT_HOSTS=disabled` quedó configurado por Firebase CLI. No se modificaron Storage rules, dependencias ni credenciales de proveedores.

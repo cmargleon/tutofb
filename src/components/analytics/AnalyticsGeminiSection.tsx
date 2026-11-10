@@ -47,7 +47,7 @@ export function AnalyticsGeminiSection({
           <select
             value={geminiFeatureFilter}
             onChange={(e) => setGeminiFeatureFilter(e.target.value as GeminiUsageFeature | 'all')}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            className="tuto-field"
           >
             <option value="all">Todos los flujos</option>
             {Object.entries(GEMINI_FEATURE_LABELS).map(([value, label]) => (
@@ -57,7 +57,7 @@ export function AnalyticsGeminiSection({
           <select
             value={geminiStatusFilter}
             onChange={(e) => setGeminiStatusFilter(e.target.value as GeminiUsageStatus | 'all')}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            className="tuto-field"
           >
             <option value="all">Todos los estados</option>
             {Object.entries(GEMINI_STATUS_LABELS).map(([value, label]) => (
@@ -67,7 +67,7 @@ export function AnalyticsGeminiSection({
           <select
             value={geminiModelFilter}
             onChange={(e) => setGeminiModelFilter(e.target.value)}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            className="tuto-field"
           >
             <option value="">Todos los modelos</option>
             {geminiUsage.availableModels.map((model) => (

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { ModelLibraryItem } from '../components/models/ModelLibraryItem';
-import { LoadingBlock } from '../components/ui';
+import { UserSquare2 } from 'lucide-react';
+import { Alert, LoadingBlock, PageHeader } from '../components/ui';
 import { ModelLibrarySection } from '../components/models/ModelLibrarySection';
 import { useModelLibrary } from '../features/models/hooks/useModelLibrary';
 import { useModelsCatalog } from '../features/models/hooks/useModelsCatalog';
@@ -22,11 +23,10 @@ export const ModelsCatalog: React.FC = () => {
   const model = modelId ? catalog.models.find((item) => item.id === modelId) : undefined;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="tuto-page">
+      {!modelId && <PageHeader title="Modelos" icon={UserSquare2} description="Biblioteca de modelos y poses disponibles para la generación de fotografías." />}
       {catalog.error && (
-        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {catalog.error}
-        </div>
+        <Alert tone="danger">{catalog.error}</Alert>
       )}
 
       {modelId ? (

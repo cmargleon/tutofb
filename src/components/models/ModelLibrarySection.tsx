@@ -92,7 +92,7 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
             aria-label="Filtrar modelos por cliente"
             value={catalog.clientFilter}
             onChange={(event) => catalog.handleClientFilterChange(event.target.value)}
-            className="w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm transition-colors focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="tuto-field w-full min-w-0"
           >
             <option value="">Todos</option>
             {activeClients.map((client) => (
@@ -105,7 +105,7 @@ export const ModelLibrarySection: React.FC<ModelLibrarySectionProps> = ({
             value={catalog.modelSearch}
             onChange={(event) => catalog.handleModelSearchChange(event.target.value)}
             placeholder="Buscar modelo por nombre..."
-            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm transition-colors placeholder-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="tuto-field w-full"
           />
         </div>
       </div>

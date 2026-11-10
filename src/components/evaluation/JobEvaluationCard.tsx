@@ -444,7 +444,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
                   value={draft.provider}
                   onChange={(event) => onUpdateDraft({ provider: event.target.value as Provider })}
                   disabled={controlsDisabled}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                  className="tuto-field w-full"
                 >
                   {PROVIDER_VALUES.map((provider) => (
                     <option key={provider} value={provider}>
@@ -467,7 +467,7 @@ export const JobEvaluationCard: React.FC<Props> = ({
                   onChange={(event) => onUpdateDraft({ prompt: event.target.value })}
                   disabled={controlsDisabled}
                   rows={3}
-                  className="w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                  className="tuto-field w-full resize-none"
                   placeholder="Prompt completo para regenerar..."
                 />
               </div>

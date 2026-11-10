@@ -28,7 +28,7 @@ export const TryOnPromptFields: React.FC<{
     return <div className="space-y-2 text-sm font-medium text-slate-700" key={label}>
       <label htmlFor={id} className="block">{label}</label>
       <textarea id={id} value={value} onChange={(event) => change(event.target.value)} rows={6}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-normal text-slate-900" />
+        className="tuto-field w-full" />
     </div>;
   };
   return <div className="space-y-5">
@@ -42,7 +42,7 @@ export const TryOnPromptFields: React.FC<{
     <p className="text-xs text-slate-500">Se envía una foto de referencia por pose. Las fotos de varios ángulos se usan por separado; no se añade una instrucción de referencia compuesta.</p>
     <label className="block space-y-2 text-sm font-medium text-slate-700">
       <span>Vista previa por prenda · Texto exacto para fal.ai</span>
-      <select value={garment?.id || ''} onChange={(event) => setPreviewId(event.target.value)} className="w-full rounded-xl border border-slate-200 p-3">
+      <select value={garment?.id || ''} onChange={(event) => setPreviewId(event.target.value)} className="tuto-field w-full">
         {state.garments.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{resolveTryOnPromptCaseKey(entry.garmentBodyArea) ? '' : ' · Sin caso A/B/C'}</option>)}
       </select>
     </label>

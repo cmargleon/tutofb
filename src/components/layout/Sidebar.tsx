@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ChevronDown,
   ChevronRight,
   LogOut,
   Moon,
@@ -10,12 +9,17 @@ import {
   Sun,
   X,
 } from 'lucide-react';
+import { signOut } from 'firebase/auth';
 import { useAuth, useRole } from '../../features/auth/AuthProvider';
 import { useTheme } from '../../features/theme/ThemeProvider';
 import { auth } from '../../firebase';
-import { signOut } from 'firebase/auth';
-import { useNavigate } from 'react-router-dom';
-import { buildNavigation, isNavigationEntryActive, type NavigationGroup } from './navigation';
+import { IconButton } from '../ui';
+import {
+  buildNavigation,
+  isNavigationEntryActive,
+  NAVIGATION_SECTION_LABELS,
+  type NavigationGroup,
+} from './navigation';
 
 interface SidebarProps {
   isDesktop: boolean;
@@ -24,6 +28,12 @@ interface SidebarProps {
   onToggleSidebar: () => void;
   onCloseMobile: () => void;
 }
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Administrador',
+  operador: 'Operador',
+  revisor: 'Revisor',
+};
 
 export const Sidebar: React.FC<SidebarProps> = ({
   isDesktop,
@@ -42,6 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const sidebarRef = useRef<HTMLElement>(null);
 
+  // Mobile drawer: focus trap, Escape to close, focus restoration.
   useEffect(() => {
     if (isDesktop || !isMobileMenuOpen) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -95,7 +106,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     navigate('/login');
   };
 
-  const sidebarWidthClass = isSidebarCollapsed ? 'xl:w-20' : 'xl:w-64';
+  const sidebarWidthClass = isSidebarCollapsed ? 'xl:w-[4.25rem]' : 'xl:w-60';
+  const displayName = appUser?.displayName || 'Usuario';
+  const roleLabel = appUser?.role ? ROLE_LABELS[appUser.role] ?? appUser.role : 'Sin rol';
+  const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0)).join('').toLocaleUpperCase('es') || 'U';
 
   return (
     <aside
@@ -105,166 +119,133 @@ export const Sidebar: React.FC<SidebarProps> = ({
       aria-modal={!isDesktop && isMobileMenuOpen ? true : undefined}
       inert={!isDesktop && !isMobileMenuOpen}
       className={`tuto-sidebar fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r transition-transform duration-200 xl:static xl:translate-x-0 xl:transition-[width] ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        isMobileMenuOpen ? 'translate-x-0 shadow-xl xl:shadow-none' : '-translate-x-full'
       } ${sidebarWidthClass}`}
     >
-      {/* Logo */}
-      <div className={`flex min-h-[72px] items-center px-4 ${collapsed ? 'flex-col gap-1 py-3' : 'justify-between'}`}>
-        <Link to="/" aria-label="Tuto · Inicio" className="flex min-w-0 items-center gap-2.5">
+      {/* Brand */}
+      <div className={`tuto-sidebar-head ${collapsed ? 'flex-col justify-center gap-1 px-0 py-2' : 'justify-between'}`}>
+        <Link to="/" aria-label="Tuto · Inicio" className="flex min-w-0 items-center gap-2 rounded-md">
           <span className="tuto-brand-mark" aria-hidden="true">t</span>
-          {!collapsed && <span className="tuto-brand">tuto<span className="text-indigo-600">.</span></span>}
+          {!collapsed && <span className="tuto-brand">tuto<span className="tuto-brand-dot">.</span></span>}
         </Link>
         {!isDesktop ? (
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            className="inline-flex items-center justify-center rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-            aria-label="Cerrar menú"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <IconButton label="Cerrar menú" icon={X} onClick={onCloseMobile} />
         ) : (
-          <button
-            type="button"
+          <IconButton
+            size="sm"
+            label={isSidebarCollapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral'}
+            icon={isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose}
             onClick={onToggleSidebar}
-            className="inline-flex items-center justify-center rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-            aria-label={isSidebarCollapsed ? 'Expandir menú lateral' : 'Colapsar menú lateral'}
-          >
-            {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
-          </button>
+          />
         )}
       </div>
 
-      {/* Navigation */}
-      <nav aria-label="Módulos" className="flex-1 px-3 pb-3 space-y-0.5 overflow-y-auto">
-        {!collapsed && <p className="tuto-nav-label">Espacio de trabajo</p>}
-        {navigation.map((entry, index) => {
-          const active = isNavigationEntryActive(location.pathname, entry);
+      {/* Modules */}
+      <nav aria-label="Módulos" className={`flex-1 overflow-y-auto pb-3 ${collapsed ? 'px-2.5' : 'px-3'}`}>
+        <div className="tuto-nav">
+          {navigation.map((entry, index) => {
+            const active = isNavigationEntryActive(location.pathname, entry);
+            const section = entry.section ?? 'home';
+            const sectionLabel = NAVIGATION_SECTION_LABELS[section];
+            const startsSection = index === 0 || (navigation[index - 1].section ?? 'home') !== section;
+            const heading = startsSection && sectionLabel ? (
+              collapsed
+                ? <hr className="tuto-divider mx-2 my-2.5" aria-hidden="true" />
+                : <p className="tuto-nav-label">{sectionLabel}</p>
+            ) : null;
 
-          if (entry.type === 'group') {
-            const isOpen = !collapsed && (openGroups[entry.name] ?? active);
+            if (entry.type === 'group') {
+              const isOpen = !collapsed && (openGroups[entry.name] ?? active);
+
+              return (
+                <React.Fragment key={entry.name}>
+                  {heading}
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(entry)}
+                    title={collapsed ? entry.name : undefined}
+                    aria-label={entry.name}
+                    aria-expanded={isOpen}
+                    data-active={active || undefined}
+                    className={`tuto-nav-link ${collapsed ? 'tuto-nav-link--collapsed' : ''}`}
+                  >
+                    <entry.icon aria-hidden="true" />
+                    {!collapsed ? <span className="truncate">{entry.name}</span> : null}
+                    {!collapsed ? <ChevronRight className="tuto-nav-chevron" aria-hidden="true" /> : null}
+                  </button>
+
+                  {isOpen ? (
+                    <div className="tuto-nav-children">
+                      {entry.children.map((child) => {
+                        const childActive = isNavigationEntryActive(location.pathname, child);
+                        return (
+                          <Link
+                            key={child.path}
+                            to={child.path}
+                            aria-current={childActive ? 'page' : undefined}
+                            className="tuto-nav-sublink"
+                          >
+                            <span className="truncate">{child.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </React.Fragment>
+              );
+            }
 
             return (
-              <div key={entry.name} className="space-y-1">
-                {!collapsed && navigation[index - 1]?.type === 'item' && <p className="tuto-nav-label">Administración</p>}
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(entry)}
-                  title={collapsed ? entry.name : undefined}
+              <React.Fragment key={entry.path}>
+                {heading}
+                <Link
+                  to={entry.path}
                   aria-label={entry.name}
-                  className={`tuto-nav-link flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    collapsed ? 'justify-center' : 'gap-3'
-                  } ${
-                    active
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                  aria-expanded={isOpen}
+                  aria-current={active ? 'page' : undefined}
+                  title={collapsed ? entry.name : undefined}
+                  className={`tuto-nav-link ${collapsed ? 'tuto-nav-link--collapsed' : ''}`}
                 >
-                  <entry.icon className={`w-5 h-5 shrink-0 ${active ? 'text-indigo-600' : ''}`} />
-                  {!collapsed ? <span>{entry.name}</span> : null}
-                  {!collapsed ? (
-                    isOpen ? (
-                      <ChevronDown className="ml-auto h-4 w-4 shrink-0" />
-                    ) : (
-                      <ChevronRight className="ml-auto h-4 w-4 shrink-0" />
-                    )
-                  ) : null}
-                </button>
-
-                {isOpen ? (
-                  <div className="space-y-1 pl-11">
-                    {entry.children.map((child) => {
-                      const childActive = isNavigationEntryActive(location.pathname, child);
-
-                      return (
-                        <Link
-                          key={child.path}
-                          to={child.path}
-                          aria-current={childActive ? 'page' : undefined}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                            childActive
-                              ? 'bg-indigo-50 text-indigo-700'
-                              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              childActive ? 'bg-indigo-600' : 'bg-gray-300'
-                            }`}
-                            aria-hidden="true"
-                          />
-                          <span>{child.name}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
+                  <entry.icon aria-hidden="true" />
+                  {!collapsed ? <span className="truncate">{entry.name}</span> : null}
+                </Link>
+              </React.Fragment>
             );
-          }
-
-          return (
-            <Link
-              key={entry.path}
-              to={entry.path}
-              aria-label={entry.name}
-              aria-current={active ? 'page' : undefined}
-              title={collapsed ? entry.name : undefined}
-              className={`tuto-nav-link flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                collapsed ? 'justify-center' : 'gap-3'
-              } ${
-                active
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <entry.icon className={`w-5 h-5 shrink-0 ${active ? 'text-indigo-600' : ''}`} />
-              {!collapsed ? <span>{entry.name}</span> : null}
-              {active && !collapsed ? (
-                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-indigo-600" aria-hidden="true" />
-              ) : null}
-            </Link>
-          );
-        })}
+          })}
+        </div>
       </nav>
 
-      {/* Footer: theme toggle + user + logout */}
-      <div className="p-3 border-t border-gray-200 space-y-0.5">
-        <button
-          type="button"
-          onClick={toggleTheme}
-          aria-label={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
-          className={`flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 ${
-            collapsed ? 'justify-center' : 'gap-3'
-          }`}
-        >
-          {isDark ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
-          {!collapsed ? <span>{isDark ? 'Tema claro' : 'Tema oscuro'}</span> : null}
-        </button>
-
-        <div className={`flex items-center px-3 py-2 ${collapsed ? 'justify-center' : 'gap-3'}`}>
-          <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-xs font-bold shrink-0">
-            {appUser?.displayName?.charAt(0) || 'A'}
-          </div>
-          {!collapsed ? (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{appUser?.displayName || 'Admin User'}</p>
-              <p className="text-xs text-gray-500 truncate capitalize">{appUser?.role || 'sin rol'}</p>
+      {/* Account */}
+      <div className="tuto-sidebar-footer">
+        {!collapsed ? (
+          <div className="tuto-user-card">
+            <span className="tuto-avatar tuto-avatar--round tuto-avatar--sm" aria-hidden="true">{initials}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">{displayName}</p>
+              <p className="truncate text-xs text-[var(--color-text-muted)]">{roleLabel}</p>
             </div>
-          ) : null}
+          </div>
+        ) : null}
+        <div className={`mt-1 flex gap-1 ${collapsed ? 'flex-col items-center' : 'items-center'}`}>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
+            title={collapsed ? (isDark ? 'Tema claro' : 'Tema oscuro') : undefined}
+            className={`tuto-nav-link ${collapsed ? 'tuto-nav-link--collapsed' : 'flex-1'}`}
+          >
+            {isDark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+            {!collapsed ? <span>{isDark ? 'Tema claro' : 'Tema oscuro'}</span> : null}
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Cerrar sesión"
+            title="Cerrar sesión"
+            className="tuto-nav-link tuto-nav-link--collapsed w-[2.125rem] hover:!bg-[var(--color-danger-soft)] hover:!text-[var(--color-danger)]"
+          >
+            <LogOut aria-hidden="true" />
+          </button>
         </div>
-
-        <button
-          onClick={handleLogout}
-          title={collapsed ? 'Cerrar sesión' : undefined}
-          className={`flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 ${
-            collapsed ? 'justify-center' : 'gap-2'
-          }`}
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          {!collapsed ? <span>Cerrar sesión</span> : null}
-        </button>
       </div>
     </aside>
   );

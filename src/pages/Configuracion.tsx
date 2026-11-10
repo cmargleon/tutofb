@@ -188,7 +188,7 @@ export const Configuracion: React.FC = () => {
   };
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-8">
+    <div className="tuto-page tuto-page--narrow">
       <PageHeader
         title="Configuración"
         description="Ajustes del sistema compartidos con todo el equipo."
@@ -343,7 +343,7 @@ export const Configuracion: React.FC = () => {
                 value={geminiModel}
                 onChange={(e) => setGeminiModel(e.target.value)}
                 disabled={!role.canManageUsers}
-                className="w-full rounded-xl border border-slate-200 py-2 pl-3 pr-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400"
+                className="tuto-field w-full"
               >
                 {KNOWN_GEMINI_MODELS.map((m) => (
                   <option key={m.value} value={m.value}>{m.label}</option>
@@ -360,7 +360,7 @@ export const Configuracion: React.FC = () => {
                   onChange={(e) => setCustomGeminiModel(e.target.value)}
                   disabled={!role.canManageUsers}
                   placeholder="ej. gemini-2.0-flash"
-                  className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400"
+                  className="tuto-field w-full"
                 />
               </div>
             )}
@@ -531,7 +531,7 @@ function PromptTextarea({
         disabled={disabled}
         placeholder={placeholder}
         maxLength={maxLength}
-        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-mono focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400 resize-y"
+        className="tuto-field w-full font-mono resize-y"
       />
     </label>
   );

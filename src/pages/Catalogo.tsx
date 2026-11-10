@@ -2,7 +2,7 @@ import { MarketplaceExportAction } from '../features/marketplaces/MarketplaceExp
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight, Download, ExternalLink, Images, RefreshCw } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { LoadingBlock } from '../components/ui';
+import { LoadingBlock, PageHeader } from '../components/ui';
 import { RetryFailedJobsDialog } from '../components/evaluation/RetryFailedJobsDialog';
 import { subscribeToClients, subscribeToClient } from '../features/clients/firebase';
 import { cancelBatchProcessing, editBatchSpreadsheet, exportBatchSpreadsheet, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
@@ -482,11 +482,12 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className={`flex-1 space-y-5 ${client ? '' : 'tuto-page !gap-0'}`}>
+        {!client && <PageHeader title="Catálogo" icon={Images} description="Fotografías aprobadas y fallidas por cliente, lote y prenda. Revisa, regenera o exporta a marketplaces." />}
+        <div className="tuto-surface p-4">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,22rem)_10rem_14rem]">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-gray-600">Cliente</span>
+              <span className="tuto-label mb-1.5 block">Cliente</span>
               <select
                 id="catalog-client"
                 disabled={Boolean(client)}
@@ -497,7 +498,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
                   if (e.target.value) next.set('clientId', e.target.value); else next.delete('clientId');
                   next.delete(batchParam); setSearchParams(next);
                 }}
-                className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="tuto-field"
               >
                 <option value="">Selecciona un cliente...</option>
                 {clients.map((c) => (
@@ -507,12 +508,12 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-gray-600">Lote</span>
+              <span className="tuto-label mb-1.5 block">Lote</span>
               <select
                 value={selectedBatchId}
                 onChange={(e) => { const next = new URLSearchParams(searchParams); next.set(batchParam, e.target.value); setSearchParams(next); }}
                 disabled={!selectedClientId || batchOptions.length === 0}
-                className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                className="tuto-field"
               >
                 {client && <option value="">Todos los lotes del cliente</option>}
                 {batchOptions.length === 0 ? (
@@ -528,12 +529,12 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-gray-600">Jobs por página</span>
+              <span className="tuto-label mb-1.5 block">Jobs por página</span>
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(Number(e.target.value))}
                 disabled={!selectedClientId}
-                className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                className="tuto-field"
               >
                 {PAGE_SIZE_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
@@ -542,12 +543,12 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-gray-600">Orden por fecha</span>
+              <span className="tuto-label mb-1.5 block">Orden por fecha</span>
               <select
                 value={sortOrder}
                 onChange={(e) => setSortOrder(e.target.value as CatalogSortOrder)}
                 disabled={!selectedClientId}
-                className="w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                className="tuto-field"
               >
                 {SORT_ORDER_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>

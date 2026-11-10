@@ -52,8 +52,8 @@ export function PhotoReview({ clientId, photo, products, group, disabled, correc
       {photo.candidateDetails?.slice(0, 5).map(candidate => <p key={candidate.id} className="text-xs text-slate-600"><strong>{candidate.label}</strong> · {candidate.evidence.join(' · ')}</p>)}
       <details><summary className="cursor-pointer text-sm font-medium text-indigo-700">Corregir asociación</summary>
         <form className="mt-3 grid gap-2" onSubmit={async event => { event.preventDefault(); await correct(selected, applyGroup ? group : [], eligible); }}>
-          <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" aria-label={`Buscar producto para ${photo.name}`} placeholder="Buscar por código, nombre o color" value={search} onChange={event => setSearch(event.target.value)} />
-          <select className="min-h-28 rounded-lg border border-slate-300 p-2 text-sm" multiple aria-label={`Productos de ${photo.name}`} value={selected} disabled={disabled}
+          <input className="tuto-field" aria-label={`Buscar producto para ${photo.name}`} placeholder="Buscar por código, nombre o color" value={search} onChange={event => setSearch(event.target.value)} />
+          <select className="tuto-field min-h-28" multiple aria-label={`Productos de ${photo.name}`} value={selected} disabled={disabled}
             onChange={event => {
               const next = Array.from(event.currentTarget.selectedOptions as HTMLCollectionOf<HTMLOptionElement>, option => option.value);
               setEligible(next.length === 1 ? next : selected.length > 1 ? eligible.filter(id => next.includes(id)) : []); setSelected(next);

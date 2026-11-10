@@ -182,7 +182,7 @@ export const Finanzas: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl p-8 space-y-8">
+    <div className="tuto-page">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <PageHeader
           title="Finanzas"
@@ -194,12 +194,12 @@ export const Finanzas: React.FC = () => {
             type="month"
             value={period}
             onChange={(event) => setPeriod(event.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+            className="tuto-field"
           />
           <select
             value={selectedClientId}
             onChange={(event) => setSelectedClientId(event.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
+            className="tuto-field"
           >
             <option value="">Todos los clientes</option>
             {visibleClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
@@ -261,15 +261,15 @@ export const Finanzas: React.FC = () => {
           <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
             <Panel title="Pricing por cliente">
               <div className="space-y-3">
-                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={pricingForm.clientId} onChange={(e) => setPricingForm((f) => ({ ...f, clientId: e.target.value }))}>
+                <select className="tuto-field w-full" value={pricingForm.clientId} onChange={(e) => setPricingForm((f) => ({ ...f, clientId: e.target.value }))}>
                   <option value="">Selecciona cliente</option>
                   {visibleClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
                 </select>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={pricingForm.billingMode} onChange={(e) => setPricingForm((f) => ({ ...f, billingMode: e.target.value as FinanceBillingMode }))}>
+                  <select className="tuto-field" value={pricingForm.billingMode} onChange={(e) => setPricingForm((f) => ({ ...f, billingMode: e.target.value as FinanceBillingMode }))}>
                     {Object.entries(billingModeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
-                  <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={pricingForm.currency} onChange={(e) => setPricingForm((f) => ({ ...f, currency: e.target.value as FinanceCurrency }))}>
+                  <select className="tuto-field" value={pricingForm.currency} onChange={(e) => setPricingForm((f) => ({ ...f, currency: e.target.value as FinanceCurrency }))}>
                     <option value="MXN">MXN</option>
                     <option value="USD">USD</option>
                   </select>
@@ -278,7 +278,7 @@ export const Finanzas: React.FC = () => {
                   <Field label="Precio por lote" value={pricingForm.pricePerBatch} onChange={(v) => setPricingForm((f) => ({ ...f, pricePerBatch: v }))} />
                   <Field label="Retainer mensual" value={pricingForm.monthlyRetainer} onChange={(v) => setPricingForm((f) => ({ ...f, monthlyRetainer: v }))} />
                 </div>
-                <textarea className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" rows={3} placeholder="Notas" value={pricingForm.notes} onChange={(e) => setPricingForm((f) => ({ ...f, notes: e.target.value }))} />
+                <textarea className="tuto-field w-full" rows={3} placeholder="Notas" value={pricingForm.notes} onChange={(e) => setPricingForm((f) => ({ ...f, notes: e.target.value }))} />
                 <Button icon={Save} loading={savingPricing} disabled={!pricingForm.clientId} onClick={handleSavePricing}>Guardar pricing</Button>
               </div>
             </Panel>
@@ -301,12 +301,12 @@ export const Finanzas: React.FC = () => {
             <Panel title="Ingreso facturado, costo fijo o ajuste manual">
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={manualEventForm.type} onChange={(e) => setManualEventForm((f) => ({ ...f, type: e.target.value as FinanceEventType }))}>
+                  <select className="tuto-field" value={manualEventForm.type} onChange={(e) => setManualEventForm((f) => ({ ...f, type: e.target.value as FinanceEventType }))}>
                     <option value="revenue">Ingreso</option>
                     <option value="cost">Costo</option>
                     <option value="adjustment">Ajuste</option>
                   </select>
-                  <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={manualEventForm.category} onChange={(e) => setManualEventForm((f) => ({ ...f, category: e.target.value as FinanceEventCategory }))}>
+                  <select className="tuto-field" value={manualEventForm.category} onChange={(e) => setManualEventForm((f) => ({ ...f, category: e.target.value as FinanceEventCategory }))}>
                     <option value="invoiced_revenue">Ingreso facturado</option>
                     <option value="estimated_revenue">Ingreso estimado</option>
                     <option value="fixed_cost_allocation">Costo fijo prorrateado</option>
@@ -314,16 +314,16 @@ export const Finanzas: React.FC = () => {
                     <option value="manual_adjustment">Ajuste manual</option>
                   </select>
                   <Field label="Monto" value={manualEventForm.amount} onChange={(v) => setManualEventForm((f) => ({ ...f, amount: v }))} />
-                  <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={manualEventForm.currency} onChange={(e) => setManualEventForm((f) => ({ ...f, currency: e.target.value as FinanceCurrency }))}>
+                  <select className="tuto-field" value={manualEventForm.currency} onChange={(e) => setManualEventForm((f) => ({ ...f, currency: e.target.value as FinanceCurrency }))}>
                     <option value="MXN">MXN</option>
                     <option value="USD">USD</option>
                   </select>
                 </div>
-                <select className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={manualEventForm.clientId} onChange={(e) => setManualEventForm((f) => ({ ...f, clientId: e.target.value }))}>
+                <select className="tuto-field w-full" value={manualEventForm.clientId} onChange={(e) => setManualEventForm((f) => ({ ...f, clientId: e.target.value }))}>
                   <option value="">Sin cliente específico</option>
                   {visibleClients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
                 </select>
-                <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Descripción contable" value={manualEventForm.description} onChange={(e) => setManualEventForm((f) => ({ ...f, description: e.target.value }))} />
+                <input className="tuto-field w-full" placeholder="Descripción contable" value={manualEventForm.description} onChange={(e) => setManualEventForm((f) => ({ ...f, description: e.target.value }))} />
                 <Button icon={Save} loading={savingManualEvent} disabled={!manualEventForm.description || !manualEventForm.amount} onClick={handleCreateManualEvent}>Registrar evento</Button>
               </div>
             </Panel>
@@ -365,7 +365,7 @@ const Panel: React.FC<{ title: string; children: React.ReactNode }> = ({ title, 
 const Field: React.FC<{ label: string; value: string; onChange: (value: string) => void }> = ({ label, value, onChange }) => (
   <label className="block text-sm">
     <span className="mb-1 block text-xs font-medium text-slate-500">{label}</span>
-    <input type="number" min="0" step="0.01" value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+    <input type="number" min="0" step="0.01" value={value} onChange={(e) => onChange(e.target.value)} className="tuto-field w-full" />
   </label>
 );
 

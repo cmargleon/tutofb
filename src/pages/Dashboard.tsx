@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock3,
   Package,
+  LayoutDashboard,
   LayoutList,
   RefreshCcw,
   Users,
@@ -18,7 +19,7 @@ import {
 
 import { AnalyticsSummary, HealthStatus, ProviderHealthCheck, SystemAlert, SystemHealthSnapshot } from '../../shared/src/types';
 import { formatDateTime as formatActivityDate } from '../../shared/src/utils/dateUtils';
-import { EmptyState, ImageThumb, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
+import { Alert, buttonClasses, EmptyState, ImageThumb, LoadingBlock, PageHeader, StatCard, StatusBadge } from '../components/ui';
 import { DashboardSnapshot, subscribeToAnalyticsSummary, subscribeToDashboardData } from '../features/dashboard/firebase';
 import { useRole } from '../features/auth/AuthProvider';
 import { useSystemHealth } from '../features/system/useSystemHealth';
@@ -33,25 +34,6 @@ const GarmentThumb: React.FC<{ path: string | null | undefined }> = ({ path }) =
     </div>
   );
 };
-
-const StatCard: React.FC<{
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  tone: string;
-}> = ({ label, value, icon: Icon, tone }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm text-slate-500">{label}</p>
-        <p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p>
-      </div>
-      <div className={`rounded-2xl p-3 ${tone}`}>
-        <Icon className="h-6 w-6" />
-      </div>
-    </div>
-  </div>
-);
 
 export const Dashboard: React.FC = () => {
   const role = useRole();
@@ -110,9 +92,10 @@ export const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto">
+      <div className="tuto-page">
         <PageHeader
-          title="Panel"
+          title="Inicio"
+          icon={LayoutDashboard}
           description="Sigue clientes, biblioteca de modelos, cola operativa y trabajos recientes."
         />
         <LoadingBlock />
@@ -121,34 +104,25 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="tuto-page">
       <PageHeader
-        title="Panel"
+        title="Inicio"
+        icon={LayoutDashboard}
         description="Vista operativa del catálogo: volumen de preparación, cola activa y últimos trabajos procesados."
+        actions={<Link to="/cola" className={buttonClasses('secondary')}>Abrir cola operativa</Link>}
       />
 
-      <div className="flex justify-end">
-        <Link
-          to="/cola"
-          className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-        >
-          Abrir cola operativa
-        </Link>
-      </div>
+      {error && <Alert tone="danger">{error}</Alert>}
 
-      {error && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
-      )}
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Clientes" value={data.clients.length} icon={Users} tone="bg-sky-50 text-sky-600" />
-        <StatCard label="Modelos" value={data.models.length} icon={UserSquare2} tone="bg-emerald-50 text-emerald-600" />
-        <StatCard label="Prendas en lotes" value={garmentCount} icon={Package} tone="bg-amber-50 text-amber-600" />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <StatCard label="Clientes" value={data.clients.length} icon={Users} tone="info" />
+        <StatCard label="Modelos" value={data.models.length} icon={UserSquare2} tone="success" />
+        <StatCard label="Prendas en lotes" value={garmentCount} icon={Package} tone="warning" />
         <StatCard
           label="Trabajos completados"
           value={summary?.completedJobs || 0}
           icon={CheckCircle2}
-          tone="bg-violet-50 text-violet-600"
+          tone="accent"
         />
       </div>
 
@@ -453,18 +427,18 @@ const SystemHealthPanel: React.FC<{
   const pendingJobsThreshold = data?.settings?.pendingJobsThreshold ?? 25;
 
   return (
-    <section className={`rounded-2xl border p-6 shadow-sm ${styles.panel}`}>
+    <section className="tuto-surface p-5 sm:p-6" aria-label="Estado del sistema">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <div className={`rounded-2xl p-3 ${styles.pill}`}>
+            <div className={`rounded-lg p-2.5 ${styles.pill}`}>
               <Activity className="h-5 w-5" />
             </div>
             <div>
               <p className="text-sm text-slate-500">Estado del sistema</p>
               <div className="mt-1 flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 rounded-full ${styles.dot}`} />
-                <h2 className="text-xl font-semibold text-slate-900">{styles.label}</h2>
+                <h2 className="text-lg font-semibold text-slate-900">{styles.label}</h2>
               </div>
             </div>
           </div>
@@ -481,7 +455,7 @@ const SystemHealthPanel: React.FC<{
             type="button"
             onClick={() => void onRefresh()}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className={buttonClasses('secondary', 'sm')}
           >
             <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
@@ -490,19 +464,17 @@ const SystemHealthPanel: React.FC<{
       </div>
 
       {error ? (
-        <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
-        </div>
+        <Alert tone="danger" className="mt-5">{error}</Alert>
       ) : null}
 
       {loading && !data ? (
         <LoadingBlock />
       ) : data ? (
         <div className="mt-6 space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="border-t border-slate-100 pt-5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <h3 className="tuto-overline flex items-center gap-2">
                   <Bell className="h-4 w-4" />
                   Alertas compartidas
                 </h3>
@@ -522,21 +494,19 @@ const SystemHealthPanel: React.FC<{
                 ))}
               </div>
             ) : (
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                No hay alertas activas con los umbrales compartidos actuales.
-              </div>
+              <Alert tone="success" className="mt-4">No hay alertas activas con los umbrales compartidos actuales.</Alert>
             )}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+          <div className="grid gap-6 border-t border-slate-100 pt-5 xl:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-4">
             {data.providers.map((provider) => (
               <ProviderStatusCard key={provider.provider} provider={provider} />
             ))}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Cola y errores</h3>
+            <div>
+              <h3 className="tuto-overline">Cola y errores</h3>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <QueueMetricCard label="Pendientes" value={data.queue.pendingJobs} tone="bg-sky-50 text-sky-700" />
                 <QueueMetricCard label="Procesando" value={data.queue.processingJobs} tone="bg-indigo-50 text-indigo-700" />

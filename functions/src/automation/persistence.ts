@@ -1,5 +1,4 @@
 import { activePhotoChannels } from '../../../shared/src/marketplacePhotoPlan';
-import { createDefaultProductGeneration } from '../../../shared/src/productGeneration';
 import { COMMERCIAL_PHOTO_PROFILE } from '../../../shared/src/commercialPhoto';
 import { resolveAutomationPreset } from './presets';
 import { assertHumanClientAccess } from '../auth/clientAccess';
@@ -55,17 +54,16 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     const uploadBindings = await readUploadBindings(tx, data);
     const now = FieldValue.serverTimestamp();
     const resolved = plan ? null : resolveAutomationPreset(data, client.data() as Client);
-    const photoModelId = plan ? plan.photoModelId || null : resolved?.modelId || null;
+    const photoModelId = data.jobType !== 'garment' ? null : plan ? plan.photoModelId || null : resolved?.modelId || null;
     const photoModel = !plan && photoModelId && activePhotoChannels((client.data() as Client).marketplaces).length
       ? (await tx.get(db.doc(`models/${photoModelId}`))).data() as import('../../../shared/src/types').Model | undefined : undefined;
     if (photoModel && (photoModel.clientId !== data.clientId || photoModel.active === false || photoModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo no disponible.');
     const photoBases = plan?.photoBases ?? (photoModel?.poses || []).filter(p => p.active !== false && (!resolved?.config.poseIds || resolved.config.poseIds.includes(p.id))).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) }));
-    if (resolved && data.jobType === 'product') { const defaults = createDefaultProductGeneration(system.data()); resolved.config.scenes ??= defaults.scenes; resolved.config.prompt ??= defaults.prompt; }
     const job: AutomationJob = {
       ...(plan ? (plan.photoProfile ? { photoProfile: plan.photoProfile } : {}) : { photoProfile: COMMERCIAL_PHOTO_PROFILE, resolvedPreset: resolved!.config }),
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
-      ...(plan?.photoMarketplaces !== undefined || !plan ? { photoBases, photoModelId } : {}),
-      ...(plan?.photoMarketplaces !== undefined ? { photoMarketplaces: plan.photoMarketplaces } : !plan ? { photoMarketplaces: (client.data() as Client).marketplaces || {} } : {}),
+      ...(data.jobType === 'garment' && (plan?.photoMarketplaces !== undefined || !plan) ? { photoBases, photoModelId } : {}),
+      ...(data.jobType !== 'garment' ? {} : plan?.photoMarketplaces !== undefined ? { photoMarketplaces: plan.photoMarketplaces } : !plan ? { photoMarketplaces: (client.data() as Client).marketplaces || {} } : {}),
       ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy, budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, providerConfirmedUsd: null },
       ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd, ...(plan.modelOptions ? { modelOptions: plan.modelOptions } : {}) } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || resolved?.name || plan?.presetName || '', createdByUid: uid, status: 'pending',
       inputImages: data.inputImages || [], sourceImages: data.inputImages || [], outputImages: [], generationJobIds: [], batchId: null,

@@ -15,6 +15,7 @@ import { automationScenePatch } from '../automation/recovery';
 
 export async function resolveMarketplacePhotoPlan(data: PhotoPlanInput & { modelId?: string | null }, uid: string, frozen?: Client['marketplaces']): Promise<PhotoPlan> {
   if (!data || typeof data.clientId !== 'string' || !Array.isArray(data.articles) || !data.articles.length || data.articles.length > 100) throw new HttpsError('invalid-argument', 'Artículos inválidos.');
+  if (data.articles.some(a => a.kind !== 'garment')) throw new HttpsError('invalid-argument', 'La planificación por marketplace solo admite ropa. Usa la generación de objetos por escenas.');
   const db = getAppFirestore();
   const client = (await db.doc(`clients/${data.clientId}`).get()).data() as Client | undefined;
   if (!client || client.status === 'archived') throw new HttpsError('not-found', 'Cliente no disponible.');

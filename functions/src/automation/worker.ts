@@ -47,7 +47,7 @@ export const processAutomation = async (jobId: string): Promise<void> => {
       const legacyConfig = client.automation?.presets?.[preset.name];
       preset.config = { ...preset.config, photoProfile: undefined, ...normalizeProviderImageConfig(preset.config.provider!, legacyConfig?.imageConfig, legacyConfig?.aspectRatio || '3:4') };
     }
-    const marketplacePhotos = job.photoMarketplaces !== undefined && activePhotoChannels(job.photoMarketplaces).length > 0;
+    const marketplacePhotos = job.jobType === 'garment' && job.photoMarketplaces !== undefined && activePhotoChannels(job.photoMarketplaces).length > 0;
     const modelOptions = job.jobType === 'garment' && !marketplacePhotos
       ? job.modelOptions || await loadAutomationModelOptions(job.clientId, client, job.modelId || preset.config.modelId, preset.config.poseIds)
       : undefined;

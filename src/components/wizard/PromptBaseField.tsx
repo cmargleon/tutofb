@@ -15,7 +15,7 @@ export const PromptBaseField: React.FC<PromptBaseFieldProps> = ({ value, onChang
       value={value}
       onChange={(event) => onChange(event.target.value)}
       rows={5}
-      className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+      className="tuto-field w-full"
       placeholder="Describe la instrucción base del try-on"
     />
     <p className="mt-2 text-xs text-slate-500">

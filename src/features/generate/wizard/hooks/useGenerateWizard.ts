@@ -288,7 +288,7 @@ export const useGenerateWizard = () => {
     [selectedModel],
   );
 
-  const marketplacePlan = useMemo(() => selectedClient && state.generationKind && activePhotoChannels(selectedClient.marketplaces).length
+  const marketplacePlan = useMemo(() => selectedClient && state.generationKind === 'garment' && activePhotoChannels(selectedClient.marketplaces).length
     ? buildMarketplacePhotoPlan(wizardPhotoPlanInput(state, selectedClient, selectedModel)) : undefined, [selectedClient, selectedModel, state]);
   useEffect(() => {
     if (state.marketplacePhotoPlan?.id !== marketplacePlan?.id) setState(current => ({ ...current, marketplacePhotoPlan: marketplacePlan }));

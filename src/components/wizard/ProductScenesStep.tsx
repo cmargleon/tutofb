@@ -24,7 +24,7 @@ export const ProductScenesStep: React.FC<{
         <summary className="cursor-pointer text-sm text-emerald-700">Editar instrucciones de la escena</summary>
         <label className="mt-3 block text-sm text-slate-700">Prompt de {preset.label}
           <textarea value={selected.prompt} disabled={disabled} maxLength={4000} rows={5} onChange={(event) => onPromptChange(preset.type, event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900" />
+            className="tuto-field mt-2 w-full" />
         </label>
         {!selected.prompt.trim() && <p role="alert" className="mt-2 text-xs text-rose-700">Escribe instrucciones para esta escena o desmárcala.</p>}
         <Button variant="secondary" disabled={disabled} onClick={() => onPromptChange(preset.type, defaultPrompt)}>Restaurar escena global</Button>

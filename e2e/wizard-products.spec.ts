@@ -3,13 +3,13 @@ import { test, expect, type Page } from '@playwright/test';
 // Isolate the real wizard from Firebase: no live reads, uploads or paid generation.
 const previewUrl = process.env.WIZARD_TEST_URL || 'http://localhost:3000';
 const image = (name: string) => ({ name, mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=', 'base64') });
-async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}, options: { confidence?: number; failAnalysisOnce?: boolean; templates?: boolean; failPreviewOnce?: boolean } = {}) {
+async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}, options: { confidence?: number; failAnalysisOnce?: boolean; templates?: boolean; failPreviewOnce?: boolean; marketplaces?: boolean } = {}) {
   page.on('pageerror', (error) => console.error(error.message));
   const hookModule = await (await page.request.get(`${previewUrl}/src/features/generate/wizard/hooks/useGenerateWizard.ts`)).text();
   const routerModule = hookModule.match(/from ["']([^"']*react-router-dom\.js[^"']*)["']/)?.[1];
   if (!routerModule) throw new Error('Vite router module not found');
   await page.route('**/src/features/generate/wizard/hooks/useGenerateWizardCatalog.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `
-    const clients = [{ id: 'client', name: 'Cliente de prueba' }];
+    const clients = [{ id: 'client', name: 'Cliente de prueba', marketplaces: ${options.marketplaces ? JSON.stringify(Object.fromEntries(['amazon', 'shein', 'tiktok-shop', 'mercado-libre'].map(id => [id, { enabled: true }]))) : '{}'} }];
     const poses = ['front', 'back'].map(view => ({ id: 'pose-' + view, fileName: view + '.jpg', storagePath: 'test/' + view + '.jpg',
       aiClassification: { usableForGarmentViews: [view], bodyFocus: 'full_body', orientationGroup: view, orientationDetail: view,
         faceVisible: true, framing: 'full_body', autoCategory: view + '_cuerpo_completo', confidence: 0.99 } }));
@@ -61,6 +61,7 @@ async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}
       return { success: true, productDrafts: request.garments.map(garment => ({ garmentId: garment.id, garmentName: garment.name,
         categoryId: 'category', categoryName: 'Camisetas', matchedColor: 'Azul', rows: [], inferredValues: {} })) };
     };
+    export const createMarketplacePhotoBatch = async request => { window.__marketplaceRequest = request; throw new Error('Objects must not use marketplace production'); };
     export const createGenerationBatch = async request => { window.__garmentRequest = request; return { batchId: 'garment-test', createdJobs: 1 }; };
     export const createProductGenerationBatch = async (request) => { window.__productRequest = request; return { batchId: 'product-test', createdJobs: request.items.length * request.scenes.length }; };
   ` }));
@@ -344,4 +345,19 @@ test('clothing chooses model before output, reuses visual analysis and prepares 
   expect(request.poseIds).toEqual(['pose-front']);
   expect(request.garments[0].photos[0].view).toBe('front');
   expect(request.provider).toBe('fal-gpt-image-2.5-flare');
+});
+
+
+test('objects keep six scenes and the original callable when all marketplaces are active', async ({ page }) => {
+  await openWizard(page, {}, { marketplaces: true });
+  await uploadItem(page, ['mug-front.png']);
+  await next(page).click();
+  await expect(page.getByText('Fotografías para', { exact: false })).toHaveCount(0);
+  await next(page).click();
+  await page.getByRole('button', { name: 'Crear lote y abrir evaluación (6)', exact: true }).click();
+  await expect(page).toHaveURL(/batchId=product-test/);
+  const request = await page.evaluate(() => ({ product: (window as any).__productRequest, marketplace: (window as any).__marketplaceRequest }));
+  expect(request.marketplace).toBeUndefined();
+  expect(request.product.scenes).toHaveLength(6);
+  expect(request.product.scenes.map((s: any) => s.type)).toEqual(['clean', 'lifestyle_1', 'lifestyle_2', 'hero', 'human_use_1', 'human_use_2']);
 });

@@ -9,73 +9,37 @@ interface WizardStepperProps {
   canSelectStep?: (stepId: number) => boolean;
 }
 
+/** Horizontal step indicator shared by the generation and model wizards. Styles: .tuto-stepper / .tuto-step. */
 export const WizardStepper: React.FC<WizardStepperProps> = ({
   steps,
   currentStep,
   onStepSelect,
   canSelectStep,
-}) => {
-  return (
-    <nav aria-label="Progress" className="mb-8">
-      <ol role="list" className="grid grid-flow-col auto-cols-fr items-start gap-0">
-        {steps.map((step, stepIdx) => (
-          <li key={step.name} className="relative">
-            {stepIdx !== steps.length - 1 ? (
-              <div className="pointer-events-none absolute left-1/2 top-4 h-0.5 w-full -translate-y-1/2 bg-gray-200" aria-hidden="true">
-                <div
-                  className={`h-full transition-all ${
-                    step.id < currentStep ? 'w-full bg-indigo-600' : 'w-0 bg-indigo-600'
-                  }`}
-                />
-              </div>
-            ) : null}
-
-            <div className="relative z-10 flex flex-col items-center px-2 text-center">
-              {step.id < currentStep ? (
-                <button
-                  type="button"
-                  onClick={() => onStepSelect?.(step.id)}
-                  disabled={canSelectStep ? !canSelectStep(step.id) : false}
-                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-indigo-600 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:hover:bg-indigo-600"
-                >
-                  <Check className="h-5 w-5 text-white" aria-hidden="true" />
-                  <span className="sr-only">{step.name}</span>
-                </button>
-              ) : step.id === currentStep ? (
-                <button
-                  type="button"
-                  onClick={() => onStepSelect?.(step.id)}
-                  disabled={canSelectStep ? !canSelectStep(step.id) : false}
-                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-indigo-600 bg-white disabled:cursor-not-allowed"
-                  aria-current="step"
-                >
-                  <span className="h-2.5 w-2.5 rounded-full bg-indigo-600" aria-hidden="true" />
-                  <span className="sr-only">{step.name}</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onStepSelect?.(step.id)}
-                  disabled={canSelectStep ? !canSelectStep(step.id) : false}
-                  className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-gray-300 bg-white transition enabled:hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="h-2.5 w-2.5 rounded-full bg-transparent" aria-hidden="true" />
-                  <span className="sr-only">{step.name}</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => onStepSelect?.(step.id)}
-                disabled={canSelectStep ? !canSelectStep(step.id) : false}
-                className="mt-3 cursor-pointer text-center text-xs font-medium text-gray-500 transition enabled:hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
-              >
-                {step.name}
-              </button>
-            </div>
+}) => (
+  <nav aria-label="Progreso del asistente" className="mb-6">
+    <ol role="list" className="tuto-stepper">
+      {steps.map((step, stepIdx) => {
+        const state = step.id === currentStep ? 'current' : step.id < currentStep ? 'done' : 'upcoming';
+        const caption = state === 'done' ? 'Completado' : state === 'current' ? 'En curso' : `Paso ${stepIdx + 1}`;
+        return (
+          <li key={step.name} className="flex min-w-0 flex-1">
+            <button
+              type="button"
+              className="tuto-step w-full"
+              data-state={state}
+              aria-current={state === 'current' ? 'step' : undefined}
+              onClick={() => onStepSelect?.(step.id)}
+              disabled={canSelectStep ? !canSelectStep(step.id) : false}
+            >
+              <span className="tuto-step-index" aria-hidden="true">{state === 'done' ? <Check /> : stepIdx + 1}</span>
+              <span className="min-w-0">
+                <span className="tuto-step-label">{step.name}</span>
+                <span className="tuto-step-caption">{caption}</span>
+              </span>
+            </button>
           </li>
-        ))}
-      </ol>
-    </nav>
-  );
-};
+        );
+      })}
+    </ol>
+  </nav>
+);

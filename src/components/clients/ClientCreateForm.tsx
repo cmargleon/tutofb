@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, Plus } from 'lucide-react';
-import { Button, Surface } from '../ui';
+import { Button, CardHeader, Surface } from '../ui';
 import { INPUT_BASE } from './clientUtils';
 
 interface ClientCreateFormProps {
@@ -18,14 +18,11 @@ export const ClientCreateForm: React.FC<ClientCreateFormProps> = ({
   newClientPrompt, setNewClientPrompt,
   isCreating, createSuccess, onSubmit,
 }) => (
-  <Surface className="p-6">
-    <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-gray-900">
-      <Plus className="w-4 h-4 text-indigo-600" />
-      Nuevo cliente
-    </h2>
-    <form onSubmit={onSubmit} className="space-y-4">
+  <Surface className="overflow-hidden">
+    <CardHeader icon={Plus} title="Nuevo cliente" description="Podrás configurar marketplaces, fuentes y automatizaciones desde su ficha." />
+    <form onSubmit={onSubmit} className="space-y-4 p-5">
       <div>
-        <label htmlFor="client-name" className="mb-1.5 block text-sm font-medium text-gray-700">
+        <label htmlFor="client-name" className="tuto-label mb-1.5 block">
           Nombre del cliente
         </label>
         <input
@@ -40,7 +37,7 @@ export const ClientCreateForm: React.FC<ClientCreateFormProps> = ({
         />
       </div>
       <div>
-        <label htmlFor="client-prompt" className="mb-1.5 block text-sm font-medium text-gray-700">
+        <label htmlFor="client-prompt" className="tuto-label mb-1.5 block">
           Prompt general del cliente
         </label>
         <textarea
@@ -52,7 +49,7 @@ export const ClientCreateForm: React.FC<ClientCreateFormProps> = ({
           placeholder="Opcional. Si lo dejas vacío, este cliente usará el prompt global por defecto de Configuración."
           disabled={isCreating}
         />
-        <p className="mt-1.5 text-xs text-slate-500">
+        <p className="tuto-hint mt-1.5">
           Este texto se precarga en el wizard cuando se selecciona el cliente.
         </p>
       </div>
@@ -62,12 +59,12 @@ export const ClientCreateForm: React.FC<ClientCreateFormProps> = ({
         size="md"
         loading={isCreating}
         disabled={!newClientName.trim()}
-        className="w-full justify-center"
+        className="w-full justify-center sm:w-auto"
       >
         Guardar cliente
       </Button>
       {createSuccess && (
-        <p className="flex items-center justify-center gap-1.5 text-sm text-emerald-600">
+        <p role="status" className="tuto-alert tuto-alert--success">
           <Check className="w-4 h-4" />
           Cliente creado con éxito
         </p>

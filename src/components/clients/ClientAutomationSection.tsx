@@ -5,20 +5,20 @@ import { DEFAULT_IMAGE_PROVIDER, PROVIDER_VALUES, PROVIDER_LABELS } from '../../
 import { createCommercialProviderImageConfig } from '../../../shared/src/commercialPhoto';
 import { createDefaultProductScenes, PRODUCT_SCENES } from '../../../shared/src/productGeneration';
 import { useClientAutomationConfig } from '../../features/automation/useClientAutomationConfig';
-import { Button } from '../ui';
+import { Button, INPUT_CLASS } from '../ui';
 import { ProviderImageConfigSelection } from '../wizard/ProviderImageConfigSelection';
 
-const inputClass = 'w-full rounded-xl border border-slate-300 bg-white p-3 text-sm';
+const inputClass = INPUT_CLASS;
 type AutomationState = ReturnType<typeof useClientAutomationConfig>;
 
-export const ClientDriveFolders = ({ state }: { state: AutomationState }) => <label className="block space-y-2 text-sm">Carpetas autorizadas de Google Drive<textarea rows={4} className={inputClass} value={state.folders} onChange={(e) => state.setFolders(e.target.value)} /><span className="block text-xs text-slate-500">Hasta 20 enlaces o IDs, uno por línea. Es la misma lista de automatización y del Organizador inteligente. Se verifica el acceso al guardar; retira los orígenes del Organizador antes de quitar una carpeta.</span></label>;
+export const ClientDriveFolders = ({ state }: { state: AutomationState }) => <label className="tuto-form-field"><span className="tuto-label">Carpetas autorizadas de Google Drive</span><textarea rows={4} className={inputClass} value={state.folders} onChange={(e) => state.setFolders(e.target.value)} /><span className="tuto-hint">Hasta 20 enlaces o IDs, uno por línea. Es la misma lista de automatización y del Organizador inteligente. Se verifica el acceso al guardar; retira los orígenes del Organizador antes de quitar una carpeta.</span></label>;
 
 export const ClientAutomationSection = ({ client }: { client: Client }) => {
   const state = useClientAutomationConfig(client);
   return <details className="mt-5 rounded-xl border border-slate-200 p-4"><summary>Google Drive y automatización · {client.automation?.driveFolderIds?.length ?? 0} carpetas</summary><ClientDriveFolders state={state} /><ClientAutomationSave state={state} section="sources" disabled={client.status === 'archived'} /><ClientAutomationFields client={client} state={state} /><ClientAutomationSave state={state} section="automation" disabled={client.status === 'archived'} /></details>;
 };
 
-export const ClientAutomationSave = ({ state, disabled, section }: { state: AutomationState; disabled: boolean; section: AutomationSection }) => <div className="mt-5 flex flex-wrap items-center gap-3"><Button disabled={disabled || state.saving} loading={state.savingSection === section} onClick={() => void state.save(section)}>{section === 'sources' ? 'Guardar fuentes de datos' : 'Guardar automatizaciones'}</Button>{state.isDirty(section) && <><span className="text-sm text-amber-700" role="status">Cambios sin guardar en {section === 'sources' ? 'Fuentes de datos' : 'Automatizaciones'} · borrador conservado en esta sesión</span><Button disabled={state.saving} variant="ghost" onClick={() => state.discardSection(section)}>Descartar cambios de esta pestaña</Button></>}</div>;
+export const ClientAutomationSave = ({ state, disabled, section }: { state: AutomationState; disabled: boolean; section: AutomationSection }) => <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4"><Button disabled={disabled || state.saving} loading={state.savingSection === section} onClick={() => void state.save(section)}>{section === 'sources' ? 'Guardar fuentes de datos' : 'Guardar automatizaciones'}</Button>{state.isDirty(section) && <><span className="text-sm text-[var(--color-warning)]" role="status">Cambios sin guardar en {section === 'sources' ? 'Fuentes de datos' : 'Automatizaciones'} · borrador conservado en esta sesión</span><Button disabled={state.saving} variant="ghost" onClick={() => state.discardSection(section)}>Descartar cambios de esta pestaña</Button></>}</div>;
 
 export const ClientAutomationFields = ({ client, state }: { client: Client; state: AutomationState }) => {
   const { value, setValue, preset, updatePreset } = state;
@@ -26,9 +26,9 @@ export const ClientAutomationFields = ({ client, state }: { client: Client; stat
   return <div>
     <div className="mt-5 space-y-4">
       <fieldset disabled={state.saving || client.status === 'archived'} className="space-y-4">
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={value.enabled === true} onChange={(e) => setValue({ ...value, enabled: e.target.checked })} />Permitir pedidos automáticos para este cliente</label>
+        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]"><input type="checkbox" checked={value.enabled === true} onChange={(e) => setValue({ ...value, enabled: e.target.checked })} />Permitir pedidos automáticos para este cliente</label>
 
-        <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <fieldset className="space-y-3 rounded-xl border border-slate-200 bg-[var(--color-bg-elevated)] p-4">
           <legend className="px-1 text-sm font-semibold">Modelos predeterminados por género</legend>
           <div className="grid gap-4 sm:grid-cols-2">
             {([
@@ -54,7 +54,7 @@ export const ClientAutomationFields = ({ client, state }: { client: Client; stat
         </div>
         <label className="block space-y-2 text-sm">Máximo de reintentos operativos<input className={inputClass} type="number" min="0" max="10" placeholder="Heredar Sistema" value={value.maxOperationalRetries ?? ''} onChange={(e) => { const next = { ...value }; if (e.target.value) next.maxOperationalRetries = Number(e.target.value); else delete next.maxOperationalRetries; setValue(next); }} /></label>
         <label className="block space-y-2 text-sm">Preset predeterminado<select className={inputClass} value={value.defaultPreset || ''} onChange={(e) => setValue({ ...value, defaultPreset: e.target.value })}><option value="">Según tipo de fotografía</option><option value="standard">Standard (prendas)</option><option value="generic_product">Producto genérico</option>{Object.keys(value.presets || {}).filter((n) => !['standard','generic_product'].includes(n)).map((n) => <option key={n}>{n}</option>)}</select></label>
-        <details className="rounded-xl border border-slate-200 bg-white p-4"><summary className="cursor-pointer text-sm font-medium">Presets, poses y prompts de automatización</summary>
+        <details className="rounded-xl border border-slate-200 bg-[var(--color-bg-elevated)] p-4"><summary className="cursor-pointer text-sm font-semibold text-[var(--color-text-primary)]">Presets, poses y prompts de automatización</summary>
           <div className="mt-4 space-y-4">
             <label className="block text-sm">Editar o crear preset<input className={inputClass} list={`presets-${client.id}`} placeholder="Ej.: catalogo-vertical" value={state.presetName} onChange={(e) => state.setPresetName(e.target.value)} /><datalist id={`presets-${client.id}`}>{Object.keys(value.presets || {}).map((n) => <option key={n}>{n}</option>)}</datalist></label>
             {state.presetName && <>

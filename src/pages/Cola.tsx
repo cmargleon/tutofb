@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, Clock3, Filter, RefreshCw, Rows3, SquareStack } from 'lucide-react';
-import { EmptyState, LoadingBlock, PageHeader, StatusBadge } from '../components/ui';
+import { AlertCircle, CheckCircle2, Clock3, Filter, ListOrdered, RefreshCw, Rows3, SquareStack } from 'lucide-react';
+import { Alert, EmptyState, LoadingBlock, PageHeader, StatCard, StatusBadge } from '../components/ui';
 import { RetryFailedJobsDialog } from '../components/evaluation/RetryFailedJobsDialog';
 import { useQueueData } from '../features/queue/firebase';
 import { cancelPendingBatchJobs, regenerateFailedBatchJobs } from '../features/evaluation/firebase';
@@ -68,25 +68,6 @@ const getCompletedJobDuration = (job: Job) => {
   const duration = job.currentOutput?.durationSeconds ?? job.totalDurationSeconds ?? null;
   return duration && duration > 0 ? duration : null;
 };
-
-const SummaryCard: React.FC<{
-  label: string;
-  value: string | number;
-  icon: React.ElementType;
-  tone: string;
-}> = ({ label, value, icon: Icon, tone }) => (
-  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <p className="text-sm text-slate-500">{label}</p>
-        <p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p>
-      </div>
-      <div className={`rounded-2xl p-3 ${tone}`}>
-        <Icon className="h-6 w-6" />
-      </div>
-    </div>
-  </div>
-);
 
 const KANBAN_COLUMNS: Array<{
   id: KanbanStage;
@@ -496,9 +477,10 @@ export const Cola: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-7xl">
+      <div className="tuto-page">
         <PageHeader
           title="Cola"
+          icon={ListOrdered}
           description="Monitorea los lotes activos, estima tiempos y actúa sobre la operación sin depender del último lote."
         />
         <LoadingBlock />
@@ -507,40 +489,39 @@ export const Cola: React.FC = () => {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 pb-12">
+    <div className="tuto-page">
       <PageHeader
         title="Cola"
+        icon={ListOrdered}
         description="Vista operativa de lotes activos con ETA, antigüedad, filtros y acciones masivas sobre la cola."
       />
 
       {error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+        <Alert tone="danger">{error}</Alert>
       ) : null}
 
       {actionMessage ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          {actionMessage}
-        </div>
+        <Alert tone="success">{actionMessage}</Alert>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <SummaryCard
+        <StatCard
           label="Lotes visibles"
           value={filteredRows.length}
           icon={Rows3}
-          tone="bg-sky-50 text-sky-600"
+          tone="info"
         />
-        <SummaryCard
+        <StatCard
           label="Trabajos en cola"
           value={totals.pending + totals.processing}
           icon={Clock3}
-          tone="bg-indigo-50 text-indigo-600"
+          tone="accent"
         />
-        <SummaryCard
+        <StatCard
           label="Fallidos reintentables"
           value={totals.failed}
           icon={AlertCircle}
-          tone="bg-amber-50 text-amber-600"
+          tone="warning"
         />
       </div>
 

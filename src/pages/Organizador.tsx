@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, ChevronRight, CircleAlert, FolderOpen, Images, Play } from 'lucide-react';
+import { FolderKanban, ChevronRight, CircleAlert, FolderOpen, Images, Play } from 'lucide-react';
 import { ORGANIZER_DEFAULT_BUDGET_USD, ORGANIZER_DEFAULT_MODEL, ORGANIZER_DIRECTORIES,
   type OrganizerConfig, type OrganizerInterpretation, type OrganizerPlanItem, type OrganizerPhoto, type OrganizerProductRow, type OrganizerPage,
   type OrganizerRun, type OrganizerSettings, type OrganizerTab, type OrganizerVariant } from '../../shared/src/types';
@@ -10,7 +10,7 @@ import { useOrganizer, type CatalogView } from '../features/organizer/useOrganiz
 import { PhotoReview } from '../features/organizer/PhotoReview';
 
 const pane = 'rounded-2xl border border-slate-200 bg-white p-5 sm:p-6';
-const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500';
+const input = 'tuto-field';
 const link = 'text-sm font-medium text-indigo-700 underline underline-offset-4';
 const date = (value: number | null) => value ? new Date(value).toLocaleString('es') : '—';
 const money = (value: number) => value.toLocaleString('es', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
@@ -146,25 +146,25 @@ export function Organizador() {
     const page = await state.perform<OrganizerPage<OrganizerProductRow>>({ action: 'provenance', clientId, variantId, cursor });
     if (page) setProvenance(old => ({ id: variantId, page: { ...page, items: cursor && old?.id === variantId ? [...old.page.items, ...page.items] : page.items } }));
   };
-  return <main className="mx-auto max-w-7xl space-y-5 pb-12">
-    <PageHeader icon={Archive} title="Organizador inteligente" description="Inventario, catálogo y referencias de Google Drive por cliente." />
-    <section className="grid gap-5 rounded-2xl bg-slate-900 p-5 text-white sm:grid-cols-[1fr_auto] sm:p-6">
-      <div><p className="text-xs font-semibold uppercase tracking-[.22em] text-teal-300">Catálogo de origen</p>
+  return <div className="tuto-page">
+    <PageHeader icon={FolderKanban} title="Organizador inteligente" description="Inventario, catálogo y referencias de Google Drive por cliente." />
+    <section className="tuto-surface grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:p-6">
+      <div><p className="tuto-overline">Catálogo de origen</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <select aria-label="Cliente" className={`${input} max-w-xs text-slate-900`} value={clientId} onChange={event => {
+          <select aria-label="Cliente" className={`${input} max-w-xs`} value={clientId} onChange={event => {
             setProvenance(null); state.selectClient(event.target.value);
           }}><option value="">Selecciona un cliente</option>{state.clients.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
           {state.clients.next && <Button size="sm" variant="secondary" onClick={state.loadClients}>Más clientes</Button>}
         </div>
       </div>
-      {config && <div className="text-sm sm:text-right"><p className="font-semibold text-teal-200">{statuses[config.watcher]}</p>
-        <p className="mt-1 text-slate-300">Última comprobación · {date(config.lastPollAt)}</p>
-        <p className="mt-1 text-slate-300">Última sincronización · {date(config.lastSyncAt)}</p>
-        <p className="mt-1 text-slate-300">Última clasificación · {date(config.lastClassifiedAt)}</p>
-        {config.destinationId && <a className="mt-2 inline-flex items-center gap-1 text-teal-200 underline" href={`https://drive.google.com/drive/folders/${config.destinationId}`} target="_blank" rel="noreferrer"><FolderOpen size={16} /> Carpeta organizada</a>}
+      {config && <div className="text-sm sm:text-right"><p className="font-semibold text-[var(--color-accent-light)]">{statuses[config.watcher]}</p>
+        <p className="mt-1 text-[var(--color-text-muted)]">Última comprobación · {date(config.lastPollAt)}</p>
+        <p className="mt-1 text-[var(--color-text-muted)]">Última sincronización · {date(config.lastSyncAt)}</p>
+        <p className="mt-1 text-[var(--color-text-muted)]">Última clasificación · {date(config.lastClassifiedAt)}</p>
+        {config.destinationId && <a className="tuto-link mt-2 inline-flex items-center gap-1" href={`https://drive.google.com/drive/folders/${config.destinationId}`} target="_blank" rel="noreferrer"><FolderOpen size={16} /> Carpeta organizada</a>}
       </div>}
     </section>
-    {(state.loadError || config?.watcherError) && <p role="alert" className="flex items-center gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><CircleAlert size={18} /> {state.loadError || config?.watcherError}</p>}
+    {(state.loadError || config?.watcherError) && <p role="alert" className="tuto-alert tuto-alert--warning"><CircleAlert size={18} /> {state.loadError || config?.watcherError}</p>}
     {access.isAdmin && client && !locked && <div key={`${clientId}-${config?.destinationId || 'setup'}-${config ? 'saved' : 'new'}`}><Setup config={config} clientName={client.name} driveFolderIds={client.driveFolderIds ?? []} busy={busy} save={state.save} /></div>}
     {config && <>
       {access.canCreateBatches && <div className="flex flex-wrap gap-2">
@@ -265,5 +265,5 @@ export function Organizador() {
         {state.page.next && <Button className="mt-4" variant="secondary" disabled={busy} onClick={state.loadMore}>Cargar más</Button>}
       </section>
     </>}
-  </main>;
+  </div>;
 }

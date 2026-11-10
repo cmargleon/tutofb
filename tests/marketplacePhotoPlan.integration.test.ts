@@ -52,8 +52,44 @@ test('photo plan: authoritative creation, replay, frozen channels, automation pa
     }
     const planService = require('../functions/lib/functions/src/automation/plans.js');
     const objectAuthorization = await planService.prepareAutomationPlan({ source: 'api', externalId: 'object-authorization', clientId, jobType: 'product', preset: 'generic_product', inputImages: [{ itemId: 'object', fileName: 'object.jpg', storagePath: path }], budgetUsd: 10, allowEstimatedCosts: true }, uid, 'operador');
-    assert.equal(objectAuthorization.classificationRequired, true);
-    await assert.rejects(planService.executeAutomationPlan(objectAuthorization.id, uid, 'operador'), /authorizeClassification/);
+    assert.equal(objectAuthorization.classificationRequired, false);
+    assert.equal(objectAuthorization.photoMarketplaces, undefined);
+    assert.equal(objectAuthorization.items[0].sceneIds.length, 6);
+    const objectReceipt = await planService.executeAutomationPlan(objectAuthorization.id, uid, 'operador');
+    // An object job saved by the previous release may still contain channel markers.
+    // Its type must route it through the original scenes pipeline regardless.
+    await db.doc(`automationJobs/${objectReceipt.jobId}`).update({ photoMarketplaces: marketplaces });
+    await require('../functions/lib/functions/src/automation/worker.js').processAutomation(objectReceipt.jobId);
+    const objectJob = (await db.doc(`automationJobs/${objectReceipt.jobId}`).get()).data();
+    assert.equal(objectJob.status, 'processing', JSON.stringify(objectJob.error));
+    assert.equal(objectJob.progress.total, 6);
+    const objectBatch = (await db.doc(`batches/${objectJob.batchId}`).get()).data();
+    assert.equal(objectBatch.photoPlan, undefined);
+    const objectJobs = await db.collection('jobs').where('batchId', '==', objectJob.batchId).get();
+    assert.equal(objectJobs.size, 6);
+    assert.ok(objectJobs.docs.every((j: any) => !j.get('photoTask') && !j.get('photoPlanId')));
+    const productService = require('../functions/lib/functions/src/callables/createProductGenerationBatch.js');
+    const { createDefaultProductScenes } = require('../functions/lib/shared/src/productGeneration.js');
+    const manualObjects = await productService.createProductGenerationBatchCore({ requestId: 'object-wizard-rollback', clientId, provider: input.provider, imageConfig: input.imageConfig, prompt: 'Original object instructions', scenes: createDefaultProductScenes(), items: [{ id: 'object', name: 'Object', referencePaths: [path] }] }, uid);
+    assert.equal(manualObjects.createdJobs, 6);
+    assert.equal((await db.doc(`batches/${manualObjects.batchId}`).get()).get('photoPlan'), undefined);
+    await assert.rejects(service.resolveMarketplacePhotoPlan({ ...input, articles: [{ ...input.articles[0], kind: 'product' }] }, uid), /solo admite ropa/);
+    await db.doc(`clients/${clientId}`).update({ marketplaces: {} });
+    const noChannels = await planService.prepareAutomationPlan({ source: 'api', externalId: 'object-no-channels', clientId, jobType: 'product', preset: 'generic_product', inputImages: [{ itemId: 'object', fileName: 'object.jpg', storagePath: path }], budgetUsd: 10, allowEstimatedCosts: true }, uid, 'operador');
+    assert.deepEqual(noChannels.items, objectAuthorization.items);
+    assert.equal(noChannels.estimatedCostUsd, objectAuthorization.estimatedCostUsd);
+    const customConfig = { ...input.imageConfig, imageSize: { width: 2048, height: 1152 }, quality: 'high' };
+    await db.doc(`clients/${clientId}`).update({ marketplaces, 'automation.presets.object_custom': { provider: input.provider, imageConfig: customConfig, prompt: 'Custom object prompt', scenes: [{ type: 'clean', prompt: 'Custom lifestyle' }, { type: 'human_use_1', prompt: 'Custom product use' }] } });
+    const custom = await planService.prepareAutomationPlan({ source: 'api', externalId: 'object-custom-preset', clientId, jobType: 'product', preset: 'object_custom', inputImages: [{ itemId: 'custom', fileName: 'object.jpg', storagePath: path }], budgetUsd: 10, allowEstimatedCosts: true }, uid, 'operador');
+    assert.equal(custom.classificationRequired, false);
+    assert.deepEqual(custom.preset.imageConfig, customConfig);
+    const customReceipt = await planService.executeAutomationPlan(custom.id, uid, 'operador');
+    await require('../functions/lib/functions/src/automation/worker.js').processAutomation(customReceipt.jobId);
+    const customJob = (await db.doc(`automationJobs/${customReceipt.jobId}`).get()).data();
+    assert.equal(customJob.progress.total, 2);
+    const customJobs = await db.collection('jobs').where('batchId', '==', customJob.batchId).get();
+    assert.ok(customJobs.docs.every((j: any) => !j.get('photoTask') && j.get('finalPrompt').includes('Custom object prompt')));
+    assert.deepEqual(customJobs.docs[0].get('imageConfig'), customConfig);
     const classifier = require('../functions/lib/functions/src/callables/classifyGarmentViewsWithGemini.js');
     t.mock.method(classifier, 'classifyGarmentWithGemini', async ({ garment }: any) => ({ photoAttributes: attributes, itemKind: 'garment', itemKindConfidence: 1, photos: garment.photos.map((p: any) => ({ ...p, view: 'front', confidence: 1 })), garmentBodyArea: 'upper_body' }));
     const { createAutomation } = require('../functions/lib/functions/src/automation/persistence.js');

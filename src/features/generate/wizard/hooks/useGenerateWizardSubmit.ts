@@ -200,7 +200,7 @@ export const useGenerateWizardSubmit = ({
         return;
       }
 
-      if (photoPlanInput && state.marketplacePhotoPlan) {
+      if (!isProduct && photoPlanInput && state.marketplacePhotoPlan) {
         const signature = JSON.stringify([state.marketplacePhotoPlan.id, state.prompt]);
         if (productSubmission.current?.signature !== signature) productSubmission.current = { signature, id: crypto.randomUUID() };
         setSubmitStage('creating-batch');

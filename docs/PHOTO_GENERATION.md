@@ -85,7 +85,9 @@ La llamada inicial de clasificación de referencias también devuelve `garmentGe
 - Los planes estiman imágenes y costo usando el modelo con más poses; tras clasificar se selecciona un solo modelo por artículo y se filtran las poses compatibles. El Organizador inteligente utiliza este mismo recorrido cuando envía prendas a automatización.
 
 
-## Planificación por marketplaces (`marketplace-photo-v1`)
+## Planificación de ropa por marketplaces (`marketplace-photo-v1`)
+
+Este planificador se aplica exclusivamente a ropa. Los objetos utilizan siempre el recorrido de escenas existente, también cuando hay marketplaces activos, y conservan sus seis escenas predeterminadas o la selección/preset explícitos. No se añaden portadas ni se descartan escenas de objetos por canal; sus futuras reglas se definirán por separado.
 
 Los canales se leen exclusivamente de `clients/{clientId}.marketplaces.*.enabled`. Sin canales activos se conserva el wizard y la automatización anteriores. Con canales activos se usa `shared/src/marketplacePhotoPlan.ts`, tanto desde el wizard como desde Functions; `createMarketplacePhotoBatch` vuelve a calcular el plan en el servidor y exige su identidad aprobada. `previewMarketplacePhotoPlan` permite inspeccionarlo sin generar imágenes.
 
@@ -97,7 +99,7 @@ La clasificación amplía la llamada Gemini existente: categoría funcional, zon
 
 La automatización mantiene las entradas actuales, leases, reservas y claves de idempotencia. Congela canales, preset, bases y modelo antes de producir. Antes de clasificar, el plan de autorización presenta un máximo conservador de tareas únicas, reservas de revisión y reintentos; después se guarda el plan exacto. `metadata.photoArticles[itemId]` acepta `productId`, `variantId` y `attributes` con la misma estructura tipada del wizard para aportar datos comerciales/correcciones. Los artículos con incidencias permanecen en `needs_attention` sin eliminar sus referencias; los independientes continúan. Repetir `requestId` o ejecutar de nuevo un plan no duplica el lote. Cambiar entradas requiere una solicitud nueva; no se amplían canales de un plan autorizado por cambios posteriores del cliente.
 
-Se producen frentes blancos/neutros y solo espaldas/laterales acreditados por referencias. Un detalle real identificado se reutiliza sin pagar otra generación. Los objetos conservan las seis escenas compartidas y sus prompts globales. En TikTok no se asignan automáticamente seis variaciones del mismo frente: se solicitan referencias de otros ángulos y se conserva su portada 3:4 o 4:3. Los demás canales pueden compartir las escenas de objetos.
+Se producen frentes blancos/neutros y solo espaldas/laterales acreditados por referencias. Un detalle real identificado se reutiliza sin pagar otra generación. Los objetos conservan las seis escenas compartidas y sus prompts globales sin intervención del planificador por marketplace. Sus estimaciones y autorizaciones en automatización se calculan por escenas, sin una clasificación adicional por canales.
 
 Para planes nuevos, la revisión recibe el JPEG final y el plan explícito. Se distinguen fidelidad y validación estructurada por canal/posición: una imagen puede servir a un canal y quedar pendiente en otro. Un texto de aprobación sin esos campos no acredita los destinos. Las obligaciones del plan se conservan en reintentos automáticos y manuales. Reintentar solo la revisión conserva bytes, costo de generación y ruta.
 

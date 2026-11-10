@@ -1,4 +1,6 @@
 import React from 'react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { Button } from '../ui';
 
 interface WizardFooterProps {
   currentStep: number;
@@ -17,25 +19,18 @@ export const WizardFooter: React.FC<WizardFooterProps> = ({
   onBack,
   onNext,
 }) => (
-  <div className="mt-8 flex items-center justify-between">
-    <button
-      type="button"
-      disabled={currentStep === 1 || isSubmitting}
-      onClick={onBack}
-      className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
+  <div className="mt-6 flex items-center justify-between gap-3 border-t border-slate-200 pt-5">
+    <Button variant="secondary" icon={ArrowLeft} disabled={currentStep === 1 || isSubmitting} onClick={onBack}>
       Volver
-    </button>
+    </Button>
+
+    <span className="hidden text-xs text-[var(--color-text-muted)] sm:inline">Paso {currentStep} de {maxStep}</span>
 
     {currentStep < maxStep ? (
-      <button
-        type="button"
-        disabled={!canAdvance || isSubmitting}
-        onClick={onNext}
-        className="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-      >
+      <Button disabled={!canAdvance || isSubmitting} onClick={onNext}>
         Continuar
-      </button>
-    ) : null}
+        <ArrowRight aria-hidden="true" />
+      </Button>
+    ) : <span aria-hidden="true" />}
   </div>
 );

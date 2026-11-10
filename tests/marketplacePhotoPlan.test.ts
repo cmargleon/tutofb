@@ -137,12 +137,12 @@ test('master products stay together across batches and variant assignments remai
   }
 });
 
-test('object scenes stay shared and are never extrapolated from clothing; TikTok excludes repeated frontal angles', () => {
+test('objects do not enter marketplace planning even with all channels enabled', () => {
   const plan = buildMarketplacePhotoPlan(input(undefined, [article({ kind: 'product', attributes: {}, references: [article().references[0]] })]));
-  assert.equal(plan.tasks.filter(t => t.sceneId).length, 6);
-  assert.ok(plan.tasks.filter(t => t.sceneId).every(t => !t.destinations.some(d => d.channel === 'tiktok-shop')));
-  assert.equal(plan.tasks.filter(t => t.destinations.some(d => d.channel === 'tiktok-shop')).length, 1);
-  assert.ok(plan.tasks.every(t => !/desde muslos|desde pecho/.test(t.instructions)));
+  assert.deepEqual(plan.channels, []);
+  assert.deepEqual(plan.tasks, []);
+  assert.equal(plan.estimate.generations, 0);
+  assert.deepEqual(plan.issues, []);
 });
 test('real detail references are reused without generation, while flat lay tasks have no human framing', () => {
   const pack = article(); pack.attributes.packaging = attr('multipack'); pack.references.push({ id: 'detail', storagePath: 'garments/drafts/operator/detail.jpg', view: 'detail' });

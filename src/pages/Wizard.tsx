@@ -4,7 +4,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { organizer } from '../features/organizer/firebase';
 import type { OrganizerDraft } from '../../shared/src/types';
-import { Button, LoadingBlock } from '../components/ui';
+import { Wand2 } from 'lucide-react';
+import { Button, LoadingBlock, PageHeader } from '../components/ui';
 import { WizardStepper } from '../components/WizardStepper';
 import { WizardFooter } from '../components/wizard/WizardFooter';
 import { ClientModelStep } from '../components/wizard/ClientModelStep';
@@ -112,8 +113,8 @@ export const Wizard: React.FC = () => {
 
   if (loadingData) {
     return (
-      <div className="max-w-7xl mx-auto pb-12">
-        <LoadingBlock />
+      <div className="tuto-page">
+        <LoadingBlock message="Cargando clientes y modelos…" />
       </div>
     );
   }
@@ -146,8 +147,13 @@ export const Wizard: React.FC = () => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      <div ref={stepperRef}>
+    <div className="tuto-page">
+      <PageHeader
+        title="Generar fotos"
+        icon={Wand2}
+        description="Sube las fotos de referencia, prepara la sesión y envía el lote a generación con revisión automática de calidad."
+      />
+      <div ref={stepperRef} className="scroll-mt-20">
         <WizardStepper
           steps={getGenerateWizardSteps(state.generationKind)}
           currentStep={state.step}

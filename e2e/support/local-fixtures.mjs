@@ -67,6 +67,7 @@ export const getBlob = async () => new Blob(['<svg xmlns="http://www.w3.org/2000
 export const getDownloadURL = async () => fixtureImage;
 const unexpected = () => { throw new Error('BLOCKED: unexpected operation in local fixture'); };
 export const uploadBytes = unexpected;
+export const uploadBytesResumable = unexpected;
 export const deleteObject = unexpected;
 export const signOut = async () => window.__setFixtureIdentity(null);
 export const signInWithEmailAndPassword = unexpected;

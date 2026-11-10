@@ -17,7 +17,7 @@ export const AutomationBudgetSettings = () => {
         ['maxReviewAttempts', 'Máximo de intentos de calidad por imagen', 1, 10, 1],
         ['maxOperationalRetries', 'Máximo de reintentos operativos', 0, 10, 1],
       ] as const).map(([key, label, min, max, step]) => <label key={key} className="space-y-2 text-sm font-medium text-slate-700">{label}
-        <input type="number" className="w-full rounded-xl border border-slate-300 p-3" min={min} max={max} step={step} value={Number.isFinite(value[key]) ? value[key] : ''} onChange={(e) => setValue({ ...value, [key]: e.target.value === '' ? NaN : Number(e.target.value) })} /></label>)}
+        <input type="number" className="tuto-field w-full" min={min} max={max} step={step} value={Number.isFinite(value[key]) ? value[key] : ''} onChange={(e) => setValue({ ...value, [key]: e.target.value === '' ? NaN : Number(e.target.value) })} /></label>)}
     </fieldset>
     <p className="text-xs text-slate-500">Los intentos de calidad incluyen la primera generación. El gasto reservado se controla en el servidor; las tarifas estimadas requieren autorización explícita y no representan un máximo de facturación del proveedor.</p>
     {role.canManageUsers && <Button loading={saving} onClick={() => void save()}>Guardar presupuesto de automatización</Button>}

@@ -628,7 +628,7 @@ const ProviderImageConfigControls: React.FC<ProviderImageConfigSelectionProps> =
                   onChange={(event) => setCustomWidthInput(event.target.value.replace(/[^\d]/g, ''))}
                   onBlur={() => commitDimension('width', customWidthInput)}
                   onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-500"
+                  className="tuto-field w-full"
                 />
               </label>
               <label className="space-y-1">
@@ -641,7 +641,7 @@ const ProviderImageConfigControls: React.FC<ProviderImageConfigSelectionProps> =
                   onChange={(event) => setCustomHeightInput(event.target.value.replace(/[^\d]/g, ''))}
                   onBlur={() => commitDimension('height', customHeightInput)}
                   onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-500"
+                  className="tuto-field w-full"
                 />
               </label>
             </div>

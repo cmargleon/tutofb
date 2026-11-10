@@ -19,19 +19,19 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
   uploadingTemplateClientId, savingTemplateCategoryId, deletingTemplateId,
   onUpload, onCategoryChange, onDelete,
 }) => (
-  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <div>
-        <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-          <Sheet className="h-4 w-4 text-emerald-600" />
-          Spreadsheets del cliente
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
+  <div className="tuto-surface overflow-hidden">
+    <div className="tuto-card-header">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="tuto-stat-icon tuto-tone--success h-8 w-8" aria-hidden="true"><Sheet /></span>
+        <div className="min-w-0">
+        <h3>Spreadsheets del cliente</h3>
+        <p className="max-w-2xl">
           Plantillas heredadas del wizard. Administra las nuevas plantillas de salida en Marketplaces; los archivos Excel fuente se cargan por separado durante la generación.
         </p>
+        </div>
       </div>
       {!isArchivedCatalogEntity(client) ? (
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500">
+        <label className="tuto-button tuto-button--secondary tuto-button--sm cursor-pointer focus-within:ring-2 focus-within:ring-[var(--color-accent)]">
           <input
             type="file"
             accept=".xlsx,.xls"
@@ -47,14 +47,14 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
       ) : null}
     </div>
 
-    <div className="mt-3 space-y-2">
+    <div className="divide-y divide-slate-100">
       {templates.length === 0 ? (
-        <p className="text-xs text-slate-500">
+        <p className="px-5 py-6 text-center text-sm text-[var(--color-text-muted)]">
           Este cliente todavía no tiene spreadsheets propios cargados.
         </p>
       ) : (
         templates.map((template) => (
-          <div key={template.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+          <div key={template.id} className="px-5 py-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-900">{template.name}</p>
@@ -67,14 +67,14 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
                   type="button"
                   onClick={() => onDelete(client, template)}
                   disabled={!template.id || deletingTemplateId === template.id}
-                  className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="tuto-button tuto-button--ghost tuto-button--sm !text-[var(--color-danger)] hover:!bg-[var(--color-danger-soft)]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   {deletingTemplateId === template.id ? 'Eliminando...' : 'Eliminar'}
                 </button>
               ) : null}
             </div>
-            <div className="mt-3">
+            <div className="mt-3 max-w-md">
               <label htmlFor={`template-category-${template.id}`} className="mb-1.5 block text-xs font-medium text-slate-600">
                 Categoría por defecto para el wizard
               </label>
@@ -83,7 +83,7 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
                 value={template.defaultCategoryId || ''}
                 disabled={isArchivedCatalogEntity(client) || savingTemplateCategoryId === template.id}
                 onChange={(event) => onCategoryChange(client, template, event.target.value || null)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                className="tuto-field"
               >
                 <option value="">Sin categoría por defecto</option>
                 {template.categories.map((category) => (

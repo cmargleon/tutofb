@@ -15,6 +15,7 @@ import { AutomationBudgetError } from './budget';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 
 export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Client, config: AutomationPreset) {
+  if (job.jobType !== 'garment') throw new HttpsError('failed-precondition', 'Los objetos utilizan el recorrido de escenas existente.');
   const db = getAppFirestore(); const ref = db.doc(`automationJobs/${job.id}`);
   const provider = config.provider || DEFAULT_AUTOMATION_PROVIDER;
   const normalized = resolveCommercialPhotoConfig(provider, config.imageConfig, config.aspectRatio || '3:4');

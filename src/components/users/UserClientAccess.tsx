@@ -28,7 +28,7 @@ export function UserClientAccess({ user }: { user: User }) {
   return <fieldset disabled={saving} className="mt-4 space-y-3 rounded-xl border border-slate-200 p-4">
     <legend className="px-2 text-sm font-medium">Alcance humano por cliente</legend>
     {!user.clientAccess && <p className="text-xs text-amber-700">Pendiente de definir. Esta cuenta necesita una selección explícita para acceder a clientes.</p>}
-    <label className="block text-sm">Acceso<select className="ml-3 rounded-lg border border-slate-300 p-2" value={mode} onChange={e => setMode(e.target.value as typeof mode)}><option value="assigned">Clientes asignados</option><option value="global">Global explícito</option></select></label>
+    <label className="block text-sm">Acceso<select className="tuto-field ml-3" value={mode} onChange={e => setMode(e.target.value as typeof mode)}><option value="assigned">Clientes asignados</option><option value="global">Global explícito</option></select></label>
     {mode === 'assigned' && <div className="max-h-48 space-y-2 overflow-auto">{clients.map(client => <label className="flex gap-2 text-sm" key={client.id}><input type="checkbox" checked={ids.includes(client.id!)} onChange={event => setIds(current => event.target.checked ? [...current, client.id!] : current.filter(id => id !== client.id))} />{client.name}{client.status === 'archived' ? ' (archivado)' : ''}</label>)}</div>}
     {mode === 'assigned' && !ids.length && <p className="text-xs text-slate-500">Sin clientes asignados: no permite consultar datos de clientes.</p>}
     <Button type="button" size="sm" loading={saving} onClick={() => void save()}>Guardar alcance humano</Button>

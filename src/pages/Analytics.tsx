@@ -73,7 +73,7 @@ export const Analytics: React.FC = () => {
   const costRows = costByClientProvider.slice(0, 10);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
+    <div className="tuto-page">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader title="Analíticas" description="Operación, producción y costos." />
         <div className="flex items-center gap-2">

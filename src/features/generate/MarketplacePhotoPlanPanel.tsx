@@ -9,17 +9,17 @@ export function MarketplacePhotoPlanPanel({ plan, onAttributesChange, onIdentity
     {plan.articles.filter(a => a.kind === 'garment').map(a => <fieldset key={a.itemId} disabled={disabled} className="rounded-xl border p-3">
       <legend className="px-2 font-medium">{a.name}</legend>
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="text-sm">Producto (común entre colores)<input className="mt-1 w-full rounded border p-2" value={a.productId} onChange={e => onIdentityChange(a.itemId, e.target.value, a.variantId)} /></label>
-        <label className="text-sm">Variante / color / SKU hijo<input className="mt-1 w-full rounded border p-2" value={a.variantId} onChange={e => onIdentityChange(a.itemId, a.productId, e.target.value)} /></label>{Object.entries(PHOTO_ATTRIBUTE_VALUES).map(([key, values]) => {
+        <label className="text-sm">Producto (común entre colores)<input className="tuto-field mt-1 w-full" value={a.productId} onChange={e => onIdentityChange(a.itemId, e.target.value, a.variantId)} /></label>
+        <label className="text-sm">Variante / color / SKU hijo<input className="tuto-field mt-1 w-full" value={a.variantId} onChange={e => onIdentityChange(a.itemId, a.productId, e.target.value)} /></label>{Object.entries(PHOTO_ATTRIBUTE_VALUES).map(([key, values]) => {
         const attribute = a.attributes[key as keyof PhotoArticleAttributes];
         return <label key={key} className="text-sm">{({ category: 'Categoría', audience: 'Público', bodyArea: 'Zona corporal', gender: 'Género comercial', packaging: 'Presentación' })[key] || key}
-          <select className="mt-1 w-full rounded border p-2" value={String(attribute?.value ?? '')} title={attribute?.evidence} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, [key]: manualPhotoAttribute(e.target.value) })}>
+          <select className="tuto-field mt-1 w-full" value={String(attribute?.value ?? '')} title={attribute?.evidence} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, [key]: manualPhotoAttribute(e.target.value) })}>
             <option value="">Por confirmar</option>{values.map(value => <option key={value} value={value}>{LABELS[value] || value}</option>)}
           </select><span className="text-xs text-slate-500">{attribute?.source || 'Sin evidencia'} · {attribute?.confidence == null ? '?' : Math.round(attribute.confidence * 100) + '%'}</span>
         </label>;
       })}
-        <label className="text-sm">Transparencia<select className="mt-1 w-full rounded border p-2" value={a.attributes.transparency?.value == null ? '' : String(a.attributes.transparency.value)} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, transparency: manualPhotoAttribute(e.target.value === 'true') })}><option value="">Por confirmar</option><option value="false">No</option><option value="true">Sí</option></select></label>
-        {(['components', 'color'] as const).map(key => <label className="text-sm" key={key}>{key === 'components' ? 'Componentes y cantidades vendidos' : 'Color / variante'}<input className="mt-1 w-full rounded border p-2" value={a.attributes[key]?.value || ''} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, [key]: manualPhotoAttribute(e.target.value) })} /></label>)}
+        <label className="text-sm">Transparencia<select className="tuto-field mt-1 w-full" value={a.attributes.transparency?.value == null ? '' : String(a.attributes.transparency.value)} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, transparency: manualPhotoAttribute(e.target.value === 'true') })}><option value="">Por confirmar</option><option value="false">No</option><option value="true">Sí</option></select></label>
+        {(['components', 'color'] as const).map(key => <label className="text-sm" key={key}>{key === 'components' ? 'Componentes y cantidades vendidos' : 'Color / variante'}<input className="tuto-field mt-1 w-full" value={a.attributes[key]?.value || ''} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, [key]: manualPhotoAttribute(e.target.value) })} /></label>)}
       </div>
     </fieldset>)}
     {plan.issues.map((issue, i) => <p key={i} className={issue.blocking ? 'text-sm text-rose-700' : 'text-sm text-amber-800'}>{plan.articles.find(a => a.itemId === issue.itemId)?.name}: {issue.message}</p>)}

@@ -629,7 +629,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                     onChange={(e) => job.id && updateDraft(job.id, { prompt: e.target.value })}
                     disabled={controlsDisabled}
                     rows={8}
-                    className="w-full resize-none rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-100 shadow-inner shadow-black/20 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="tuto-field w-full resize-none"
                     placeholder="Prompt para regenerar esta foto..."
                   />
                 </div>
@@ -640,7 +640,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                     value={draft.provider}
                     onChange={(e) => job.id && updateDraft(job.id, { provider: e.target.value as Provider })}
                     disabled={controlsDisabled}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-slate-100 shadow-inner shadow-black/20 transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="tuto-field w-full"
                   >
                     {PROVIDER_VALUES.map((provider) => (
                       <option key={provider} value={provider} disabled={disabledProviders?.includes(provider)}>

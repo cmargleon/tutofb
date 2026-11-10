@@ -1,4 +1,3 @@
-import { createDefaultProductScenes } from './productGeneration';
 import type { PhotoArticle, PhotoAttribute, PhotoPlan, PhotoPlanInput, PhotoRequirement, PhotoTask } from './types/photoPlan';
 import type { MarketplaceId } from './marketplaces';
 import { getProviderCostUsd } from './constants/providerCosts';
@@ -37,14 +36,14 @@ export const PHOTO_RULES: PhotoRequirement[] = [
 ];
 
 export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
-  const channels = activePhotoChannels(input.marketplaces);
+  const channels = input.articles.some(a => a.kind === 'garment') ? activePhotoChannels(input.marketplaces) : [];
   const plan: PhotoPlan = { version: PHOTO_PLAN_VERSION, id: '', clientId: input.clientId, channels, articles: input.articles,
     rules: channels.length ? PHOTO_RULES.filter(r => r.channel === 'common' || channels.includes(r.channel as MarketplaceId)) : [], tasks: [], issues: [],
     effectiveConfig: { provider: input.provider, imageConfig: input.imageConfig, aspectRatio: input.aspectRatio },
     estimate: { uniqueImages: 0, generations: 0, reviews: 0, estimatedCostUsd: 0 } };
   const issue = (itemId: string, code: string, message: string, blocking = true) => plan.issues.push({ itemId, code, message, blocking });
   if (!channels.length) { plan.id = photoIdentity(plan); return plan; }
-  for (const article of [...input.articles].sort((a, b) => a.itemId.localeCompare(b.itemId))) {
+  for (const article of input.articles.filter(a => a.kind === 'garment').sort((a, b) => a.itemId.localeCompare(b.itemId))) {
     const a = article.attributes;
     const category = knownPhotoAttribute(a.category), audience = knownPhotoAttribute(a.audience), packaging = knownPhotoAttribute(a.packaging);
     const area = knownPhotoAttribute(a.bodyArea);
@@ -99,10 +98,6 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
       const flat = pack || sensitiveChild || (child && channel === 'tiktok-shop') || (audience === 'baby' && channel === 'mercado-libre');
       const background = channel === 'tiktok-shop' || article.kind === 'garment' && channel === 'amazon' || pack ? 'white' : 'neutral';
       add(channel, 'front', background, flat, true);
-      if (article.kind === 'product' && channel !== 'tiktok-shop') {
-        for (const scene of input.objectScenes || createDefaultProductScenes()) add(channel, 'front', 'context', false, false, scene);
-      }
-      if (article.kind === 'product' && channel === 'tiktok-shop') issue(article.itemId, 'tiktok-object-angles', 'TikTok: las escenas frontales compartidas se conservan para otros canales. Agrega referencias de otros ángulos para ampliar esta galería sin repetir el frente.', false);
       for (const view of ['back', 'side', 'detail'] as const) if (article.references.some(r => r.view === view)) {
         if (view === 'detail' && child && channel === 'tiktok-shop') issue(article.itemId, 'tiktok-child-detail', 'TikTok infantil: el detalle real no se asigna sin evidencia de flat lay sin personas. Las otras vistas planas se conservan.', false);
         else add(channel, view, child && channel === 'tiktok-shop' ? 'white' : view === 'detail' ? 'original' : 'neutral', flat, false);

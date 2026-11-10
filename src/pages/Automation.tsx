@@ -2,16 +2,16 @@ import { MarketplaceExportAction } from '../features/marketplaces/MarketplaceExp
 import { remainingAutomationBudget } from '../../shared/src/automationPolicy';
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Workflow } from 'lucide-react';
+import { AlertTriangle, Loader2, Workflow, XCircle } from 'lucide-react';
 import { DEFAULT_IMAGE_PROVIDER, PROVIDER_VALUES, PROVIDER_LABELS } from '../../shared/src/domain';
 import { AutomationJob, Provider } from '../../shared/src/types';
 import { PRODUCT_SCENES } from '../../shared/src/productGeneration';
-import { Button, ImageThumb, PageHeader, StatusBadge } from '../components/ui';
+import { Alert, Button, buttonClasses, CardHeader, DataTable, EmptyState, ImageThumb, PageHeader, StatCard, StatusBadge, Surface } from '../components/ui';
 import { useAutomation } from '../features/automation/useAutomation';
 
 const date = (value: any) => value?.toDate ? value.toDate().toLocaleString('es') : '—';
 const labelClass = 'flex flex-col gap-2 text-sm font-medium text-slate-700';
-const inputClass = 'rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900';
+const inputClass = 'tuto-field';
 const timestamps = (job: AutomationJob) => [
   ['Creado', job.createdAt], ['Actualizado', job.updatedAt], ['Iniciado', job.startedAt], ['Completado', job.completedAt], ['Fallo / atención', job.failedAt],
 ] as const;
@@ -23,14 +23,15 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
   const selected = state.selectedJob || state.jobs.find((job) => job.id === search.get('job'));
   const client = state.clients.find((entry) => entry.id === state.clientId);
   const driveFolderIds = client?.automation?.driveFolderIds ?? [];
-  return <div className="mx-auto max-w-6xl space-y-6">
+  const statusCount = (statuses: string[]) => state.jobs.filter((job) => statuses.includes(job.status)).length;
+  return <div className="tuto-page">
     <PageHeader title="Automatización" description="Producción de imágenes desde una entrada mínima o un sistema externo." icon={Workflow} />
-    <nav className="flex gap-3 text-sm" aria-label="Automatización">
-      <Link className="rounded-xl border bg-white px-4 py-2" to="/automation">Trabajos</Link>
-      {state.canCreate && <Link className="rounded-xl border bg-white px-4 py-2" to="/automation/intake">Nueva entrada</Link>}
+    <nav className="tuto-section-nav" aria-label="Automatización">
+      <Link to="/automation" aria-current={!intake ? 'page' : undefined}>Trabajos</Link>
+      {state.canCreate && <Link to="/automation/intake" aria-current={intake ? 'page' : undefined}>Nueva entrada</Link>}
     </nav>
-    {state.error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">{state.error}</p>}
-    {intake ? <form className="max-w-2xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" onSubmit={(event) => { event.preventDefault(); void state.submit(resume); }}>
+    {state.error && <Alert tone="danger">{state.error}</Alert>}
+    {intake ? <form className="tuto-surface max-w-2xl space-y-5 p-5 sm:p-6" onSubmit={(event) => { event.preventDefault(); void state.submit(resume); }}>
       <h2 className="text-lg font-semibold">{resume ? 'Completar entrada pendiente' : 'Enviar a producción'}</h2>
       {resume && <p className="break-all text-sm text-slate-600">Trabajo: {resume}. El cliente y el tipo originales se conservarán.</p>}
       <label className={labelClass}>Cliente<select className={inputClass} required={!resume} disabled={Boolean(resume) || state.busy} value={state.clientId} onChange={(event) => { state.setClientId(event.target.value); state.setModelId(''); state.setPreset(''); }}>
@@ -82,24 +83,33 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         <Button type="button" loading={state.busy} disabled={!state.preparedPlan.policy.allowEstimatedCosts || (state.preparedPlan.classificationRequired && !state.preparedPlan.policy.authorizeClassification)} onClick={() => void state.execute()}>Ejecutar plan</Button>
       </section>}
     </form> : <>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm"><thead className="border-b bg-slate-50 text-slate-600"><tr>{['Fecha / cliente', 'Origen / tipo', 'Estado', 'Imágenes', 'Reintentos', 'Detalle'].map((label) => <th className="p-4" key={label}>{label}</th>)}</tr></thead>
-          <tbody>{state.jobs.map((job) => <tr key={job.id} className="border-b border-slate-100">
-            <td className="p-4">{date(job.createdAt)}<div className="font-medium">{state.clients.find((client) => client.id === job.clientId)?.name || job.clientId}</div></td>
-            <td className="p-4">{job.source}<div className="text-slate-500">{job.jobType}</div></td>
-            <td className="p-4"><StatusBadge status={job.status} /></td><td className="p-4">{job.inputImages.length} entradas · {job.outputImages.length} salidas</td><td className="p-4">{job.retryCount}</td>
-            <td className="p-4"><Link className="font-medium text-indigo-600" to={`/automation?job=${job.id}`}>Abrir</Link></td>
-          </tr>)}</tbody></table>
-        {!state.jobs.length && <p className="p-8 text-sm text-slate-500">Aún no hay trabajos. Se muestran los 100 más recientes.</p>}
+      <div className="tuto-stat-grid">
+        <StatCard label="Trabajos recientes" value={state.jobs.length} icon={Workflow} tone="accent" hint="Últimos 100 trabajos" />
+        <StatCard label="En curso" value={statusCount(['pending', 'importing', 'processing', 'review'])} icon={Loader2} tone="info" />
+        <StatCard label="Requieren atención" value={statusCount(['needs_attention'])} icon={AlertTriangle} tone="warning" />
+        <StatCard label="Fallidos" value={statusCount(['failed'])} icon={XCircle} tone="danger" />
       </div>
-      {selected && <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6" aria-label="Detalle de AutomationJob">
-        <div className="flex flex-wrap items-center justify-between gap-4"><h2 className="break-all font-semibold">{selected.id}</h2><StatusBadge status={selected.status} /></div>
+      <Surface className="overflow-hidden">
+        <CardHeader title="Trabajos" description="Se muestran los 100 más recientes. Abre un trabajo para ver escenas, incidencias y resultados." />
+        {!state.jobs.length ? <EmptyState icon={<Workflow />} title="Aún no hay trabajos" description="Las entradas manuales o de sistemas externos aparecerán aquí. Se muestran los 100 más recientes." /> :
+        <DataTable caption="Trabajos de automatización" className="min-w-[760px]">
+          <thead><tr>{['Fecha / cliente', 'Origen / tipo', 'Estado', 'Imágenes', 'Reintentos', 'Detalle'].map((label) => <th scope="col" key={label} className={label === 'Reintentos' ? 'is-numeric' : label === 'Detalle' ? 'text-right' : undefined}>{label}</th>)}</tr></thead>
+          <tbody>{state.jobs.map((job) => <tr key={job.id} className={selected?.id === job.id ? '!bg-[var(--color-bg-active)]' : undefined}>
+            <td><div className="font-medium text-[var(--color-text-primary)]">{state.clients.find((client) => client.id === job.clientId)?.name || job.clientId}</div><div className="text-xs text-[var(--color-text-muted)]">{date(job.createdAt)}</div></td>
+            <td>{job.source}<div className="text-xs text-[var(--color-text-muted)]">{job.jobType}</div></td>
+            <td><StatusBadge status={job.status} /></td><td>{job.inputImages.length} entradas · {job.outputImages.length} salidas</td><td className="is-numeric">{job.retryCount}</td>
+            <td className="text-right"><Link className={buttonClasses('secondary', 'sm')} to={`/automation?job=${job.id}`}>Abrir</Link></td>
+          </tr>)}</tbody>
+        </DataTable>}
+      </Surface>
+      {selected && <section className="tuto-surface space-y-5 p-5 sm:p-6" aria-label="Detalle de AutomationJob">
+        <div className="flex flex-wrap items-center justify-between gap-4"><div className="min-w-0"><p className="tuto-overline">Trabajo seleccionado</p><h2 className="mt-1 break-all text-base font-semibold text-[var(--color-text-primary)]">{selected.id}</h2></div><StatusBadge status={selected.status} /></div>
         <p className="text-sm">{selected.progress.completed} / {selected.progress.total} completados · {selected.progress.failed} fallidos · preset {selected.requestedPreset || 'default'}</p>
         {selected.driveUrl && <a className="text-sm text-indigo-600" href={selected.driveUrl} target="_blank" rel="noreferrer">Abrir fuente de Drive</a>}
         {(selected.sourceImages || selected.inputImages).filter((image) => image.url).map((image, index) => <a key={index} className="block text-sm text-indigo-600" href={image.url} target="_blank" rel="noreferrer">Fuente: {image.fileName}</a>)}
         {(selected.batchIds || (selected.batchId ? [selected.batchId] : [])).map(batchId => <Link key={batchId} className="block text-sm text-indigo-600" to={`/catalogo?clientId=${selected.clientId}&batchId=${batchId}`}>Ver resultados · lote {batchId}</Link>)}
         {(selected.batchIds?.length || selected.batchId) && <MarketplaceExportAction key={selected.id} scope={{ clientId: selected.clientId, batchIds: selected.batchIds?.length ? selected.batchIds : [selected.batchId!] }} />}
-        {selected.error && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{selected.error.code}: {selected.error.message}</p>}
+        {selected.error && <p role="alert" className="tuto-alert tuto-alert--warning">{selected.error.code}: {selected.error.message}</p>}
         {!selected.batchId && ['failed', 'needs_attention'].includes(selected.status) && <div className="flex flex-wrap gap-3">
           <Button variant="secondary" loading={state.busy} disabled={selected.retryCount >= 2} onClick={() => void state.retry(selected)}>Reintentar entrada</Button>
           <Link className="px-3 py-2 text-sm text-indigo-600" to={`/automation/intake?resume=${selected.id}`}>Completar modelo / sustituir imágenes</Link>
@@ -114,8 +124,8 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         {selected.items?.map((item) => <div key={item.itemId} className="overflow-auto rounded-xl border border-slate-200"><div className="flex justify-between bg-slate-50 p-3 text-sm"><strong>{item.itemId}</strong><span>{item.status}</span></div>{(item.garmentGender || item.modelId) && <p className="px-3 py-2 text-xs text-slate-600">{item.garmentGender ? { male: 'Prenda masculina', female: 'Prenda femenina', unisex: 'Prenda unisex' }[item.garmentGender] : 'Género sin determinar'}{item.modelId && ` · Modelo: ${(state.models || []).find(model => model.id === item.modelId)?.name || item.modelId}`}</p>}{item.issue && <p className="bg-amber-50 p-3 text-sm text-amber-900">{item.issue.code}: {item.issue.message}</p>}<table className="w-full text-left text-xs"><thead><tr>{['Escena', 'Estado', 'Intentos', 'Gemini / incidencia'].map((label) => <th className="p-3" key={label}>{label}</th>)}</tr></thead><tbody>{item.scenes.map((scene) => <tr key={scene.jobId} className="border-t"><td className="p-3">{scene.scene}</td><td className="p-3">{scene.status}</td><td className="p-3">{scene.attempts}</td><td className="p-3">{scene.verdict || '—'}<p>{scene.reason}</p></td></tr>)}</tbody></table></div>)}
         {state.canCreate && (selected.spendingPaused || selected.items?.some((item) => item.scenes.some((scene) => scene.status === 'budget'))) && <div className="flex flex-wrap items-center gap-3"><label className={labelClass}>Presupuesto autorizado (USD)<input className={inputClass} type="number" min="0.01" step="0.01" placeholder={String(selected.budget?.limitUsd || '')} value={state.resumeBudgetUsd} onChange={(e) => state.setResumeBudgetUsd(e.target.value)} /></label><Button loading={state.busy} variant="secondary" onClick={() => void state.resume(selected)}>Reanudar con límites vigentes</Button></div>}
         {selected.outputImages.length > 0 && <Button loading={state.busy} variant="secondary" onClick={() => void state.download(selected)}>Descargar aprobadas + manifiesto ZIP</Button>}
-        <h3 className="font-medium">Entradas</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-6">{selected.inputImages.map((image, index) => <figure key={index}><div className="aspect-square"><ImageThumb storagePath={image.storagePath} alt={image.fileName} fit="contain" /></div><figcaption className="mt-1 truncate text-xs">{image.fileName}</figcaption></figure>)}</div>
-        <h3 className="font-medium">Resultados aprobados</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{selected.outputImages.map((image) => <figure key={image.jobId}><div className="aspect-square"><ImageThumb storagePath={image.storagePath} alt={image.type} fit="contain" /></div><figcaption className="mt-1 text-xs">{image.type}</figcaption></figure>)}</div>
+        <h3 className="tuto-section-title">Entradas</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-6">{selected.inputImages.map((image, index) => <figure key={index}><div className="aspect-square"><ImageThumb storagePath={image.storagePath} alt={image.fileName} fit="contain" /></div><figcaption className="mt-1 truncate text-xs">{image.fileName}</figcaption></figure>)}</div>
+        <h3 className="tuto-section-title">Resultados aprobados</h3><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{selected.outputImages.map((image) => <figure key={image.jobId}><div className="aspect-square"><ImageThumb storagePath={image.storagePath} alt={image.type} fit="contain" /></div><figcaption className="mt-1 text-xs">{image.type}</figcaption></figure>)}</div>
         {selected.batchId && <p className="text-xs text-slate-500">Abre el batch para revisar intentos, costos y reintentar jobs de generación.</p>}
       </section>}
     </>}

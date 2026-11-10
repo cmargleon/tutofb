@@ -47,13 +47,13 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   };
   let sceneIds: string[];
   let modelOptions: AutomationModelOption[] | undefined;
-  const photoChannels = activePhotoChannels(client.marketplaces);
+  const photoChannels = data.jobType === 'garment' ? activePhotoChannels(client.marketplaces) : [];
   if (data.jobType === 'garment' && !photoChannels.length) {
     try { modelOptions = await loadAutomationModelOptions(data.clientId, client, data.modelId || resolved.config.modelId, preset.poseIds); }
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
     // Until classification, estimate using the model with the most poses per item.
     sceneIds = modelOptions.reduce<string[]>((largest, option) => option.poseIds.length > largest.length ? option.poseIds : largest, []);
-  } else sceneIds = photoChannels.length ? (data.jobType === 'garment' ? ['front-white-model', 'front-white-flat', 'front-neutral-model', 'front-neutral-flat', 'back-neutral-model', 'back-neutral-flat', 'back-white-flat', 'side-neutral-model', 'side-neutral-flat', 'side-white-flat', 'real-detail'] : ['front-white', 'front-neutral', ...(preset.scenes || defaults.scenes).map(s => s.type), 'available-back', 'available-side', 'real-detail']) : preset.scenes!.map((scene) => scene.type);
+  } else sceneIds = photoChannels.length ? ['front-white-model', 'front-white-flat', 'front-neutral-model', 'front-neutral-flat', 'back-neutral-model', 'back-neutral-flat', 'back-white-flat', 'side-neutral-model', 'side-neutral-flat', 'side-white-flat', 'real-detail'] : preset.scenes!.map((scene) => scene.type);
   const modelId = modelOptions?.length === 1 ? modelOptions[0].modelId : photoChannels.length ? resolved.modelId : null;
   const photoModel = modelId && photoChannels.length ? (await db.doc(`models/${modelId}`).get()).data() as import('../../../shared/src/types').Model | undefined : undefined;
   if (modelId && photoChannels.length && (!photoModel || photoModel.clientId !== data.clientId || photoModel.active === false || photoModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo del plan no disponible.');
@@ -76,7 +76,7 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
     return { itemId, imageCount: count, sceneIds,
       estimatedCostUsd: usd(sceneIds.length * (generation.holdUsd + GEMINI_OPERATION_HOLD_USD) * (policy.maxReviewAttempts + policy.maxOperationalRetries) + (data.jobType === 'garment' || photoChannels.length ? GEMINI_OPERATION_HOLD_USD * (policy.maxOperationalRetries + 1) : 0)) };
   });
-  const plan: AutomationPlan = { photoBases, photoModelId: modelId, photoMarketplaces: client.marketplaces || {}, photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
+  const plan: AutomationPlan = { ...(data.jobType === 'garment' ? { photoBases, photoModelId: modelId, photoMarketplaces: client.marketplaces || {} } : {}), photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
     request: { ...data, inputImages: inputs, preset: resolved.name },
     presetName: resolved.name, preset, policy, modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment' || photoChannels.length > 0,
     estimatedCostUsd: usd(items.reduce((sum, item) => sum + item.estimatedCostUsd, 0)),
@@ -108,7 +108,7 @@ export const executeAutomationPlan = async (id: string, uid: string, role: strin
     const job = (await getAppFirestore().collection('automationJobs').doc(plan.executedJobId).get()).data() as AutomationJob;
     return { jobId: plan.executedJobId, status: job.status, duplicate: true, ...automationPolling(job) };
   }
-  if (!plan.policy.allowEstimatedCosts || (plan.classificationRequired && !plan.policy.authorizeClassification)) throw new HttpsError('failed-precondition', 'Prepara el plan con allowEstimatedCosts y, para prendas, authorizeClassification explícitos antes de ejecutarlo.');
+  if (!plan.policy.allowEstimatedCosts || (plan.request.jobType === 'garment' && plan.classificationRequired && !plan.policy.authorizeClassification)) throw new HttpsError('failed-precondition', 'Prepara el plan con allowEstimatedCosts y, para prendas, authorizeClassification explícitos antes de ejecutarlo.');
   // Check file versions and current folder authorization before any paid processing.
   for (const image of plan.request.inputImages || []) if (image.driveFile) await authorizeDriveFile(plan.clientId, image);
   const receipt = await createAutomation(plan.request, uid, role, plan);

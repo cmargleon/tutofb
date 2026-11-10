@@ -1,16 +1,17 @@
 import {
-  Archive,
   BarChart3,
   DollarSign,
+  FolderKanban,
   Images,
   LayoutDashboard,
-  Rows3,
+  ListOrdered,
   Settings,
   Shield,
   SlidersHorizontal,
   UserSquare2,
   Users,
   Wand2,
+  Workflow,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -25,10 +26,21 @@ export interface NavigationRole {
   canManageUsers: boolean;
 }
 
+/** Module family used to group the sidebar (Odoo-style app sections). */
+export type NavigationSection = 'home' | 'production' | 'catalog' | 'admin';
+
+export const NAVIGATION_SECTION_LABELS: Record<NavigationSection, string | null> = {
+  home: null,
+  production: 'Operaciones',
+  catalog: 'Catálogo',
+  admin: 'Administración',
+};
+
 interface NavigationBase {
   name: string;
   icon: LucideIcon;
   visible: boolean;
+  section?: NavigationSection;
 }
 
 export interface NavigationItem extends NavigationBase {
@@ -54,18 +66,19 @@ const isPathActive = (pathname: string, path: string) => {
 
 export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
   const entries: NavigationEntry[] = [
-    { type: 'item', name: 'Dashboard', path: '/', icon: LayoutDashboard, visible: role.isActive },
-    { type: 'item', name: 'Generar Fotos', path: '/generate', icon: Wand2, visible: role.canCreateBatches },
-    { type: 'item', name: 'Automatización', path: '/automation', icon: Rows3, visible: role.canCreateBatches },
-    { type: 'item', name: 'Organizador inteligente', path: '/organizador', icon: Archive, visible: role.canEvaluate },
-    { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate },
-    { type: 'item', name: 'Cola', path: '/cola', icon: Rows3, visible: role.canEvaluate },
+    { type: 'item', name: 'Inicio', path: '/', icon: LayoutDashboard, visible: role.isActive, section: 'home' },
+    { type: 'item', name: 'Generar Fotos', path: '/generate', icon: Wand2, visible: role.canCreateBatches, section: 'production' },
+    { type: 'item', name: 'Automatización', path: '/automation', icon: Workflow, visible: role.canCreateBatches, section: 'production' },
+    { type: 'item', name: 'Organizador inteligente', path: '/organizador', icon: FolderKanban, visible: role.canEvaluate, section: 'production' },
+    { type: 'item', name: 'Cola', path: '/cola', icon: ListOrdered, visible: role.canEvaluate, section: 'production' },
+    { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate, section: 'catalog' },
     {
       type: 'group',
       name: 'Modelos',
       icon: UserSquare2,
       defaultPath: '/models/catalogo',
       visible: role.canManageModels,
+      section: 'catalog',
       children: [
         { type: 'item', name: 'Generar', path: '/models/generar', icon: Wand2, visible: role.canManageModels },
         { type: 'item', name: 'Catálogo', path: '/models/catalogo', icon: Images, visible: role.canManageModels },
@@ -75,22 +88,24 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
       type: 'group',
       name: 'Clientes',
       icon: Users,
-      defaultPath: '/clients/crear',
+      defaultPath: '/clients/lista',
       visible: role.canManageClients,
+      section: 'admin',
       children: [
-        { type: 'item', name: 'Crear', path: '/clients/crear', icon: Users, visible: role.canManageClients },
         { type: 'item', name: 'Lista de Clientes', path: '/clients/lista', icon: Users, visible: role.canManageClients },
+        { type: 'item', name: 'Crear', path: '/clients/crear', icon: Users, visible: role.canManageClients },
       ],
     },
     {
       type: 'group',
       name: 'Usuarios',
       icon: Shield,
-      defaultPath: '/users/crear',
+      defaultPath: '/users/lista',
       visible: role.canManageUsers,
+      section: 'admin',
       children: [
-        { type: 'item', name: 'Crear', path: '/users/crear', icon: Shield, visible: role.canManageUsers },
         { type: 'item', name: 'Lista de Usuarios', path: '/users/lista', icon: Shield, visible: role.canManageUsers },
+        { type: 'item', name: 'Crear', path: '/users/crear', icon: Shield, visible: role.canManageUsers },
       ],
     },
     {
@@ -99,6 +114,7 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
       icon: SlidersHorizontal,
       defaultPath: '/analytics',
       visible: role.canAccessAnalytics || role.canAccessFinance || role.canManageUsers,
+      section: 'admin',
       children: [
         { type: 'item', name: 'Analíticas', path: '/analytics', icon: BarChart3, visible: role.canAccessAnalytics },
         { type: 'item', name: 'Finanzas', path: '/finanzas', icon: DollarSign, visible: role.canAccessFinance },

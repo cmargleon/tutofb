@@ -398,7 +398,7 @@ export const PoseView: React.FC<PoseViewProps> = ({
               onChange={(e) => onUpdateDraft({ prompt: e.target.value })}
               disabled={controlsDisabled}
               rows={5}
-              className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+              className="tuto-field w-full resize-none"
               placeholder="Prompt para regenerar..."
             />
           </div>
@@ -408,7 +408,7 @@ export const PoseView: React.FC<PoseViewProps> = ({
               value={draft.provider}
               onChange={(e) => onUpdateDraft({ provider: e.target.value as Provider })}
               disabled={controlsDisabled}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+              className="tuto-field w-full"
             >
               {PROVIDER_VALUES.map((provider) => (
                 <option key={provider} value={provider}>

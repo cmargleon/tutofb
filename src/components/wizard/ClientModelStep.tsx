@@ -69,7 +69,7 @@ export const ClientModelStep: React.FC<Props> = ({
             disabled={isBusy}
             value={selectedClientId || ''}
             onChange={(event) => onClientChange(event.target.value || null)}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+            className="tuto-field w-full"
           >
             <option value="">Selecciona un cliente</option>
             {clients.map((client) => (
@@ -139,7 +139,7 @@ export const ClientModelStep: React.FC<Props> = ({
                 value={selectedSpreadsheetTemplateId || ''}
                 onChange={(event) => onSpreadsheetTemplateChange(event.target.value || null)}
                 disabled={!selectedClientId}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                className="tuto-field w-full"
               >
                 <option value="">Selecciona un spreadsheet</option>
                 {spreadsheetTemplates.map((template) => (
@@ -155,7 +155,7 @@ export const ClientModelStep: React.FC<Props> = ({
                 value={selectedSpreadsheetCategoryId || ''}
                 onChange={(event) => onSpreadsheetCategoryChange(event.target.value || null)}
                 disabled={!selectedSpreadsheetTemplateId}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                className="tuto-field w-full"
               >
                 <option value="">Detectar automáticamente por prenda</option>
                 {spreadsheetCategories.map((category) => (

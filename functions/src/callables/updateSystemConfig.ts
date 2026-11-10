@@ -1,4 +1,5 @@
 import { validateAutomationBudget } from '../../../shared/src/automationPolicy';
+import { validateAutomationRules } from '../../../shared/src/automationConfig';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { onCall } from 'firebase-functions/v2/https';
@@ -16,6 +17,10 @@ export const updateSystemConfig = onCall<UpdateSystemConfigRequest, Promise<Upda
     assertValidAdditionalSystemPrompts(request.data);
     if (request.data.automationBudget) {
       try { validateAutomationBudget(request.data.automationBudget); }
+      catch (error) { throw new HttpsError('invalid-argument', (error as Error).message); }
+    }
+    if (request.data.automationRules !== undefined) {
+      try { validateAutomationRules(request.data.automationRules); }
       catch (error) { throw new HttpsError('invalid-argument', (error as Error).message); }
     }
     const db = getAppFirestore();

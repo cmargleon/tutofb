@@ -1,10 +1,11 @@
 import * as admin from 'firebase-admin';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import type { AutomationInput, OrganizerPhoto } from '../../../shared/src/types';
+import type { AutomationInput, ClientAutomationConfig, OrganizerPhoto } from '../../../shared/src/types';
 import { assertUserRoles } from '../auth/roles';
 import { getSystemConfigDocRef, sanitizeSystemConfig } from '../admin/systemConfig';
 import { createAutomation } from '../automation/persistence';
+import { AutomationAttentionError } from '../automation/imports';
 import { normalizeInputImage } from '../media/normalizeInputImage';
 import { assertDelegatedStamp } from '../manglar/access';
 import { withManglarContext } from '../manglar/context';
@@ -68,10 +69,12 @@ export async function automateNewPhotos(drive: OrganizerDrive, root: DocumentRef
     sources.push({ entry: value.entry, photo });
   }
   const groups = groupGenerationSources(sources);
+  let organizerGeneration: ClientAutomationConfig['organizerGeneration'];
   const isEnabled = async () => {
     const [system, client] = await Promise.all([getSystemConfigDocRef().get(), getAppFirestore().collection('clients').doc(config.clientId).get()]);
+    organizerGeneration = client.data()?.automation?.organizerGeneration;
     return sanitizeSystemConfig(system.data()).organizerAutoGenerationEnabled && client.exists &&
-      client.data()?.status !== 'archived' && client.data()?.automation?.enabled !== false;
+      client.data()?.status !== 'archived' && client.data()?.automation?.enabled !== false && organizerGeneration?.enabled !== false;
   };
   let skipped = 0;
   for (const [index, group] of groups.entries()) {
@@ -122,12 +125,26 @@ export async function automateNewPhotos(drive: OrganizerDrive, root: DocumentRef
     }
     const create = () => createAutomation({
       source: 'api', externalId: `organizer-${key}`, clientId: config.clientId, jobType: selection.kind,
+      ...(organizerGeneration?.preset !== undefined ? { preset: organizerGeneration.preset } : {}),
       inputImages, allowEstimatedCosts: true, authorizeClassification: true,
       metadata: { organizerRunId: run.id, organizerPhotoCount: group.photos.length,
         organizerPhotoIds: selection.references.map(({ photo }) => photo.id) },
     }, uid, role);
-    const receipt = run.delegated ? await withManglarContext({ caller: { ...run.delegated,
-      scopes: ['jobs:read', 'jobs:create'], allowedClientIds: [config.clientId] } }, create) : await create();
+    let receipt: Awaited<ReturnType<typeof createAutomation>>;
+    try {
+      receipt = run.delegated ? await withManglarContext({ caller: { ...run.delegated,
+        scopes: ['jobs:read', 'jobs:create'], allowedClientIds: [config.clientId] } }, create) : await create();
+    } catch (error) {
+      if (!(error instanceof AutomationAttentionError) || organizerGeneration?.preset === undefined) throw error;
+      const issue = error.message;
+      await whileLeased(doc, lease, tx => {
+        tx.set(handoff, { status: 'needs_attention', photoIds: group.photos.map(({ photo }) => photo.id), issue });
+        for (const { photo } of group.photos) tx.update(root.collection('photos').doc(photo.id), {
+          hasConflict: true, issue: photo.issue?.includes(issue) ? photo.issue : [photo.issue, issue].filter(Boolean).join(' '),
+        });
+      });
+      continue;
+    }
     // Receipt and consumption are committed together. A crash before this transaction
     // reuses createAutomation's idempotency key rather than creating a second batch.
     await whileLeased(doc, lease, tx => {

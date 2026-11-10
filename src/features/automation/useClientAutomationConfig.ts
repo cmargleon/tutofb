@@ -1,3 +1,5 @@
+import { resolveAutomationRules, resolveEffectiveAutomationConfig, validateAutomationRules } from '../../../shared/src/automationConfig';
+import { useSystemConfig } from '../system/useSystemConfig';
 import { isAutomationDraft } from '../clients/draftStorage';
 import { useEffect, useState } from 'react';
 import type { AutomationPreset, Client, ClientAutomationConfig, Model } from '../../../shared/src/types';
@@ -22,9 +24,19 @@ export const useClientAutomationConfig = (client: Client) => {
   const toast = useToast();
   useEffect(() => { setPresetName(client.automation?.defaultPreset || ''); }, [client.id]);
   useEffect(() => subscribeToModels(setModels, (error) => toast({ tone: 'error', title: 'No se pudieron cargar los modelos', description: error.message }), { clientId: client.id }), [client.id]);
+  const { config: systemConfig, loading: systemLoading } = useSystemConfig();
   const preset = value.presets?.[presetName] || {};
   const availableModels = models.filter(model => model.clientId === client.id && model.active !== false && model.status !== 'archived');
   const genderDefaults = getClientGenderModelDefaults(client.id!, value, availableModels);
+  const inheritedRules = resolveAutomationRules(systemConfig.automationRules);
+  const effectiveConfig = resolveEffectiveAutomationConfig({ system: systemConfig, client: { ...client, automation: value }, models: availableModels });
+  const setRule = (key: keyof NonNullable<ClientAutomationConfig['rules']>, input: string) => setValue(current => {
+    const rules = { ...current.rules };
+    if (input === '') delete rules[key]; else rules[key] = Number(input);
+    const next = { ...current };
+    if (Object.keys(rules).length) next.rules = rules; else delete next.rules;
+    return next;
+  });
   const updatePreset = (patch: Partial<AutomationPreset>) => setValue((current) => {
     const next = { ...current.presets?.[presetName], ...patch };
     if (patch.prompt === '') delete next.prompt;
@@ -43,6 +55,7 @@ export const useClientAutomationConfig = (client: Client) => {
   const save = async (section: ClientAutomationSection) => {
     setSavingSection(section);
     try {
+      if (section === 'automation') validateAutomationRules(value.rules ?? {});
       const automation = section === 'sources'
         ? { driveFolderIds: folders.split(/[\n,]+/).map((id) => id.trim()).filter(Boolean) }
         : { ...selectClientAutomationSection(value, 'automation'), ...genderDefaults };
@@ -52,7 +65,7 @@ export const useClientAutomationConfig = (client: Client) => {
     } catch (error) { toast({ tone: 'error', title: 'No se pudo guardar', description: (error as Error).message }); }
     finally { setSavingSection(null); }
   };
-  return { isDirty, discardSection, value, setValue, folders, setFolders, presetName, setPresetName, preset, updatePreset, models: availableModels,
+  return { effectiveConfig, inheritedRules, setRule, systemConfig, systemLoading, isDirty, discardSection, value, setValue, folders, setFolders, presetName, setPresetName, preset, updatePreset, models: availableModels,
     genderDefaults, maleModels: availableModels.filter(model => getModelGender(model) !== 'female'),
     femaleModels: availableModels.filter(model => getModelGender(model) !== 'male'), saving, savingSection, save };
 };

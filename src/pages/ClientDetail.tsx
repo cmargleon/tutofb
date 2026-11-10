@@ -58,7 +58,7 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
 
     <section hidden={active !== 'automatizaciones'} aria-label="Automatizaciones">
       <Card className="overflow-hidden rounded-2xl">
-        <CardHeader title="Automatizaciones" description="Guarda los ajustes de esta pestaña de forma independiente. La generación posterior al Organizador sigue controlada globalmente desde Configuración." />
+        <CardHeader title="Automatizaciones" description="Guarda los ajustes de esta pestaña de forma independiente. Define las reglas y la generación posterior al Organizador para este cliente. Los valores vacíos heredan Sistema." />
         <CardBody className="pt-0">
           <ClientAutomationFields client={client} state={automation} />
           <ClientAutomationSave state={automation} section="automation" disabled={archived} />

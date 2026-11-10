@@ -58,6 +58,10 @@ export function isAutomationDraft(value: unknown): boolean {
     if (key === 'driveFolderIds') return Array.isArray(item) && item.every(id => typeof id === 'string');
     if (key === 'enabled' || key === 'paused') return typeof item === 'boolean';
     if (['defaultBudgetUsd', 'maxBudgetUsd', 'maxReviewAttempts', 'maxOperationalRetries'].includes(key)) return typeof item === 'number' && Number.isFinite(item);
+    if (key === 'rules') return typeof item === 'object' && !Array.isArray(item) && Object.entries(item).every(([field, entry]) =>
+      ['garmentGenderMinConfidence', 'classificationMinConfidence'].includes(field) && typeof entry === 'number' && Number.isFinite(entry));
+    if (key === 'organizerGeneration') return typeof item === 'object' && !Array.isArray(item) && Object.entries(item).every(([field, entry]) =>
+      field === 'enabled' ? typeof entry === 'boolean' : field === 'preset' && typeof entry === 'string');
     if (key === 'presets') return typeof item === 'object' && !Array.isArray(item) && Object.values(item).every(isPresetDraft);
     if (['defaultPreset', 'defaultModelId', 'defaultMaleModelId', 'defaultFemaleModelId'].includes(key)) return typeof item === 'string';
     return true;

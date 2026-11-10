@@ -59,6 +59,7 @@ export interface AutomationJob extends CreateAutomationJobRequest {
   clientNameSnapshot?: string;
   planId?: string;
   effectivePolicy?: AutomationPolicy;
+  effectiveRules?: AutomationRules;
   resolvedPreset?: AutomationPreset;
   modelOptions?: AutomationModelOption[];
   budget?: AutomationBudgetState;
@@ -95,6 +96,8 @@ export interface AutomationBudgetConfig {
   maxOperationalRetries: number;
 }
 export interface ClientAutomationConfig {
+  rules?: Partial<AutomationRules>;
+  organizerGeneration?: { enabled?: boolean; preset?: string };
   enabled?: boolean;
   driveFolderIds?: string[];
   defaultModelId?: string;
@@ -106,6 +109,10 @@ export interface ClientAutomationConfig {
   maxReviewAttempts?: number;
   maxOperationalRetries?: number;
 }
+export type AutomationRules = {
+  garmentGenderMinConfidence: number;
+  classificationMinConfidence: number;
+};
 export interface AutomationPolicy {
   budgetUsd: number;
   maxReviewAttempts: number;
@@ -142,6 +149,7 @@ export interface AutomationPlan {
   id: string; createdByUid: string; clientId: string; clientName: string;
   request: CreateAutomationJobRequest; presetName: string; preset: AutomationPreset;
   policy: AutomationPolicy; modelId: string | null;
+  effectiveRules?: AutomationRules;
   modelOptions?: AutomationModelOption[];
   items: Array<{ itemId: string; imageCount: number; sceneIds: string[]; estimatedCostUsd: number }>;
   estimatedCostUsd: number; classificationRequired: boolean;

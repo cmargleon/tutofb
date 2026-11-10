@@ -6,6 +6,8 @@ import { getManglarContext } from '../manglar/context';
 import { delegatedStamp } from '../manglar/access';
 import { createHash } from 'node:crypto';
 import { DEFAULT_AUTOMATION_BUDGET, resolveAutomationPolicy } from '../../../shared/src/automationPolicy';
+import { DEFAULT_AUTOMATION_RULES, resolveAutomationRules } from '../../../shared/src/automationConfig';
+import { sanitizeSystemConfig } from '../admin/systemConfig';
 import type { AutomationPlan, Client } from '../../../shared/src/types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -64,7 +66,10 @@ export const createAutomation = async (input: unknown, uid: string, role: string
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
       ...(data.jobType === 'garment' && (plan?.photoMarketplaces !== undefined || !plan) ? { photoBases, photoModelId } : {}),
       ...(data.jobType !== 'garment' ? {} : plan?.photoMarketplaces !== undefined ? { photoMarketplaces: plan.photoMarketplaces } : !plan ? { photoMarketplaces: (client.data() as Client).marketplaces || {} } : {}),
-      ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy, budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, providerConfirmedUsd: null },
+      ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy,
+      effectiveRules: plan ? plan.effectiveRules ?? { ...DEFAULT_AUTOMATION_RULES }
+        : resolveAutomationRules(sanitizeSystemConfig(system.data()).automationRules, (client.data() as Client).automation?.rules),
+      budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, providerConfirmedUsd: null },
       ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd, ...(plan.modelOptions ? { modelOptions: plan.modelOptions } : {}) } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || resolved?.name || plan?.presetName || '', createdByUid: uid, status: 'pending',
       inputImages: data.inputImages || [], sourceImages: data.inputImages || [], outputImages: [], generationJobIds: [], batchId: null,
       createdAt: now, updatedAt: now, startedAt: null, completedAt: null, failedAt: null,

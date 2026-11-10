@@ -7,6 +7,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { AutomationModelOption, AutomationPlan, Client, CreateAutomationJobRequest } from '../../../shared/src/types';
 import { DEFAULT_AUTOMATION_BUDGET, resolveAutomationPolicy, usd } from '../../../shared/src/automationPolicy';
+import { resolveAutomationRules } from '../../../shared/src/automationConfig';
 import { createDefaultProductGeneration } from '../../../shared/src/productGeneration';
 import { COMMERCIAL_PHOTO_PROFILE, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getAppFirestore } from '../firebase/appFirestore';
@@ -78,7 +79,7 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   });
   const plan: AutomationPlan = { ...(data.jobType === 'garment' ? { photoBases, photoModelId: modelId, photoMarketplaces: client.marketplaces || {} } : {}), photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
     request: { ...data, inputImages: inputs, preset: resolved.name },
-    presetName: resolved.name, preset, policy, modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment' || photoChannels.length > 0,
+    presetName: resolved.name, preset, policy, effectiveRules: resolveAutomationRules(system.automationRules, client.automation?.rules), modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment' || photoChannels.length > 0,
     estimatedCostUsd: usd(items.reduce((sum, item) => sum + item.estimatedCostUsd, 0)),
     costGuarantee: 'estimated_authorization_required', createdAt: FieldValue.serverTimestamp(), executedJobId: null };
   if (!plan.request.modelId) delete plan.request.modelId;

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AutomationModelOption, Client, GarmentGender, Model } from '../../../shared/src/types';
 import { getClientGenderModelDefaults, getModelGender } from '../../../shared/src/automationModels';
+import { DEFAULT_AUTOMATION_RULES } from '../../../shared/src/automationConfig';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { AutomationAttentionError } from './imports';
 import { resolveAutomationPoseIds } from './presets';
@@ -34,10 +35,10 @@ export async function loadAutomationModelOptions(clientId: string, client: Clien
   return resolveAutomationModelOptions(clientId, client, snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Model)), modelId, poseIds);
 }
 
-export function selectAutomationModel(options: AutomationModelOption[], gender: GarmentGender | null | undefined, confidence: number | null | undefined, stableKey: string): AutomationModelOption | null {
+export function selectAutomationModel(options: AutomationModelOption[], gender: GarmentGender | null | undefined, confidence: number | null | undefined, stableKey: string, minimumConfidence = DEFAULT_AUTOMATION_RULES.garmentGenderMinConfidence): AutomationModelOption | null {
   if (!options.length) return null;
   if (new Set(options.map(option => option.modelId)).size === 1) return options[0];
-  if (!gender || (confidence ?? 0) < 0.65) return null;
+  if (!gender || (confidence ?? 0) < minimumConfidence) return null;
   if (gender !== 'unisex') return options.find(option => option.gender === gender) || null;
   const sorted = [...options].sort((a, b) => a.modelId.localeCompare(b.modelId));
   return sorted[createHash('sha256').update(stableKey).digest().readUInt32BE(0) % sorted.length];

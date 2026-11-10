@@ -1,4 +1,5 @@
 import { DEFAULT_AUTOMATION_BUDGET, validateAutomationBudget } from '../../../shared/src/automationPolicy';
+import { validateAutomationRules } from '../../../shared/src/automationConfig';
 import {
   DEFAULT_TRY_ON_PROMPT_CASES,
 } from '../../../shared/src/domain';
@@ -53,11 +54,16 @@ const readAutomationBudget = (input: SystemConfig['automationBudget']) => {
   try { return validateAutomationBudget(input ?? DEFAULT_AUTOMATION_BUDGET); }
   catch { return { ...DEFAULT_AUTOMATION_BUDGET }; }
 };
+const readAutomationRules = (input: SystemConfig['automationRules']) => {
+  try { return validateAutomationRules(input ?? {}); }
+  catch { return {}; }
+};
 
 export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undefined): SystemConfig => ({
   organizerAutoGenerationEnabled: typeof input?.organizerAutoGenerationEnabled === 'boolean'
     ? input.organizerAutoGenerationEnabled : DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED,
   automationBudget: readAutomationBudget(input?.automationBudget),
+  ...(input?.automationRules === undefined ? {} : { automationRules: readAutomationRules(input.automationRules) }),
   jobMaxRetries: typeof input?.jobMaxRetries === 'number' && input.jobMaxRetries >= 0 ? Math.round(input.jobMaxRetries) : DEFAULT_SYSTEM_CONFIG.jobMaxRetries,
   jobRetryDelayMs: typeof input?.jobRetryDelayMs === 'number' && input.jobRetryDelayMs >= 0 ? Math.round(input.jobRetryDelayMs) : DEFAULT_SYSTEM_CONFIG.jobRetryDelayMs,
   batchMaxJobs: typeof input?.batchMaxJobs === 'number' && input.batchMaxJobs >= 1 ? Math.round(input.batchMaxJobs) : DEFAULT_SYSTEM_CONFIG.batchMaxJobs,

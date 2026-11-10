@@ -378,6 +378,16 @@ input[type="radio"]:not(:disabled) {
 .theme-dark .bg-amber-50\/70   { background-color: rgba(240, 160, 80, 0.06); }
 .theme-dark .bg-rose-50\/70    { background-color: rgba(232, 93, 93, 0.06); }
 .theme-dark .bg-slate-50\/80   { background-color: rgba(15, 20, 34, 0.80); }
+.theme-dark .bg-sky-100 { background-color: rgba(14, 165, 233, 0.14); }
+
+/* Pastel gradient stops (Cola kanban columns): tinted dark surfaces */
+.theme-dark .from-amber-100   { --tw-gradient-from: rgba(240, 160, 80, 0.14); }
+.theme-dark .via-amber-50     { --tw-gradient-via: rgba(240, 160, 80, 0.06); }
+.theme-dark .from-sky-100     { --tw-gradient-from: rgba(14, 165, 233, 0.14); }
+.theme-dark .via-sky-50       { --tw-gradient-via: rgba(14, 165, 233, 0.06); }
+.theme-dark .from-emerald-100 { --tw-gradient-from: rgba(110, 227, 176, 0.12); }
+.theme-dark .via-emerald-50   { --tw-gradient-via: rgba(110, 227, 176, 0.05); }
+.theme-dark .to-white         { --tw-gradient-to: var(--color-bg-surface, #0f1422); }
 
 /* ─── Accent (indigo → electric blue) ─────────────────────────── */
 .theme-dark .bg-indigo-600 {
@@ -512,6 +522,8 @@ input[type="radio"]:not(:disabled) {
 /* ─── Semantic text ────────────────────────────────────────────── */
 .theme-dark .text-sky-600    { color: #38bdf8; }
 .theme-dark .text-sky-700    { color: #7dd3fc; }
+.theme-dark .text-sky-800    { color: #7dd3fc; }
+.theme-dark .text-emerald-800 { color: var(--color-success); }
 .theme-dark .text-emerald-600 { color: var(--color-success); }
 .theme-dark .text-emerald-700 { color: var(--color-success); }
 .theme-dark .text-amber-600  { color: var(--color-warning); }

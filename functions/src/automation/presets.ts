@@ -3,6 +3,7 @@ import { AutomationPreset, Client, CreateAutomationJobRequest, Model } from '../
 import { isPoseActive } from '../../../shared/src/domain';
 import { AutomationAttentionError } from './imports';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
+import { resolveAutomationPresetName } from '../../../shared/src/automationConfig';
 
 export { PRODUCT_IDENTITY_RULES } from '../../../shared/src/productGeneration';
 import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
@@ -28,10 +29,10 @@ export const resolveAutomationPoseIds = (model: Pick<Model, 'poses'>, requestedP
 };
 
 export const resolveAutomationPreset = (data: CreateAutomationJobRequest, client: Client): { name: string; config: AutomationPreset; modelId: string | null } => {
-  const name = data.preset || client.automation?.defaultPreset || (data.jobType === 'product' ? 'generic_product' : 'standard');
+  const name = resolveAutomationPresetName(data, client.automation);
   const configured = client.automation?.presets?.[name];
-  if (data.jobType === 'product' && name !== 'generic_product' && !configured) throw new AutomationAttentionError('Preset de producto no disponible.');
-  if (data.jobType === 'garment' && name !== 'standard' && !configured) throw new AutomationAttentionError('Preset del cliente no configurado.');
+  if (data.jobType === 'product' && name !== 'generic_product' && !configured) throw new AutomationAttentionError('Preset de producto no disponible. Revisa el preset en Cliente → Automatizaciones.');
+  if (data.jobType === 'garment' && name !== 'standard' && !configured) throw new AutomationAttentionError('Preset del cliente no configurado. Revisa el preset en Cliente → Automatizaciones.');
   const provider = data.provider || configured?.provider || DEFAULT_AUTOMATION_PROVIDER;
   const config: AutomationPreset = { ...configured, provider, photoProfile: COMMERCIAL_PHOTO_PROFILE,
     ...resolveCommercialPhotoConfig(provider, undefined, configured?.aspectRatio, configured?.imageConfig) };

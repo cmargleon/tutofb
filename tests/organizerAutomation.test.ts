@@ -42,6 +42,64 @@ test('conserva frente y espalda de ropa y requiere revisión ante tipos contradi
   assert.equal(selectGenerationReferences([source('unknown', { kind: 'unknown' })], 0.75), null);
 });
 
+test('el control del cliente impide generar, envía su preset y conserva referencias ante un preset eliminado', async t => {
+  const admin = requireFunctions('firebase-admin');
+  const app = admin.apps.length ? null : admin.initializeApp({ projectId: 'demo-organizer-unit', storageBucket: 'demo-organizer-unit.appspot.com' });
+  const firestore = requireFunctions('./lib/functions/src/firebase/appFirestore.js');
+  const system = requireFunctions('./lib/functions/src/admin/systemConfig.js');
+  const roles = requireFunctions('./lib/functions/src/auth/roles.js');
+  const store = requireFunctions('./lib/functions/src/organizer/store.js');
+  const persistence = requireFunctions('./lib/functions/src/automation/persistence.js');
+  const { AutomationAttentionError } = requireFunctions('./lib/functions/src/automation/imports.js');
+  const { automateNewPhotos } = requireFunctions('./lib/functions/src/organizer/automation.js');
+  const item = source('unit-front');
+  let globalEnabled = true;
+  let organizerGeneration: { enabled?: boolean; preset?: string } | undefined = { enabled: false };
+  const requests: any[] = [];
+  const writes: Array<{ path: string; value: any }> = [];
+  let creationError: Error | undefined;
+  const root = { collection: (name: string) => ({ doc: () => ({ path: name, get: async () => ({ exists: name !== 'generationSources', data: () => name === 'photos' ? item.photo : { copiedId: 'copy', parentId: 'managed' } }) }) }) };
+  const doc = { collection: (name: string) => ({ doc: () => ({ path: name }), get: async () => ({ docs: [] }) }) };
+  const drive = { managed: async () => {}, verifyCopy: async () => {} };
+  t.mock.method(firestore, 'getAppFirestore', () => ({ collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ status: 'active', automation: { enabled: true, ...(organizerGeneration ? { organizerGeneration } : {}) } }) }) }) }) }));
+  t.mock.method(system, 'getSystemConfigDocRef', () => ({ get: async () => ({ data: () => ({ organizerAutoGenerationEnabled: globalEnabled }) }) }));
+  t.mock.method(roles, 'assertUserRoles', async () => 'admin');
+  t.mock.method(store, 'documents', async function* () { yield { id: item.entry.id, data: () => ({ entry: item.entry, added: true }) }; });
+  t.mock.method(store, 'whileLeased', async (_doc: unknown, _lease: string, work: any) => work({ set(ref: any, value: any) { writes.push({ path: ref.path, value }); }, update() {} }));
+  t.mock.method(admin.storage(), 'bucket', () => ({ file: () => ({ exists: async () => [true] }) }));
+  t.mock.method(persistence, 'createAutomation', async (request: unknown) => { requests.push(request); if (creationError) throw creationError; return { jobId: 'unit-job', status: 'pending' }; });
+  const invoke = () => automateNewPhotos(drive, root, doc, { clientId: 'client', minimumConfidence: 0.75, operatorUids: ['operator'], sourceIds: [] }, { id: 'run', createdBy: 'operator', photoIds: [] }, 'lease', Date.now() + 60_000);
+  try {
+    await invoke();
+    assert.equal(requests.length, 0);
+    organizerGeneration = { enabled: true, preset: 'custom-product' };
+    globalEnabled = false;
+    await invoke();
+    assert.equal(requests.length, 0);
+    globalEnabled = true;
+    await invoke();
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].preset, 'custom-product');
+    organizerGeneration = undefined;
+    await invoke();
+    assert.equal(requests.length, 2);
+    assert.equal(Object.hasOwn(requests[1], 'preset'), false, 'Sin configurar se conserva la elección actual de preset');
+    organizerGeneration = { preset: 'deleted-preset' };
+    creationError = new AutomationAttentionError('Preset de producto no disponible. Revisa el preset en Cliente → Automatizaciones.');
+    writes.length = 0;
+    await invoke();
+    assert.equal(requests[2].preset, 'deleted-preset');
+    assert.deepEqual(writes, [{ path: 'generationHandoffs', value: { status: 'needs_attention', photoIds: ['unit-front'], issue: creationError.message } }]);
+    assert.match(writes[0].value.issue, /Cliente → Automatizaciones/);
+    assert.equal(writes.some(write => write.path === 'generationSources'), false, 'No consume referencias cuando falta el preset');
+    creationError = new Error('Error operativo');
+    await assert.rejects(invoke, /Error operativo/);
+    organizerGeneration = undefined;
+    creationError = new AutomationAttentionError('Preset heredado inválido');
+    await assert.rejects(invoke, /Preset heredado inválido/, 'Sin preset nuevo se conserva el comportamiento anterior');
+  } finally { if (app) await app.delete(); }
+});
+
 const local = [process.env.FIRESTORE_EMULATOR_HOST, process.env.FIREBASE_STORAGE_EMULATOR_HOST]
   .every(value => /^((127\.0\.0\.1)|localhost):\d+$/.test(value || ''));
 test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera una interrupción', { skip: !local, timeout: 120_000 }, async ({ mock }) => {

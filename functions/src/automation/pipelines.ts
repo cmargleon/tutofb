@@ -17,6 +17,7 @@ import { createDefaultProductGeneration } from '../../../shared/src/productGener
 import { AutomationBudgetError } from './budget';
 import { APPROVED_TRY_ON_PROMPT_FORMAT, composeApprovedTryOnPrompt, seedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
+import { DEFAULT_AUTOMATION_RULES } from '../../../shared/src/automationConfig';
 
 const groupedImages = (inputs: AutomationInput[]) => {
   const groups = new Map<string, AutomationInput[]>();
@@ -24,6 +25,7 @@ const groupedImages = (inputs: AutomationInput[]) => {
   return groups;
 };
 export const dispatchGarment = async (job: AutomationJob, client: Client, config: AutomationPreset, options: AutomationModelOption[]): Promise<void> => {
+  const classificationMinConfidence = job.effectiveRules?.classificationMinConfidence ?? DEFAULT_AUTOMATION_RULES.classificationMinConfidence;
   const snapshots = await getAppFirestore().getAll(...options.map(option => getAppFirestore().collection('models').doc(option.modelId)));
   const available = options.flatMap((option, index) => {
     const model = snapshots[index].data() as Model | undefined;
@@ -71,7 +73,7 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
       }
       analysis = classified;
       if (needsGenderAnalysis || !job.analysisCache?.[cacheKey]) await getAppFirestore().collection('automationJobs').doc(job.id).update({ [`analysisCache.${cacheKey}`]: classified });
-      if (classified.itemKind !== 'garment' || (classified.itemKindConfidence ?? 0) < 0.65 || !classified.garmentBodyArea || classified.photos.some((photo) => (photo.confidence ?? 0) < 0.65)) {
+      if (classified.itemKind !== 'garment' || (classified.itemKindConfidence ?? 0) < classificationMinConfidence || !classified.garmentBodyArea || classified.photos.some((photo) => (photo.confidence ?? 0) < classificationMinConfidence)) {
         items.push({ itemId, status: 'needs_attention', scenes: [], issue: { code: 'classification-required', message: `La clasificación de ${images[0].fileName} necesita revisión. Revisa el tipo de artículo y sus vistas.` } });
         await persistItems();
         continue;
@@ -88,7 +90,7 @@ export const dispatchGarment = async (job: AutomationJob, client: Client, config
       garmentGenderConfidence: analysis?.garmentGenderConfidence ?? null,
       garmentGenderReasoning: analysis?.garmentGenderReasoning || null,
     };
-    const selection = selectAutomationModel(available, detection.garmentGender, detection.garmentGenderConfidence, `${job.id}:${itemId}`);
+    const selection = selectAutomationModel(available, detection.garmentGender, detection.garmentGenderConfidence, `${job.id}:${itemId}`, job.effectiveRules?.garmentGenderMinConfidence);
     if (!selection) {
       items.push({ itemId, ...detection, status: 'needs_attention', scenes: [], issue: {
         code: 'garment-gender-required', message: `No se pudo determinar si ${images[0].fileName} es masculino, femenino o unisex. Revisa sus referencias o selecciona un modelo explícito.`,

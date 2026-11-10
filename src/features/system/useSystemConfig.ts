@@ -1,13 +1,10 @@
-import { DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED, SystemConfig } from '../../../shared/src/types';
+import { SystemConfig } from '../../../shared/src/types';
 import { normalizeAdditionalSystemPrompts } from '../../../shared/src/systemPrompts';
 
 const DEFAULT_CONFIG: SystemConfig = {
-  organizerAutoGenerationEnabled: DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED,
-  automationBudget: DEFAULT_AUTOMATION_BUDGET,
   jobMaxRetries: 3,
   jobRetryDelayMs: 300000,
   batchMaxJobs: 100,
@@ -31,8 +28,9 @@ export const useSystemConfig = () => {
         const data = snap.data() as Partial<SystemConfig>;
         setConfig({
           organizerAutoGenerationEnabled: typeof data.organizerAutoGenerationEnabled === 'boolean'
-            ? data.organizerAutoGenerationEnabled : DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED,
-          automationBudget: data.automationBudget || DEFAULT_AUTOMATION_BUDGET,
+            ? data.organizerAutoGenerationEnabled : undefined,
+          automationBudget: data.automationBudget,
+          automationRules: data.automationRules,
           ...normalizeAdditionalSystemPrompts(data),
           jobMaxRetries: typeof data.jobMaxRetries === 'number' ? data.jobMaxRetries : DEFAULT_CONFIG.jobMaxRetries,
           jobRetryDelayMs: typeof data.jobRetryDelayMs === 'number' ? data.jobRetryDelayMs : DEFAULT_CONFIG.jobRetryDelayMs,

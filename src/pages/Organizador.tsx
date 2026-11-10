@@ -86,7 +86,7 @@ function Setup({ config, clientName, driveFolderIds, busy, save }: {
       <Field label="UID de operadores o revisores · uno por línea"><textarea className={input} name="operators" rows={2} defaultValue={config?.operatorUids.join('\n')} /></Field>
       <div className="grid content-start gap-2 text-sm text-slate-700">
         <label><input name="enabled" type="checkbox" defaultChecked={config?.enabled} /> Activar vigilancia automática</label>
-        <p className="text-xs text-slate-600">Si está activado en Sistema → Configuración, las fotos nuevas pasan a generación después de organizarse, aunque no coincidan con el Excel. Se usan el modelo, preset y presupuesto de automatización del cliente.</p>
+        <p className="text-xs text-slate-600">Si está activado en Sistema y en la ficha del cliente, las fotos nuevas pasan a generación después de organizarse, aunque no coincidan con el Excel. Se usan el modelo, preset y presupuesto de automatización del cliente.</p>
         <label><input name="control" type="checkbox" defaultChecked={config?.controlSheet} /> Crear Google Sheet de control</label>
         <label><input name="inherit" type="checkbox" defaultChecked={config?.allowInheritedAccess} /> Autorizar el acceso heredado de la carpeta o unidad compartida</label>
       </div>
@@ -165,6 +165,7 @@ export function Organizador() {
       </div>}
     </section>
     {(state.loadError || config?.watcherError) && <p role="alert" className="tuto-alert tuto-alert--warning"><CircleAlert size={18} /> {state.loadError || config?.watcherError}</p>}
+    {access.isAdmin && client && <p className="text-sm text-slate-600">La generación posterior se configura en <Link className={link} to={`/clients/${encodeURIComponent(clientId)}?tab=automatizaciones`}>Cliente → Automatizaciones</Link>.</p>}
     {access.isAdmin && client && !locked && <div key={`${clientId}-${config?.destinationId || 'setup'}-${config ? 'saved' : 'new'}`}><Setup config={config} clientName={client.name} driveFolderIds={client.driveFolderIds ?? []} busy={busy} save={state.save} /></div>}
     {config && <>
       {access.canCreateBatches && <div className="flex flex-wrap gap-2">

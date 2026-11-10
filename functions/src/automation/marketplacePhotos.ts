@@ -13,8 +13,10 @@ import { GEMINI_API_KEY, getGeminiGarmentViewClassificationModel } from '../conf
 import { getSystemConfigCached } from '../admin/systemConfig';
 import { AutomationBudgetError } from './budget';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
+import { DEFAULT_AUTOMATION_RULES } from '../../../shared/src/automationConfig';
 
 export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Client, config: AutomationPreset) {
+  const classificationMinConfidence = job.effectiveRules?.classificationMinConfidence ?? DEFAULT_AUTOMATION_RULES.classificationMinConfidence;
   if (job.jobType !== 'garment') throw new HttpsError('failed-precondition', 'Los objetos utilizan el recorrido de escenas existente.');
   const db = getAppFirestore(); const ref = db.doc(`automationJobs/${job.id}`);
   const provider = config.provider || DEFAULT_AUTOMATION_PROVIDER;
@@ -36,10 +38,10 @@ export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Cli
         garment: { garmentId: itemId, garmentName: images[0].fileName, photos: images.map((image, index) => ({ id: `${itemId}-${index}`, fileName: image.fileName, storagePath: image.storagePath!, sourceIndex: index })) },
       });
       await patch({ [`analysisCache.${key}`]: analysis });
-      if (analysis.itemKind !== job.jobType || (analysis.itemKindConfidence ?? 0) < .65) throw new Error('Confirma el tipo de artículo.');
+      if (analysis.itemKind !== job.jobType || (analysis.itemKindConfidence ?? 0) < classificationMinConfidence) throw new Error('Confirma el tipo de artículo.');
       const explicit = (job.metadata?.photoArticles as Record<string, any> | undefined)?.[itemId];
       const referenceViews = explicit?.referenceViews || {};
-      if (analysis.photos.some(p => !['front', 'back', 'side', 'detail'].includes(referenceViews[p.fileName]) && (p.confidence ?? 0) < .65)) throw new Error('Confirma las vistas de referencia; la clasificación visual no es suficientemente cierta.');
+      if (analysis.photos.some(p => !['front', 'back', 'side', 'detail'].includes(referenceViews[p.fileName]) && (p.confidence ?? 0) < classificationMinConfidence)) throw new Error('Confirma las vistas de referencia; la clasificación visual no es suficientemente cierta.');
       articles.push({ itemId, productId: typeof explicit?.productId === 'string' ? explicit.productId : itemId, variantId: typeof explicit?.variantId === 'string' ? explicit.variantId : itemId,
         name: images[0].fileName, kind: job.jobType, attributes: mergePhotoAttributes(analysis.photoAttributes, normalizePhotoAttributes(explicit?.attributes, true)),
         references: analysis.photos.map(p => ({ id: p.id, storagePath: p.storagePath, view: ['front', 'back', 'side', 'detail'].includes(referenceViews[p.fileName]) ? referenceViews[p.fileName] : p.isDetail ? 'detail' : p.view, ...(images.find(i => i.storagePath === p.storagePath)?.normalizedSha256 ? { sha256: images.find(i => i.storagePath === p.storagePath)!.normalizedSha256 } : {}) })) });

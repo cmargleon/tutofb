@@ -101,3 +101,91 @@ test('API polling policy is age based, bounded, and stops for all terminal state
     assert.equal(response.pollAfterSeconds, 0); assert.equal(response.pollingTimedOut, false);
   }
 });
+
+test('dispatch snapshots use configured classification/gender rules while older jobs keep 0.65', async t => {
+  const admin = require('../functions/node_modules/firebase-admin');
+  const app = admin.apps.length ? null : admin.initializeApp({ projectId: 'demo-automation-rules', storageBucket: 'demo-automation-rules.appspot.com' });
+  const firestore = require('../functions/lib/functions/src/firebase/appFirestore.js');
+  const classifier = require('../functions/lib/functions/src/callables/classifyGarmentViewsWithGemini.js');
+  const system = require('../functions/lib/functions/src/admin/systemConfig.js');
+  const batches = require('../functions/lib/functions/src/callables/createGenerationBatch.js');
+  const { dispatchGarment } = require('../functions/lib/functions/src/automation/pipelines.js');
+  const models = ['male', 'female'].map(id => ({ id, clientId: 'client', poses: [{ id: 'front', aiClassification: {
+    usableForGarmentViews: ['front'], orientationGroup: 'front', framing: 'full_body', bodyFocus: 'full_body',
+  } }] }));
+  const options = models.map(model => ({ modelId: model.id, gender: model.id, poseIds: ['front'] }));
+  let items: any[] = [];
+  let created = 0;
+  let confidence = 0.7;
+  t.mock.method(firestore, 'getAppFirestore', () => ({
+    collection: () => ({ doc: () => ({ update: async () => {} }) }),
+    getAll: async () => models.map(model => ({ data: () => model })),
+    runTransaction: async (work: any) => work({ get: async () => ({ data: () => ({ leaseToken: 'lease', status: 'importing' }) }), update: (_ref: any, patch: any) => { items = structuredClone(patch.items); } }),
+  }));
+  t.mock.method(classifier, 'classifyGarmentWithGemini', async ({ garment }: any) => ({
+    itemKind: 'garment', itemKindConfidence: confidence, garmentBodyArea: 'full_body', garmentGender: 'male', garmentGenderConfidence: confidence,
+    photos: garment.photos.map((photo: any) => ({ ...photo, view: 'front', confidence, classifiedBy: 'gemini' })),
+  }));
+  t.mock.method(system, 'getSystemConfigCached', async () => system.sanitizeSystemConfig({}));
+  t.mock.method(batches, 'createGenerationBatchesCore', async () => { created++; });
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'unit-only';
+  const invoke = (effectiveRules?: any) => dispatchGarment({ id: 'automation', clientId: 'client', createdByUid: 'user', leaseToken: 'lease', retryCount: 0,
+    inputImages: [{ itemId: 'shirt', fileName: 'shirt.jpg', storagePath: 'garments/shirt.jpg' }], ...(effectiveRules ? { effectiveRules } : {}),
+  }, { automation: { rules: { classificationMinConfidence: 0.95, garmentGenderMinConfidence: 0.95 } } }, {}, options);
+  try {
+    await invoke();
+    assert.equal(created, 1, 'Un trabajo antiguo ignora cambios posteriores y conserva 0.65');
+    assert.equal(items[0].status, 'processing');
+    await invoke({ classificationMinConfidence: 0.8, garmentGenderMinConfidence: 0.65 });
+    assert.equal(created, 1);
+    assert.equal(items[0].issue.code, 'classification-required');
+    await invoke({ classificationMinConfidence: 0.65, garmentGenderMinConfidence: 0.8 });
+    assert.equal(created, 1);
+    assert.equal(items[0].issue.code, 'garment-gender-required');
+    confidence = 0.6;
+    await invoke();
+    assert.equal(created, 1);
+    assert.equal(items[0].issue.code, 'classification-required');
+    await invoke({ classificationMinConfidence: 0.5, garmentGenderMinConfidence: 0.5 });
+    assert.equal(created, 2);
+  } finally {
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previousKey;
+    if (app) await app.delete();
+  }
+});
+
+test('plans and directly created jobs freeze resolved rules; old plans retain the original defaults', async t => {
+  const firestore = require('../functions/lib/functions/src/firebase/appFirestore.js');
+  const access = require('../functions/lib/functions/src/auth/clientAccess.js');
+  const { prepareAutomationPlan } = require('../functions/lib/functions/src/automation/plans.js');
+  const { createAutomation } = require('../functions/lib/functions/src/automation/persistence.js');
+  const data = new Map<string, any>([
+    ['clients/client-1', { name: 'Cliente', status: 'active', automation: { rules: { garmentGenderMinConfidence: 0.8 } } }],
+    ['system_config/main', { batchMaxJobs: 100, automationRules: { garmentGenderMinConfidence: 0.7, classificationMinConfidence: 0.75 } }],
+  ]);
+  let serial = 0;
+  const reference = (path: string) => ({ path, id: path.split('/').at(-1), get: async () => snapshot(path) });
+  const snapshot = (path: string) => ({ exists: data.has(path), id: path.split('/').at(-1), ref: reference(path), data: () => data.get(path) });
+  const db = {
+    collection: (name: string) => ({ doc: (id = `auto-${++serial}`) => reference(`${name}/${id}`) }),
+    runTransaction: async (work: any) => work({
+      get: async (ref: any) => snapshot(ref.path), getAll: async (...refs: any[]) => refs.map(ref => snapshot(ref.path)),
+      create: (ref: any, value: any) => data.set(ref.path, structuredClone(value)),
+      update: (ref: any, value: any) => data.set(ref.path, { ...data.get(ref.path), ...value }),
+    }),
+  };
+  t.mock.method(firestore, 'getAppFirestore', () => db);
+  t.mock.method(access, 'assertHumanClientAccess', async () => {});
+  const request = { ...payload, jobType: 'product', allowEstimatedCosts: true };
+  const plan = await prepareAutomationPlan(request, 'user', 'admin');
+  assert.deepEqual(plan.effectiveRules, { garmentGenderMinConfidence: 0.8, classificationMinConfidence: 0.75 });
+  data.set('clients/client-1', { name: 'Cliente', status: 'active', automation: { rules: { garmentGenderMinConfidence: 0.9, classificationMinConfidence: 0.85 } } });
+  const planned = await createAutomation(plan.request, 'user', 'admin', plan);
+  assert.deepEqual(data.get(`automationJobs/${planned.jobId}`).effectiveRules, plan.effectiveRules);
+  const direct = await createAutomation({ ...request, externalId: 'direct-rules' }, 'user', 'admin');
+  assert.deepEqual(data.get(`automationJobs/${direct.jobId}`).effectiveRules, { garmentGenderMinConfidence: 0.9, classificationMinConfidence: 0.85 });
+  const { effectiveRules: _rules, ...legacyPlan } = plan;
+  const legacy = await createAutomation({ ...request, externalId: 'legacy-plan' }, 'user', 'admin', legacyPlan);
+  assert.deepEqual(data.get(`automationJobs/${legacy.jobId}`).effectiveRules, { garmentGenderMinConfidence: 0.65, classificationMinConfidence: 0.65 });
+});

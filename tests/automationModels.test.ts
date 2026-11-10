@@ -63,6 +63,14 @@ test('a single male or female default is used for every garment, including unkno
   assert.equal(selectAutomationModel(remaining, 'male', 0.99, 'item')?.modelId, 'woman');
 });
 
+test('uses the configured gender threshold and retains 0.65 when it is omitted', () => {
+  assert.equal(selectAutomationModel(options, 'male', 0.7, 'item', 0.8), null);
+  assert.equal(selectAutomationModel(options, 'male', 0.8, 'item', 0.8)?.modelId, 'man');
+  assert.equal(selectAutomationModel(options, 'male', 0.7, 'item')?.modelId, 'man');
+  assert.equal(selectAutomationModel(options, 'male', 0.64, 'item'), null);
+  assert.equal(selectAutomationModel(options, 'male', 0.65, 'item')?.modelId, 'man');
+});
+
 test('Gemini is asked for garment gender with the original references, and objects never retain a gender', async () => {
   const admin = require('../functions/node_modules/firebase-admin');
   if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-automation-model-unit', storageBucket: 'demo-automation-model-unit.appspot.com' });

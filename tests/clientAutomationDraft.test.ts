@@ -80,3 +80,20 @@ test('partial draft acknowledgements and discards retain pending values and base
   assert.deepEqual(mergeClientAutomationSection(pending, savedAutomation, 'automation'), pending);
   assert.deepEqual(mergeClientAutomationSection(pending, base, 'sources'), savedAutomation);
 });
+
+test('decision rules and Organizer settings participate in automation dirty state, section merge and concurrency', async () => {
+  const { selectClientAutomationSection, mergeClientAutomationSection } = require('../functions/lib/shared/src/clientAutomationSections.js');
+  const state = fixture();
+  const base = structuredClone(state.automation);
+  for (const fields of [{ rules: { garmentGenderMinConfidence: 0.8 } }, { rules: { classificationMinConfidence: 0.9 } },
+    { organizerGeneration: { enabled: false } }, { organizerGeneration: { preset: 'custom' } }]) {
+    const pending = { ...base, ...fields };
+    assert.notEqual(configSnapshot(selectClientAutomationSection(pending, 'automation')), configSnapshot(selectClientAutomationSection(base, 'automation')));
+    assert.equal(configSnapshot(selectClientAutomationSection(pending, 'sources')), configSnapshot(selectClientAutomationSection(base, 'sources')));
+    assert.deepEqual(mergeClientAutomationSection(pending, { ...base, driveFolderIds: ['new'] }, 'sources'), { ...pending, driveFolderIds: ['new'] });
+    assert.deepEqual(mergeClientAutomationSection({ ...base, driveFolderIds: ['new'] }, pending, 'automation'), { ...pending, driveFolderIds: ['new'] });
+    assert.deepEqual(mergeClientAutomationSection(pending, base, 'automation'), base);
+    await assert.rejects(() => saveClientAutomation({ clientId: 'client', section: 'automation', expectedAutomation: pending, automation: selectClientAutomationSection(base, 'automation') }, state.db), { code: 'aborted' });
+  }
+  assert.equal(state.writes.length, 0);
+});

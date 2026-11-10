@@ -1,3 +1,4 @@
+import { AutomationRulesSettings } from '../components/automation/AutomationRulesSettings';
 import { AutomationBudgetSettings } from '../components/automation/AutomationBudgetSettings';
 import { OrganizerAutomationSettings } from '../components/automation/OrganizerAutomationSettings';
 import React, { useEffect, useState } from 'react';
@@ -272,6 +273,7 @@ export const Configuracion: React.FC = () => {
       </div>
 
       <AutomationBudgetSettings />
+      <AutomationRulesSettings />
       <OrganizerAutomationSettings />
 
       {/* Section 2: Queue parameters */}

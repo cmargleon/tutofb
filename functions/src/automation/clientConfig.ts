@@ -11,6 +11,7 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { parseDriveFolderId, validateDriveFolder } from './drive';
 import { configSnapshot } from '../../../shared/src/configSnapshot';
 import { selectClientAutomationSection } from '../../../shared/src/clientAutomationSections';
+import { validateAutomationRules } from '../../../shared/src/automationConfig';
 
 export const saveClientAutomation = async (input: UpdateClientAutomationRequest, db: Firestore = getAppFirestore()): Promise<ClientAutomationConfig> => {
   if (!input || typeof input.clientId !== 'string' || !/^[\w-]{1,200}$/.test(input.clientId) || !input.automation || typeof input.automation !== 'object') throw new HttpsError('invalid-argument', 'Configuración de cliente inválida.');
@@ -27,6 +28,12 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
   if (input.section !== 'sources') {
     if (typeof raw.enabled !== 'boolean') throw new HttpsError('invalid-argument', 'Activación inválida.');
     config.enabled = raw.enabled;
+    if (raw.rules !== undefined) {
+      try {
+        const rules = validateAutomationRules(raw.rules);
+        if (Object.keys(rules).length) config.rules = rules;
+      } catch (error) { throw new HttpsError('invalid-argument', (error as Error).message); }
+    }
     for (const key of ['defaultModelId', 'defaultMaleModelId', 'defaultFemaleModelId', 'defaultPreset'] as const) {
       if (raw[key] !== undefined && raw[key] !== '') { if (typeof raw[key] !== 'string' || !/^[\w-]{1,200}$/.test(raw[key])) throw new HttpsError('invalid-argument', `${key} inválido.`); config[key] = raw[key]; }
     }
@@ -57,6 +64,21 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
         const model = (await db.collection('models').doc(modelId).get()).data() as Model | undefined;
         if (!model || model.clientId !== input.clientId || model.status === 'archived' || model.active === false || preset.poseIds?.some((id) => !model.poses.some((p) => p.id === id))) throw new HttpsError('invalid-argument', 'Modelo o poses ajenos al cliente.');
       } else if (preset.poseIds) throw new HttpsError('invalid-argument', 'Las poses requieren un modelo del cliente.');
+    }
+    if (raw.organizerGeneration !== undefined) {
+      const value = raw.organizerGeneration;
+      if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).some(key => !['enabled', 'preset'].includes(key))
+        || (value.enabled !== undefined && typeof value.enabled !== 'boolean')
+        || (value.preset !== undefined && (typeof value.preset !== 'string'
+          || (!['standard', 'generic_product'].includes(value.preset) && !Object.hasOwn(config.presets, value.preset))))) {
+        throw new HttpsError('invalid-argument', 'Generación desde el Organizador inválida: revisa la activación y el preset en Cliente → Automatizaciones.');
+      }
+      const organizerGeneration = {
+        ...(value.enabled !== undefined ? { enabled: value.enabled } : {}),
+        ...(value.preset !== undefined ? { preset: value.preset } : {}),
+      };
+      if (Object.keys(organizerGeneration).length) config.organizerGeneration = organizerGeneration;
     }
     if (config.defaultModelId) {
       const model = (await db.collection('models').doc(config.defaultModelId).get()).data() as Model | undefined;

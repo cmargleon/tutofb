@@ -69,7 +69,7 @@
 
   --color-bg-base: #f5f6f8;
   --color-bg-surface: #ffffff;
-  --color-bg-sidebar: #fbfbfc;
+  --color-bg-sidebar: #eceff3;
   --color-bg-elevated: #f8f9fb;
   --color-bg-hover: #f1f3f6;
   --color-bg-active: #edf6f4;
@@ -544,6 +544,8 @@ textarea.tuto-field { min-height: 5rem; resize: vertical; }
 .tuto-skip-link:focus { transform: translateY(0); }
 
 .tuto-sidebar { background: var(--color-bg-sidebar); border-color: var(--color-border-subtle); }
+/* Sidebar tone differs from content: re-tune hover/active so they still read on the tinted background. */
+html:not(.theme-dark) .tuto-sidebar { --color-bg-hover: #e1e5eb; --color-bg-active: #dbebe7; --color-border-subtle: #dde1e7; }
 .tuto-sidebar-head { display: flex; align-items: center; min-height: var(--tuto-topbar-height); padding: 0 .75rem 0 1rem; border-bottom: 1px solid transparent; }
 .tuto-brand { font-size: 1.1875rem; font-weight: 750; letter-spacing: -.04em; color: var(--color-text-primary); line-height: 1; }
 .tuto-brand-dot { color: var(--color-accent-dot); }
@@ -631,7 +633,7 @@ textarea.tuto-field { min-height: 5rem; resize: vertical; }
 
 /* ─── Dark theme: semantic tokens added by the design system ──── */
 html.theme-dark {
-  --color-bg-sidebar: #0d1220;
+  --color-bg-sidebar: #070a12;
   --color-border-strong: #3a4673;
   --color-accent-hover: #2b8a7c;
   --color-accent-soft: rgba(101, 188, 170, 0.12);

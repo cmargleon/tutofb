@@ -1,9 +1,12 @@
 import * as admin from 'firebase-admin';
 import { setGlobalOptions } from 'firebase-functions/v2';
+import { ENFORCE_APP_CHECK } from './config/appCheck';
 
 admin.initializeApp();
 
-setGlobalOptions({ maxInstances: 10 });
+// Debe ejecutarse antes de cargar cualquier módulo que declare funciones: onCall lee
+// las opciones globales (incluido enforceAppCheck) en el momento de la definición.
+setGlobalOptions({ maxInstances: 10, enforceAppCheck: ENFORCE_APP_CHECK });
 
 // Export callables
 export { setUserClientAccess } from './callables/setUserClientAccess';

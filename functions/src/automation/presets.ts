@@ -1,3 +1,4 @@
+import { COMMERCIAL_PHOTO_PROFILE, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { AutomationPreset, Client, CreateAutomationJobRequest, Model } from '../../../shared/src/types';
 import { isPoseActive } from '../../../shared/src/domain';
 import { AutomationAttentionError } from './imports';
@@ -31,7 +32,9 @@ export const resolveAutomationPreset = (data: CreateAutomationJobRequest, client
   const configured = client.automation?.presets?.[name];
   if (data.jobType === 'product' && name !== 'generic_product' && !configured) throw new AutomationAttentionError('Preset de producto no disponible.');
   if (data.jobType === 'garment' && name !== 'standard' && !configured) throw new AutomationAttentionError('Preset del cliente no configurado.');
-  const config = { ...configured, provider: data.provider || configured?.provider || DEFAULT_AUTOMATION_PROVIDER };
+  const provider = data.provider || configured?.provider || DEFAULT_AUTOMATION_PROVIDER;
+  const config: AutomationPreset = { ...configured, provider, photoProfile: COMMERCIAL_PHOTO_PROFILE,
+    ...resolveCommercialPhotoConfig(provider, undefined, configured?.aspectRatio, configured?.imageConfig) };
   const modelId = data.modelId || config.modelId || client.automation?.defaultModelId || null;
   return { name, config, modelId };
 };

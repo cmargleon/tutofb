@@ -103,3 +103,36 @@ test('automation accepts all new models, overrides preset provider and rejects d
   }
   assert.throws(() => validateAutomationInput({ ...input, provider: 'openai-gpt-image-1.5' }, 'user'), /fal.ai/);
 });
+
+test('commercial defaults validate for every active provider and ratio without changing model-human defaults', () => {
+  const { createCommercialProviderImageConfig, commercialPhotoSize } = require('../functions/lib/shared/src/commercialPhoto.js') as typeof import('../shared/src/commercialPhoto');
+  for (const provider of PROVIDER_VALUES) {
+    for (const ratio of ['1:1', '3:4', '4:3', '2:3', '3:2', '9:16', '16:9'] as const) {
+      const config = createCommercialProviderImageConfig(provider, ratio);
+      assert.ok(isProviderImageConfig(config), JSON.stringify(config)); assert.equal(resolveAspectRatioForImageConfig(config), ratio);
+      if ('imageSize' in config && typeof config.imageSize !== 'string') {
+        const [w, h] = ratio.split(':').map(Number);
+        assert.equal(config.imageSize.width * h, config.imageSize.height * w);
+      }
+      if ('quality' in config) assert.equal(config.quality, 'medium');
+      if ('outputFormat' in config) assert.equal(config.outputFormat, 'jpeg');
+    }
+    assert.deepEqual(createDefaultProviderImageConfig(provider), createLegacyProviderImageConfig(provider, '3:4'));
+  }
+  assert.deepEqual(commercialPhotoSize('fal-gpt-image-2.5-flare', '2:3'), { width: 1344, height: 2016 });
+  assert.deepEqual(commercialPhotoSize('fal-flux-2-edit', '4:3'), { width: 2048, height: 1536 });
+});
+
+test('commercial precedence preserves explicit generation formats/quality/dimensions and auto; aspect-only uses commercial defaults', () => {
+  const { resolveCommercialPhotoConfig, createCommercialProviderImageConfig } = require('../functions/lib/shared/src/commercialPhoto.js') as typeof import('../shared/src/commercialPhoto');
+  const provider = 'fal-gpt-image-2.5-flare';
+  const preset = { provider, imageSize: 'auto', quality: 'high', outputFormat: 'webp' } as const;
+  assert.deepEqual(resolveCommercialPhotoConfig(provider, undefined, '3:4', preset).imageConfig, preset);
+  const explicit = { ...preset, imageSize: { width: 1024, height: 1024 }, outputFormat: 'png' } as const;
+  assert.deepEqual(resolveCommercialPhotoConfig(provider, explicit, undefined, preset).imageConfig, explicit);
+  assert.deepEqual(resolveCommercialPhotoConfig(provider, undefined, '1:1').imageConfig, { provider, imageSize: { width: 2048, height: 2048 }, quality: 'medium', outputFormat: 'jpeg' });
+  const client = { automation: { presets: { generic_product: { provider, imageConfig: preset } } } };
+  const resolved = resolveAutomationPreset({ source: 'api', externalId: 'a', clientId: 'c', jobType: 'product', provider: 'fal-nano-banana-2' }, client as any);
+  assert.deepEqual(resolved.config.imageConfig, createCommercialProviderImageConfig('fal-nano-banana-2'));
+  assert.equal(resolved.config.photoProfile, 'commercial-photo-v1');
+});

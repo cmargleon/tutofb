@@ -1,0 +1,460 @@
+{
+  "profile": "commercial-photo-v1",
+  "project": "tutofb-260320-1003",
+  "date": "2026-11-09",
+  "files": [
+    "docs/PHOTO_GENERATION.md",
+    "docs/provider-pricing.md",
+    "e2e/wizard-products.spec.ts",
+    "functions/src/automation/persistence.ts",
+    "functions/src/automation/plans.ts",
+    "functions/src/automation/presets.ts",
+    "functions/src/automation/worker.ts",
+    "functions/src/callables/createGenerationBatch.helpers.ts",
+    "functions/src/callables/createGenerationBatch.ts",
+    "functions/src/callables/createProductGenerationBatch.ts",
+    "functions/src/callables/regenerateJob.helpers.ts",
+    "functions/src/manglar/estimates.ts",
+    "functions/src/manglar/wizard.ts",
+    "functions/src/media/compressGeneratedImage.ts",
+    "functions/src/providers/fal.ts",
+    "functions/src/providers/falModels.ts",
+    "functions/src/workers/jobWorker.ts",
+    "shared/src/providerImageConfig.ts",
+    "shared/src/types/automation.ts",
+    "shared/src/types/batch.ts",
+    "shared/src/types/job.ts",
+    "shared/src/types/provider.ts",
+    "src/components/clients/ClientAutomationSection.tsx",
+    "src/components/wizard/BatchStep.tsx",
+    "src/components/wizard/ProviderImageConfigSelection.tsx",
+    "src/features/generate/wizard/hooks/useGenerateWizard.ts",
+    "src/features/generate/wizard/state.ts",
+    "tests/automationAdvanced.integration.test.ts",
+    "tests/compressGeneratedImage.test.ts",
+    "tests/createGenerationBatch.test.ts",
+    "tests/falImageModels.test.ts",
+    "tests/photoGenerationFlow.test.ts",
+    "tests/providerCosts.test.ts",
+    "shared/src/commercialPhoto.ts",
+    "tests/commercialPhoto.integration.test.ts",
+    "ARCHITECTURE.md",
+    "e2e/automation-settings.spec.ts"
+  ],
+  "functions": [
+    {
+      "id": "updateClientAutomation",
+      "source": "functions/src/automation/clientConfig.ts"
+    },
+    {
+      "id": "manglarMcp",
+      "source": "functions/src/automation/mcp.ts"
+    },
+    {
+      "id": "organizerScheduler",
+      "source": "functions/src/organizer/worker.ts"
+    },
+    {
+      "id": "createGenerationBatch",
+      "source": "functions/src/callables/createGenerationBatch.ts"
+    },
+    {
+      "id": "createProductGenerationBatch",
+      "source": "functions/src/callables/createProductGenerationBatch.ts"
+    },
+    {
+      "id": "previewProductDrafts",
+      "source": "functions/src/callables/previewProductDrafts.ts"
+    },
+    {
+      "id": "regenerateJob",
+      "source": "functions/src/callables/regenerateJob.ts"
+    },
+    {
+      "id": "regenerateFailedBatchJobs",
+      "source": "functions/src/callables/regenerateFailedBatchJobs.ts"
+    },
+    {
+      "id": "regenerateJobsBulk",
+      "source": "functions/src/callables/regenerateJobsBulk.ts"
+    },
+    {
+      "id": "generateModelPose",
+      "source": "functions/src/callables/generateModelPose.ts"
+    },
+    {
+      "id": "processJobOnActivation",
+      "source": "functions/src/triggers/processJobOnActivation.ts"
+    },
+    {
+      "id": "processJobOnCreate",
+      "source": "functions/src/triggers/processJobOnCreate.ts"
+    },
+    {
+      "id": "processJobOnRequeue",
+      "source": "functions/src/triggers/processJobOnRequeue.ts"
+    },
+    {
+      "id": "requeueExpiredJobsOnSchedule",
+      "source": "functions/src/triggers/requeueExpiredJobs.ts"
+    },
+    {
+      "id": "createAutomationJob",
+      "source": "functions/src/automation/api.ts"
+    },
+    {
+      "id": "retryAutomationJob",
+      "source": "functions/src/automation/api.ts"
+    },
+    {
+      "id": "createAutomationPlan",
+      "source": "functions/src/automation/api.ts"
+    },
+    {
+      "id": "getAutomationPlan",
+      "source": "functions/src/automation/api.ts"
+    },
+    {
+      "id": "executeAutomationPlanCallable",
+      "source": "functions/src/automation/api.ts"
+    },
+    {
+      "id": "resumeAutomationJob",
+      "source": "functions/src/automation/api.ts"
+    },
+    {
+      "id": "automationApi",
+      "source": "functions/src/automation/api.ts"
+    },
+    {
+      "id": "automationIntakeWorker",
+      "source": "functions/src/automation/worker.ts"
+    },
+    {
+      "id": "automationGenerationProgress",
+      "source": "functions/src/automation/worker.ts"
+    },
+    {
+      "id": "recoverAutomationImports",
+      "source": "functions/src/automation/worker.ts"
+    }
+  ],
+  "storageGuarantee": {
+    "format": "jpeg",
+    "contentType": "image/jpeg",
+    "extension": "jpg",
+    "space": "srgb",
+    "depth": "uchar",
+    "icc": "srgb",
+    "maxSide": 2048,
+    "maxBytes": 2800000,
+    "withoutEnlargement": true,
+    "crop": false,
+    "padding": false,
+    "alphaBackground": "white"
+  },
+  "realVerificationGenerations": 0,
+  "realVerificationGenerationCostUsd": 0,
+  "providerVerification": "Official exact edit OpenAPI/documentation plus simulated fal responses; no real inference",
+  "observedFixtures": {
+    "providerRoundTrip": [
+      24,
+      30
+    ],
+    "compressionGeometries": [
+      [
+        1536,
+        2048
+      ],
+      [
+        2048,
+        2048
+      ],
+      [
+        2048,
+        1536
+      ],
+      [
+        13,
+        7
+      ],
+      [
+        3000,
+        1000
+      ]
+    ]
+  },
+  "checks": {
+    "rootLint": "passed",
+    "frontendBuild": "passed",
+    "functionsLint": "passed",
+    "functionsBuild": "passed",
+    "npmTest": {
+      "passed": 257,
+      "failed": 0,
+      "skipped": 19
+    },
+    "emulators": {
+      "passed": 448,
+      "failed": 0,
+      "skipped": 1,
+      "existingSkip": "external SHEIN template fixture"
+    },
+    "e2e": {
+      "passed": 12,
+      "failed": 0,
+      "specs": [
+        "e2e/wizard-products.spec.ts",
+        "e2e/automation-settings.spec.ts"
+      ]
+    },
+    "runtime": "Node 22.22.0 existing /private/tmp runtime for emulator runner and release builds"
+  },
+  "deployment": {
+    "state": "complete",
+    "selective": true,
+    "excludedPreexistingMarketplaceChanges": true,
+    "hosting": "released",
+    "releaseDirectory": "/var/folders/dm/_c5glb3d2gb5vkvkc56knfth0000gn/T/tuto-commercial-photo-release-vhs0dhhg",
+    "abortedAttempt": "An empty selective filter was interrupted during read-only predeploy validation; no resource release occurred; subsequent command has all 24 explicit function targets plus Hosting.",
+    "frontendVerification": {
+      "url": "https://tutofb-260320-1003.web.app",
+      "indexMatchesIsolatedBuild": true,
+      "profileAssets": [
+        {
+          "asset": "ProviderImageConfigSelection-CjLSN8j5.js",
+          "sha256": "dbc06484b3313ccb95aa311532573487620b6a5bd7f98cf30c50f5f7b0965277"
+        }
+      ]
+    },
+    "functionVerification": [
+      {
+        "id": "updateClientAutomation",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250813154267"
+      },
+      {
+        "id": "manglarMcp",
+        "state": "ACTIVE",
+        "hash": "79a32fd50d5a8b59eba32766d7d59a01045f659b",
+        "sourceGeneration": "1794250812502248"
+      },
+      {
+        "id": "organizerScheduler",
+        "state": "ACTIVE",
+        "hash": "9ddf0e2b3245986b73334adb06735a052a6ef206",
+        "sourceGeneration": "1794250856102273"
+      },
+      {
+        "id": "createGenerationBatch",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250856263177"
+      },
+      {
+        "id": "createProductGenerationBatch",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855797109"
+      },
+      {
+        "id": "previewProductDrafts",
+        "state": "ACTIVE",
+        "hash": "788dee1fdcf0114680833fa05760a9eb38c251b4",
+        "sourceGeneration": "1794250812922488"
+      },
+      {
+        "id": "regenerateJob",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855917207"
+      },
+      {
+        "id": "regenerateFailedBatchJobs",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250856012151"
+      },
+      {
+        "id": "regenerateJobsBulk",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855857702"
+      },
+      {
+        "id": "generateModelPose",
+        "state": "ACTIVE",
+        "hash": "33949b54048dbad632c259e67327d26e03f6e34c",
+        "sourceGeneration": "1794250855895792"
+      },
+      {
+        "id": "processJobOnActivation",
+        "state": "ACTIVE",
+        "hash": "249ee1df5ae3f901fdc6fd96a90e70da8ce139f0",
+        "sourceGeneration": "1794250812951667"
+      },
+      {
+        "id": "processJobOnCreate",
+        "state": "ACTIVE",
+        "hash": "249ee1df5ae3f901fdc6fd96a90e70da8ce139f0",
+        "sourceGeneration": "1794250867594175"
+      },
+      {
+        "id": "processJobOnRequeue",
+        "state": "ACTIVE",
+        "hash": "249ee1df5ae3f901fdc6fd96a90e70da8ce139f0",
+        "sourceGeneration": "1794250866590479"
+      },
+      {
+        "id": "requeueExpiredJobsOnSchedule",
+        "state": "ACTIVE",
+        "hash": "249ee1df5ae3f901fdc6fd96a90e70da8ce139f0",
+        "sourceGeneration": "1794250866442294"
+      },
+      {
+        "id": "createAutomationJob",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855885280"
+      },
+      {
+        "id": "retryAutomationJob",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855436272"
+      },
+      {
+        "id": "createAutomationPlan",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855864027"
+      },
+      {
+        "id": "getAutomationPlan",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250856027491"
+      },
+      {
+        "id": "executeAutomationPlanCallable",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855946009"
+      },
+      {
+        "id": "resumeAutomationJob",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855837652"
+      },
+      {
+        "id": "automationApi",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855882938"
+      },
+      {
+        "id": "automationIntakeWorker",
+        "state": "ACTIVE",
+        "hash": "788dee1fdcf0114680833fa05760a9eb38c251b4",
+        "sourceGeneration": "1794250856180402"
+      },
+      {
+        "id": "automationGenerationProgress",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250855624593"
+      },
+      {
+        "id": "recoverAutomationImports",
+        "state": "ACTIVE",
+        "hash": "d8e9c19db0d3ef906217241594b4a0c8efb59e92",
+        "sourceGeneration": "1794250856067978"
+      }
+    ],
+    "unselectedFunctionHashChanges": [],
+    "hostingRelease": [
+      {
+        "name": "projects/tutofb-260320-1003/sites/tutofb-260320-1003/channels/live",
+        "url": "https://tutofb-260320-1003.web.app",
+        "releaseTime": "2026-11-09T19:01:31.943Z",
+        "versionName": "projects/tutofb-260320-1003/sites/tutofb-260320-1003/versions/fab2f456e78b0fd8"
+      }
+    ]
+  },
+  "releaseContentVerification": "Own files match working tree; unrelated baseline files match HEAD; unpublished marketplace functions absent",
+  "defaults": [
+    {
+      "providers": [
+        "fal-gpt-image-2.5-flare",
+        "fal-gpt-image-2.5-sunburst",
+        "fal-gpt-image-2"
+      ],
+      "before": "portrait_4_3 (768x1024), medium, PNG",
+      "after": "1536x2048, medium, JPEG"
+    },
+    {
+      "providers": [
+        "fal-seedream-5-pro",
+        "fal-seedream-5-flash",
+        "fal-flux-2-edit"
+      ],
+      "before": "portrait_4_3, PNG forced by adapter",
+      "after": "1536x2048, native generation quality unchanged, JPEG"
+    },
+    {
+      "providers": [
+        "fal-banana-pro",
+        "fal-nano-banana-2"
+      ],
+      "before": "3:4, native 1K, PNG",
+      "after": "3:4, native 2K, JPEG; actual dimensions measured, not guaranteed 1536x2048"
+    },
+    {
+      "providers": [
+        "fal-seedream"
+      ],
+      "before": "portrait_4_3, native format",
+      "after": "1665x2220; no output_format parameter"
+    },
+    {
+      "providers": [
+        "fal-seedream-5"
+      ],
+      "before": "portrait_4_3, native format",
+      "after": "1665x2220, JPEG"
+    }
+  ],
+  "costImpact": {
+    "nanoBanana2Usd": {
+      "before1K": 0.08,
+      "after2K": 0.12
+    },
+    "nanoBananaProUsd": {
+      "before1K": 0.15,
+      "after2K": 0.15
+    },
+    "seedreamProTwoReferencesUsd": 0.1395,
+    "fluxTwoReferencesUsd": 0.06,
+    "gpt": "medium retained; unpublished dimensions use existing heuristic; no invoice or guaranteed cap",
+    "budget": "effective config frozen and shared by estimateGenerationHold, plans, Manglar and worker; historical charges untouched"
+  },
+  "compatibility": {
+    "historicalJobs": "Absence of photoProfile preserves legacy normalization/storage",
+    "historicalPlans": "Authorized preset and profile reused without recalculation",
+    "modelHumanGeneration": "Existing createDefaultProviderImageConfig, createLegacyProviderImageConfig and legacy fallback retained",
+    "resumeReview": "Provider/compressor/Storage.save not called; path, MIME, metadata, cost, duration preserved",
+    "initialGeminiReview": "Original provider bytes",
+    "extraBucketsOrImageCopiesAdded": false
+  },
+  "commands": [
+    "npm run lint",
+    "npm run build",
+    "npm --prefix functions run lint",
+    "npm --prefix functions run build",
+    "npm test -- --test-concurrency=4",
+    "PATH=/private/tmp/node-v22.22.0-darwin-arm64/bin:$PATH npm run test:emulators",
+    "playwright test e2e/wizard-products.spec.ts e2e/automation-settings.spec.ts --workers=1"
+  ]
+}

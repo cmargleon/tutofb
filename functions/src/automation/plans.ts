@@ -7,7 +7,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import type { AutomationModelOption, AutomationPlan, Client, CreateAutomationJobRequest } from '../../../shared/src/types';
 import { DEFAULT_AUTOMATION_BUDGET, resolveAutomationPolicy, usd } from '../../../shared/src/automationPolicy';
 import { createDefaultProductGeneration } from '../../../shared/src/productGeneration';
-import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
+import { COMMERCIAL_PHOTO_PROFILE, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { assertProviderEnabledInSystemConfig, sanitizeSystemConfig } from '../admin/systemConfig';
 import { canReadAutomation, validateAutomationInput } from './domain';
@@ -39,7 +39,7 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   const defaults = createDefaultProductGeneration(system);
   const provider = resolved.config.provider || DEFAULT_AUTOMATION_PROVIDER;
   assertProviderEnabledInSystemConfig(provider, system);
-  const normalized = normalizeProviderImageConfig(provider, resolved.config.imageConfig, resolved.config.aspectRatio || '3:4');
+  const normalized = resolveCommercialPhotoConfig(provider, resolved.config.imageConfig, resolved.config.aspectRatio || '3:4');
   const preset = { ...resolved.config, provider, imageConfig: normalized.imageConfig, aspectRatio: normalized.aspectRatio,
     prompt: resolved.config.prompt ?? (data.jobType === 'product' ? defaults.prompt : client.generationPromptBase || ''),
     ...(data.jobType === 'product' ? { scenes: resolved.config.scenes || defaults.scenes } : {}),
@@ -71,7 +71,7 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
     return { itemId, imageCount: count, sceneIds,
       estimatedCostUsd: usd(sceneIds.length * (generation.holdUsd + GEMINI_OPERATION_HOLD_USD) * (policy.maxReviewAttempts + policy.maxOperationalRetries) + (data.jobType === 'garment' ? GEMINI_OPERATION_HOLD_USD * (policy.maxOperationalRetries + 1) : 0)) };
   });
-  const plan: AutomationPlan = { id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
+  const plan: AutomationPlan = { photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
     request: { ...data, inputImages: inputs, preset: resolved.name },
     presetName: resolved.name, preset, policy, modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment',
     estimatedCostUsd: usd(items.reduce((sum, item) => sum + item.estimatedCostUsd, 0)),

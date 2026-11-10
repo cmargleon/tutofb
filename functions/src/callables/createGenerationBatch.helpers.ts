@@ -1,3 +1,4 @@
+import { resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { APPROVED_TRY_ON_PROMPT_FORMAT, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { isPoseActive } from '../../../shared/src/domain';
@@ -23,6 +24,7 @@ import {
   getDefaultTryOnPromptCaseText,
   isArchivedCatalogEntity,
   isProvider,
+  isAspectRatio,
   resolveTryOnPromptCaseKey,
 } from '../../../shared/src/domain';
 import { isProviderImageConfig, normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
@@ -269,6 +271,7 @@ export const validateCreateGenerationBatchInput = (
   data: Partial<CreateGenerationBatchRequest> | null | undefined,
   authUid: string,
   _maxJobs: number,
+  commercial = true,
 ): ValidatedCreateGenerationBatchInput => {
   const clientId = requireNonEmptyString(data?.clientId, 'El cliente');
   const modelId = requireNonEmptyString(data?.modelId, 'El modelo');
@@ -294,7 +297,9 @@ export const validateCreateGenerationBatchInput = (
     throw new HttpsError('invalid-argument', 'La configuracion de imagen no coincide con el proveedor seleccionado.');
   }
 
-  const normalizedImageConfig = normalizeProviderImageConfig(provider, imageConfig, legacyAspectRatio);
+  if (legacyAspectRatio != null && !isAspectRatio(legacyAspectRatio)) throw new HttpsError('invalid-argument', 'Proporción de imagen inválida.');
+
+  const normalizedImageConfig = (commercial ? resolveCommercialPhotoConfig : normalizeProviderImageConfig)(provider, imageConfig, legacyAspectRatio);
 
   const poseIds = Array.isArray(data?.poseIds)
     ? [...new Set(data.poseIds.filter((value): value is string => typeof value === 'string' && value.trim().length > 0))]

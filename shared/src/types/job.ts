@@ -140,6 +140,8 @@ export interface JobFailureInfo {
 }
 
 export interface JobOutput {
+  storedImage?: import('./provider').StoredPhotoMetadata;
+  photoProfile?: import('./provider').CommercialPhotoProfile;
   promptFormat?: 'approved-try-on-v1';
   id: string;
   jobId: string;
@@ -173,6 +175,7 @@ export interface JobOutput {
 }
 
 export interface Job {
+  photoProfile?: import('./provider').CommercialPhotoProfile;
   manglarBudgetId?: string;
   promptFormat?: 'approved-try-on-v1';
   automationJobId?: string;

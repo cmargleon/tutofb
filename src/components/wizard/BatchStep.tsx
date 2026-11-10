@@ -166,7 +166,7 @@ export const BatchStep: React.FC<Props> = ({
           ) : null}
 
           <div className={selectedProviderDisabled ? 'pointer-events-none opacity-60' : undefined}>
-            <ProviderImageConfigSelection
+            <ProviderImageConfigSelection commercial
               provider={state.provider}
               value={state.providerImageConfigs[state.provider]}
               onChange={onProviderImageConfigChange}

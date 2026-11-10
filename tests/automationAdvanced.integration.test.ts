@@ -391,6 +391,7 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
           const original = await sharp({ create: { width: 13, height: 7, channels: 4, background: '#22664488' } })[format]().toBuffer();
           generatedImage = { bytes: oversized ? Buffer.concat([original, Buffer.alloc(3 * 1024 * 1024 + 1 - original.length)]) : original, contentType: `image/${format}` };
           const ref = db.collection('jobs').doc(job.generationJobIds[index++]);
+          await ref.update({ photoProfile: admin.firestore.FieldValue.delete() }); // legacy characterization
           const before = providerCalls;
           await generation.processJob(ref.id, 'create', { skipBacklogSweep: true });
           const done = (await ref.get()).data();

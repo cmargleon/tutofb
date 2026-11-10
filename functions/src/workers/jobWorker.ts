@@ -185,9 +185,10 @@ const persistGeneratedAttempt = async ({
     claimedJob.imageConfig,
     claimedJob.aspectRatio,
   );
-  const storedImage = await compressGeneratedImageIfNeeded({
+  const storedImage = reuseOutput ? { bytes: providerResult.imageBytes, contentType: claimedJob.currentOutput!.contentType, storedImage: claimedJob.currentOutput!.storedImage } : await compressGeneratedImageIfNeeded({
     bytes: providerResult.imageBytes,
     contentType: providerResult.contentType,
+    photoProfile: claimedJob.photoProfile, imageConfig: normalizedImageConfig.imageConfig,
   });
   const extension = extensionForContentType(storedImage.contentType);
   const destinationPath = reuseOutput ? claimedJob.currentOutput!.resultImagePath : `generated/${claimedJob.clientId}/${claimedJob.batchId}/${jobId}/${outputId}.${extension}`;
@@ -221,6 +222,8 @@ const persistGeneratedAttempt = async ({
     finalPrompt: claimedJob.finalPrompt,
     aspectRatio: normalizedImageConfig.aspectRatio,
     imageConfig: normalizedImageConfig.imageConfig,
+    ...(claimedJob.photoProfile ? { photoProfile: claimedJob.photoProfile } : {}),
+    ...(storedImage.storedImage ? { storedImage: storedImage.storedImage } : {}),
     resultImagePath: destinationPath,
     contentType: storedImage.contentType,
     remoteUrl: providerResult.remoteUrl,
@@ -233,6 +236,7 @@ const persistGeneratedAttempt = async ({
     failureInfo: persistedFailureInfo,
     isCurrent: true,
     createdAt: reuseOutput ? claimedJob.currentOutput!.createdAt : admin.firestore.FieldValue.serverTimestamp(),
+    ...(reuseOutput ? { ...claimedJob.currentOutput!, autoReview, failureInfo: persistedFailureInfo, isCurrent: true } : {}),
   };
 
   const shouldResetForNextAttempt = nextStatus === 'pending' || nextStatus === 'failed';
@@ -251,7 +255,7 @@ const persistGeneratedAttempt = async ({
     claimExpiresAt: null,
     timeoutAt: null,
     completedAt: nextStatus === 'completed' ? admin.firestore.FieldValue.serverTimestamp() : null,
-    latestOutputCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...(!reuseOutput ? { latestOutputCreatedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
     currentOutputId: outputId,
     currentOutput,
     completedOutputCount: admin.firestore.FieldValue.increment(reuseOutput ? 0 : 1),
@@ -708,6 +712,7 @@ const processJobCore = async (
     const generationAttempt = resumeReview ? claimedJob.generationAttemptCount || 1 : (claimedJob.generationAttemptCount || 0) + 1;
     const maxAutoReviewAttempts = claimedJob.autoReviewMaxAttempts || getJobAutoReviewMaxAttempts();
 
+    let review: Awaited<ReturnType<typeof reviewGeneratedImageWithGemini>>;
     try {
       const [poseReference, garmentReference] = await Promise.all([
         downloadStorageImage(claimedJob.poseImagePath),
@@ -715,7 +720,7 @@ const processJobCore = async (
       ]);
 
       const jobSystemConfig = await getSystemConfigCached();
-      const review = await reviewGeneratedImageWithGemini({
+      review = await reviewGeneratedImageWithGemini({
         ...(claimedJob.automationManaged && claimedJob.automationJobId ? {
           exactAutomationPrompt: true,
           automation: { id: claimedJob.automationJobId, key: `review:${jobId}:${claimedJob.claimToken}`, kind: 'review' as const, generation: { id: jobId, claimToken: claimedJob.claimToken } },
@@ -751,56 +756,40 @@ const processJobCore = async (
         signal: controller.signal,
       });
 
-      const storedReview = buildStoredReview(review, generationAttempt);
+    } catch (reviewError) {
+      await failGeneratedAttemptAfterReviewError({
+        claimedJob,
+        providerResult,
+        durationSeconds,
+        generationAttempt,
+        error: reviewError,
+      });
+      return;
+    }
+    const storedReview = buildStoredReview(review, generationAttempt);
 
-      if (review.verdict === 'approved') {
-        await persistGeneratedAttempt({
-          claimedJob,
-          providerResult,
-          durationSeconds,
-          generationAttempt,
-          nextStatus: 'completed',
-          autoReview: storedReview,
-          failureInfo: null,
-          lastError: null,
-        });
-        return;
-      }
+    if (review.verdict === 'approved') {
+      await persistGeneratedAttempt({
+        claimedJob,
+        providerResult,
+        durationSeconds,
+        generationAttempt,
+        nextStatus: 'completed',
+        autoReview: storedReview,
+        failureInfo: null,
+        lastError: null,
+      });
+      return;
+    }
 
-      if (generationAttempt < maxAutoReviewAttempts) {
-        const failureInfo = buildGeminiRejectedFailureInfo({
-          summary: review.summary,
-          attemptNumber: generationAttempt,
-          maxAttempts: maxAutoReviewAttempts,
-          provider: providerResult.provider,
-          requestId: providerResult.requestId,
-          retryable: true,
-          raw: {
-            criteria: review.criteria,
-            revisedPrompt: review.revisedPrompt,
-          },
-        });
-        await persistGeneratedAttempt({
-          claimedJob,
-          providerResult,
-          durationSeconds,
-          generationAttempt,
-          nextStatus: 'pending',
-          autoReview: storedReview,
-          failureInfo,
-          nextPromptBase: review.revisedPrompt || undefined,
-          lastError: toFailureSummary(failureInfo),
-        });
-        return;
-      }
-
+    if (generationAttempt < maxAutoReviewAttempts) {
       const failureInfo = buildGeminiRejectedFailureInfo({
         summary: review.summary,
         attemptNumber: generationAttempt,
         maxAttempts: maxAutoReviewAttempts,
         provider: providerResult.provider,
         requestId: providerResult.requestId,
-        retryable: false,
+        retryable: true,
         raw: {
           criteria: review.criteria,
           revisedPrompt: review.revisedPrompt,
@@ -811,20 +800,38 @@ const processJobCore = async (
         providerResult,
         durationSeconds,
         generationAttempt,
-        nextStatus: 'failed',
+        nextStatus: 'pending',
         autoReview: storedReview,
         failureInfo,
+        nextPromptBase: review.revisedPrompt || undefined,
         lastError: toFailureSummary(failureInfo),
       });
-    } catch (reviewError) {
-      await failGeneratedAttemptAfterReviewError({
-        claimedJob,
-        providerResult,
-        durationSeconds,
-        generationAttempt,
-        error: reviewError,
-      });
+      return;
     }
+
+    const failureInfo = buildGeminiRejectedFailureInfo({
+      summary: review.summary,
+      attemptNumber: generationAttempt,
+      maxAttempts: maxAutoReviewAttempts,
+      provider: providerResult.provider,
+      requestId: providerResult.requestId,
+      retryable: false,
+      raw: {
+        criteria: review.criteria,
+        revisedPrompt: review.revisedPrompt,
+      },
+    });
+    await persistGeneratedAttempt({
+      claimedJob,
+      providerResult,
+      durationSeconds,
+      generationAttempt,
+      nextStatus: 'failed',
+      autoReview: storedReview,
+      failureInfo,
+      lastError: toFailureSummary(failureInfo),
+    });
+
   } catch (error) {
     if (error instanceof AutomationBudgetError && claimedJob.automationManaged) await pauseAutomationGeneration(claimedJob, error.message);
     else await retryOrFailJob(claimedJob, error);

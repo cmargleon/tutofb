@@ -37,9 +37,9 @@ La exportación heredada conserva sus endpoints/contratos, incluyendo Google She
 
 ## Fotografías y seguridad
 
-El motor recupera únicamente outputs actuales completados, no marcados para revisión, aprobados por Gemini o seleccionados explícitamente por el operador mediante el mecanismo existente. No publica imágenes de Storage, no crea tokens de descarga de originales ni usa URLs temporales de Firebase/Drive para publicar.
+El motor recupera únicamente outputs efectivos de jobs completados, no marcados para revisión, aprobados por Gemini o seleccionados explícitamente por el operador mediante el mecanismo existente. La prevalidación y descarga no publican imágenes. La acción explícita `publishMarketplaceImages` prepara copias JPG aprobadas en el bucket GCS separado; no crea tokens de descarga de originales ni usa URL temporales de Firebase/Drive para publicar.
 
-Si la plantilla necesita URLs, el operador debe alojar las fotografías aprobadas en un servicio autorizado y registrar sus URLs HTTPS permanentes con confirmación explícita. Se rechazan URLs con tokens/query, hosts privados, Firebase, Drive y proxies autenticados. Una URL debe estar asociada al ID de una imagen aprobada del mismo producto. Esto es una autorización declarada por el operador, no una comprobación de identidad visual del contenido remoto ni una publicación automática. Las URLs de outputs que dejan de estar aprobados no se exportan.
+Si la plantilla necesita URL, el operador puede autorizar y pulsar **Preparar URL para …** desde el editor del producto. Tuto publica copias versionadas, permite copiar/abrir sus enlaces y completa las asociaciones `image.N` de la exportación. También se admiten URL HTTPS permanentes de un alojamiento externo autorizado. Se rechazan tokens/query, hosts privados, Firebase, Drive y proxies autenticados; las URL directas de GCS se aceptan solo si el registro de publicación del producto/canal las acredita. Una URL debe estar asociada al ID de una imagen aprobada del mismo producto. Los enlaces externos siguen siendo una autorización declarada, sin comprobación de identidad visual del contenido remoto. Las fotos que dejan de estar aprobadas se excluyen de nuevas exportaciones; las copias ya publicadas se conservan para los Excel anteriores. Detalles, permisos y preparación técnica: [MARKETPLACE_IMAGES.md](MARKETPLACE_IMAGES.md).
 
 Los callables usan roles actuales, acceso efectivo al cliente y comprobación individual de cada batch. No basta enviar un `clientId` permitido junto con lotes ajenos. Configurar/importar/archivar exige administrador; editar datos y descargar conserva los roles admin/operador/revisor. Se rechazan clientes archivados y escrituras concurrentes del producto mediante revisión esperada.
 
@@ -85,7 +85,7 @@ Las pruebas históricas de `catalog-subscriptions.spec.ts` fallaban también en 
 
 ## Operación pendiente del administrador
 
-Habilitar los canales deseados por cliente, asociar los templates heredados tras revisión, cargar los oficiales de los otros marketplaces y confirmar campos/categorías/operación. Completar datos comerciales y exenciones verificadas externamente; alojar las imágenes aprobadas si la plataforma necesita URLs públicas; efectuar una subida de prueba en cada marketplace con su plantilla oficial. Los requisitos desconocidos o formatos bloqueados necesitan ampliar el adaptador, no introducir valores de relleno.
+Habilitar los canales deseados por cliente, asociar los templates heredados tras revisión, cargar los oficiales de los otros marketplaces y confirmar campos/categorías/operación. Completar datos comerciales y exenciones verificadas externamente; publicar copias aprobadas desde Tuto o registrar enlaces externos si la plataforma necesita URL públicas; efectuar una subida de prueba en cada marketplace con su plantilla oficial. Los requisitos desconocidos o formatos bloqueados necesitan ampliar el adaptador, no introducir valores de relleno.
 
 ## Resultado de las verificaciones y despliegue
 

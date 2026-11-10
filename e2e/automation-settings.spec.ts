@@ -4,7 +4,7 @@ test('automation budget controls persist separately from manual queue settings a
   let saved: any = { automationBudget: { defaultBudgetUsd: 10, maxBudgetUsd: 100, maxReviewAttempts: 3, maxOperationalRetries: 2 }, jobMaxRetries: 7 };
   await page.exposeFunction('__saveAutomationConfig', (patch: any) => { saved = { ...saved, ...patch }; return { success: true, config: saved }; });
   await page.route('https://**/*', (route) => route.abort());
-  await page.route('**/src/features/auth/AuthProvider.tsx*', (route) => route.fulfill({ contentType: 'application/javascript', body: 'export const useRole = () => ({ canManageUsers: true });' }));
+  await page.route('**/src/features/auth/AuthProvider.tsx*', (route) => route.fulfill({ contentType: 'application/javascript', body: 'export const useRole = () => ({ canManageUsers: true }); export const useAuth = () => ({ user: { uid: \"isolated-admin\" }, appUser: { role: \"admin\" }, loading: false });' }));
   await page.route('**/src/features/system/useSystemConfig.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `const config = ${JSON.stringify(saved)}; export const useSystemConfig = () => ({ config, loading: false });` }));
   await page.route('**/src/features/system/firebase.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: 'export const updateSystemConfig = (patch) => window.__saveAutomationConfig(patch);' }));
   await page.route('**/automation-settings-preview', (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div>

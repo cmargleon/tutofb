@@ -8,6 +8,13 @@ export type ProductField = typeof PRODUCT_FIELDS[number];
 export type VariantField = typeof VARIANT_FIELDS[number];
 export interface ProductEvidence { original: string; normalized: string; source: 'manual' | 'legacy' | 'ai'; confidence: number | null }
 export interface MasterVariant { id: string; values: Partial<Record<VariantField, string>>; attributes?: Record<string, string> }
+export interface PublishedMarketplaceImage {
+  outputId: string; jobId: string; sourceStoragePath: string;
+  marketplaceId: MarketplaceId; profileVersion: string;
+  bucket: string; storagePath: string; url: string;
+  contentType: 'image/jpeg'; width: number; height: number; bytes: number;
+  publishedAt: TimestampLike; publishedByUid: string;
+}
 export interface ProductMarketplaceData {
   templateId: string; categoryId: string;
   /** Explicit output values, never copied back into master fields. */
@@ -24,6 +31,8 @@ export interface MasterProduct {
   originalImages: Array<{ storagePath: string; fileName: string }>;
   approvedImages: Array<{ outputId: string; jobId: string; storagePath: string }>;
   generatedImages?: Array<{ outputId: string; jobId: string; storagePath: string; approved: boolean }>;
+  /** Server projection of publications still associated with approved outputs. */
+  publishedImages?: Partial<Record<MarketplaceId, Record<string, PublishedMarketplaceImage>>>;
   pendingImages: number;
   marketplaces: Partial<Record<MarketplaceId, ProductMarketplaceData>>;
   revision: number;
@@ -48,6 +57,13 @@ export interface MarketplaceTemplateConfig {
   confirmedAt?: TimestampLike;
 }
 export interface MarketplaceExportScope { clientId: string; batchIds: string[] }
+export interface PublishMarketplaceImagesRequest extends MarketplaceExportScope {
+  productId: string; marketplaceId: MarketplaceId; authorizePublicImages: boolean;
+}
+export interface PublishMarketplaceImagesResponse {
+  images: PublishedMarketplaceImage[];
+  failures: Array<{ outputId: string; message: string }>;
+}
 export interface MarketplaceExportIssue { marketplaceId: MarketplaceId; productId?: string; productName?: string; field?: string; code: string; message: string }
 export interface MarketplaceReadiness { marketplaceId: MarketplaceId; ready: boolean; compatibleTemplates: number; issues: MarketplaceExportIssue[] }
 export interface MarketplaceExportPreview {

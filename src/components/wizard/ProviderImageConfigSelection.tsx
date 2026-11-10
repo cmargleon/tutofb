@@ -1,3 +1,5 @@
+import { COMMERCIAL_PHOTO_CAPABILITIES, commercialPhotoSize, createCommercialProviderImageConfig } from '../../../shared/src/commercialPhoto';
+import { summarizeProviderImageConfig, resolveAspectRatioForImageConfig } from '../../../shared/src/providerImageConfig';
 import React, { useEffect, useState } from 'react';
 import {
   BANANA_ASPECT_RATIO_VALUES,
@@ -17,6 +19,7 @@ import { Provider } from '../../../shared/src/types';
 import { WizardProviderImageConfig } from '../../features/generate/types';
 
 interface ProviderImageConfigSelectionProps {
+  commercial?: boolean;
   provider: Provider;
   value: WizardProviderImageConfig;
   onChange: (config: WizardProviderImageConfig) => void;
@@ -197,11 +200,20 @@ const normalizeGPTImage2Dimension = (value: string, fallback: number): number =>
   return Math.max(16, Math.round(clamped / 16) * 16);
 };
 
-export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelectionProps> = ({
+const ProviderImageConfigControls: React.FC<ProviderImageConfigSelectionProps> = ({
   provider,
   value,
-  onChange,
+  onChange, commercial = false,
 }) => {
+  const isSizeSelected = (preset: string) => {
+    if (!('imageSize' in value)) return false;
+    if (value.imageSize === preset) return true;
+    if (!commercial || typeof value.imageSize === 'string' || preset.startsWith('auto') || preset === 'square') return false;
+    const framed = { ...value, imageSize: preset } as WizardProviderImageConfig;
+    const target = createCommercialProviderImageConfig(provider, resolveAspectRatioForImageConfig(framed));
+    return 'imageSize' in target && typeof target.imageSize !== 'string'
+      && target.imageSize.width === value.imageSize.width && target.imageSize.height === value.imageSize.height;
+  };
   const [customWidthInput, setCustomWidthInput] = useState('1536');
   const [customHeightInput, setCustomHeightInput] = useState('2048');
 
@@ -217,7 +229,6 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
   }, [provider, value]);
 
   if ((value.provider === 'fal-gpt-image-2' || value.provider === 'fal-gpt-image-2.5-sunburst' || value.provider === 'fal-gpt-image-2.5-flare') && provider === value.provider) {
-    const selectedPreset = typeof value.imageSize === 'string' ? value.imageSize : null;
     const customWidth = typeof value.imageSize === 'string' ? 1024 : value.imageSize.width;
     const customHeight = typeof value.imageSize === 'string' ? 1360 : value.imageSize.height;
     const customArea = customWidth * customHeight;
@@ -252,18 +263,19 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {GPT_IMAGE_2_IMAGE_SIZE_PRESET_VALUES.map((preset) => {
               const copy = getGPTImage2PresetCopy(preset);
+              if (commercial && preset !== 'auto' && preset !== 'square' && provider !== 'openai-gpt-image-1.5') { const size = commercialPhotoSize(provider, resolveAspectRatioForImageConfig({ provider: 'fal-gpt-image-2', imageSize: preset, quality: 'medium', outputFormat: 'jpeg' })); copy.description = `${size.width} × ${size.height} solicitados al proveedor.`; }
               return renderChoiceButton({
                 keyValue: preset,
                 title: copy.title,
                 description: copy.description,
-                selected: selectedPreset === preset,
+                selected: isSizeSelected(preset),
                 onClick: () => onChange({ ...value, imageSize: preset }),
               });
             })}
 
             {renderChoiceButton({
               keyValue: 'custom',
-              title: 'Píxeles exactos',
+              title: 'Dimensiones solicitadas',
               description: 'Define width y height en múltiplos de 16.',
               selected: typeof value.imageSize !== 'string',
               onClick: () => {
@@ -330,7 +342,7 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
         })}
 
         {renderCompactOptions({
-          label: 'Formato',
+          label: 'Formato solicitado al proveedor',
           values: GPT_IMAGE_2_OUTPUT_FORMAT_VALUES,
           selected: value.outputFormat,
           onSelect: (outputFormat) => onChange({ ...value, outputFormat: outputFormat as typeof value.outputFormat }),
@@ -351,13 +363,18 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
             keyValue: preset,
             title: preset === 'auto_1K' ? 'Auto 1K' : getSeedreamPresetCopy(preset === 'auto_1K' ? 'auto_2K' : preset).title,
             description: preset.startsWith('auto_') ? 'Resolución automática según la referencia.' : getSeedreamPresetCopy(preset === 'auto_1K' ? 'auto_2K' : preset).description,
-            selected: value.imageSize === preset,
+            selected: isSizeSelected(preset),
             onClick: () => {
               if (value.provider === 'fal-flux-2-edit') {
                 if (preset !== 'auto_1K' && preset !== 'auto_2K') onChange({ ...value, imageSize: preset });
               } else onChange({ ...value, imageSize: preset });
             },
           }))}
+        </div>
+        <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+          <div className="text-sm">Dimensiones solicitadas: {typeof value.imageSize === 'string' ? value.imageSize : `${value.imageSize.width} × ${value.imageSize.height} px`}</div>
+          <button type="button" onClick={() => onChange({ ...value, imageSize: { width: 1536, height: 2048 } })}>Personalizado 1536 × 2048</button>
+          {typeof value.imageSize !== 'string' ? <div className="flex flex-wrap gap-2">{(['width', 'height'] as const).map(axis => <label key={axis}>{axis === 'width' ? 'Ancho' : 'Alto'} (px)<input className="w-28 rounded border p-2" type="number" min={flux ? 512 : 1} max={flux ? 2048 : 4096} value={typeof value.imageSize === 'string' ? '' : value.imageSize[axis]} onChange={event => { if (typeof value.imageSize !== 'string') onChange({ ...value, imageSize: { ...value.imageSize, [axis]: Number(event.target.value) } }); }} /></label>)}</div> : null}
         </div>
         <p className="text-xs text-slate-500">{flux ? 'Hasta 4 imágenes de referencia. Para crear una identidad sin referencia se usa FLUX.2 texto a imagen.' : 'Hasta 10 imágenes de referencia y resolución de salida hasta 2K.'}</p>
       </div>
@@ -438,7 +455,6 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
   }
 
   if (provider === 'fal-seedream' && value.provider === 'fal-seedream') {
-    const selectedPreset = typeof value.imageSize === 'string' ? value.imageSize : null;
     const customWidth = typeof value.imageSize === 'string' ? 1536 : value.imageSize.width;
     const customHeight = typeof value.imageSize === 'string' ? 2048 : value.imageSize.height;
     const customArea = customWidth * customHeight;
@@ -477,15 +493,15 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
                 keyValue: preset,
                 title: copy.title,
                 description: copy.description,
-                selected: selectedPreset === preset,
+                selected: isSizeSelected(preset),
                 onClick: () => onChange({ ...value, imageSize: preset }),
               });
             })}
 
             {renderChoiceButton({
               keyValue: 'custom',
-              title: 'Pixeles exactos',
-              description: 'Define width y height exactos para Seedream.',
+              title: 'Dimensiones solicitadas',
+              description: 'Solicita dimensiones; el proveedor puede ajustarlas.',
               selected: typeof value.imageSize !== 'string',
               onClick: () => {
                 setCustomWidthInput(String(customWidth));
@@ -549,7 +565,6 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
   }
 
   if (provider === 'fal-seedream-5' && value.provider === 'fal-seedream-5') {
-    const selectedPreset = typeof value.imageSize === 'string' ? value.imageSize : null;
     const customWidth = typeof value.imageSize === 'string' ? 1536 : value.imageSize.width;
     const customHeight = typeof value.imageSize === 'string' ? 2048 : value.imageSize.height;
     const customArea = customWidth * customHeight;
@@ -580,14 +595,14 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
                 keyValue: preset,
                 title: copy.title,
                 description: copy.description,
-                selected: selectedPreset === preset,
+                selected: isSizeSelected(preset),
                 onClick: () => onChange({ ...value, imageSize: preset }),
               });
             })}
 
             {renderChoiceButton({
               keyValue: 'custom',
-              title: 'Píxeles exactos',
+              title: 'Dimensiones solicitadas',
               description: 'Define width y height para Seedream 5.',
               selected: typeof value.imageSize !== 'string',
               onClick: () => {
@@ -640,4 +655,23 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
   }
 
   return null;
+};
+
+
+export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelectionProps> = (props) => {
+  const onChange = (config: WizardProviderImageConfig) => {
+    if (props.commercial && 'imageSize' in config && typeof config.imageSize === 'string' && config.imageSize !== 'square' && !config.imageSize.startsWith('auto')) {
+      const defaults = createCommercialProviderImageConfig(config.provider, resolveAspectRatioForImageConfig(config));
+      if ('imageSize' in defaults) config = { ...config, imageSize: defaults.imageSize } as WizardProviderImageConfig;
+    }
+    props.onChange(config);
+  };
+  return <div className="space-y-3">
+    {props.commercial ? <p className="text-xs text-slate-500">Solicitud: {summarizeProviderImageConfig(props.value)}. Archivo guardado: JPEG sRGB, hasta 2048 px y 2.8 MB, sin ampliar. El proveedor puede devolver otro tamaño; 2K es un nivel nativo.</p> : null}
+    <ProviderImageConfigControls {...props} onChange={onChange} />
+    {props.commercial && props.provider !== 'openai-gpt-image-1.5' && !('quality' in props.value) && 'outputFormat' in props.value ? renderCompactOptions({
+      label: 'Formato solicitado al proveedor', values: COMMERCIAL_PHOTO_CAPABILITIES[props.provider].formats,
+      selected: props.value.outputFormat || '', onSelect: outputFormat => props.onChange({ ...props.value, outputFormat } as WizardProviderImageConfig), labels: OUTPUT_FORMAT_LABELS,
+    }) : null}
+  </div>;
 };

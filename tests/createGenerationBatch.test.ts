@@ -892,3 +892,13 @@ test('getCompatibleGarmentPoseCombinations permite mochila frontal de producto s
     ['gar-backpack:pose-back-upper'],
   );
 });
+
+test('new batches resolve aspect-only commercial defaults; explicit and historical generation configs remain unchanged', () => {
+  const request = { clientId: 'client-1', modelId: 'model-1', outputMode: 'photos_only' as const, poseIds: ['pose-1'], garments: [{ id: 'g', name: 'Shirt', storagePath: 'garments/drafts/user-1/d/g.jpg', isMultiAngle: false }], productDrafts: [], provider: 'fal-gpt-image-2.5-flare' as const, promptBase: '', aspectRatio: '1:1' as const };
+  const commercial = validateCreateGenerationBatchInput(request, 'user-1', 20);
+  assert.deepEqual(commercial.imageConfig, { provider: request.provider, imageSize: { width: 2048, height: 2048 }, quality: 'medium', outputFormat: 'jpeg' });
+  const legacy = validateCreateGenerationBatchInput(request, 'user-1', 20, false);
+  assert.deepEqual(legacy.imageConfig, { provider: request.provider, imageSize: 'square_hd', quality: 'medium', outputFormat: 'png' });
+  const explicit = { ...request, imageConfig: { provider: request.provider, imageSize: 'auto' as const, quality: 'high' as const, outputFormat: 'webp' as const } };
+  assert.deepEqual(validateCreateGenerationBatchInput(explicit, 'user-1', 20).imageConfig, explicit.imageConfig);
+});

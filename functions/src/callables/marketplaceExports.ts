@@ -64,7 +64,8 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
     for (const [outputId, url] of Object.entries(imageUrls)) {
       const existing = product.marketplaces[channel]?.imageUrls?.[outputId];
       if (existing === url) continue; // Historical links remain separate; only currently approved outputs may be exported.
-      if (request.data.authorizePublicImages !== true || !product.approvedImages.some(i => i.outputId === outputId) || !safePublicImageUrl(url)) throw new HttpsError('invalid-argument', 'Autoriza explícitamente URLs públicas permanentes de fotografías aprobadas.');
+      const publishedUrls = Object.values(product.publishedImages?.[channel] || {}).map(image => image.url);
+      if (request.data.authorizePublicImages !== true || !product.approvedImages.some(i => i.outputId === outputId) || !safePublicImageUrl(url, publishedUrls)) throw new HttpsError('invalid-argument', 'Autoriza explícitamente URLs públicas permanentes de fotografías aprobadas.');
     }
     let requirements: typeof data.requirements;
     if (data.requirements) {

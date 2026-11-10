@@ -15,11 +15,14 @@ export const isValidGtin = (value: string) => {
   const digits = [...value].map(Number); const check = digits.pop();
   return (10 - digits.reverse().reduce((sum, n, i) => sum + n * (i % 2 === 0 ? 3 : 1), 0) % 10) % 10 === check;
 };
-export const safePublicImageUrl = (value: string) => {
+export const safePublicImageUrl = (value: string, publishedUrls: readonly string[] = []) => {
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash
-      && !/localhost|(^|\.)local$|firebase|googleapis|drive\.google|cloudfunctions|127\.|^10\.|^192\.168\.|^169\.254\.|^172\.(1[6-9]|2\d|3[01])\.|\[|^0\./i.test(url.hostname);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.port) return false;
+    // Google URLs are accepted only when resolved from this product's server-owned publication registry.
+    if (url.hostname === 'storage.googleapis.com') return publishedUrls.includes(value)
+      && /^\/[a-z0-9-]+\/images\/[a-f0-9]{64}\/[a-f0-9]{64}\/[a-f0-9]{64}\.jpg$/.test(url.pathname);
+    return !/localhost|(^|\.)local$|firebase|googleapis|drive\.google|cloudfunctions|127\.|^10\.|^192\.168\.|^169\.254\.|^172\.(1[6-9]|2\d|3[01])\.|\[|^0\./i.test(url.hostname);
   } catch { return false; }
 };
 export const isImageField = (key: string) => /(?:img|image|foto|picture|imagen)/i.test(key);
@@ -46,6 +49,7 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
     if (!data || data.templateId !== template.id || data.categoryId !== category.id) { issue('category', 'Categoría sin configurar.'); return { rows: [], issues }; }
     if (!product.approvedImages.length) issue('images_pending', 'Imágenes pendientes de aprobación.');
     const mappings = template.exportConfig?.mappings[category.id!] || {};
+    const publishedUrls = Object.values(product.publishedImages?.[id] || {}).map(image => image.url);
     const nonemptySkus = product.variants.map(v => v.values.sku || product.values.sku || '').filter(Boolean);
     if (new Set(nonemptySkus).size !== nonemptySkus.length) issue('duplicate_sku', 'Las variantes deben tener SKU distintos; corrige los duplicados.');
     const rows = product.variants.map((variant, rowIndex) => {
@@ -65,7 +69,7 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         const allowed = getProductDraftColumnAllowedValues(category, column, values);
         if (value && allowed.length && !allowed.includes(value)) issue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
         if (value && column.dropdownFormula && !allowed.length) issue('unresolved_list', `${column.label}: lista dependiente sin resolver; requiere un adaptador específico.`, column.key);
-        if (value && (isImageField(column.key) || isImageField(column.label) || mapping?.source.startsWith('image.')) && (!safePublicImageUrl(value) || !product.approvedImages.some(img => data.imageUrls?.[img.outputId] === value))) issue('image_url', `${column.label}: configura una URL pública permanente de una imagen aprobada; las URLs privadas o temporales no son válidas.`, column.key);
+        if (value && (isImageField(column.key) || isImageField(column.label) || mapping?.source.startsWith('image.')) && (!safePublicImageUrl(value, publishedUrls) || !product.approvedImages.some(img => data.imageUrls?.[img.outputId] === value))) issue('image_url', `${column.label}: publica la fotografía aprobada o configura su URL pública permanente; las URLs privadas o temporales no son válidas.`, column.key);
         if (value && mapping?.dataType === 'number' && (!/^-?\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)))) issue('number', `${column.label}: número inválido.`, column.key);
         if (value && (mapping?.source === 'variant.gtin' || /^(gtin|ean|upc|universal_product_code|codigo_universal)$/.test(normalizedKey)) && !isValidGtin(value)) issue('gtin', `${column.label}: GTIN inválido; no se generará uno automáticamente.`, column.key);
         if (value && (mapping?.source === 'variant.asin' || normalizedKey === 'asin') && !/^[A-Z0-9]{10}$/.test(value)) issue('asin', `${column.label}: ASIN inválido.`, column.key);

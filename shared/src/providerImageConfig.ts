@@ -268,18 +268,21 @@ export const isFalBananaProImageConfig = (value: unknown): value is FalBananaPro
   isRecord(value)
   && value.provider === 'fal-banana-pro'
   && isBananaAspectRatio(value.aspectRatio)
-  && isBananaResolution(value.resolution);
+  && isBananaResolution(value.resolution)
+  && (value.outputFormat === undefined || isGPTImage2OutputFormat(value.outputFormat));
 
 export const isFalNanoBanana2ImageConfig = (value: unknown): value is FalNanoBanana2ImageConfig =>
   isRecord(value)
   && value.provider === 'fal-nano-banana-2'
   && isNanoBanana2AspectRatio(value.aspectRatio)
-  && isNanoBanana2Resolution(value.resolution);
+  && isNanoBanana2Resolution(value.resolution)
+  && (value.outputFormat === undefined || isGPTImage2OutputFormat(value.outputFormat));
 
 export const isFalSeedream5ImageConfig = (value: unknown): value is FalSeedream5ImageConfig =>
   isRecord(value)
   && value.provider === 'fal-seedream-5'
-  && (isSeedream5ImageSizePreset(value.imageSize) || isSeedream5CustomImageSize(value.imageSize));
+  && (isSeedream5ImageSizePreset(value.imageSize) || isSeedream5CustomImageSize(value.imageSize))
+  && (value.outputFormat === undefined || value.outputFormat === 'jpeg' || value.outputFormat === 'png');
 
 export const isOpenAIImageConfig = (value: unknown): value is OpenAIImageConfig =>
   isRecord(value)
@@ -318,11 +321,13 @@ const isBoundedImageSize = (value: unknown, flux: boolean): boolean => {
 export const isFalSeedream5StandardImageConfig = (value: unknown): value is FalSeedream5StandardImageConfig =>
   isRecord(value)
   && (value.provider === 'fal-seedream-5-pro' || value.provider === 'fal-seedream-5-flash')
-  && ((SEEDREAM_5_STANDARD_IMAGE_SIZE_VALUES as readonly unknown[]).includes(value.imageSize) || isBoundedImageSize(value.imageSize, false));
+  && ((SEEDREAM_5_STANDARD_IMAGE_SIZE_VALUES as readonly unknown[]).includes(value.imageSize) || isBoundedImageSize(value.imageSize, false))
+  && (value.outputFormat === undefined || value.outputFormat === 'jpeg' || value.outputFormat === 'png');
 
 export const isFalFlux2ImageConfig = (value: unknown): value is FalFlux2ImageConfig =>
   isRecord(value) && value.provider === 'fal-flux-2-edit'
-  && ((FAL_STANDARD_IMAGE_SIZE_VALUES as readonly unknown[]).includes(value.imageSize) || isBoundedImageSize(value.imageSize, true));
+  && ((FAL_STANDARD_IMAGE_SIZE_VALUES as readonly unknown[]).includes(value.imageSize) || isBoundedImageSize(value.imageSize, true))
+  && (value.outputFormat === undefined || isGPTImage2OutputFormat(value.outputFormat));
 
 export const isProviderImageConfig = (value: unknown): value is ProviderImageConfig =>
   isFalSeedreamImageConfig(value)

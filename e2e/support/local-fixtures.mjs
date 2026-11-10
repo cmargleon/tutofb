@@ -101,6 +101,12 @@ export const httpsCallable = (_, name) => async input => {
   (window.__localCalls ||= []).push({ name, input });
   if (name === 'saveMasterProduct') { masterFixture = { ...masterFixture, values: input.values, variants: input.variants, marketplaces: { ...masterFixture.marketplaces, ...input.marketplaces }, revision: masterFixture.revision + 1 }; return { data: { success: true, revision: masterFixture.revision } }; }
   if (name === 'previewMarketplaceExports') return { data: marketplacePreview() };
+  if (name === 'publishMarketplaceImages') {
+    const image = { outputId: 'local-output', jobId: 'local-job', sourceStoragePath: 'fixtures/catalog.svg', marketplaceId: input.marketplaceId, profileVersion: 'jpeg-v1', bucket: 'local-marketplace-images', storagePath: `images/${'a'.repeat(64)}/${'b'.repeat(64)}/${'c'.repeat(64)}.jpg`, url: `https://storage.googleapis.com/local-marketplace-images/images/${'a'.repeat(64)}/${'b'.repeat(64)}/${'c'.repeat(64)}.jpg`, contentType: 'image/jpeg', width: 1200, height: 1200, bytes: 10000, publishedAt: stamp, publishedByUid: 'local-admin' };
+    masterFixture.publishedImages = { ...masterFixture.publishedImages, [input.marketplaceId]: { 'local-output': image } };
+    masterFixture.marketplaces[input.marketplaceId].imageUrls = { 'local-output': image.url };
+    return { data: { images: [image], failures: [] } };
+  }
   if (name === 'downloadMarketplaceExports') return { data: { fileName: input.marketplaceIds.length === 1 ? 'fixture.xlsx' : 'fixture.zip', downloadUrl: '/__tuto_fixture.svg', expiresAt: Date.now() + 900000, failures: [], exportedMarketplaces: input.marketplaceIds } };
   if (name === 'listClients') return { data: { clients: records.clients, page: 1, hasMore: false } };
   if (name === 'generateModelPose') return { data: {

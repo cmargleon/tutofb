@@ -3,6 +3,7 @@ import { PermanentDeleteCatalogEntityRequest, PermanentDeleteCatalogEntityRespon
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { deletePublishedMarketplaceImages } from '../spreadsheets/marketplaceImages';
 
 export const permanentlyDeleteClient = onCall<
   PermanentDeleteCatalogEntityRequest,
@@ -28,6 +29,7 @@ export const permanentlyDeleteClient = onCall<
     throw new HttpsError('failed-precondition', 'Primero archiva el cliente antes de borrarlo definitivamente.');
   }
 
+  await deletePublishedMarketplaceImages(id);
   await clientRef.delete();
 
   return {

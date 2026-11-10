@@ -5,7 +5,7 @@ import {
   DEFAULT_TRY_ON_PROMPT,
   DEFAULT_IMAGE_PROVIDER,
 } from '../../../../shared/src/domain';
-import { createDefaultProviderImageConfig } from '../../../../shared/src/providerImageConfig';
+import { createCommercialProviderImageConfig } from '../../../../shared/src/commercialPhoto';
 import { WizardStepDefinition } from '../../wizard/types';
 import {
   GarmentUploadState,
@@ -44,17 +44,17 @@ export const createInitialGenerateWizardState = (): WizardState => ({
   productDraftPreparation: createInitialProductDraftPreparationState(),
   provider: DEFAULT_IMAGE_PROVIDER,
   providerImageConfigs: {
-    'fal-seedream': createDefaultProviderImageConfig('fal-seedream'),
-    'fal-banana-pro': createDefaultProviderImageConfig('fal-banana-pro'),
-    'openai-gpt-image-1.5': createDefaultProviderImageConfig('openai-gpt-image-1.5'),
-    'fal-nano-banana-2': createDefaultProviderImageConfig('fal-nano-banana-2'),
-    'fal-seedream-5': createDefaultProviderImageConfig('fal-seedream-5'),
-    'fal-gpt-image-2': createDefaultProviderImageConfig('fal-gpt-image-2'),
-    'fal-gpt-image-2.5-sunburst': createDefaultProviderImageConfig('fal-gpt-image-2.5-sunburst'),
-    'fal-gpt-image-2.5-flare': createDefaultProviderImageConfig('fal-gpt-image-2.5-flare'),
-    'fal-seedream-5-pro': createDefaultProviderImageConfig('fal-seedream-5-pro'),
-    'fal-seedream-5-flash': createDefaultProviderImageConfig('fal-seedream-5-flash'),
-    'fal-flux-2-edit': createDefaultProviderImageConfig('fal-flux-2-edit'),
+    'fal-seedream': createCommercialProviderImageConfig('fal-seedream'),
+    'fal-banana-pro': createCommercialProviderImageConfig('fal-banana-pro'),
+    'openai-gpt-image-1.5': createCommercialProviderImageConfig('openai-gpt-image-1.5'),
+    'fal-nano-banana-2': createCommercialProviderImageConfig('fal-nano-banana-2'),
+    'fal-seedream-5': createCommercialProviderImageConfig('fal-seedream-5'),
+    'fal-gpt-image-2': createCommercialProviderImageConfig('fal-gpt-image-2'),
+    'fal-gpt-image-2.5-sunburst': createCommercialProviderImageConfig('fal-gpt-image-2.5-sunburst'),
+    'fal-gpt-image-2.5-flare': createCommercialProviderImageConfig('fal-gpt-image-2.5-flare'),
+    'fal-seedream-5-pro': createCommercialProviderImageConfig('fal-seedream-5-pro'),
+    'fal-seedream-5-flash': createCommercialProviderImageConfig('fal-seedream-5-flash'),
+    'fal-flux-2-edit': createCommercialProviderImageConfig('fal-flux-2-edit'),
   },
   prompt: seedTryOnPrompt(DEFAULT_TRY_ON_PROMPT).general,
   tryOnPromptBlocks: seedTryOnPrompt(DEFAULT_TRY_ON_PROMPT).blocks,
@@ -65,7 +65,7 @@ export const getSelectedProviderImageConfig = (state: WizardState) => state.prov
 export const selectGenerateWizardProvider = (state: WizardState, provider: WizardState['provider']): WizardState => {
   const config = state.providerImageConfigs[provider];
   const imageConfig = 'imageSize' in config
-    ? { ...config, imageSize: 'portrait_4_3' as const }
+    ? { ...config, imageSize: (createCommercialProviderImageConfig(provider) as Extract<typeof config, { imageSize: unknown }>).imageSize }
     : 'aspectRatio' in config
       ? { ...config, aspectRatio: '3:4' as const }
       : config;

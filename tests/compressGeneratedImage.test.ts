@@ -153,6 +153,8 @@ const controlledEncoder = (metadata: { width?: number; height?: number }, candid
   // CommonJS wrapper permits injection at Sharp's boundary, isolated from the real module cache.
   const wrapper = runInNewContext(`(function(require, module, exports) { ${readFileSync(modulePath, 'utf8')}\n})`, { Buffer });
   wrapper((id: string) => {
+    if (id.endsWith('shared/src/commercialPhoto')) return require('./lib/shared/src/commercialPhoto.js');
+    if (id.endsWith('shared/src/providerImageConfig')) return require('./lib/shared/src/providerImageConfig.js');
     assert.ok(id === 'sharp' || id === require.resolve('sharp'), id);
     return fakeSharp;
   }, module, module.exports);
@@ -211,4 +213,89 @@ test('only resizes scales smaller than the known longest side, including landsca
       } : undefined);
     }
   }
+});
+
+const commercial = require(modulePath).compressGeneratedImageIfNeeded as typeof import('../functions/src/media/compressGeneratedImage').compressGeneratedImageIfNeeded;
+const profile = 'commercial-photo-v1' as const;
+test('commercial profile normalizes small PNG/WebP/JPEG, bounds geometry and records actual metadata despite incorrect MIME', async () => {
+  for (const [width, height] of [[1536, 2048], [2048, 2048], [2048, 1536], [13, 7], [3000, 1000]]) {
+    for (const format of ['png', 'webp', 'jpeg'] as const) {
+      const source = await sharp({ create: { width, height, channels: 4, background: '#66332200' } })[format]().toBuffer();
+      const result = await commercial({ bytes: source, contentType: 'image/wrong', photoProfile: profile,
+        imageConfig: { provider: 'fal-gpt-image-2.5-flare', imageSize: { width: 1536, height: 2048 }, quality: 'medium', outputFormat: 'png' } });
+      const metadata = await sharp(result.bytes).metadata();
+      const scale = Math.min(1, 2048 / Math.max(width, height));
+      assert.deepEqual([metadata.width, metadata.height], [Math.round(width * scale), Math.round(height * scale)]);
+      assert.equal(metadata.format, 'jpeg'); assert.equal(metadata.depth, 'uchar'); assert.equal(metadata.space, 'srgb');
+      assert.equal(metadata.hasAlpha, false); assert.ok(metadata.icc); assert.match(metadata.icc!.toString('ascii').replace(/\x00/g, ''), /sRGB/);
+      assert.equal(metadata.orientation, undefined); assert.equal(result.contentType, 'image/jpeg'); assert.ok(result.bytes.length <= 2_800_000);
+      assert.equal(result.storedImage!.sizeBytes, result.bytes.length);
+      assert.equal(result.storedImage!.requestedGeometryDiffers, width !== 1536 || height !== 2048);
+      if (format !== 'jpeg') { const { data } = await sharp(result.bytes).raw().toBuffer({ resolveWithObject: true }); assert.deepEqual([...data.subarray(0, 3)], [255, 255, 255]); }
+    }
+  }
+});
+
+test('commercial profile applies EXIF before sizing and converts P3/CMYK/16 bit inputs to tagged 8 bit sRGB', async () => {
+  for (const colour of ['p3', 'cmyk', 'rgb16'] as const) {
+    let pipeline = sharp({ create: { width: 3000, height: 1000, channels: 3, background: '#996644' } });
+    const source = colour === 'p3' ? await pipeline.withIccProfile('p3').jpeg().withExifMerge({ IFD0: { Orientation: '6' } }).toBuffer()
+      : colour === 'cmyk' ? await pipeline.toColourspace('cmyk').jpeg().withExifMerge({ IFD0: { Orientation: '6' } }).toBuffer()
+      : await pipeline.toColourspace('rgb16').png().withExifMerge({ IFD0: { Orientation: '6' } }).toBuffer();
+    const sourceMeta = await sharp(source).metadata();
+    const rotated = await sharp(source).rotate().toBuffer({ resolveWithObject: true });
+    const result = await commercial({ bytes: source, contentType: 'image/png', photoProfile: profile });
+    const m = await sharp(result.bytes).metadata();
+    const scale = Math.min(1, 2048 / Math.max(rotated.info.width, rotated.info.height));
+    assert.deepEqual([m.width, m.height], [Math.round(rotated.info.width * scale), Math.round(rotated.info.height * scale)]);
+    assert.equal(m.depth, 'uchar'); assert.equal(m.space, 'srgb'); assert.ok(m.icc); assert.equal(m.orientation, undefined);
+    if (colour === 'cmyk') assert.equal(sourceMeta.space, 'cmyk');
+    if (colour === 'rgb16') assert.equal(sourceMeta.depth, 'ushort');
+    if (colour === 'p3') assert.ok(sourceMeta.icc);
+  }
+});
+
+test('commercial profile decodes invalid and truncated bytes even under the byte limit', async () => {
+  await assert.rejects(commercial({ bytes: Buffer.from([1, 2, 3]), contentType: 'image/jpeg', photoProfile: profile }));
+  const png = await small().png().toBuffer();
+  await assert.rejects(commercial({ bytes: png.subarray(0, png.length - 30), contentType: 'image/png', photoProfile: profile }));
+});
+
+test('commercial adaptive encoding starts from original pixels and keeps full resolution before lowering it', async () => {
+  const original = await noise(2048, 2048).png().toBuffer();
+  assert.ok(original.length > 2_800_000);
+  const result = await commercial({ bytes: original, contentType: 'image/png', photoProfile: profile });
+  const m = await sharp(result.bytes).metadata(); assert.deepEqual([m.width, m.height], [2048, 2048]);
+  assert.ok(result.bytes.length <= 2_800_000);
+  for (const quality of [90, 88, 85, 82, 80]) {
+    const candidate = await sharp(original, { failOn: 'warning' }).rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true }).toColourspace('srgb').flatten({ background: '#ffffff' }).withIccProfile('srgb').jpeg({ quality, mozjpeg: true }).toBuffer();
+    if (candidate.length <= 2_800_000) { assert.deepEqual(result.bytes, candidate); break; }
+  }
+});
+
+test('commercial candidate order reduces size only after all qualities, avoids duplicate scales and rejects an impossible limit', async () => {
+  const policy = require('./lib/shared/src/commercialPhoto.js');
+  const input = Buffer.from('original pixels placeholder');
+  const attempts: Array<{ size: number; quality: number }> = [];
+  let successAt = 6;
+  const fakeSharp = (bytes: Buffer) => {
+    let size = 0, quality = 0;
+    const pipeline: any = {
+      rotate: () => pipeline, resize: (options: any) => { size = options.width; return pipeline; },
+      toColourspace: () => pipeline, flatten: () => pipeline, withIccProfile: () => pipeline,
+      jpeg: (options: any) => { quality = options.quality; return pipeline; },
+      metadata: async () => bytes === input ? { width: 10, height: 10, format: 'png' } : { width: 9, height: 9, format: 'jpeg', depth: 'uchar', space: 'srgb', icc: Buffer.from('sRGB'), hasAlpha: false },
+      toBuffer: async () => { assert.equal(bytes, input); attempts.push({ size, quality }); return Buffer.alloc(attempts.length === successAt ? 10 : 2_800_001); },
+    };
+    return pipeline;
+  };
+  const module = { exports: {} as typeof import('../functions/src/media/compressGeneratedImage') };
+  const wrapper = runInNewContext(`(function(require, module, exports) { ${readFileSync(modulePath, 'utf8')}\n})`, { Buffer });
+  wrapper((id: string) => id === 'sharp' ? fakeSharp : id.endsWith('commercialPhoto') ? policy : require('./lib/shared/src/providerImageConfig.js'), module, module.exports);
+  await module.exports.compressGeneratedImageIfNeeded({ bytes: input, contentType: 'image/png', photoProfile: profile });
+  assert.deepEqual(attempts, [90, 88, 85, 82, 80].map(quality => ({ size: 10, quality })).concat([{ size: 9, quality: 90 }]));
+  attempts.length = 0; successAt = -1;
+  await assert.rejects(module.exports.compressGeneratedImageIfNeeded({ bytes: input, contentType: 'image/png', photoProfile: profile }), /máximo absoluto/);
+  const scales = attempts.filter(a => a.quality === 90).map(a => a.size);
+  assert.equal(scales.length, new Set(scales).size); assert.equal(scales.at(-1), 1);
 });

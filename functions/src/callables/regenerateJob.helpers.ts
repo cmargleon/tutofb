@@ -1,3 +1,4 @@
+import { resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
 import { APPROVED_TRY_ON_PROMPT_FORMAT, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
 import { buildFinalGenerationPrompt, isProvider } from '../../../shared/src/domain';
@@ -16,7 +17,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     throw new Error('El prompt no puede quedar vacío para regenerar.');
   }
 
-  const { imageConfig, aspectRatio } = normalizeProviderImageConfig(provider, job.imageConfig, job.aspectRatio);
+  const { imageConfig, aspectRatio } = (job.photoProfile ? resolveCommercialPhotoConfig : normalizeProviderImageConfig)(provider, job.imageConfig, job.aspectRatio);
 
   return {
     ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),

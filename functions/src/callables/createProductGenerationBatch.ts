@@ -1,3 +1,4 @@
+import { COMMERCIAL_PHOTO_PROFILE, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
 import { automationScenePatch } from '../automation/recovery';
 import { createHash } from 'node:crypto';
@@ -21,7 +22,6 @@ export const createProductGenerationBatchCore = async (
   const system = await getSystemConfigCached();
   const data = validateProductGenerationInput(input, uid, system.batchMaxJobs);
   assertProviderEnabledInSystemConfig(data.provider, system, 'generar objetos');
-  const imageConfig = normalizeProviderImageConfig(data.provider, data.imageConfig, data.aspectRatio || '1:1');
   const batchId = automation ? `automation-${automation.id}` : `product-${createHash('sha256').update(`${uid}:${data.requestId}`).digest('hex')}`;
   const batchRef = db.collection('batches').doc(batchId);
   const clientRef = db.collection('clients').doc(data.clientId);
@@ -38,11 +38,17 @@ export const createProductGenerationBatchCore = async (
     if (!client || !isActiveCatalogEntity(client)) throw new HttpsError('not-found', 'El cliente no está disponible.');
     const automationRef = automation ? db.collection('automationJobs').doc(automation.id) : null;
     let automationPolicy: AutomationJob['effectivePolicy'];
+    let photoProfile = automation ? undefined : COMMERCIAL_PHOTO_PROFILE;
     if (automationRef) {
       const current = (await tx.get(automationRef)).data() as AutomationJob | undefined;
       if (!current || current.leaseToken !== automation!.leaseToken || current.status !== 'importing') throw new HttpsError('aborted', 'Reserva expirada.');
       automationPolicy = current.effectivePolicy;
+      photoProfile = current.photoProfile;
     }
+    const profilePatch = photoProfile === COMMERCIAL_PHOTO_PROFILE ? { photoProfile: COMMERCIAL_PHOTO_PROFILE } : {};
+    const imageConfig = profilePatch.photoProfile
+      ? resolveCommercialPhotoConfig(data.provider, data.imageConfig, data.aspectRatio)
+      : normalizeProviderImageConfig(data.provider, data.imageConfig, data.aspectRatio || '1:1');
     const jobs: Array<{ id: string; data: Omit<Job, 'id'> }> = [];
     for (const item of data.items) {
       for (const scene of data.scenes) {
@@ -56,7 +62,7 @@ export const createProductGenerationBatchCore = async (
           poseImagePath: item.referencePaths[0], poseFileName: item.name,
           garmentId: item.id, garmentName: item.name, garmentFilePath: item.referencePaths[1] || item.referencePaths[0],
           garmentIsMultiAngle: item.referencePaths.length > 1, finalPrompt: buildProductPrompt(data.prompt, scene.prompt),
-          provider: data.provider, aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig,
+          provider: data.provider, aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig, ...profilePatch,
           maxRetries: system.jobMaxRetries, completedAt: null, currentOutputId: null, currentOutput: null,
           completedOutputCount: 0, totalCostUsd: 0, totalDurationSeconds: 0, manualRegenerationCount: 0,
           createdAt: now, updatedAt: now, createdByUid: uid,
@@ -67,7 +73,7 @@ export const createProductGenerationBatchCore = async (
     const batch: Omit<Batch, 'id'> = {
       ...(automation ? { automationJobId: automation.id } : {}), generationKind: 'product', clientId: data.clientId, clientNameSnapshot: client.name,
       modelId: '', modelNameSnapshot: 'Producto', outputMode: 'photos_only', provider: data.provider,
-      aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig, promptBase: data.prompt, productScenes: data.scenes,
+      aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig, ...profilePatch, promptBase: data.prompt, productScenes: data.scenes,
       poseIds: [], garmentCount: data.items.length, totalJobs: jobs.length, pendingJobs: jobs.length, processingJobs: 0, completedJobs: 0, failedJobs: 0,
       status: 'pending', latestJobCreatedAt: now, createdAt: now, updatedAt: now, createdByUid: uid,
       createdByDisplayName: userSnapshot.data()?.displayName || null,

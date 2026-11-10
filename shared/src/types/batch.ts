@@ -31,6 +31,7 @@ export interface BatchModelSnapshot {
 }
 
 export interface Batch {
+  photoProfile?: import('./provider').CommercialPhotoProfile;
   promptFormat?: 'approved-try-on-v1';
   automationJobId?: string;
   generationKind?: 'garment' | 'product';

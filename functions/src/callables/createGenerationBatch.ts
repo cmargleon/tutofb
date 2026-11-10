@@ -1,3 +1,4 @@
+import { COMMERCIAL_PHOTO_PROFILE } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
 import { automationScenePatch } from '../automation/recovery';
 import type { AutomationPolicy } from '../../../shared/src/types';
@@ -35,7 +36,11 @@ const prepareGenerationBatch = async (
   groupIndex?: number,
 ) => {
     const systemConfig = await getSystemConfigCached();
-    const validated = validateCreateGenerationBatchInput(data, uid, systemConfig.batchMaxJobs);
+    const photoProfile = automation
+      ? (await getAppFirestore().collection('automationJobs').doc(automation.id).get()).data()?.photoProfile
+      : COMMERCIAL_PHOTO_PROFILE;
+    const profilePatch = photoProfile === COMMERCIAL_PHOTO_PROFILE ? { photoProfile: COMMERCIAL_PHOTO_PROFILE } : {};
+    const validated = validateCreateGenerationBatchInput(data, uid, systemConfig.batchMaxJobs, Boolean(profilePatch.photoProfile));
     assertProviderEnabledInSystemConfig(validated.provider, systemConfig, 'usar para crear un lote');
 
     const db = getAppFirestore();
@@ -140,6 +145,7 @@ const prepareGenerationBatch = async (
       provider: validated.provider,
       aspectRatio: validated.aspectRatio,
       imageConfig: validated.imageConfig,
+      ...profilePatch,
       promptBase: validated.promptBase,
       ...(validated.approvedPrompts ? { promptFormat: validated.promptFormat } : {}),
       poseIds: validated.poseIds,
@@ -252,6 +258,7 @@ const prepareGenerationBatch = async (
         garmentReferenceImageType: 'single_view',
         aspectRatio: validated.aspectRatio,
         imageConfig: validated.imageConfig,
+      ...profilePatch,
         ...jobDraft,
         maxRetries,
         completedAt: null,

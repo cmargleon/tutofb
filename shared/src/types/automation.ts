@@ -18,6 +18,7 @@ export interface AutomationInput {
   driveFile?: { folderId: string; fileId: string; revisionId?: string; version?: string };
 }
 export interface AutomationPreset {
+  photoProfile?: import('./provider').CommercialPhotoProfile;
   modelId?: string;
   poseIds?: string[];
   provider?: Provider;
@@ -45,6 +46,7 @@ export interface CreateAutomationJobRequest {
   allowEstimatedCosts?: boolean;
 }
 export interface AutomationJob extends CreateAutomationJobRequest {
+  photoProfile?: import('./provider').CommercialPhotoProfile;
   manglarAuthorization?: { uid: string; connectionId: string; role: import('./common').Role; accessVersion: number };
   id: string;
   createdByUid: string;
@@ -129,6 +131,7 @@ export interface AutomationItemState {
   scenes: AutomationSceneState[];
 }
 export interface AutomationPlan {
+  photoProfile?: import('./provider').CommercialPhotoProfile;
   id: string; createdByUid: string; clientId: string; clientName: string;
   request: CreateAutomationJobRequest; presetName: string; preset: AutomationPreset;
   policy: AutomationPolicy; modelId: string | null;

@@ -1,6 +1,39 @@
 import { test, expect, chromium } from '@playwright/test';
 import { openIsolatedBrowser } from './support/isolated-browser.mjs';
 
+test('publication requires consent, keeps unsaved fields and fills stable URLs before saving the product', async () => {
+  const isolated = await openIsolatedBrowser(chromium);
+  try {
+    const { page, baseURL } = isolated;
+    await page.goto(`${baseURL}/catalogo?clientId=local-client&batchId=local-batch`);
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
+    await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
+    await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Producto sin perder cambios');
+    await drawer.getByText('SHEIN · plantilla y datos de salida', { exact: true }).click();
+    const shein = drawer.locator('details').filter({ has: page.getByText('SHEIN · plantilla y datos de salida', { exact: true }) });
+    const prepare = shein.getByRole('button', { name: 'Preparar URL para SHEIN', exact: true });
+    await expect(prepare).toBeDisabled();
+    expect(await page.evaluate(() => ((window as any).__localCalls || []).some((call: any) => call.name === 'publishMarketplaceImages'))).toBe(false);
+    await shein.getByRole('checkbox', { name: 'Autorizo publicar copias', exact: false }).check();
+    await prepare.click();
+    const imageUrl = shein.getByRole('textbox', { name: 'URL pública · foto aprobada 1', exact: true });
+    await expect(imageUrl).toHaveValue(/^https:\/\/storage\.googleapis\.com\/.*\.jpg$/);
+    const url = await imageUrl.inputValue();
+    await expect(shein.getByRole('link', { name: 'Abrir imagen publicada' })).toHaveAttribute('href', url);
+    await expect(shein.getByRole('button', { name: 'Copiar URL' })).toBeVisible();
+    await expect(drawer.getByRole('textbox', { name: 'Nombre', exact: true })).toHaveValue('Producto sin perder cambios');
+    const calls = await page.evaluate(() => (window as any).__localCalls.filter((call: any) => call.name === 'publishMarketplaceImages'));
+    expect(calls).toHaveLength(1); expect(calls[0].input.authorizePublicImages).toBe(true); expect(calls[0].input.marketplaceId).toBe('shein');
+    await shein.screenshot({ path: '/tmp/tuto-marketplace-images-editor.png' });
+    await drawer.getByRole('button', { name: 'Guardar y volver a validar', exact: true }).click();
+    const save = await page.evaluate(() => (window as any).__localCalls.find((call: any) => call.name === 'saveMasterProduct'));
+    expect(save.input.marketplaces.shein.imageUrls['local-output']).toBe(url);
+    expect(save.input.values.name).toBe('Producto sin perder cambios');
+    await page.screenshot({ path: '/tmp/tuto-marketplace-images-publication.png' });
+  } finally { await isolated.close(); }
+});
+
 test('catalog opens one export drawer, validates without creating files, selects all and downloads only on click', async () => {
   const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 1280, height: 900 } });
   const { page, baseURL } = isolated;

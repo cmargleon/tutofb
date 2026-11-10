@@ -138,3 +138,15 @@ test('UI and backend share the same price calculation and source catalog', () =>
     assert.notEqual(MODEL_PHOTO_PROVIDER_HINTS[modelProvider], 'Generación mediante fal.ai');
   }
 });
+
+test('commercial estimates and budget holds use the effective request including native 2K and larger custom areas', () => {
+  const { createCommercialProviderImageConfig } = require('../functions/lib/shared/src/commercialPhoto.js') as typeof import('../shared/src/commercialPhoto');
+  const { estimateGenerationHold } = require('../functions/lib/functions/src/costs/generationEstimates.js') as typeof import('../functions/src/costs/generationEstimates');
+  const { getProviderCostUsd } = require('../functions/lib/shared/src/constants/providerCosts.js') as typeof import('../shared/src/constants/providerCosts');
+  for (const [provider, expected] of [['fal-nano-banana-2', 0.12], ['fal-banana-pro', 0.15], ['fal-seedream-5-pro', 0.1395], ['fal-flux-2-edit', 0.06]] as const) {
+    const config = createCommercialProviderImageConfig(provider);
+    assert.equal(getProviderCostUsd(provider, config, 2), expected);
+    const estimate = estimateGenerationHold(provider, config, 2);
+    assert.equal(estimate.estimateUsd, expected); assert.ok(estimate.holdUsd >= expected);
+  }
+});

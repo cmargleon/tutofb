@@ -1,5 +1,4 @@
 import { seedTryOnPrompt } from '../../../../../shared/src/approvedTryOnPrompt';
-import { createDefaultProviderImageConfig } from '../../../../../shared/src/providerImageConfig';
 import { createDefaultProductGeneration } from '../../../../../shared/src/productGeneration';
 import { useToast } from '../../../feedback/FeedbackProvider';
 import { useProductGeneration } from './useProductGeneration';
@@ -125,7 +124,6 @@ export const useGenerateWizard = () => {
   const [areProductScenesDirty, setAreProductScenesDirty] = useState(false);
   const [excludedItemsNotice, setExcludedItemsNotice] = useState<string | null>(null);
   const excludedSignatureRef = useRef('');
-  const previousGenerationKindRef = useRef<WizardState['generationKind']>(null);
 
   const { config: systemConfig, loading: systemConfigLoading } = useSystemConfig();
   const productDefaults = useMemo(() => createDefaultProductGeneration(systemConfig), [systemConfig.systemPromptProduct, systemConfig.systemProductScenePrompts]);
@@ -137,8 +135,6 @@ export const useGenerateWizard = () => {
     const generationKind = resolveWizardMajorityKind(state.garments);
     const excludedItems = generationKind ? state.garments.filter((garment) => getEffectiveItemKind(garment) !== generationKind) : [];
     const excludedIds = new Set(excludedItems.map((garment) => garment.id));
-    const shouldResetImageConfig = Boolean(generationKind && previousGenerationKindRef.current !== generationKind);
-    if (generationKind) previousGenerationKindRef.current = generationKind;
     if (excludedItems.length) {
       const signature = excludedItems.map((garment) => garment.id).join('|');
       if (excludedSignatureRef.current !== signature) {
@@ -159,9 +155,7 @@ export const useGenerateWizard = () => {
         outputMode: generationKind === 'product' ? 'photos_only' : current.outputMode,
         selectedSpreadsheetTemplateId: generationKind === 'product' ? null : current.selectedSpreadsheetTemplateId,
         selectedSpreadsheetCategoryId: generationKind === 'product' ? null : current.selectedSpreadsheetCategoryId,
-        providerImageConfigs: shouldResetImageConfig ? Object.fromEntries(Object.keys(current.providerImageConfigs).map((provider: WizardState['provider']) => [
-          provider, createDefaultProviderImageConfig(provider),
-        ])) as WizardState['providerImageConfigs'] : current.providerImageConfigs,
+
       });
     });
   }, [state.garments, toast]);

@@ -1,0 +1,28 @@
+{
+  "checkedAt": "2026-11-09T16:58:07.177Z",
+  "projectId": "tutofb-260320-1003",
+  "bucket": "tutofb-260320-1003-marketplace-images",
+  "location": "us-central1",
+  "delivery": "Direct Cloud Storage HTTPS; no Function invocation on image GET/HEAD",
+  "publicRole": "roles/storage.legacyObjectReader",
+  "runtimeRole": "roles/storage.objectUser",
+  "deployedFunctions": [
+    "publishMarketplaceImages",
+    "previewMarketplaceExports",
+    "downloadMarketplaceExports",
+    "saveMasterProduct",
+    "permanentlyDeleteClient"
+  ],
+  "checks": {
+    "anonymousHead": 200,
+    "cacheControl": "public,max-age=86400,immutable",
+    "anonymousGet": 200,
+    "downloadMatchesPublishedJpeg": true,
+    "anonymousList": 401,
+    "privateBucketAnonymousHead": 403,
+    "unauthenticatedPublication": 401,
+    "hostingBundleMatchesBuild": true
+  },
+  "verificationImage": "Synthetic local fixture; removed after checks",
+  "verificationScope": "Local unit/integration/browser tests and deployed transport/access checks. No real catalog photos were published and no marketplace listing was submitted."
+}

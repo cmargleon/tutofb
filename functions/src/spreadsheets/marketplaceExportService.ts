@@ -11,6 +11,7 @@ import { validId } from '../manglar/access';
 import { projectMasterProducts } from './masterProducts';
 import { inspectWorkbookPackage, patchWorkbookCells, assertPatchableCells, rangeContains, type SheetPatch, type CellPatch, xmlAttrs, validationAccepts } from './ooxmlWorkbook';
 import { sanitizeSpreadsheetFileName } from './batchSpreadsheetExport';
+import { attachMarketplacePublications } from './marketplaceImages';
 
 export function normalizeExportScope(input: MarketplaceExportScope): MarketplaceExportScope {
   const clientId = validId(input?.clientId);
@@ -52,6 +53,7 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
     const legacy = p.legacyDrafts.find(d => d.templateId === t.id || d.templateId === t.exportConfig?.replacesTemplateId || t.exportConfig?.legacyTemplateIds?.includes(d.templateId));
     if (legacy && t.categoryIds.includes(legacy.categoryId)) p.marketplaces[t.exportConfig.marketplaceId] = { templateId: t.id!, categoryId: legacy.categoryId };
   }
+  await attachMarketplacePublications(products, MARKETPLACES.filter(channel => client.marketplaces?.[channel.id]?.enabled).map(channel => channel.id));
   return { scope, client, products, templates, categories };
 }
 type Context = Awaited<ReturnType<typeof loadExportContext>>;

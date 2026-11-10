@@ -1,3 +1,4 @@
+import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
 import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -40,6 +41,10 @@ export const processAutomation = async (jobId: string): Promise<void> => {
     const client = clientSnapshot.data() as Client | undefined;
     if (!client || client.status === 'archived') throw new AutomationAttentionError('Cliente no disponible.');
     const preset = job.resolvedPreset ? { name: job.requestedPreset, config: job.resolvedPreset, modelId: job.modelId || null } : resolveAutomationPreset(job, client);
+    if (!job.resolvedPreset && !job.photoProfile) {
+      const legacyConfig = client.automation?.presets?.[preset.name];
+      preset.config = { ...preset.config, photoProfile: undefined, ...normalizeProviderImageConfig(preset.config.provider!, legacyConfig?.imageConfig, legacyConfig?.aspectRatio || '3:4') };
+    }
     const modelOptions = job.jobType === 'garment'
       ? job.modelOptions || await loadAutomationModelOptions(job.clientId, client, job.modelId || preset.config.modelId, preset.config.poseIds)
       : undefined;

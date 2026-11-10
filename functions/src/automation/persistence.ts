@@ -1,3 +1,5 @@
+import { COMMERCIAL_PHOTO_PROFILE } from '../../../shared/src/commercialPhoto';
+import { resolveAutomationPreset } from './presets';
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getManglarContext } from '../manglar/context';
 import { delegatedStamp } from '../manglar/access';
@@ -50,10 +52,12 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
     const uploadBindings = await readUploadBindings(tx, data);
     const now = FieldValue.serverTimestamp();
+    const resolved = plan ? null : resolveAutomationPreset(data, client.data() as Client);
     const job: AutomationJob = {
+      ...(plan ? (plan.photoProfile ? { photoProfile: plan.photoProfile } : {}) : { photoProfile: COMMERCIAL_PHOTO_PROFILE, resolvedPreset: resolved!.config }),
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
       ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy, budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, providerConfirmedUsd: null },
-      ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd, ...(plan.modelOptions ? { modelOptions: plan.modelOptions } : {}) } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || '', createdByUid: uid, status: 'pending',
+      ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd, ...(plan.modelOptions ? { modelOptions: plan.modelOptions } : {}) } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || resolved?.name || plan?.presetName || '', createdByUid: uid, status: 'pending',
       inputImages: data.inputImages || [], sourceImages: data.inputImages || [], outputImages: [], generationJobIds: [], batchId: null,
       createdAt: now, updatedAt: now, startedAt: null, completedAt: null, failedAt: null,
       error: null, retryCount: 0, leaseToken: null, leaseExpiresAt: null,
@@ -86,11 +90,13 @@ export const retryAutomation = async (input: RetryAutomationJobRequest, uid: str
     const maxIntakeRetries = Math.min(job.effectivePolicy?.maxOperationalRetries ?? MAX_INTAKE_ATTEMPTS - 1, global.maxOperationalRetries, client.data()?.automation?.maxOperationalRetries ?? global.maxOperationalRetries);
     if (!['failed', 'needs_attention'].includes(job.status) || job.retryCount >= maxIntakeRetries) throw new HttpsError('failed-precondition', 'Reintentos agotados o trabajo activo.');
     const data = validateAutomationInput({ ...job, inputImages: job.sourceImages || job.inputImages, ...input }, input.inputImages ? uid : job.createdByUid);
+    if (job.planId && (input.preset || input.provider || input.modelId)) throw new HttpsError('failed-precondition', 'Prepara un nuevo plan para cambiar la configuración autorizada.');
+    const updatedPreset = job.photoProfile && (input.preset || input.provider || input.modelId) ? resolveAutomationPreset(data, client.data() as Client).config : null;
     const uploadBindings = await readUploadBindings(tx, data);
     uploadBindings.forEach((binding) => tx.create(binding, { inputClientId: data.clientId }));
     tx.update(ref, {
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
-      ...((input.preset || input.provider || input.modelId) ? { resolvedPreset: FieldValue.delete(), modelOptions: FieldValue.delete() } : {}),
+      ...((input.preset || input.provider || input.modelId) ? { resolvedPreset: updatedPreset || FieldValue.delete(), modelOptions: FieldValue.delete() } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       modelId: data.modelId || null, requestedPreset: data.preset || '', preset: data.preset || null,
       inputImages: data.inputImages || [], ...(input.inputImages ? { sourceImages: input.inputImages } : {}), status: 'pending', error: null,

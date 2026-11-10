@@ -1,3 +1,4 @@
+import { resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { mapModelPhotoProviderToProvider } from '../../../shared/src/domain';
@@ -38,7 +39,7 @@ export const estimateManglarAction = async (operation: Operation, data: any) => 
     else if (['wizard.createGarment', 'wizard.createProduct'].includes(key)) {
         const request = data.request;
         units = request.garments ? request.garments.length * request.poseIds.length : request.items.length * request.scenes.length;
-        const config = normalizeProviderImageConfig(request.provider, request.imageConfig, request.aspectRatio || '3:4').imageConfig;
+        const config = resolveCommercialPhotoConfig(request.provider, request.imageConfig, request.aspectRatio).imageConfig;
         const references = request.items ? Math.max(...request.items.map((item: any) => item.referencePaths.length)) : 2;
         const hold = estimateGenerationHold(request.provider as Provider, config, references);
         initialHoldUsd = (hold.holdUsd + GEMINI_OPERATION_HOLD_USD) * units!;

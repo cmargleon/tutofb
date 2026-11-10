@@ -23,7 +23,7 @@ test('selecting any available provider defaults to portrait framing and preserve
   }
   const selected = selectGenerateWizardProvider(state, 'fal-gpt-image-2.5-flare');
   assert.deepEqual(selected.providerImageConfigs['fal-gpt-image-2.5-flare'], {
-    provider: 'fal-gpt-image-2.5-flare', imageSize: 'portrait_4_3', quality: 'high', outputFormat: 'jpeg',
+    provider: 'fal-gpt-image-2.5-flare', imageSize: { width: 1536, height: 2048 }, quality: 'high', outputFormat: 'jpeg',
   });
   assert.equal((state.providerImageConfigs['fal-gpt-image-2.5-flare'] as any).imageSize, 'square_hd');
 });

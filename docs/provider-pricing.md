@@ -1,6 +1,6 @@
 # Precios de generación
 
-Verificados el 16 de octubre de 2026. Moneda: USD. La fuente del cálculo para interfaz y Functions es `shared/src/constants/providerCosts.ts`.
+Revisados el 9 de noviembre de 2026 (tarifas estimadas; sin conciliación de facturas). Moneda: USD. La fuente del cálculo para interfaz y Functions es `shared/src/constants/providerCosts.ts`.
 
 | Modelo activo | Precio de generación |
 | --- | --- |
@@ -36,3 +36,12 @@ Fuentes oficiales:
 - PNG/JPEG/WEBP no tienen recargo publicado en estas tarifas.
 - El total multiplica el estimado unitario por las imágenes a generar. Las poses que reutilizan una referencia no agregan generación. Reintentos y revisiones adicionales no están incluidos.
 - No se han modificado costos históricos ni la configuración de proveedores; el proveedor OpenAI directo retirado conserva su compatibilidad histórica.
+
+
+## Perfil comercial v1
+
+La configuración efectiva se congela antes de estimar o reservar: Wizard, planes, Manglar y worker comparten el resolver comercial y `providerCosts`; `estimateGenerationHold` reserva sobre esa misma configuración. Los planes autorizados no se recalculan al ejecutar. No se modifican cargos históricos.
+
+En 3:4, Banana 2 pasa de US$0.08 (1K) a US$0.12 (2K); Pro mantiene US$0.15. Seedream Pro 1536×2048 supera 1536²: US$0.135 más referencias adicionales (dos referencias: US$0.1395). FLUX 1536×2048 estima 3 MP de salida más entrada (dos referencias: US$0.06). GPT conserva medium; los tamaños no publicados usan la heurística existente por área y ratio, no una factura ni un límite garantizado. Calidad JPEG 90 de almacenamiento es independiente de calidad medium/high de generación.
+
+Se mantienen autorización, reservas conservadoras para costos variables y liquidación. Reducir el archivo a 2048 px después de generarlo no reduce la factura del proveedor. Fuentes de la revisión: [Banana Pro](https://fal.ai/nano-banana-pro), [Banana 2](https://fal.ai/learn/tools/how-to-use-nano-banana-2), [Pro edit](https://fal.ai/models/bytedance/seedream/v5/pro/edit), [FLUX edit](https://fal.ai/models/fal-ai/flux-2/edit), [GPT 2.5](https://fal.ai/gpt-image-2.5). Los ejemplos documentados y las estimaciones se distinguen de las respuestas simuladas de las pruebas.

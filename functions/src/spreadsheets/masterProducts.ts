@@ -3,6 +3,11 @@ import type { Batch, Job, MasterProduct, ProductDraft, StoredMasterProduct } fro
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 
 export const masterProductId = (batch: Pick<Batch, 'id' | 'automationJobId'>, garmentId: string) => createHash('sha256').update(`${batch.automationJobId || batch.id}\0${garmentId}`).digest('hex').slice(0, 40);
+export const isApprovedMasterProductOutput = (job: Job, output = resolveApprovedJobOutput(job)): boolean => Boolean(
+  job.status === 'completed' && !job.manuallyFlagged && output && typeof output.id === 'string' && output.id
+  && typeof output.resultImagePath === 'string' && output.resultImagePath.startsWith(`generated/${job.clientId}/${job.batchId}/`)
+  && (Boolean(job.userSelectedOutput?.id && job.userSelectedOutput.id === output.id) || output.autoReview?.verdict === 'approved'),
+);
 const productAliases: Record<string, string[]> = { name: ['goods_name', 'item_name', 'product_name', 'title'], description: ['goods_description', 'product_description', 'description'], brand: ['brand', 'brand_name'], material: ['material'], composition: ['composition'] };
 const variantAliases: Record<string, string[]> = { sku: ['sku_code', 'item_sku', 'seller_sku', 'sku'], color: ['main_attribute_value', 'color', 'colour'], size: ['secondary_attribute_1_value', 'size'], price: ['price', 'standard_price', 'retail_price'], inventory: ['quantity', 'inventory'], gtin: ['gtin', 'ean', 'upc'], asin: ['asin'], spu: ['supplier_code'], skc: ['skc'] };
 export function projectMasterProducts(clientId: string, batches: Batch[], jobs: Job[], drafts: ProductDraft[], stored: Record<string, StoredMasterProduct> = {}): MasterProduct[] {
@@ -27,7 +32,7 @@ export function projectMasterProducts(clientId: string, batches: Batch[], jobs: 
     } else {
       const output = resolveApprovedJobOutput(item);
       // A manual selection is an explicit approval in the existing review flow.
-      const approved = item.status === 'completed' && !item.manuallyFlagged && output && typeof output.id === 'string' && Boolean(output.id) && typeof output.resultImagePath === 'string' && output.resultImagePath.startsWith(`generated/${clientId}/${item.batchId}/`) && (Boolean(item.userSelectedOutput?.id && item.userSelectedOutput.id === output.id) || output.autoReview?.verdict === 'approved');
+      const approved = isApprovedMasterProductOutput(item, output);
       if (output?.id && output.resultImagePath && !p.generatedImages!.some(i => i.outputId === output.id)) p.generatedImages!.push({ outputId: output.id, jobId: item.id!, storagePath: output.resultImagePath, approved: Boolean(approved) });
       if (approved && output && !p.approvedImages.some(i => i.outputId === output.id)) p.approvedImages.push({ outputId: output.id, jobId: item.id!, storagePath: output.resultImagePath });
       else if (!approved) p.pendingImages++;

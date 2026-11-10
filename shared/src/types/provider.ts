@@ -48,6 +48,7 @@ export interface FalSeedreamImageConfig {
 }
 
 export interface FalBananaProImageConfig {
+  outputFormat?: GPTImage2OutputFormat;
   provider: 'fal-banana-pro';
   aspectRatio: BananaAspectRatio;
   resolution: BananaResolution;
@@ -60,12 +61,14 @@ export interface OpenAIImageConfig {
 }
 
 export interface FalNanoBanana2ImageConfig {
+  outputFormat?: GPTImage2OutputFormat;
   provider: 'fal-nano-banana-2';
   aspectRatio: NanoBanana2AspectRatio;
   resolution: NanoBanana2Resolution;
 }
 
 export interface FalSeedream5ImageConfig {
+  outputFormat?: 'jpeg' | 'png';
   provider: 'fal-seedream-5';
   imageSize: Seedream5ImageSizePreset | SeedreamCustomImageSize;
 }
@@ -86,10 +89,12 @@ export interface FalGPTImage25ImageConfig {
   outputFormat: GPTImage2OutputFormat;
 }
 export interface FalSeedream5StandardImageConfig {
+  outputFormat?: 'jpeg' | 'png';
   provider: FalSeedream5StandardProvider;
   imageSize: Exclude<GPTImage2ImageSizePreset, 'auto'> | 'auto_1K' | 'auto_2K' | SeedreamCustomImageSize;
 }
 export interface FalFlux2ImageConfig {
+  outputFormat?: GPTImage2OutputFormat;
   provider: 'fal-flux-2-edit';
   imageSize: Exclude<GPTImage2ImageSizePreset, 'auto'> | SeedreamCustomImageSize;
 }
@@ -107,3 +112,11 @@ export type ProviderImageConfig =
 
 // Re-export for convenience — provider.ts is the natural home for Provider too
 export type { Provider, AspectRatio };
+
+export type CommercialPhotoProfile = 'commercial-photo-v1';
+export interface StoredPhotoMetadata {
+  width: number; height: number; sizeBytes: number; format: 'jpeg';
+  space: 'srgb'; depth: 'uchar'; hasAlpha: false; hasSrgbIcc: true;
+  sourceWidth: number; sourceHeight: number; sourceFormat: string;
+  requestedGeometryDiffers: boolean;
+}

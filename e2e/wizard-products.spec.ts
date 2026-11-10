@@ -141,7 +141,7 @@ test('selecting a model resets to Portrait 4:3 while preserving quality, format 
   await page.getByRole('button', { name: 'Crear lote y abrir evaluación (6)', exact: true }).click();
   await expect(page).toHaveURL(/batchId=product-test/);
   expect(await page.evaluate(() => (window as any).__productRequest.imageConfig)).toMatchObject({
-    provider: 'fal-gpt-image-2.5-flare', imageSize: 'landscape_4_3', quality: 'high', outputFormat: 'jpeg',
+    provider: 'fal-gpt-image-2.5-flare', imageSize: { width: 2048, height: 1536 }, quality: 'high', outputFormat: 'jpeg',
   });
 });
 
@@ -177,7 +177,7 @@ test('detects an object before configuration, groups references and submits edit
   expect(request.items[0].referencePaths).toHaveLength(2);
   expect(request.scenes).toEqual([{ type: 'clean', prompt: 'On a wooden table' }]);
   expect(request.prompt).toBe('Warm soft light');
-  expect(request.imageConfig.imageSize).toBe('portrait_4_3');
+  expect(request.imageConfig.imageSize).toEqual({ width: 1665, height: 2220 });
   expect(request.modelId).toBeUndefined();
   expect(await page.evaluate(() => (window as any).__uploadCalls)).toBe(1);
 });
@@ -192,6 +192,9 @@ test('correcting the photography type preserves uploaded references and detects 
   await expect(page.getByText('1 seleccionada de 2')).toBeVisible();
   await next(page).click();
   await expect(page.getByRole('button', { name: /Crear lote y abrir evaluación/ })).toBeEnabled();
+  await page.getByRole('button', { name: /^Square HD/ }).click();
+  await page.getByRole('button', { name: 'High', exact: true }).click();
+  await page.getByRole('button', { name: 'PNG', exact: true }).click();
   await back(page).click();
   await back(page).click();
   await page.getByText('Cambiar tipo de fotografía', { exact: true }).click();
@@ -207,6 +210,7 @@ test('correcting the photography type preserves uploaded references and detects 
   expect(uploaded.calls).toBe(1);
   expect(uploaded.analysis).toBe(1);
   expect(uploaded.request.items[0].referencePaths).toHaveLength(1);
+  expect(uploaded.request.imageConfig).toMatchObject({ imageSize: { width: 2048, height: 2048 }, quality: 'high', outputFormat: 'png' });
 });
 
 test('mobile wizard validates reference limits and generates all six scenes with Flare by default', async ({ page }) => {
@@ -234,7 +238,7 @@ test('mobile wizard validates reference limits and generates all six scenes with
   await expect(page).toHaveURL(/batchId=product-test/);
   const request = await page.evaluate(() => (window as any).__productRequest);
   expect(request.provider).toBe('fal-gpt-image-2.5-flare');
-  expect(request.imageConfig.imageSize).toBe('portrait_4_3');
+  expect(request.imageConfig.imageSize).toEqual({ width: 1536, height: 2048 });
   expect(request.scenes).toHaveLength(6);
   expect(request.scenes.filter((entry: { type: string }) => entry.type.startsWith('human_use_'))).toHaveLength(2);
 });

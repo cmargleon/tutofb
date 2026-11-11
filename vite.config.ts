@@ -32,11 +32,9 @@ export default defineConfig(() => {
               return 'vendor-firebase-functions';
             }
 
-            if (id.includes('/@firebase/app/') || id.includes('/firebase/app/')) {
-              return 'vendor-firebase-core';
-            }
-
             if (id.includes('/@firebase/') || id.includes('/firebase/')) {
+              // Keep Firebase app core with App Check and their shared dependencies.
+              // Splitting them creates a cycle when App Check registers at module evaluation.
               return 'vendor-firebase-shared';
             }
 

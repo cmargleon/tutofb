@@ -72,7 +72,7 @@ functions/src/  → Backend: callables/ · triggers/ · workers/ · review/ · p
 
 **Flujo de submit:** `useGenerateWizardSubmit` → callable `createGenerationBatch` → Batch + Jobs en Firestore → trigger `processJobOnCreate` → `jobWorker.ts` (claim → provider → Gemini review → resultado).
 
-**Proveedores disponibles:** `fal-seedream`, `fal-banana-pro`, `fal-nano-banana-2`, `fal-seedream-5`, `openai-gpt-image-1.5`.
+**Proveedores disponibles** (`PROVIDERS` en `shared/src/constants.ts`): `fal-seedream`, `fal-banana-pro`, `fal-nano-banana-2`, `fal-seedream-5`, `fal-gpt-image-2`, `openai-gpt-image-1.5`.
 
 ---
 

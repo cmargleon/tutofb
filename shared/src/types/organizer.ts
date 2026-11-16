@@ -195,6 +195,37 @@ export interface OrganizerInterpretation {
   relationships: { variantIds: string[]; kind: 'base' | 'visual' | 'commercial' | 'shared'; evidence: string[] }[];
   unresolved: string[];
 }
+export interface OrganizerProductContext {
+  clientId: string;
+  baseProductId: string;
+  variantId: string;
+}
+
+export interface OrganizerBatchOrigin extends Omit<OrganizerProductContext, 'clientId'> {
+  itemId: string;
+}
+
+export interface OrganizerGeneration {
+  batchId: string;
+  createdAt: number;
+  itemIds: string[];
+  masterProductIds: string[];
+  approved: number;
+  attention: number;
+  inProgress: number;
+  cancelled: number;
+}
+
+export interface OrganizerProductWorkflow {
+  context: OrganizerProductContext;
+  baseName: string;
+  variant: OrganizerVariant;
+  variants: Array<Pick<OrganizerVariant, 'id' | 'visual' | 'color' | 'pack' | 'capacity'>>;
+  references: Array<{ id: string; name: string; sourceUrl: string | null; view: string }>;
+  generations: OrganizerGeneration[];
+  pendingAutomation: number;
+}
+
 export type OrganizerRequest =
   | { action: 'clients'; cursor?: string }
   | { action: 'config'; clientId: string }
@@ -206,11 +237,13 @@ export type OrganizerRequest =
   | { action: 'files' | 'ledger' | 'plan'; clientId: string; runId: string; cursor?: string }
   | { action: 'interpretations'; clientId: string; cursor?: string }
   | { action: 'provenance'; clientId: string; variantId: string; cursor?: string }
-  | { action: 'draft'; clientId: string; variantId: string }
+  | { action: 'workflow'; clientId: string; variantId: string; baseProductId?: string; batchId?: string }
+  | { action: 'draft'; clientId: string; variantId: string; baseProductId?: string }
   | { action: 'thumbnail'; clientId: string; photoId: string }
   | { action: 'correct'; clientId: string; photoId: string; variantId: string | null; variantIds?: string[]; photoIds?: string[]; referenceVariantIds?: string[] }
   | { action: 'references'; clientId: string; variantId: string; decision: 'approve' | 'reject' | 'reset' };
 export interface OrganizerDraft {
+  context?: OrganizerProductContext;
   name: string;
   kind: 'garment' | 'product';
   color: string;
@@ -244,7 +277,7 @@ export interface OrganizerClient {
   driveFolderIds?: string[];
 }
 
-export type OrganizerResponse = OrganizerDraft | { mimeType: 'image/jpeg'; base64: string } | OrganizerConfig | OrganizerRun | OrganizerVariant | OrganizerPhoto | null
+export type OrganizerResponse = OrganizerProductWorkflow | OrganizerDraft | { mimeType: 'image/jpeg'; base64: string } | OrganizerConfig | OrganizerRun | OrganizerVariant | OrganizerPhoto | null
   | OrganizerPage<OrganizerClient>
   | OrganizerPage<OrganizerRun | OrganizerVariant | OrganizerPhoto | OrganizerProductRow | OrganizerTab | OrganizerRunFile | OrganizerLedgerItem | OrganizerBaseProduct | OrganizerCommercialVariant | OrganizerPlanItem | OrganizerInterpretation>
   | { run: OrganizerRun; reportUrl: string | null; controlSheetUrl: string | null };

@@ -31,6 +31,7 @@ interface ProductDraftEditorProps {
   showGeneratedImagesSummary?: boolean;
   showAddRowButton?: boolean;
   showRowActions?: boolean;
+  resolvedValuesByRow?: Record<string, ProductDraftRow['values']>;
   resolveDropdownChoices?: (
     draft: EditableDraft,
     row: ProductDraftRow,
@@ -162,6 +163,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
   showGeneratedImagesSummary = true,
   showAddRowButton = true,
   showRowActions = true,
+  resolvedValuesByRow,
   resolveDropdownChoices,
   resolveVisibleColumns,
   onChangeRows,
@@ -224,7 +226,10 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
       isDropdown,
       isFixedDropdown,
       placeholder,
-    } = getFieldState(activeCategory, activeDraft, row, column, resolveDropdownChoices);
+    } = getFieldState(activeCategory, activeDraft, {
+      ...row,
+      values: resolvedValuesByRow?.[row.id] || row.values,
+    }, column, resolveDropdownChoices);
 
     const updateValue = (nextValue: string) => {
       patchRows((rows) =>
@@ -245,6 +250,8 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
     if (isDropdown) {
       return (
         <select
+          data-draft-field={column.key}
+          data-draft-row={row.id}
           aria-label={column.label}
           aria-required={column.required || undefined}
           value={resolvedValue}
@@ -283,6 +290,8 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
         ) : null}
         <input
           type="text"
+          data-draft-field={column.key}
+          data-draft-row={row.id}
           aria-label={column.label}
           aria-required={column.required || undefined}
           value={displayValue}
@@ -384,7 +393,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
                 ...activeCategory,
                 columns: activeColumns,
               },
-              row,
+              { ...row, values: resolvedValuesByRow?.[row.id] || row.values },
             );
             return (
               <div key={row.id} className="space-y-4">

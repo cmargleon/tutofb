@@ -31,6 +31,7 @@ export interface BatchModelSnapshot {
 }
 
 export interface Batch {
+  organizerOrigin?: import('./organizer').OrganizerBatchOrigin;
   photoPlan?: import('./photoPlan').PhotoPlan;
   photoProfile?: import('./provider').CommercialPhotoProfile;
   promptFormat?: 'approved-try-on-v1';
@@ -82,6 +83,7 @@ export interface ApprovedGarmentPrompt {
 }
 
 export interface CreateGenerationBatchRequest {
+  organizerContext?: import('./organizer').OrganizerProductContext;
   promptFormat?: 'approved-try-on-v1';
   approvedPrompts?: ApprovedGarmentPrompt[];
   clientId: string;

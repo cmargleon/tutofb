@@ -1,6 +1,9 @@
-import { functions } from '../../firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db, functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import {
+  Job, JobLog, JobReviewCorrection, RecordJobRejectionRequest, RecordJobRejectionResponse,
+  RegenerateJobRequest, RegenerateJobResponse,
   CancelBatchProcessingRequest,
   CancelBatchProcessingResponse,
   CancelJobGenerationResponse,
@@ -23,10 +26,10 @@ import {
   UpdateBatchProductDraftResponse,
 } from '../../../shared/src/types';
 
-export const regenerateJob = async (jobId: string, provider: Provider, prompt: string) => {
-  const regenerateJobCallable = httpsCallable(functions, 'regenerateJob');
+export const regenerateJob = async (jobId: string, provider: Provider, prompt: string, correction?: JobReviewCorrection) => {
+  const regenerateJobCallable = httpsCallable<RegenerateJobRequest, RegenerateJobResponse>(functions, 'regenerateJob');
   try {
-    const result = await regenerateJobCallable({ jobId, provider, prompt });
+    const result = await regenerateJobCallable({ jobId, provider, prompt, ...(correction ? { correction } : {}) });
     return result.data;
   } catch (error) {
     console.error('Error calling regenerateJob:', error);
@@ -227,3 +230,17 @@ export const updateBatchProductDraft = async (
   const result = await callable({ batchId, draftId, rows });
   return result.data;
 };
+
+export const recordJobRejection = async (request: RecordJobRejectionRequest): Promise<RecordJobRejectionResponse> =>
+  (await httpsCallable<RecordJobRejectionRequest, RecordJobRejectionResponse>(functions, 'recordJobRejection')(request)).data;
+
+export const subscribeJobRejections = (
+  jobId: string, outputId: string, onData: (entries: JobLog[]) => void, onError: (error: Error) => void,
+) => onSnapshot(query(collection(db, 'jobs', jobId, 'logs'), where('humanFeedback.outputId', '==', outputId)),
+  snapshot => onData(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as JobLog)), onError);
+
+export const subscribeLegacyJobReferences = (
+  job: Pick<Job, 'clientId' | 'batchId' | 'garmentId'>, onData: (paths: string[]) => void, onError: (error: Error) => void,
+) => onSnapshot(query(collection(db, 'jobs'), where('clientId', '==', job.clientId),
+  where('batchId', '==', job.batchId), where('garmentId', '==', job.garmentId)),
+  snapshot => onData(snapshot.docs.map(doc => doc.get('garmentFilePath')).filter((path): path is string => typeof path === 'string' && Boolean(path))), onError);

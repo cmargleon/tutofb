@@ -13,12 +13,14 @@ interface Props {
   onSameItemFiles?: (files: File[]) => Promise<void>;
   garments: UploadedGarmentDraft[];
   isSubmitting: boolean;
+  importedOnly?: boolean;
   onFiles: (files: File[]) => Promise<void>;
   onRemoveGarment: (id: string) => void;
 }
 
-export const GarmentsStep: React.FC<Props> = ({ garments, isSubmitting, onFiles, onRemoveGarment, generationKind, excludedItemsNotice, onGenerationKindChange, onRetryAnalysis, onSameItemFiles }) => (
+export const GarmentsStep: React.FC<Props> = ({ garments, isSubmitting, onFiles, onRemoveGarment, generationKind, excludedItemsNotice, onGenerationKindChange, onRetryAnalysis, onSameItemFiles, importedOnly }) => (
   <div className="space-y-6">
+    {!importedOnly && <>
     <div>
       <h2 className="text-lg font-semibold text-slate-900">Sube tus productos</h2>
       <p className="mt-1 text-sm text-slate-500">Detectaremos si el lote es de ropa u objetos. Hasta 4 referencias por artículo y 40 fotos por lote.</p>
@@ -73,6 +75,7 @@ export const GarmentsStep: React.FC<Props> = ({ garments, isSubmitting, onFiles,
           onChange={async (event) => { const input = event.currentTarget; await onSameItemFiles?.(Array.from(input.files || [])); input.value = ''; }} />
       </label>
     </div>
+    </>}
 
     {excludedItemsNotice && <p role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{excludedItemsNotice}</p>}
     {garments.some((garment) => garment.analysisStatus === 'preparing') && <p role="status" className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">Analizando fotos… Estamos detectando el tipo de artículo y sus vistas.</p>}

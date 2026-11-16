@@ -1,6 +1,7 @@
+import { JobPhotoReview } from './JobPhotoReview';
 import { ReviewPromptProposal } from './ReviewPromptProposal';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
+import { Batch, Job, JobOutput, JobReviewCorrection, Provider } from '../../../shared/src/types';
 import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { StatusBadge } from '../ui';
 import { AlertCircle, ChevronDown, ChevronUp, Copy, Download, ImageIcon, RefreshCw, XCircle } from 'lucide-react';
@@ -28,7 +29,7 @@ interface Props {
   autoReviewRetryError: string | null;
   cancellationError: string | null;
   onUpdateDraft: (updates: Partial<{ provider: Provider; prompt: string }>) => void;
-  onRegenerate: () => void;
+  onRegenerate: (correction?: JobReviewCorrection) => Promise<boolean>;
   onRetryAutoReview: () => void;
   onCancelGeneration: () => Promise<void>;
   selected?: boolean;
@@ -88,17 +89,17 @@ export const JobEvaluationCard: React.FC<Props> = ({
   const toast = useToast();
   const [downloading, setDownloading] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
+  const { outputs, loading: historyLoading, error: historyError } = useJobOutputHistory(job.id, HISTORY_LIMIT);
 
   const outputsDesc = useMemo(() => {
     const merged = new Map<string, JobOutput>();
-    [job.userSelectedOutput, job.currentOutput, ...outputs].forEach((output) => {
+    [...outputs, job.currentOutput, job.userSelectedOutput, job.retainedApprovedOutput].forEach((output) => {
       if (output?.id && !merged.has(output.id)) {
         merged.set(output.id, output);
       }
     });
     return [...merged.values()].sort((left, right) => toMillis(right.createdAt) - toMillis(left.createdAt));
-  }, [job.currentOutput, job.userSelectedOutput, outputs]);
+  }, [job.currentOutput, job.userSelectedOutput, job.retainedApprovedOutput, outputs]);
 
   const currentOutput = job.currentOutput || outputsDesc[0] || null;
   const reviewSignals = getJobReviewSignals(job);
@@ -357,6 +358,9 @@ export const JobEvaluationCard: React.FC<Props> = ({
 
       {/* Action strip */}
       <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+        <JobPhotoReview job={job} outputs={outputsDesc} displayedOutput={displayedOutput}
+          historyLoading={historyLoading} historyError={historyError} regenerationDisabled={controlsDisabled}
+          regenerationError={regenerationError} onRegenerate={onRegenerate} />
         {/* Primary: Regenerate */}
         {role.canRegenerate ? (
           <button

@@ -4,10 +4,12 @@ import { FolderKanban, ChevronRight, CircleAlert, FolderOpen, Images, Play } fro
 import { ORGANIZER_DEFAULT_BUDGET_USD, ORGANIZER_DEFAULT_MODEL, ORGANIZER_DIRECTORIES,
   type OrganizerConfig, type OrganizerInterpretation, type OrganizerPlanItem, type OrganizerPhoto, type OrganizerProductRow, type OrganizerPage,
   type OrganizerRun, type OrganizerSettings, type OrganizerTab, type OrganizerVariant } from '../../shared/src/types';
-import { Button, PageHeader } from '../components/ui';
+import { Button, LoadingBlock, PageHeader } from '../components/ui';
 import { useRole } from '../features/auth/AuthProvider';
 import { useOrganizer, type CatalogView } from '../features/organizer/useOrganizer';
 import { PhotoReview } from '../features/organizer/PhotoReview';
+import { ProductWorkflowPanel } from '../features/organizer/ProductWorkflowPanel';
+import { useProductWorkflow, workflowUrl } from '../features/organizer/productWorkflow';
 
 const pane = 'rounded-2xl border border-slate-200 bg-white p-5 sm:p-6';
 const input = 'tuto-field';
@@ -152,7 +154,10 @@ function RunCard({ run, controller, busy, canRun, active }: { run: OrganizerRun;
 export function Organizador() {
   const access = useRole();
   const state = useOrganizer();
-  const { config, run, clientId, busy } = state;
+  const { config, run, clientId, baseProductId, variantId, batchId, busy } = state;
+  const detail = useProductWorkflow(clientId, variantId, baseProductId, undefined, state.revision);
+  const workflow = detail?.workflow;
+  const isFicha = Boolean(variantId);
   const [provenance, setProvenance] = useState<{ id: string; page: OrganizerPage<OrganizerProductRow> } | null>(null);
   const client = state.clients.items.find(item => item.id === clientId);
   const locked = Boolean(config?.activeRunId);
@@ -169,7 +174,7 @@ export function Organizador() {
         <div className="mt-3 flex flex-wrap gap-2">
           <select aria-label="Cliente" className={`${input} max-w-xs`} value={clientId} onChange={event => {
             setProvenance(null); state.selectClient(event.target.value);
-          }}><option value="">Selecciona un cliente</option>{state.clients.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          }}><option value="">Selecciona un cliente</option>{clientId && !client && <option value={clientId}>{config?.clientName || 'Cliente del enlace'}</option>}{state.clients.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
           {state.clients.next && <Button size="sm" variant="secondary" onClick={state.loadClients}>Más clientes</Button>}
         </div>
       </div>
@@ -181,37 +186,45 @@ export function Organizador() {
       </div>}
     </section>
     {(state.loadError || config?.watcherError) && <p role="alert" className="tuto-alert tuto-alert--warning"><CircleAlert size={18} /> {state.loadError || config?.watcherError}</p>}
-    {access.isAdmin && client && <p className="text-sm text-slate-600">La generación posterior se configura en <Link className={link} to={`/clients/${encodeURIComponent(clientId)}?tab=automatizaciones`}>Cliente → Automatizaciones</Link>.</p>}
-    {access.isAdmin && client && !locked && <div key={`${clientId}-${config?.destinationId || 'setup'}-${config ? 'saved' : 'new'}`}><Setup config={config} clientName={client.name} driveFolderIds={client.driveFolderIds ?? []} busy={busy} save={state.save} /></div>}
-    {config && <>
-      {access.canCreateBatches && <div className="flex flex-wrap gap-2">
+    {!isFicha && access.isAdmin && client && <p className="text-sm text-slate-600">La generación posterior se configura en <Link className={link} to={`/clients/${encodeURIComponent(clientId)}?tab=automatizaciones`}>Cliente → Automatizaciones</Link>.</p>}
+    {!isFicha && access.isAdmin && client && !locked && <div key={`${clientId}-${config?.destinationId || 'setup'}-${config ? 'saved' : 'new'}`}><Setup config={config} clientName={client.name} driveFolderIds={client.driveFolderIds ?? []} busy={busy} save={state.save} /></div>}
+    {isFicha && <div className="space-y-3">
+      <Link className="tuto-link text-sm" to={`/organizador?${new URLSearchParams({ clientId })}`}>Volver a productos</Link>
+      {!detail && <LoadingBlock message="Cargando ficha del producto…" />}
+      {detail?.error && <p role="alert" className="tuto-alert tuto-alert--warning">{detail.error}</p>}
+      {workflow && <ProductWorkflowPanel workflow={workflow} batchId={batchId} canGenerate={access.canCreateBatches}
+        canEditReferences={!locked} refresh={state.refresh} />}
+    </div>}
+    {config && (!isFicha || workflow) && <>
+      {!isFicha && access.canCreateBatches && <div className="flex flex-wrap gap-2">
         <Button variant="secondary" disabled={busy || locked || !hasSources} onClick={() => state.start('inventory')}>Inventario</Button>
         <Button variant="secondary" disabled={busy || locked || !hasSources} onClick={() => state.start('dry_run')}>Simular</Button>
         <Button icon={Play} disabled={busy || !hasSources || locked && !canReplace} onClick={() => state.start('classify')}>{canReplace ? 'Autorizar presupuesto nuevo' : 'Clasificar'}</Button>
         <Button variant="secondary" disabled={busy || locked || !hasSources} onClick={() => state.start('sync')}>Sincronizar cambios</Button>
       </div>}
-      {access.canCreateBatches && <GenerateFromOriginals key={clientId} disabled={busy || locked || !hasSources}
+      {!isFicha && access.canCreateBatches && <GenerateFromOriginals key={clientId} disabled={busy || locked || !hasSources}
         start={photoIds => void state.start('generate', { photoIds })} />}
-      {run && <RunCard run={run} controller={state.control} busy={busy} canRun={access.canCreateBatches} active={run.id === config.activeRunId} />}
+      {!isFicha && run && <RunCard run={run} controller={state.control} busy={busy} canRun={access.canCreateBatches} active={run.id === config.activeRunId} />}
       <section className={pane} aria-label="Catálogo organizado">
-        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-4">{views.map(view =>
-          <Button key={view.id} variant={state.view === view.id ? 'primary' : 'ghost'} size="sm" onClick={() => { setProvenance(null); state.selectView(view.id); }}>{view.label}</Button>)}</div>
-        {state.page.items.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Aún no hay registros en esta vista.</p>}
-        {state.view === 'products' && <label className="mb-3 block text-sm">Estado del catálogo <select className={`${input} mt-1 max-w-xs`} value={state.filterStatus} onChange={event => state.setFilterStatus(event.target.value as OrganizerVariant['status'] | '')}>
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-4">{views.filter(view => !isFicha || view.id === 'products' || view.id === 'photos').map(view =>
+          <Button key={view.id} variant={state.view === view.id ? 'primary' : 'ghost'} size="sm" onClick={() => { setProvenance(null); state.selectView(view.id, variantId); }}>{view.label}</Button>)}</div>
+        {(state.view !== 'products' || !isFicha) && state.page.items.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Aún no hay registros en esta vista.</p>}
+        {state.view === 'products' && !isFicha && <label className="mb-3 block text-sm">Estado del catálogo <select className={`${input} mt-1 max-w-xs`} value={state.filterStatus} onChange={event => state.setFilterStatus(event.target.value as OrganizerVariant['status'] | '')}>
           <option value="">Todos</option><option value="pending">Pendientes</option><option value="review">Revisar</option><option value="uploaded">Subidos según Excel</option>
         </select></label>}
         {state.simulation && <p className="mb-3 text-sm text-amber-800">Vista de simulación. Revisa el plan antes de clasificar; las correcciones estarán disponibles al terminar la ejecución aplicada.</p>}
         <ul className="divide-y divide-slate-100">
-          {state.view === 'products' && (state.page.items as OrganizerVariant[]).map(item => <li key={item.id} className="grid gap-3 py-4 lg:grid-cols-[1fr_auto]">
-            <div><h3 className="font-semibold">{item.name} <span className="ml-1 text-sm font-normal text-slate-500">{item.visual}</span></h3>
+          {(state.view === 'products' || workflow && state.view === 'photos') && (workflow ? [workflow.variant] : state.page.items as OrganizerVariant[]).map(item => <li key={item.id} className="grid gap-3 py-4 lg:grid-cols-[1fr_auto]">
+            <div>{!isFicha && <h3 className="font-semibold">{item.name} <span className="ml-1 text-sm font-normal text-slate-500">{item.visual}</span></h3>}
               <p className="text-sm text-slate-600">{[item.color, item.pack, item.category, statuses[item.status], `Referencias ${statuses[item.referenceState].toLowerCase()}`].filter(Boolean).join(' · ')}</p>
               <p className="mt-1 text-xs text-slate-500">{[item.skcs.length && `SKC ${item.skcs.join(', ')}`, item.skus.length && `SKU ${item.skus.join(', ')}`, item.sizes.join(', ')].filter(Boolean).join(' · ')}</p>
               {item.documented && <p className="mt-1 text-xs text-slate-500">FOTO IA {documentState[item.documented.photo]} · UPLOAD {documentState[item.documented.upload]} · PUBLICAR {documentState[item.documented.publish]}</p>}
               {item.issues.map(issue => <p key={issue} className="mt-1 text-xs text-amber-800">{issue}</p>)}
-              <p className="mt-1 text-xs text-slate-500">Referencias · {item.references.front.length} frontales · {item.references.back.length} traseras · {item.references.main.length} principales · {item.references.complementary?.length || 0} complementarias</p>
+              {!isFicha && <p className="mt-1 text-xs text-slate-500">Referencias · {item.references.front.length} frontales · {item.references.back.length} traseras · {item.references.main.length} principales · {item.references.complementary?.length || 0} complementarias</p>}
             </div>
             <div className="flex flex-wrap items-start gap-2">
-              <Button size="sm" variant="secondary" icon={Images} onClick={() => state.selectView('photos', item.id)}>Ver fotos</Button>
+              {!isFicha && !state.simulation && <Link className={link} to={workflowUrl('/organizador', { clientId, variantId: item.id })}>Abrir ficha</Link>}
+              {!isFicha && <Button size="sm" variant="secondary" icon={Images} onClick={() => state.selectView('photos', item.id)}>Ver fotos</Button>}
               <Button size="sm" variant="ghost" onClick={() => showProvenance(item.id)}>Ver celdas</Button>
               
               {access.canCreateBatches && <Button size="sm" variant="ghost" disabled={busy || locked || Boolean(state.simulation)} onClick={() => state.start('classify', { variantId: item.id })}>Reanalizar</Button>}
@@ -226,7 +239,6 @@ export function Organizador() {
               {item.referenceState === 'rejected' && <Button size="sm" variant="ghost" disabled={busy || locked || Boolean(state.simulation)} onClick={async () => {
                 if (await state.perform({ action: 'references', clientId, variantId: item.id, decision: 'reset' }, 'Revisión reabierta')) state.refresh();
               }}>Reabrir revisión</Button>}
-              {access.canCreateBatches && item.referenceState === 'approved' && <Link className={link} to={`/generate?organizerClient=${clientId}&organizerVariant=${item.id}`}>Usar en el wizard</Link>}
             </div>
             {provenance?.id === item.id && <div className="space-y-2 rounded-xl bg-slate-50 p-4 lg:col-span-2">
               {provenance.page.items.map(row => <div key={`${row.fileId}-${row.tab}-${row.line}`}>

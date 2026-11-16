@@ -22,7 +22,7 @@ export const useProductGeneration = ({ state, setState, setFlowError, defaultSce
           originalPhotos: prepared.flatMap((item) => item.originalPhotos).map((photo, index) => ({ ...photo, sourceIndex: index })), isMultiAngle: files.length > 1 }];
       }
       if (catalog && prepared.length) {
-        prepared[0] = { ...prepared[0], name: catalog.name, analysisStatus: 'ready', itemKind: catalog.kind,
+        prepared[0] = { ...prepared[0], organizerContext: catalog.context, name: catalog.name, analysisStatus: 'ready', itemKind: catalog.kind,
           itemKindConfidence: 1, itemKindReasoning: 'Referencias aprobadas en el Organizador inteligente',
           matchedColor: catalog.color || null,
           originalPhotos: prepared[0].originalPhotos.map(photo => {

@@ -1,3 +1,4 @@
+import { readProductWorkflow, readWorkflowVariant } from './productWorkflow';
 import { assertHumanClientAccess, loadHumanClientIds } from '../auth/clientAccess';
 import { FieldPath, Filter } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -17,7 +18,7 @@ import { photoDecisionKey } from './planning';
 
 type Actor = { uid: string; role: Role; delegated?: DelegatedCaller };
 const actions = ['clients', 'config', 'configure', 'start', 'run', 'pause', 'resume', 'cancel', 'report',
-  'runs', 'products', 'photos', 'conflicts', 'tabs', 'baseProducts', 'commercial', 'files', 'ledger', 'plan', 'interpretations', 'provenance', 'correct', 'references', 'thumbnail', 'draft'];
+  'runs', 'products', 'photos', 'conflicts', 'tabs', 'baseProducts', 'commercial', 'files', 'ledger', 'plan', 'interpretations', 'provenance', 'correct', 'references', 'thumbnail', 'draft', 'workflow'];
 const writeActions = new Set(['configure', 'start', 'pause', 'resume', 'cancel', 'correct', 'references', 'draft']);
 const paidModes = ['classify', 'sync'];
 const allowed = (actor: Actor, config?: StoredConfig) =>
@@ -216,12 +217,14 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
       if (!(await product.get()).exists) throw new HttpsError('not-found', 'Variante no disponible.');
       return listPage<OrganizerProductRow>(product.collection('provenance'), request.cursor);
     }
+    case 'workflow': return readProductWorkflow(root, request.variantId, request.baseProductId, request.batchId);
     case 'draft': {
       if (actor.role === 'revisor') throw new HttpsError('permission-denied', 'El revisor no puede preparar producción.');
       const variantId = checkedId(request.variantId);
-      const [productDoc, decisionDoc] = await getAppFirestore().getAll(root.collection('products').doc(variantId), root.collection('referenceDecisions').doc(variantId));
-      const product = productDoc.data() as OrganizerVariant | undefined;
-      if (!product || product.referenceState !== 'approved') throw new HttpsError('failed-precondition', 'Se requieren referencias aprobadas.');
+      const [{ variant: product, baseProductId }, decisionDoc] = await Promise.all([
+        readWorkflowVariant(root, variantId, request.baseProductId), root.collection('referenceDecisions').doc(variantId).get(),
+      ]);
+      if (product.referenceState !== 'approved') throw new HttpsError('failed-precondition', 'Se requieren referencias aprobadas.');
       const kind = product.references.front.length && product.references.back.length ? 'garment' : 'product';
       const ids = [...new Set(kind === 'garment' ? [...product.references.front, ...product.references.back] : [...product.references.main, ...(product.references.complementary || [])])].slice(0, 4);
       if (!ids.length) throw new HttpsError('failed-precondition', 'No hay referencias vigentes.');
@@ -240,7 +243,7 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
         const view = product.references.front.includes(id) ? 'front' : product.references.back.includes(id) ? 'back' : null;
         return { name: photo.name.replace(/\.[^.]+$/, '') + '.jpg', view, base64: bytes.toString('base64') } as OrganizerDraft['photos'][number];
       }));
-      return { name: product.name, color: product.color, kind, photos };
+      return { context: { clientId, baseProductId, variantId }, name: product.name, color: product.color, kind, photos };
     }
     case 'thumbnail': {
       const photoId = checkedId(request.photoId);

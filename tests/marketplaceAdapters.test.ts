@@ -13,7 +13,10 @@ for (const id of ['shein', 'mercado-libre', 'tiktok-shop', 'amazon'] as const) t
   const p = product(); p.marketplaces[id] = { templateId: 't', categoryId: 'cat' };
   const result = MARKETPLACE_ADAPTERS[id].prepare(p, template(id), category);
   assert.deepEqual(result.issues, []); assert.equal(result.rows.length, 2); assert.equal(result.rows[1].values.gtin, '');
-  p.variants[0].values.color = 'Unknown'; assert.ok(MARKETPLACE_ADAPTERS[id].prepare(p, template(id), category).issues.some((i: any) => i.code === 'enum'));
+  p.variants[0].values.color = 'Unknown';
+  const colorIssue = MARKETPLACE_ADAPTERS[id].prepare(p, template(id), category).issues.find((i: any) => i.code === 'enum');
+  assert.equal(colorIssue?.field, 'color');
+  assert.equal(colorIssue?.variantId, 'red-s');
   p.variants[0].values.gtin = '123'; assert.ok(MARKETPLACE_ADAPTERS[id].prepare(p, template(id), category).issues.some((i: any) => i.code === 'gtin'));
 });
 test('manual output overrides prevail, closed lists reject arbitrary AI values, unresolved dependent validations block', () => {

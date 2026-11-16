@@ -76,6 +76,7 @@ export interface GarmentOriginalPhotoDraft {
 }
 
 export interface UploadedGarmentDraft {
+  organizerContext?: import('../../../shared/src/types').OrganizerProductContext;
   photoProductId?: string;
   photoVariantId?: string;
   photoAttributes?: Partial<import('../../../shared/src/types').PhotoArticleAttributes>;

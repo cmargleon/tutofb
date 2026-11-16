@@ -11,7 +11,11 @@ export function suggestedMarketplaceSource(marketplaceId: MarketplaceId, key: st
   const detail = normalized.match(/^detail_img_(10|[1-9])$/)?.[1];
   return detail ? `image.${detail}` : aliases[normalized.replace(/\[.*\]$/, '')] || '';
 }
-export interface AdaptedProduct { rows: Array<{ variantId: string; values: Record<string, string> }>; issues: MarketplaceExportIssue[] }
+export interface AdaptedProduct {
+  rows: Array<{ variantId: string; values: Record<string, string> }>;
+  issues: MarketplaceExportIssue[];
+  pendingImageOutputIds: string[];
+}
 export interface MarketplaceAdapter {
   id: MarketplaceId;
   aliases: Record<string, string>;
@@ -34,6 +38,14 @@ export const safePublicImageUrl = (value: string, publishedUrls: readonly string
   } catch { return false; }
 };
 export const isImageField = (key: string) => /(?:img|image|foto|picture|imagen)/i.test(key);
+const approvedImageOutputId = (product: MasterProduct, channel: MarketplaceId, variantId: string, source?: string) => {
+  const match = source?.match(/^image\.(\d+)$/);
+  if (!match) return undefined;
+  const index = Number(match[1]);
+  if (!product.photoAssignments) return product.approvedImages[index]?.outputId;
+  const assignment = product.photoAssignments.find(a => a.channel === channel && a.variantId === variantId && a.position === index + 1 && a.eligible);
+  return product.approvedImages.find(image => image.outputId === assignment?.outputId)?.outputId;
+};
 const sourceValue = (source: string, p: MasterProduct, v: MasterVariant, data: ProductMarketplaceData, rowIndex: number, template: SpreadsheetTemplate) => {
   const [kind, ...parts] = source.split('.'); const key = parts.join('.');
   if (kind === 'product') return p.values[key as keyof typeof p.values] ?? '';
@@ -41,14 +53,6 @@ const sourceValue = (source: string, p: MasterProduct, v: MasterVariant, data: P
   if (kind === 'attribute') return v.attributes?.[key] ?? '';
   if (kind === 'literal') return key;
   if (kind === 'assignment') { const main = p.photoAssignments?.find(a => a.channel === template.exportConfig?.marketplaceId && a.variantId === v.id && a.position === 1 && a.eligible); return key === 'imageType' ? String(main?.imageType ?? '') : key === 'imageSort' ? String(main?.imageSort ?? '') : ''; }
-  if (kind === 'image') {
-    if (p.photoAssignments) {
-      const channel = template.exportConfig?.marketplaceId;
-      const assignment = p.photoAssignments.find(a => a.channel === channel && a.variantId === v.id && a.position === (Number(key) || 0) + 1 && a.eligible);
-      return assignment?.outputId ? data.imageUrls?.[assignment.outputId] || '' : '';
-    }
-    return data.imageUrls?.[p.approvedImages[Number(key) || 0]?.outputId] || '';
-  }
   if (kind === 'legacy') {
     const draft = p.legacyDrafts.find(d => (d.templateId === data.templateId || d.templateId === template.exportConfig?.replacesTemplateId || template.exportConfig?.legacyTemplateIds?.includes(d.templateId)) && d.categoryId === data.categoryId);
     return draft?.rows[rowIndex]?.values[key] || '';
@@ -60,60 +64,83 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
   prepare(product, template, category) {
     category = { ...category, validationMode: 'template' };
     const issues: MarketplaceExportIssue[] = [];
-    const issue = (code: string, message: string, field?: string) => issues.push({ marketplaceId: id, productId: product.id, productName: product.values.name || product.garmentId, code, message, ...(field ? { field } : {}) });
+    const pendingImageOutputIds = new Set<string>();
+    const issue = (code: string, message: string, field?: string, variantId?: string) => issues.push({
+      marketplaceId: id, productId: product.id, productName: product.values.name || product.garmentId, code, message,
+      ...(field ? { field } : {}), ...(variantId ? { variantId } : {}),
+    });
     const data = product.marketplaces[id];
-    if (!data || data.templateId !== template.id || data.categoryId !== category.id) { issue('category', 'Categoría sin configurar.'); return { rows: [], issues }; }
+    if (!data || data.templateId !== template.id || data.categoryId !== category.id) { issue('category', 'Categoría sin configurar.'); return { rows: [], issues, pendingImageOutputIds: [] }; }
     if (!product.approvedImages.length) issue('images_pending', 'Imágenes pendientes de aprobación.');
     if (product.photoAssignments) for (const variant of product.variants) {
       const assignments = product.photoAssignments.filter(a => a.channel === id && a.variantId === variant.id).sort((a, b) => a.position - b.position);
       const eligible = assignments.filter(a => a.eligible && a.outputId);
-      if (!assignments.some(a => a.role === 'main' && a.position === 1 && a.eligible) || assignments.some(a => a.required && !a.eligible)) issue('gallery_pending', `Variante ${variant.id}: portada o fotografía obligatoria pendiente para ${id}.`);
+      if (!assignments.some(a => a.role === 'main' && a.position === 1 && a.eligible) || assignments.some(a => a.required && !a.eligible)) issue('gallery_pending', `Variante ${variant.id}: portada o fotografía obligatoria pendiente para ${id}.`, undefined, variant.id);
       const limit = id === 'amazon' || id === 'tiktok-shop' ? 9 : id === 'shein' ? 11 : 10;
-      if (eligible.length > limit) issue('gallery_limit', `La galería de ${variant.id} supera ${limit} imágenes.`);
-      if (new Set(eligible.map(a => a.outputId)).size !== eligible.length || new Set(assignments.map(a => a.position)).size !== assignments.length) issue('gallery_duplicate', `Archivo o posición repetida en ${variant.id}.`);
-      if (id === 'tiktok-shop' && new Set(eligible.map(a => a.angle)).size !== eligible.length) issue('gallery_angle', `Ángulo repetido en ${variant.id}.`);
+      if (eligible.length > limit) issue('gallery_limit', `La galería de ${variant.id} supera ${limit} imágenes.`, undefined, variant.id);
+      if (new Set(eligible.map(a => a.outputId)).size !== eligible.length || new Set(assignments.map(a => a.position)).size !== assignments.length) issue('gallery_duplicate', `Archivo o posición repetida en ${variant.id}.`, undefined, variant.id);
+      if (id === 'tiktok-shop' && new Set(eligible.map(a => a.angle)).size !== eligible.length) issue('gallery_angle', `Ángulo repetido en ${variant.id}.`, undefined, variant.id);
     }
     const mappings = template.exportConfig?.mappings[category.id!] || {};
+    const dropdownColumns = category.columns.filter(column => column.dropdownOptions?.length || column.dropdownDependency || column.dropdownFormula)
+      .sort((a, b) => Number(Boolean(a.dropdownDependency)) - Number(Boolean(b.dropdownDependency)));
     if (product.organizer && !Object.values(mappings).some(mapping => mapping.source === 'image.0'))
       issue('image_mapping', 'Asocia la portada aprobada a su columna de imagen principal en la plantilla.');
     const publishedUrls = Object.values(product.publishedImages?.[id] || {}).map(image => image.url);
     const nonemptySkus = product.variants.map(v => v.values.sku || product.values.sku || '').filter(Boolean);
     if (new Set(nonemptySkus).size !== nonemptySkus.length) issue('duplicate_sku', 'Las variantes deben tener SKU distintos; corrige los duplicados.');
     const rows = product.variants.map((variant, rowIndex) => {
+      const rowIssue = (code: string, message: string, field?: string) => issue(code, message, field, variant.id);
       const overrides = data.rows?.find(r => r.id === variant.id)?.values || {};
+      const imageOutputs = new Map<string, string>();
       const values: Record<string, string> = Object.fromEntries(category.columns.map(column => {
         const mapping = mappings[column.key];
-        if (Object.prototype.hasOwnProperty.call(overrides, column.key)) return [column.key, overrides[column.key]];
-        const original = sourceValue(mapping?.source || '', product, variant, data, rowIndex, template);
+        const imageSource = mapping?.source.startsWith('image.');
+        const outputId = approvedImageOutputId(product, id, variant.id, mapping?.source);
+        if (outputId) imageOutputs.set(column.key, outputId);
+        if (Object.prototype.hasOwnProperty.call(overrides, column.key) && overrides[column.key].trim()) return [column.key, overrides[column.key]];
+        const original = imageSource ? (outputId && data.imageUrls?.[outputId] || '') : sourceValue(mapping?.source || '', product, variant, data, rowIndex, template);
         const mapped = mapping?.valueMap && Object.prototype.hasOwnProperty.call(mapping.valueMap, original) ? mapping.valueMap[original] : original;
         return [column.key, mapped];
       }));
+      // Normalize only an exact equivalent of a mapped value. Explicit overrides stay as entered.
+      for (const column of dropdownColumns) {
+        const value = values[column.key];
+        if (!value || (Object.prototype.hasOwnProperty.call(overrides, column.key) && overrides[column.key].trim())) continue;
+        const allowed = getProductDraftColumnAllowedValues(category, column, values);
+        if (allowed.includes(value)) continue;
+        const normalize = (text: string) => text.trim().normalize('NFC').toLowerCase();
+        const matches = allowed.filter(option => normalize(option) === normalize(value));
+        if (matches.length === 1) values[column.key] = matches[0];
+      }
       for (const column of category.columns) {
         const mapping: TemplateColumnMapping | undefined = mappings[column.key];
         const value = values[column.key];
+        const outputId = imageOutputs.get(column.key);
         const normalizedKey = normalizeMarketplaceColumnKey(column.key);
-        if ((column.required || mapping?.required) && !value.trim()) issue('required', `Falta ${column.label} en variante ${rowIndex + 1}.`, column.key);
-        if (product.organizer && !value && mapping?.source.startsWith('image.') && product.photoAssignments?.some(a =>
-          a.channel === id && a.variantId === variant.id && a.position === Number(mapping.source.slice(6)) + 1 && a.eligible))
-          issue('image_publication', `Prepara la URL pública de ${column.label} para la variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`, column.key);
+        if (!value.trim() && outputId && !data.imageUrls?.[outputId]) {
+          pendingImageOutputIds.add(outputId);
+          continue;
+        }
+        if ((column.required || mapping?.required) && !value.trim()) rowIssue('required', `Falta ${column.label} en variante ${rowIndex + 1}.`, column.key);
         const allowed = getProductDraftColumnAllowedValues(category, column, values);
-        if (value && allowed.length && !allowed.includes(value)) issue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
-        if (value && column.dropdownFormula && !allowed.length) issue('unresolved_list', `${column.label}: lista dependiente sin resolver; requiere un adaptador específico.`, column.key);
-        if (value && (isImageField(column.key) || isImageField(column.label) || mapping?.source.startsWith('image.')) && (!safePublicImageUrl(value, publishedUrls) || !product.approvedImages.some(img => data.imageUrls?.[img.outputId] === value))) issue('image_url', `${column.label}: publica la fotografía aprobada o configura su URL pública permanente; las URLs privadas o temporales no son válidas.`, column.key);
-        if (value && product.photoAssignments && mapping?.source.startsWith('image.') && value !== sourceValue(mapping.source, product, variant, data, rowIndex, template)) issue('image_assignment', `${column.label}: imagen fuera de la asignación aprobada de variante/canal/posición.`, column.key);
-        if (value && mapping?.dataType === 'number' && (!/^-?\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)))) issue('number', `${column.label}: número inválido.`, column.key);
-        if (value && (mapping?.source === 'variant.gtin' || /^(gtin|ean|upc|universal_product_code|codigo_universal)$/.test(normalizedKey)) && !isValidGtin(value)) issue('gtin', `${column.label}: GTIN inválido; no se generará uno automáticamente.`, column.key);
-        if (value && (mapping?.source === 'variant.asin' || normalizedKey === 'asin') && !/^[A-Z0-9]{10}$/.test(value)) issue('asin', `${column.label}: ASIN inválido.`, column.key);
+        if (value && allowed.length && !allowed.includes(value)) rowIssue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
+        if (value && column.dropdownFormula && !allowed.length) rowIssue('unresolved_list', `${column.label}: lista dependiente sin resolver; requiere un adaptador específico.`, column.key);
+        if (value && (isImageField(column.key) || isImageField(column.label) || mapping?.source.startsWith('image.')) && (!safePublicImageUrl(value, publishedUrls) || !product.approvedImages.some(img => data.imageUrls?.[img.outputId] === value))) rowIssue('image_url', `${column.label}: publica la fotografía aprobada o configura su URL pública permanente; las URLs privadas o temporales no son válidas.`, column.key);
+        if (value && product.photoAssignments && mapping?.source.startsWith('image.') && value !== (outputId && data.imageUrls?.[outputId])) rowIssue('image_assignment', `${column.label}: imagen fuera de la asignación aprobada de variante/canal/posición.`, column.key);
+        if (value && mapping?.dataType === 'number' && (!/^-?\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)))) rowIssue('number', `${column.label}: número inválido.`, column.key);
+        if (value && (mapping?.source === 'variant.gtin' || /^(gtin|ean|upc|universal_product_code|codigo_universal)$/.test(normalizedKey)) && !isValidGtin(value)) rowIssue('gtin', `${column.label}: GTIN inválido; no se generará uno automáticamente.`, column.key);
+        if (value && (mapping?.source === 'variant.asin' || normalizedKey === 'asin') && !/^[A-Z0-9]{10}$/.test(value)) rowIssue('asin', `${column.label}: ASIN inválido.`, column.key);
       }
       if (product.organizer) {
         const measurement = (key: string) => category.columns.some(c => mappings[c.key]?.source === `variant.${key}` && values[c.key]);
         if (measurement('weight') && !variant.values.weightUnit && !product.values.weightUnit)
-          issue('weight_unit', `Falta la unidad del peso en variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`);
+          rowIssue('weight_unit', `Falta la unidad del peso en variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`);
         if (['length', 'width', 'height'].some(measurement) && !variant.values.dimensionUnit && !product.values.dimensionUnit)
-          issue('dimension_unit', `Falta la unidad de dimensiones en variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`);
+          rowIssue('dimension_unit', `Falta la unidad de dimensiones en variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`);
       }
       if (id === 'mercado-libre' && template.exportConfig?.operation === 'existing_catalog') {
-        if (!variant.values.catalogId || !category.columns.some(c => mappings[c.key]?.source === 'variant.catalogId' && values[c.key])) issue('catalog_identifier', 'Vinculación a catálogo: falta el ID de catálogo y su asociación a la plantilla.');
+        if (!variant.values.catalogId || !category.columns.some(c => mappings[c.key]?.source === 'variant.catalogId' && values[c.key])) rowIssue('catalog_identifier', 'Vinculación a catálogo: falta el ID de catálogo y su asociación a la plantilla.');
       }
       if (id === 'amazon') {
         // Legacy input is read for compatibility; new corrections are scoped to the destination.
@@ -121,16 +148,16 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         const gtinExemption = data.requirements ? (exemptionScopeMatches ? data.requirements.gtinExemptionByVariant?.[variant.id] : 'pending') : variant.values.gtinExemption;
         if (template.exportConfig?.operation === 'existing_catalog') {
           const hasIdentifier = category.columns.some(c => (mappings[c.key]?.source === 'variant.asin' && /^[A-Z0-9]{10}$/.test(values[c.key])) || (mappings[c.key]?.source === 'variant.gtin' && isValidGtin(values[c.key])));
-          if (!hasIdentifier) issue('catalog_identifier', 'La oferta requiere un ASIN o GTIN válido asociado a una columna de la plantilla.');
+          if (!hasIdentifier) rowIssue('catalog_identifier', 'La oferta requiere un ASIN o GTIN válido asociado a una columna de la plantilla.');
         }
-        if (template.exportConfig?.operation === 'new_product' && variant.values.parentage !== 'parent' && !variant.values.gtin && gtinExemption !== 'approved') issue('gtin_authorization', 'Ficha nueva: falta GTIN o confirmación de exención aprobada externamente.');
-        if (gtinExemption && !['approved', 'pending'].includes(gtinExemption)) issue('gtin_authorization', 'Estado de exención inválido; usa pending o approved tras verificarlo externamente.');
-        if (product.variants.length > 1 && template.exportConfig?.operation === 'new_product' && (!variant.values.parentage || (variant.values.parentage === 'child' && !variant.values.parentSku))) issue('variants', 'Configura las relaciones padre/hijo de las variantes.');
+        if (template.exportConfig?.operation === 'new_product' && variant.values.parentage !== 'parent' && !variant.values.gtin && gtinExemption !== 'approved') rowIssue('gtin_authorization', 'Ficha nueva: falta GTIN o confirmación de exención aprobada externamente.');
+        if (gtinExemption && !['approved', 'pending'].includes(gtinExemption)) rowIssue('gtin_authorization', 'Estado de exención inválido; usa pending o approved tras verificarlo externamente.');
+        if (product.variants.length > 1 && template.exportConfig?.operation === 'new_product' && (!variant.values.parentage || (variant.values.parentage === 'child' && !variant.values.parentSku))) rowIssue('variants', 'Configura las relaciones padre/hijo de las variantes.');
       }
       return { variantId: variant.id, values };
     });
     if (!rows.length) issue('variants', 'Faltan variantes.');
-    return { rows, issues };
+    return { rows, issues, pendingImageOutputIds: [...pendingImageOutputIds] };
   },
 });
 export const MARKETPLACE_ADAPTERS: Record<MarketplaceId, MarketplaceAdapter> = {
@@ -139,7 +166,8 @@ export const MARKETPLACE_ADAPTERS: Record<MarketplaceId, MarketplaceAdapter> = {
     goods_description: 'product.description', default_product_desc: 'product.description', main_attribute_value: 'variant.color',
     secondary_attribute_1_value: 'variant.size', main_img: 'image.0', detail_img_1: 'image.1', stock: 'variant.inventory',
     original_price: 'variant.price', weight: 'variant.weight', weight_unit: 'variant.weightUnit', length: 'variant.length',
-    width: 'variant.width', height: 'variant.height', length_unit: 'variant.dimensionUnit', quantity_number: 'variant.pack' }),
+    width: 'variant.width', height: 'variant.height', length_unit: 'variant.dimensionUnit', quantity_number: 'variant.pack',
+    attr_1000463: 'attribute.foodContactMaterial', transparencia: 'attribute.transparency' }),
   'mercado-libre': createAdapter('mercado-libre', { sku_del_vendedor: 'variant.sku', codigo_universal: 'variant.gtin', titulo: 'product.name', seller_sku: 'variant.sku', seller_custom_field: 'variant.sku', title: 'product.name', available_quantity: 'variant.inventory', catalog_product_id: 'variant.catalogId', picture: 'image.0' }),
   'tiktok-shop': createAdapter('tiktok-shop', { seller_sku: 'variant.sku', product_name: 'product.name', product_description: 'product.description', retail_price: 'variant.price', quantity: 'variant.inventory', main_image: 'image.0' }),
   amazon: createAdapter('amazon', { item_sku: 'variant.sku', item_name: 'product.name', brand_name: 'product.brand', product_description: 'product.description', standard_price: 'variant.price', quantity: 'variant.inventory', external_product_id: 'variant.gtin', asin: 'variant.asin', parent_sku: 'variant.parentSku', parent_child: 'variant.parentage', relationship_type: 'variant.relationshipType', variation_theme: 'variant.variationTheme', main_image_url: 'image.0' }),

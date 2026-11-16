@@ -1,40 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Job } from '../../../shared/src/types';
 import { mergeCatalogDisplayGroups, PendingCatalogRegeneration, reconcilePendingRegenerations } from './catalogView';
-import { subscribeToCatalogBatchJobs } from './firebase';
 import { CatalogGarmentGroup, CatalogSortOrder } from './useCatalogJobs';
 
 export const useCatalogDisplayGroups = ({
-  selectedBatchId,
+  generatingJobs,
   sortOrder,
   garmentGroups,
 }: {
-  selectedBatchId: string;
+  generatingJobs: Job[];
   sortOrder: CatalogSortOrder;
   garmentGroups: CatalogGarmentGroup[];
 }) => {
-  const [generatingJobs, setGeneratingJobs] = useState<Job[]>([]);
   const [pendingRegenerations, setPendingRegenerations] = useState<Record<string, PendingCatalogRegeneration>>({});
-
-  useEffect(() => {
-    if (!selectedBatchId) {
-      setGeneratingJobs([]);
-      return undefined;
-    }
-
-    const unsubscribe = subscribeToCatalogBatchJobs(
-      selectedBatchId,
-      sortOrder,
-      (jobs) => {
-        setGeneratingJobs(
-          jobs.filter((job) => job.status === 'pending' || job.status === 'processing'),
-        );
-      },
-      () => setGeneratingJobs([]),
-    );
-
-    return () => unsubscribe();
-  }, [selectedBatchId, sortOrder]);
 
   const displayGarmentGroups = useMemo(
     () => mergeCatalogDisplayGroups(garmentGroups, generatingJobs, pendingRegenerations, sortOrder),

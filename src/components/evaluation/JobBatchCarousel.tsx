@@ -189,7 +189,7 @@ export const JobBatchCarousel: React.FC<Props> = ({
                 autoReviewRetryError={autoReviewRetryErrors[job.id!] || null}
                 cancellationError={cancellationErrors[job.id!] || null}
                 onUpdateDraft={(updates) => updateDraft(job.id!, updates)}
-                onRegenerate={() => handleRegenerate(job.id!)}
+                onRegenerate={(correction) => handleRegenerate(job.id!, correction)}
                 onRetryAutoReview={() => handleRetryAutoReview(job.id!)}
                 onCancelGeneration={() => handleCancelGeneration(job.id!)}
                 selected={job.id ? selectedJobIds.includes(job.id) : false}

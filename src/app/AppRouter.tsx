@@ -45,15 +45,24 @@ const UsersRedirect: React.FC = () => {
   return <Navigate replace to={`/users/crear${location.search}${location.hash}`} />;
 };
 
+const LoginRoute = () => {
+  const { state } = useLocation();
+  const returnTo = typeof state?.returnTo === 'string' && /^\/(organizador|generate|catalogo)\?/.test(state.returnTo)
+    ? state.returnTo : '/';
+  return <Login redirectTo={returnTo} />;
+};
+
 const ProtectedRoute: React.FC<{ children: React.ReactNode, roles?: string[] }> = ({ children, roles }) => {
   const { user, appUser, loading } = useAuth();
+  const { pathname, search } = useLocation();
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50"><LoadingBlock /></div>;
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={new URLSearchParams(search).has('variantId')
+      ? { returnTo: pathname + search } : undefined} />;
   }
 
   if (!appUser || appUser.active !== true || appUser.status === 'archived') {
@@ -75,7 +84,7 @@ export const AppRouter: React.FC = () => {
     <BrowserRouter>
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<LoginRoute />} />
           <Route path="/automation/connect" element={<PageErrorBoundary><ManglarConnect /></PageErrorBoundary>} />
 
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>

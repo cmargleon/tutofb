@@ -1,3 +1,7 @@
+import { getJobReviewReferencePaths, needsLegacyJobReviewReferences } from '../../../shared/src/jobReview';
+import type { Job } from '../../../shared/src/types';
+import { getAppFirestore } from '../firebase/appFirestore';
+import { validId } from '../manglar/access';
 import { assertUserRoles } from '../auth/roles';
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getBearerToken } from './downloadAssets.helpers';
@@ -7,7 +11,7 @@ import type { Request, Response } from 'express';
 
 const bucket = admin.storage().bucket();
 
-const resolveStoragePath = (request: Request): string => {
+const resolveStoragePath = async (request: Request, uid: string): Promise<string> => {
   const rawPath = request.path.replace(/^\/+/, '');
   const decodedPath = rawPath
     .split('/')
@@ -15,15 +19,32 @@ const resolveStoragePath = (request: Request): string => {
     .map((segment) => decodeURIComponent(segment))
     .join('/');
 
-  if (!decodedPath.startsWith('generated/')) {
-    throw new HttpsError('permission-denied', 'Solo se permiten assets generados.');
-  }
-
-  if (decodedPath.split('/').some((segment) => segment === '.' || segment === '..')) {
+  const parts = decodedPath.split('/');
+  if (parts.some((segment) => !segment || segment === '.' || segment === '..')) {
     throw new HttpsError('invalid-argument', 'Ruta inválida.');
   }
 
-  return decodedPath;
+  if (parts[0] === 'generated') {
+    await assertHumanClientAccess(uid, parts[1]);
+    return decodedPath;
+  }
+
+  if (parts[0] === 'review-reference') {
+    const db = getAppFirestore();
+    const job = (await db.collection('jobs').doc(validId(parts[1])).get()).data() as Job | undefined;
+    if (!job) throw new HttpsError('not-found', 'Trabajo no encontrado.');
+    await assertHumanClientAccess(uid, job.clientId);
+    const path = parts.slice(2).join('/');
+    if (getJobReviewReferencePaths(job).includes(path)) return path;
+    if (needsLegacyJobReviewReferences(job) && job.batchId && job.garmentId) {
+      const matches = await db.collection('jobs')
+        .where('clientId', '==', job.clientId).where('batchId', '==', job.batchId)
+        .where('garmentId', '==', job.garmentId).where('garmentFilePath', '==', path).limit(1).get();
+      if (!matches.empty) return path;
+    }
+  }
+
+  throw new HttpsError('permission-denied', 'Imagen fuera del alcance de este trabajo.');
 };
 
 export const publicGeneratedImage = onRequest(
@@ -47,8 +68,7 @@ export const publicGeneratedImage = onRequest(
       if (!token) throw new HttpsError('unauthenticated', 'Debes iniciar sesión.');
       const decoded = await admin.auth().verifyIdToken(token);
       await assertUserRoles(decoded.uid, decoded.role, ['admin', 'operador', 'revisor']);
-      const storagePath = resolveStoragePath(request);
-      await assertHumanClientAccess(decoded.uid, storagePath.split('/')[1]);
+      const storagePath = await resolveStoragePath(request, decoded.uid);
       const file = bucket.file(storagePath);
       const [exists] = await file.exists();
 
@@ -58,6 +78,10 @@ export const publicGeneratedImage = onRequest(
 
       const [metadata] = await file.getMetadata();
       const contentType = metadata.contentType || 'application/octet-stream';
+      if (request.path.startsWith('/review-reference/') && !/^image\/(jpeg|png|webp|avif|gif|bmp|tiff|heic|heif)$/i.test(contentType)) {
+        throw new HttpsError('failed-precondition', 'El archivo no tiene un formato de imagen compatible.');
+      }
+      response.set('X-Content-Type-Options', 'nosniff');
       const cacheControl = 'private, no-store, max-age=0';
 
       response.set('Content-Type', contentType);
@@ -88,7 +112,7 @@ export const publicGeneratedImage = onRequest(
         const statusCode =
           error.code === 'unauthenticated' ? 401 : error.code === 'permission-denied'
             ? 403
-            : error.code === 'invalid-argument'
+            : ['invalid-argument', 'failed-precondition'].includes(error.code)
               ? 400
               : error.code === 'not-found'
                 ? 404

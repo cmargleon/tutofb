@@ -5,6 +5,7 @@ export type ProductSceneType = 'clean' | 'lifestyle_1' | 'lifestyle_2' | 'hero' 
 export interface ProductSceneInput { type: ProductSceneType; prompt: string }
 export interface ProductGenerationItem { id: string; name: string; referencePaths: string[] }
 export interface CreateProductGenerationBatchRequest {
+  organizerContext?: import('./organizer').OrganizerProductContext;
   requestId: string;
   clientId: string;
   items: ProductGenerationItem[];

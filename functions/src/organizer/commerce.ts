@@ -54,6 +54,17 @@ const pending = (issue: string): OrganizerCommercialSource => ({ variants: [], o
 const origin = (row: OrganizerProductRow) => ({
   fileId: row.fileId, fileName: row.fileName, version: row.sourceVersion || '', tab: row.tab, row: row.line,
 });
+const declaredProductColumns = {
+  brand: /^(?:MARCA|BRAND)$/,
+  material: /^(?:MATERIAL|MATERIAL PRINCIPAL)$/,
+  composition: /^(?:COMPOSICION|COMPOSITION)$/,
+} as const;
+const foodContactColumn = /^MATERIALES? EN CONTACTO CON ALIMENTOS\s*(?:\(1000463\))?$/;
+const declaredCell = (row: OrganizerProductRow, header: RegExp) => {
+  const cells = row.cells.filter(cell => header.test(keyText(cell.header || '')));
+  const value = cells.length === 1 ? cells[0].originalValue : null;
+  return typeof value === 'string' ? value.trim() : '';
+};
 
 function readCommercialValues(row: OrganizerProductRow, mapping: OrganizerSourceColumns) {
   const values: Partial<Record<OrganizerSourceField, string>> = {};
@@ -93,13 +104,14 @@ function readCommercialValues(row: OrganizerProductRow, mapping: OrganizerSource
   return { values, issues };
 }
 
-export function resolveCommercialRows(variant: OrganizerVariant, rows: OrganizerProductRow[], mapping: OrganizerSourceColumns = {}): OrganizerCommercialSource {
+export function resolveCommercialRows(variant: OrganizerVariant, rows: OrganizerProductRow[], mapping: OrganizerSourceColumns = {}, includeDeclaredAttributes = false): OrganizerCommercialSource {
   const eligible = rows.filter(row => row.line > 0 && (row.skc || row.sku));
   if (!eligible.length) return pending('La asociación no tiene una fila fuente con SKC o SKU.');
   if (eligible.some(row => !row.sourceVersion)) return pending('Falta la versión de la fila fuente. Vuelve a leer el Excel del Organizador.');
   const variants = new Map<string, MasterVariant>();
   const origins: OrganizerCommercialSource['origins'] = {};
   const names = new Map<string, Set<string>>();
+  const foodContactByVariant = new Map<string, Set<string>>();
   const issues: string[] = [];
   for (const row of eligible) {
     const rawPack = row.pack || packFromName(row.name) || variant.pack;
@@ -111,6 +123,12 @@ export function resolveCommercialRows(variant: OrganizerVariant, rows: Organizer
     const sourceId = (field: 'skc' | 'sku') => row.cells.find(cell => cell.field === field && code(cell.value) === row[field])?.value.trim() || row[field];
     const values = { skc: sourceId('skc'), sku: sourceId('sku'), color, size: row.size, pack, ...commercial.values };
     const previous = variants.get(id);
+    if (includeDeclaredAttributes) {
+      const declaredFoodContact = declaredCell(row, foodContactColumn);
+      const materials = foodContactByVariant.get(id) || new Set<string>();
+      if (declaredFoodContact) materials.add(declaredFoodContact);
+      foodContactByVariant.set(id, materials);
+    }
     const conflicts = Object.entries(values).filter(([key, value]) => value && previous?.values[key as keyof typeof values] &&
       previous.values[key as keyof typeof values] !== value);
     if (conflicts.length) issues.push(`Valores distintos para ${row.skc || row.sku} en ${row.tab} fila ${row.line} (${conflicts.map(([key]) => key).join(', ')}).`);
@@ -126,19 +144,27 @@ export function resolveCommercialRows(variant: OrganizerVariant, rows: Organizer
     issues.push(`El identificador ${value.skc || value.sku} figura con productos distintos (${origins[id].map(row => `${row.tab} fila ${row.row}`).join(', ')}).`);
   }
   const rowsByIdentifier = [...variants.values()];
+  for (const row of rowsByIdentifier) {
+    const materials = foodContactByVariant.get(row.id);
+    if (materials?.size === 1) row.attributes = { ...row.attributes, foodContactMaterial: [...materials][0] };
+  }
+  const declaredProduct = includeDeclaredAttributes ? Object.fromEntries(Object.entries(declaredProductColumns).flatMap(([field, header]) => {
+    const values = new Set(eligible.map(row => declaredCell(row, header)));
+    return values.size === 1 && !values.has('') ? [[field, [...values][0]]] : [];
+  })) : {};
   const skus = rowsByIdentifier.map(row => code(row.values.sku || '')).filter(Boolean);
   if (new Set(skus).size !== skus.length) issues.push('Un SKU figura en variantes distintas.');
   return {
     variants: issues.length ? [] : rowsByIdentifier,
     origins,
-    values: { ...(variant.name ? { name: variant.name } : {}), ...(variant.description ? { description: variant.description } : {}),
+    values: { ...declaredProduct, ...(variant.name ? { name: variant.name } : {}), ...(variant.description ? { description: variant.description } : {}),
       ...(variant.category ? { category: variant.category } : {}) },
     issue: issues.length ? distinct(issues).slice(0, 5).join(' ') : null,
   };
 }
 
 export async function readOrganizerCommerce(root: DocumentReference, photos: OrganizerCommercialLink['photos'],
-  mapping: OrganizerSourceColumns = {}) {
+  mapping: OrganizerSourceColumns = {}, includeDeclaredAttributes = false) {
   const snapshots = await Promise.all(photos.map(photo => root.collection('photos').doc(photo.id).get()));
   const current = snapshots.map(snapshot => snapshot.data() as (OrganizerPhoto & { version: string }) | undefined);
   const id = current[0]?.variantId || null;
@@ -156,5 +182,5 @@ export async function readOrganizerCommerce(root: DocumentReference, photos: Org
   }
   const rows = provenance.docs.map(doc => doc.data() as OrganizerProductRow)
     .sort((a, b) => a.fileId.localeCompare(b.fileId) || a.tab.localeCompare(b.tab) || a.line - b.line);
-  return { organizerVariantId: id, source: resolveCommercialRows(variant, rows, mapping) };
+  return { organizerVariantId: id, source: resolveCommercialRows(variant, rows, mapping, includeDeclaredAttributes) };
 }

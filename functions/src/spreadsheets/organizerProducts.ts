@@ -1,25 +1,57 @@
-import type { Batch, Client, Job, MasterProduct, MasterVariant, StoredMasterProduct } from '../../../shared/src/types';
+import type { AutomationJob, Batch, Client, Job, MasterProduct, MasterVariant, PhotoArticleAttributes, StoredMasterProduct } from '../../../shared/src/types';
 import { MARKETPLACES } from '../../../shared/src/marketplaces';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { readOrganizerCommerce, type OrganizerCommercialLink } from '../organizer/commerce';
 import { isApprovedMasterProductOutput } from './masterProducts';
 
+type OrganizerProduct = {
+  organizer: NonNullable<MasterProduct['organizer']>;
+  photoAttributes: Partial<PhotoArticleAttributes>[];
+};
+
 export async function loadOrganizerProducts(client: Client, batches: Batch[], jobs: Job[]) {
   const db = getAppFirestore();
   const byBatch = new Map(batches.map(batch => [batch.id, batch]));
-  const refs = [...new Set(jobs.flatMap(job => {
+  const referencesByItem = new Map<string, Set<string>>();
+  const automationIds = new Set<string>();
+  for (const job of jobs) {
     const id = byBatch.get(job.batchId)?.automationJobId;
-    return id ? [`automationJobs/${id}/organizerCommerce/${job.garmentId}`] : [];
-  }))];
-  const links = new Map<string, MasterProduct['organizer']>();
+    if (!id) continue;
+    automationIds.add(id);
+    const path = `automationJobs/${id}/organizerCommerce/${job.garmentId}`;
+    const references = referencesByItem.get(path) || new Set<string>();
+    for (const reference of job.automationReferencePaths || job.productReferencePaths || []) references.add(reference);
+    referencesByItem.set(path, references);
+  }
+  const refs = [...referencesByItem.keys()];
+  const evidence = new Map<string, Partial<PhotoArticleAttributes>[]>();
+  if (automationIds.size) {
+    const snapshots = await db.getAll(...[...automationIds].map(id => db.collection('automationJobs').doc(id)),
+      { fieldMask: ['clientId', 'analysisCache'] });
+    for (const snapshot of snapshots) {
+      if (snapshot.get('clientId') !== client.id) continue;
+      const analyses = snapshot.get('analysisCache') as AutomationJob['analysisCache'];
+      for (const analysis of Object.values(analyses || {})) {
+        if (!analysis.usedGemini || !analysis.photoAttributes || !analysis.photos?.length) continue;
+        const path = `${snapshot.ref.path}/organizerCommerce/${analysis.garmentId}`;
+        const references = referencesByItem.get(path);
+        const analyzed = new Set(analysis.photos.map(photo => photo.storagePath));
+        if (!references?.size || analyzed.size !== references.size || [...analyzed].some(reference => !references.has(reference))) continue;
+        const group = evidence.get(path) || [];
+        group.push(analysis.photoAttributes);
+        evidence.set(path, group);
+      }
+    }
+  }
+  const links = new Map<string, OrganizerProduct>();
   const root = db.collection('organizers').doc(client.id!);
   for (let index = 0; index < refs.length; index += 25) {
     const snapshots = await db.getAll(...refs.slice(index, index + 25).map(path => db.doc(path)));
     await Promise.all(snapshots.map(async snapshot => {
       if (!snapshot.exists) return;
       const link = snapshot.data() as OrganizerCommercialLink;
-      const current = await readOrganizerCommerce(root, link.photos, client.automation?.organizerGeneration?.sourceColumns);
+      const current = await readOrganizerCommerce(root, link.photos, client.automation?.organizerGeneration?.sourceColumns, true);
       const classificationChanged = !current.source.issue && !link.source.issue &&
         (current.source.values.name !== link.source.values.name || current.source.values.category !== link.source.values.category ||
           current.organizerVariantId !== link.organizerVariantId);
@@ -27,13 +59,31 @@ export async function loadOrganizerProducts(client: Client, batches: Batch[], jo
         ...link.category, templateId: null, categoryId: null, version: null, confidence: null,
         reason: 'Cambió la identidad o categoría del Excel fuente. Revisa la categoría comercial.',
       } : link.category || null;
-      links.set(snapshot.ref.path, { source: current.source, category });
+      links.set(snapshot.ref.path, {
+        organizer: { source: current.source, category },
+        photoAttributes: current.source.issue ? [] : evidence.get(snapshot.ref.path) || [],
+      });
     }));
   }
   return links;
 }
 
-export function applyOrganizerSource(product: MasterProduct, data: NonNullable<MasterProduct['organizer']>, jobs: Job[]) {
+function agreedVisualAttribute<K extends 'color' | 'transparency'>(analyses: Partial<PhotoArticleAttributes>[], key: K) {
+  const observations = analyses.flatMap(analysis => {
+    const attribute = analysis[key];
+    if (attribute?.source !== 'gemini' || typeof attribute.confidence !== 'number' || !Number.isFinite(attribute.confidence) ||
+      attribute.confidence < 0.95 || attribute.confidence > 1 || !attribute.evidence?.trim()) return [];
+    const value = attribute.value;
+    if (key === 'color' && (typeof value !== 'string' || !value.trim() || value.length > 80)) return [];
+    if (key === 'transparency' && typeof value !== 'boolean') return [];
+    return [{ value: String(value).trim(), confidence: attribute.confidence, evidence: attribute.evidence }];
+  });
+  const normalize = (value: string) => value.normalize('NFC').toLowerCase();
+  if (new Set(observations.map(observation => normalize(observation.value))).size !== 1) return undefined;
+  return observations.sort((a, b) => b.confidence - a.confidence || a.value.localeCompare(b.value) || a.evidence.localeCompare(b.evidence))[0];
+}
+
+export function applyOrganizerSource(product: MasterProduct, { organizer: data, photoAttributes }: OrganizerProduct) {
   product.organizer = data;
   if (data.source.variants.length) product.variants = data.source.variants;
   for (const [field, value] of Object.entries(data.source.values)) {
@@ -44,22 +94,23 @@ export function applyOrganizerSource(product: MasterProduct, data: NonNullable<M
   if (category?.templateId && category.categoryId) product.marketplaces[category.marketplaceId] = {
     templateId: category.templateId, categoryId: category.categoryId,
   };
-  const suggestions = jobs.flatMap(job => {
-    const output = resolveApprovedJobOutput(job);
-    return isApprovedMasterProductOutput(job, output) && output?.autoReview?.marketplaceData ? [output.autoReview.marketplaceData] : [];
-  });
-  const suggestion = suggestions[0];
-  for (const [field, value] of Object.entries({ name: suggestion?.title, description: suggestion?.description, brand: suggestion?.brand })) {
-    if (value && !data.source.values[field as keyof MasterProduct['values']]) {
-      product.values[field as keyof MasterProduct['values']] = value;
-      product.evidence[field] = { original: value, normalized: value, source: 'ai', confidence: null };
+  const color = agreedVisualAttribute(photoAttributes, 'color');
+  const transparency = agreedVisualAttribute(photoAttributes, 'transparency');
+  product.variants = product.variants.map(variant => {
+    const values = { ...variant.values };
+    const attributes = { ...variant.attributes };
+    if (color && !values.color) {
+      values.color = color.value;
+      product.evidence[`variant.${variant.id}.color`] = { original: color.evidence, normalized: color.value, source: 'ai', confidence: color.confidence };
     }
-  }
-  for (const variant of product.variants) {
-    variant.attributes = { ...Object.fromEntries(Object.entries({
-      garmentType: suggestion?.garmentType, primaryColor: suggestion?.primaryColor, gender: suggestion?.gender, sport: suggestion?.sport,
-    }).filter((entry): entry is [string, string] => Boolean(entry[1]))), ...variant.attributes };
-  }
+    if (transparency && !attributes.transparency) {
+      attributes.transparency = transparency.value === 'true' ? 'Sí' : 'No';
+      product.evidence[`variant.${variant.id}.transparency`] = {
+        original: transparency.evidence, normalized: attributes.transparency, source: 'ai', confidence: transparency.confidence,
+      };
+    }
+    return { ...variant, values, ...(Object.keys(attributes).length ? { attributes } : {}) };
+  });
 }
 
 export function applyOrganizerVariantOverrides(variants: MasterVariant[], overrides: NonNullable<StoredMasterProduct['organizerOverrides']>) {

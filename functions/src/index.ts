@@ -21,6 +21,7 @@ export * from './callables/deleteClientSpreadsheetTemplate';
 export * from './callables/updateClientSpreadsheetTemplateCategory';
 export * from './callables/previewProductDrafts';
 export * from './callables/regenerateJob';
+export * from './callables/recordJobRejection';
 export * from './callables/deleteJob';
 export * from './callables/retryJobAutoReview';
 export * from './callables/cancelJobGeneration';

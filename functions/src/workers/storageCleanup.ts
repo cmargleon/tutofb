@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { JobOutput } from '../../../shared/src/types';
+import { Job, JobOutput } from '../../../shared/src/types';
 
 const DAYS_THRESHOLD = 30;
 const BATCH_SIZE = 50;
@@ -52,6 +52,12 @@ export const cleanupOldOutputStorage = async (): Promise<{
     }
 
     try {
+      const job = (await doc.ref.parent.parent?.get())?.data() as Job | undefined;
+      if (job?.userSelectedOutputId === doc.id || job?.userSelectedOutput?.id === doc.id
+        || job?.retainedApprovedOutput?.id === doc.id) {
+        skipped++;
+        continue;
+      }
       await bucket.file(output.resultImagePath).delete({ ignoreNotFound: true });
       if (output.thumbnailPath) await bucket.file(output.thumbnailPath).delete({ ignoreNotFound: true });
       await doc.ref.update({ storageDeletedAt: Timestamp.now() });

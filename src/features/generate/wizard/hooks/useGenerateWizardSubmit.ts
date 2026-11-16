@@ -1,3 +1,4 @@
+import { workflowUrl } from '../../../organizer/productWorkflow';
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createMarketplacePhotoBatch, createGenerationBatch, createProductGenerationBatch } from '../../firebase';
@@ -96,6 +97,16 @@ export const useGenerateWizardSubmit = ({
       );
       return;
     }
+
+    const imported = state.garments.find(item => item.organizerContext)?.organizerContext;
+    if (imported && (state.garments.length !== 1 || imported.clientId !== state.selectedClientId)) {
+      setFlowError('El lote vinculado debe contener solo la variante importada del Organizador.');
+      return;
+    }
+    const organizerPatch = imported ? { organizerContext: imported } : {};
+    const openResults = (batchId: string) => navigate(imported
+      ? workflowUrl('/catalogo', imported, { batchId })
+      : `/catalogo?${new URLSearchParams({ clientId: state.selectedClientId!, batchId })}`);
 
     if (state.outputMode === 'spreadsheet' && state.sourceSpreadsheet?.status === 'uploading') {
       setFlowError('Espera a que termine la subida del spreadsheet fuente antes de crear el lote.');
@@ -201,15 +212,16 @@ export const useGenerateWizardSubmit = ({
       }
 
       if (!isProduct && photoPlanInput && state.marketplacePhotoPlan) {
-        const signature = JSON.stringify([state.marketplacePhotoPlan.id, state.prompt]);
+        const signature = JSON.stringify([state.marketplacePhotoPlan.id, state.prompt, imported]);
         if (productSubmission.current?.signature !== signature) productSubmission.current = { signature, id: crypto.randomUUID() };
         setSubmitStage('creating-batch');
-        const result = await createMarketplacePhotoBatch({ ...photoPlanInput, requestId: productSubmission.current.id, approvedPlanId: state.marketplacePhotoPlan.id, prompt: state.prompt });
-        navigate(`/catalogo?clientId=${state.selectedClientId}&batchId=${result.batchId}`);
+        const result = await createMarketplacePhotoBatch({ ...photoPlanInput, ...organizerPatch, requestId: productSubmission.current.id, approvedPlanId: state.marketplacePhotoPlan.id, prompt: state.prompt });
+        openResults(result.batchId);
         return;
       }
       if (isProduct) {
         const request = {
+          ...organizerPatch,
           clientId: state.selectedClientId,
           items: nextGarments.map((item) => ({ id: item.id, name: item.name,
             referencePaths: item.originalPhotos.map((photo) => {
@@ -224,7 +236,7 @@ export const useGenerateWizardSubmit = ({
         if (productSubmission.current?.signature !== signature) productSubmission.current = { signature, id: crypto.randomUUID() };
         setSubmitStage('creating-batch');
         const result = await createProductGenerationBatch({ ...request, requestId: productSubmission.current.id });
-        navigate(`/catalogo?clientId=${state.selectedClientId}&batchId=${result.batchId}`);
+        openResults(result.batchId);
         return;
       }
 
@@ -245,9 +257,9 @@ export const useGenerateWizardSubmit = ({
       }
 
       setSubmitStage('creating-batch');
-      const result = await createGenerationBatch(buildCreateGenerationBatchRequest(state, uploadedGarments));
+      const result = await createGenerationBatch({ ...buildCreateGenerationBatchRequest(state, uploadedGarments), ...organizerPatch });
 
-      navigate(`/catalogo?clientId=${state.selectedClientId}&batchId=${result.batchId}`);
+      openResults(result.batchId);
     } catch (submitError: any) {
       console.error(submitError);
       setFlowError(

@@ -6,6 +6,7 @@ import { syncProductDraftImagesForGarment } from '../spreadsheets/syncProductDra
 const resolveEffectiveOutputId = (job: Job | undefined): string | null =>
   job?.userSelectedOutput?.id
   || job?.userSelectedOutputId
+  || job?.retainedApprovedOutput?.id
   || job?.currentOutput?.id
   || job?.currentOutputId
   || null;

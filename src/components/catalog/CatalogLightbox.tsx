@@ -1,11 +1,13 @@
+import { JobPhotoReview } from '../evaluation/JobPhotoReview';
 import { ReviewPromptProposal } from '../evaluation/ReviewPromptProposal';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { AlertCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, RefreshCw, X } from 'lucide-react';
-import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
+import { Batch, Job, JobOutput, JobReviewCorrection, Provider } from '../../../shared/src/types';
 import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
+import { getApprovedReviewOutput } from '../../../shared/src/jobReview';
 import { selectJobOutput } from '../../features/evaluation/firebase';
 import { useJobRegenerationFirebase } from '../../features/evaluation/useJobRegenerationFirebase';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
@@ -59,7 +61,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   const [regenerationInFlight, setRegenerationInFlight] = useState(false);
   const [regenerationSawRemoteProcessing, setRegenerationSawRemoteProcessing] = useState(false);
   const pendingHistoryBaselineIdsRef = useRef<Set<string> | null>(null);
-  const { outputs, loading: historyLoading } = useJobOutputHistory(job.id, HISTORY_LIMIT);
+  const { outputs, loading: historyLoading, error: historyError } = useJobOutputHistory(job.id, HISTORY_LIMIT);
   const {
     localDrafts,
     queueingJobs,
@@ -110,15 +112,15 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
 
   const outputsDesc = useMemo(() => {
     const merged = new Map<string, JobOutput>();
-    [job.userSelectedOutput, job.currentOutput, ...outputs].forEach((output) => {
+    [...outputs, job.currentOutput, job.userSelectedOutput, job.retainedApprovedOutput].forEach((output) => {
       if (output?.id && !merged.has(output.id)) {
         merged.set(output.id, output);
       }
     });
     return [...merged.values()].sort((left, right) => toMillis(right.createdAt) - toMillis(left.createdAt));
-  }, [job.currentOutput, job.userSelectedOutput, outputs]);
+  }, [job.currentOutput, job.userSelectedOutput, job.retainedApprovedOutput, outputs]);
 
-  const persistedSelectedOutputId = resolveApprovedJobOutput(job)?.id || null;
+  const persistedSelectedOutputId = getApprovedReviewOutput(job)?.id || null;
   const effectiveSelectedOutputId =
     pendingSelectedOutputId !== undefined ? pendingSelectedOutputId : persistedSelectedOutputId;
   const currentOutput = resolveApprovedJobOutput(job) || outputsDesc[0] || null;
@@ -172,11 +174,11 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
       return;
     }
 
-    if (pendingSelectedOutputId === persistedSelectedOutputId) {
+    if (pendingSelectedOutputId === (job.userSelectedOutputId || null)) {
       setPendingSelectedOutputId(undefined);
       setSelectionSavingOutputId(null);
     }
-  }, [pendingSelectedOutputId, persistedSelectedOutputId]);
+  }, [pendingSelectedOutputId, job.userSelectedOutputId]);
 
   useEffect(() => {
     if (!regenerationInFlight) {
@@ -217,6 +219,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (document.querySelector('dialog[data-job-photo-review][open]')) return;
       const target = e.target as HTMLElement | null;
       const isTypingTarget = target
         ? ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
@@ -268,9 +271,9 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
     }
   };
 
-  const handleRegenerateClick = async () => {
-    if (!job.id || selectedProviderDisabled) return;
-    const success = await handleRegenerate(job.id);
+  const handleRegenerateClick = async (correction?: JobReviewCorrection) => {
+    if (!job.id || (!correction && selectedProviderDisabled)) return false;
+    const success = await handleRegenerate(job.id, correction);
     if (success) {
       pendingHistoryBaselineIdsRef.current = new Set(outputsDesc.map((output) => output.id));
       setShowPendingHistoryPlaceholder(true);
@@ -282,6 +285,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
         description: `La foto de ${job.modelNameSnapshot} volvió a cola con el prompt actualizado.`,
       });
     }
+    return success;
   };
 
   const handleCopyImageUrl = async () => {
@@ -296,11 +300,11 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
   };
 
   const handleSelectHistoryOutput = async (outputId: string) => {
-    if (!job.id || selectionSavingOutputId) {
+    if (!role.canEvaluate || !job.id || selectionSavingOutputId || isRemoteGenerating) {
       return;
     }
 
-    if (effectiveSelectedOutputId === outputId && pendingSelectedOutputId === undefined) {
+    if (job.userSelectedOutputId === outputId && pendingSelectedOutputId === undefined) {
       return;
     }
 
@@ -511,6 +515,11 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
           <aside className="flex min-h-0 flex-col border-b border-white/10 lg:border-b-0 lg:border-r lg:border-white/10">
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="px-4 py-4 sm:px-5" onClick={(e) => e.stopPropagation()}>
+                <div className="mb-3">
+                  <JobPhotoReview job={job} outputs={outputsDesc} displayedOutput={displayedOutput}
+                    historyLoading={historyLoading} historyError={historyError} regenerationDisabled={controlsDisabled || Boolean(disabledProviders?.includes(job.provider))}
+                    regenerationError={regenerationError} onRegenerate={handleRegenerateClick} />
+                </div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Historial</p>
                 {historyLoading && historyOutputs.length === 0 && !showPendingHistoryPlaceholder ? (
                   <div className="flex items-center gap-2 text-sm text-slate-300">
@@ -527,7 +536,7 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                         active={displayedOutput?.id === output.id}
                         effectivelySelected={effectiveSelectedOutputId === output.id}
                         geminiApproved={output.autoReview?.verdict === 'approved'}
-                        disabled={Boolean(selectionSavingOutputId)}
+                        disabled={!role.canEvaluate || isRemoteGenerating || Boolean(selectionSavingOutputId)}
                         onSelect={() => void handleSelectHistoryOutput(output.id)}
                       />
                     ))}

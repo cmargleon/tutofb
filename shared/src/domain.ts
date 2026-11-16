@@ -288,8 +288,8 @@ export const isActiveCatalogEntity = (value: { status?: CatalogEntityStatus | nu
   !isArchivedCatalogEntity(value);
 // Older poses without an explicit state remain available.
 export const isPoseActive = (pose: Pick<Pose, 'active'>): boolean => pose.active !== false;
-export const resolveApprovedJobOutput = (job: Pick<Job, 'userSelectedOutput' | 'currentOutput'>): JobOutput | null =>
-  job.userSelectedOutput || job.currentOutput || null;
+export const resolveApprovedJobOutput = (job: Pick<Job, 'userSelectedOutput' | 'retainedApprovedOutput' | 'currentOutput'>): JobOutput | null =>
+  job.userSelectedOutput || job.retainedApprovedOutput || job.currentOutput || null;
 
 const MODEL_IDENTITY_TRAIT_LABELS: Record<keyof ModelIdentityTraits, string> = {
   sex: 'Biological sex / presentation anchor',

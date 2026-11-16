@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import { Job, Provider } from '../../../shared/src/types';
+import { getJobRegenerationBasePrompt } from '../../../shared/src/jobReview';
+import { Job, JobReviewCorrection, Provider } from '../../../shared/src/types';
 import { cancelJobGeneration, regenerateJob, retryJobAutoReview } from './firebase';
 
 export const useJobRegenerationFirebase = () => {
@@ -19,7 +20,7 @@ export const useJobRegenerationFirebase = () => {
         ...prev,
         [job.id!]: {
           provider: job.provider,
-          prompt: (job.generationKind === 'product' ? job.requestedPromptBase : null) || job.promptBase || job.finalPrompt || ''
+          prompt: getJobRegenerationBasePrompt(job)
         }
       };
     });
@@ -32,9 +33,9 @@ export const useJobRegenerationFirebase = () => {
     }));
   }, []);
 
-  const handleRegenerate = useCallback(async (jobId: string) => {
+  const handleRegenerate = useCallback(async (jobId: string, correction?: JobReviewCorrection) => {
     const draft = localDrafts[jobId];
-    if (!draft || !draft.prompt.trim()) {
+    if (!draft || (!correction && !draft.prompt.trim())) {
       setRegenerationErrors(prev => ({ ...prev, [jobId]: 'El prompt no puede estar vacío' }));
       return false;
     }
@@ -43,7 +44,7 @@ export const useJobRegenerationFirebase = () => {
     setRegenerationErrors(prev => ({ ...prev, [jobId]: null }));
 
     try {
-      await regenerateJob(jobId, draft.provider, draft.prompt);
+      await regenerateJob(jobId, draft.provider, draft.prompt, correction);
       return true;
     } catch (error: any) {
       setRegenerationErrors(prev => ({ ...prev, [jobId]: error.message || 'Error al encolar regeneración' }));

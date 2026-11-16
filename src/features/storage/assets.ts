@@ -12,7 +12,8 @@ export interface ResolvedStorageAsset {
 }
 
 const appConfig = firebaseConfig as typeof firebaseConfig & { projectId?: string };
-const isGeneratedStoragePath = (storagePath: string): boolean => storagePath.startsWith('generated/');
+const usesProtectedImageEndpoint = (path: string): boolean =>
+  path.startsWith('generated/') || path.startsWith('review-reference/');
 const encodeStoragePathForUrl = (storagePath: string): string =>
   storagePath
     .split('/')
@@ -83,7 +84,7 @@ const wait = async (delayMs: number): Promise<void> =>
   });
 
 const fetchStorageAssetUrl = async (storagePath: string): Promise<ResolvedStorageAsset> => {
-  if (isGeneratedStoragePath(storagePath)) {
+  if (usesProtectedImageEndpoint(storagePath)) {
     const user = auth.currentUser;
     if (!user) throw new Error('Debes iniciar sesión para ver la imagen.');
     const response = await scheduleStorageUrlRequest(async () => fetch(buildPublicGeneratedImageUrl(storagePath), { headers: { Authorization: `Bearer ${await user.getIdToken()}` } }));

@@ -1,3 +1,4 @@
+import { resolveOrganizerBatchOrigin } from '../organizer/productWorkflow';
 import { GEMINI_API_KEY } from '../config/runtime';
 import * as admin from 'firebase-admin';
 import { createHash } from 'node:crypto';
@@ -41,7 +42,7 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
   const db = getAppFirestore();
   const identity = createHash('sha256').update(`${uid}:${data.clientId}:${data.requestId}`).digest('hex');
   const batchRef = db.doc(`batches/photo-${identity}`);
-  const inputHash = createHash('sha256').update(canonicalPhotoJson([data.approvedPlanId, data.prompt, data.articles, data.provider, data.imageConfig, data.aspectRatio, data.modelId || null])).digest('hex');
+  const inputHash = createHash('sha256').update(canonicalPhotoJson([data.approvedPlanId, data.prompt, data.articles, data.provider, data.imageConfig, data.aspectRatio, data.modelId || null, ...(data.organizerContext ? [data.organizerContext] : [])])).digest('hex');
   const previous = await batchRef.get();
   if (previous.exists) {
     if (previous.get('photoInputHash') !== inputHash) throw new HttpsError('already-exists', 'La solicitud ya se usó con otra entrada.');
@@ -53,8 +54,11 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
   const system = await getSystemConfigCached();
   if (plan.tasks.length > system.batchMaxJobs) throw new HttpsError('out-of-range', 'El plan excede el límite de trabajos.');
 
+  const organizerOrigin = automation ? undefined : await resolveOrganizerBatchOrigin(
+    data.organizerContext, data.clientId, data.articles.map(article => article.itemId), uid,
+  );
   const clientRef = db.doc(`clients/${data.clientId}`);
-  const requestHash = createHash('sha256').update(canonicalPhotoJson([plan, data.prompt])).digest('hex');
+  const requestHash = createHash('sha256').update(canonicalPhotoJson([plan, data.prompt, ...(organizerOrigin ? [organizerOrigin] : [])])).digest('hex');
   return db.runTransaction(async tx => {
     const automationRef = automation ? db.doc(`automationJobs/${automation.id}`) : null;
     const [existing, clientSnapshot] = await tx.getAll(batchRef, clientRef);
@@ -70,7 +74,7 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
     if (!automation && canonicalPhotoJson(photoRecipeRevisions(plan.channels, client.marketplaces)) !== canonicalPhotoJson(plan.recipeSnapshot?.channels))
       throw new HttpsError('failed-precondition', 'La receta cambió. Revisa el plan antes de generar.');
     const now = admin.firestore.FieldValue.serverTimestamp();
-    const batch: Omit<Batch, 'id'> = { photoPlan: plan, photoProfile: COMMERCIAL_PHOTO_PROFILE, generationKind: data.articles[0].kind,
+    const batch: Omit<Batch, 'id'> = { ...(organizerOrigin ? { organizerOrigin } : {}), photoPlan: plan, photoProfile: COMMERCIAL_PHOTO_PROFILE, generationKind: data.articles[0].kind,
       ...(automation ? { automationJobId: automation.id } : {}),
       clientId: data.clientId, clientNameSnapshot: client.name, clientSnapshot: { id: data.clientId, name: client.name }, modelId: data.modelId || '', modelNameSnapshot: 'Plan de fotografías', outputMode: 'photos_only',
       provider: plan.effectiveConfig.provider, aspectRatio: plan.effectiveConfig.aspectRatio, imageConfig: plan.effectiveConfig.imageConfig, promptBase: data.prompt,

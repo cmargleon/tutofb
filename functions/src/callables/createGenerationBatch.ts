@@ -1,3 +1,4 @@
+import { resolveOrganizerBatchOrigin } from '../organizer/productWorkflow';
 import { COMMERCIAL_PHOTO_PROFILE } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
 import { automationScenePatch } from '../automation/recovery';
@@ -117,7 +118,11 @@ const prepareGenerationBatch = async (
 
     const now = admin.firestore.FieldValue.serverTimestamp();
     const batchRef = automation ? db.collection('batches').doc(`automation-${automation.id}${groupIndex === undefined ? '' : `-${groupIndex}`}`) : db.collection('batches').doc();
+    const organizerOrigin = automation ? undefined : await resolveOrganizerBatchOrigin(
+      data.organizerContext, validated.clientId, validated.garments.map(garment => garment.id), uid,
+    );
     const batchData: Omit<Batch, 'id'> = {
+      ...(organizerOrigin ? { organizerOrigin } : {}),
       clientId: client.id!,
       clientNameSnapshot: client.name,
       clientSnapshot: {
@@ -246,6 +251,7 @@ const prepareGenerationBatch = async (
         garmentId: garment.id,
         garmentName: garment.name,
         garmentFilePath: selectedGarmentPhoto.storagePath,
+        garmentReferencePaths: (garment.photos || []).map((photo) => photo.storagePath),
         garmentPhotoId: selectedGarmentPhoto.id,
         garmentPhotoFileName: selectedGarmentPhoto.fileName,
         garmentView: selectedGarmentPhoto.view,

@@ -162,8 +162,6 @@ export const persistGeneratedAttempt = async ({
 
   if (nextStatus === 'completed') {
     baseJobUpdate['traceability.lastCompletedAt'] = admin.firestore.FieldValue.serverTimestamp();
-    baseJobUpdate.userSelectedOutputId = null;
-    baseJobUpdate.userSelectedOutput = null;
   }
 
   if (shouldResetForNextAttempt) {

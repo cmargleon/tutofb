@@ -4,9 +4,9 @@ Tuto conserva las referencias y los resultados privados en su bucket Firebase ac
 
 ## Uso
 
-En Catálogo → Exportar a marketplaces → Completar datos, selecciona la plantilla/categoría, abre el destino, autoriza la publicación y pulsa **Preparar URL para …**. Se publican solo las fotografías que el servidor considera aprobadas. Puedes copiar las URL o abrir los archivos y guardar el producto para volver a validar. Los cambios del formulario se conservan durante la preparación. Los enlaces de alojamiento externo siguen admitidos.
+En Catálogo → Exportar a marketplaces, selecciona los destinos, corrige los requisitos pendientes y pulsa **Descargar**. Esa acción autoriza crear los enlaces públicos que falten para las fotos aprobadas que usa el Excel. Si necesitas obtener los enlaces antes, **Completar datos → Preparar URL para …** permite prepararlos y copiarlos con autorización explícita. Los enlaces de alojamiento externo siguen admitidos.
 
-Abrir el catálogo, validar o descargar un Excel no publica fotografías. La proyección de exportación recupera publicaciones existentes y completa las asociaciones `image.0`, `image.1`, etc. de la plantilla. Los valores explícitos por fila siguen teniendo prioridad: una celda con una URL antigua debe vaciarse para usar su asociación o corregirse.
+Abrir el catálogo y validar son acciones de solo lectura. La exportación reutiliza publicaciones existentes y completa las asociaciones `image.0`, `image.1`, etc. de la plantilla. Si hace falta publicar, la descarga vuelve a comprobar la aprobación, pertenencia y canal antes de crear cada copia. Los valores explícitos por fila siguen teniendo prioridad: una celda con una URL antigua debe vaciarse para usar su asociación o corregirse.
 
 ## Servidor y almacenamiento
 

@@ -73,8 +73,6 @@ export const cancelJobGeneration = onCall<CancelJobGenerationRequest, Promise<Ca
         completedAt: null,
         currentOutputId: null,
         currentOutput: null,
-        userSelectedOutputId: null,
-        userSelectedOutput: null,
         updatedAt: now,
         lastError: toFailureSummary(failureInfo),
         failureInfo,

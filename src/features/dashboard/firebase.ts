@@ -1,95 +1,55 @@
-import { subscribeHumanQuery } from '../auth/scopedQuery';
-import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { AnalyticsSummary, Batch, Client, Job, Model } from '../../../shared/src/types';
+import {
+  collection, getCountFromServer, getDocsFromServer, limit, orderBy, query, where,
+} from 'firebase/firestore';
+import type { Query } from 'firebase/firestore';
+import type { Batch, Job, JobStatus } from '../../../shared/src/types';
+import { toMillisOrZero } from '../../../shared/src/utils/dateUtils';
 import { db } from '../../firebase';
-import { isActiveCatalogEntity } from '../../../shared/src/domain';
 
-export interface DashboardSnapshot {
-  clients: Client[];
-  models: Model[];
-  recentBatches: Batch[];
-  recentJobs: Job[];
-}
+export const RECENT_BATCH_LIMIT = 20;
+export const RECENT_JOB_LIMIT = 50;
+export const ACTION_BATCH_LIMIT = 5;
+export const ACTION_JOB_LIMIT = 1000;
+export const GENERATION_STATUSES = ['pending', 'processing', 'completed', 'failed'] as const satisfies readonly JobStatus[];
 
-export const subscribeToDashboardData = (
-  onData: (snapshot: DashboardSnapshot) => void,
-  onError: (error: Error) => void,
-) => {
-  let latestClients: Client[] = [];
-  let latestModels: Model[] = [];
-  let latestBatches: Batch[] = [];
-  let latestJobs: Job[] = [];
-
-  const emit = () => {
-    onData({
-      clients: latestClients,
-      models: latestModels,
-      recentBatches: latestBatches,
-      recentJobs: latestJobs,
-    });
-  };
-
-  const unsubscribers = [
-    subscribeHumanQuery(
-      query(collection(db, 'clients'), orderBy('createdAt', 'desc')),
-      '__name__',
-      (snapshot) => {
-        latestClients = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() } as Client))
-          .filter(isActiveCatalogEntity);
-        emit();
-      },
-      onError,
-    ),
-    subscribeHumanQuery(
-      query(collection(db, 'models'), orderBy('createdAt', 'desc')),
-      'clientId',
-      (snapshot) => {
-        latestModels = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() } as Model))
-          .filter(isActiveCatalogEntity);
-        emit();
-      },
-      onError,
-    ),
-    subscribeHumanQuery(
-      query(collection(db, 'batches'), orderBy('createdAt', 'desc'), limit(20)),
-      'clientId',
-      (snapshot) => {
-        latestBatches = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Batch));
-        emit();
-      },
-      onError,
-    ),
-    subscribeHumanQuery(
-      query(collection(db, 'jobs'), orderBy('createdAt', 'desc'), limit(50)),
-      'clientId',
-      (snapshot) => {
-        latestJobs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Job));
-        emit();
-      },
-      onError,
-    ),
-  ];
-
-  return () => {
-    unsubscribers.forEach((unsubscribe) => unsubscribe());
-  };
+const scopeQueries = (reference: Query, clientIds: readonly string[] | null): Query[] => {
+  if (clientIds === null) return [reference];
+  const queries: Query[] = [];
+  for (let offset = 0; offset < clientIds.length; offset += 5) {
+    queries.push(query(reference, where('clientId', 'in', clientIds.slice(offset, offset + 5))));
+  }
+  return queries;
 };
 
-export const subscribeToAnalyticsSummary = (
-  onData: (summary: AnalyticsSummary | null) => void,
-  onError: (error: Error) => void,
-) =>
-  onSnapshot(
-    doc(db, 'analytics_summary', 'global'),
-    (snapshot) => {
-      if (!snapshot.exists()) {
-        onData(null);
-        return;
-      }
+const readRecent = async <T extends Job | Batch>(
+  collectionName: 'jobs' | 'batches', clientIds: readonly string[] | null, maxResults: number,
+): Promise<T[]> => {
+  const reference = query(collection(db, collectionName), orderBy('createdAt', 'desc'), limit(maxResults));
+  const snapshots = await Promise.all(scopeQueries(reference, clientIds).map(part => getDocsFromServer(part)));
+  return snapshots.flatMap(snapshot => snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as T))
+    .sort((a, b) => toMillisOrZero(b.createdAt) - toMillisOrZero(a.createdAt) || (a.id === b.id ? 0 : a.id! < b.id! ? 1 : -1))
+    .slice(0, maxResults);
+};
 
-      onData(snapshot.data() as AnalyticsSummary);
-    },
-    onError,
-  );
+export const readRecentBatches = (clientIds: readonly string[] | null) =>
+  readRecent<Batch>('batches', clientIds, RECENT_BATCH_LIMIT);
+
+export const readRecentJobs = (clientIds: readonly string[] | null) =>
+  readRecent<Job>('jobs', clientIds, RECENT_JOB_LIMIT);
+
+export const countGenerationJobs = async (clientIds: readonly string[] | null, status: JobStatus) => {
+  const reference = query(collection(db, 'jobs'), where('status', '==', status));
+  const parts = await Promise.all(scopeQueries(reference, clientIds).map(part => getCountFromServer(part)));
+  return parts.reduce((total, part) => total + part.data().count, 0);
+};
+
+export const readActionBatchJobs = async (batch: Batch) => {
+  const snapshot = await getDocsFromServer(query(
+    collection(db, 'jobs'),
+    where('clientId', '==', batch.clientId),
+    where('batchId', '==', batch.id),
+    limit(ACTION_JOB_LIMIT + 1),
+  ));
+  if (snapshot.size > ACTION_JOB_LIMIT) return null;
+  return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Job);
+};

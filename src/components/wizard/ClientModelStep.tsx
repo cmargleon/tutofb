@@ -7,6 +7,7 @@ import { EmptyState, ImageThumb } from '../ui';
 interface Props {
   generationKind: WizardState['generationKind'];
   isBusy: boolean;
+  lockClient?: boolean;
   section: 'client' | 'model' | 'output';
   clients: Client[];
   models: Model[];
@@ -32,6 +33,7 @@ interface Props {
 export const ClientModelStep: React.FC<Props> = ({
   generationKind,
   isBusy,
+  lockClient,
   section,
   clients,
   models,
@@ -66,7 +68,7 @@ export const ClientModelStep: React.FC<Props> = ({
           {section === 'client' && <><label className="mb-2 block text-sm font-medium text-slate-700">Cliente</label>
           <select
             aria-label="Cliente"
-            disabled={isBusy}
+            disabled={isBusy || lockClient}
             value={selectedClientId || ''}
             onChange={(event) => onClientChange(event.target.value || null)}
             className="tuto-field w-full"

@@ -1,7 +1,8 @@
 import { MarketplacePhotoPlanPanel } from '../features/generate/MarketplacePhotoPlanPanel';
 import { ProductScenesStep } from '../components/wizard/ProductScenesStep';
 import React, { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useProductWorkflow, workflowUrl } from '../features/organizer/productWorkflow';
 import { organizer } from '../features/organizer/firebase';
 import type { OrganizerDraft } from '../../shared/src/types';
 import { Wand2 } from 'lucide-react';
@@ -17,11 +18,23 @@ import { useWizard } from '../features/generate/hooks/useWizard';
 import { GENERATE_WIZARD_MAX_STEP, getGenerateWizardSteps } from '../features/generate/wizard/state';
 
 export const Wizard: React.FC = () => {
+  const [params] = useSearchParams();
+  const variantId = params.get('variantId') ?? params.get('organizerVariant') ?? '';
+  const clientId = params.get('clientId') ?? params.get('organizerClient') ?? '';
+  const baseProductId = params.get('baseProductId') ?? '';
+  const batchId = params.get('batchId') ?? '';
+  return <GenerationWizard key={JSON.stringify([variantId, variantId && clientId, baseProductId, batchId])}
+    organizerVariant={variantId} organizerClient={clientId} baseProductId={baseProductId} batchId={batchId} />;
+};
+
+const GenerationWizard = ({ organizerVariant, organizerClient, baseProductId, batchId }: {
+  organizerVariant: string; organizerClient: string; baseProductId: string; batchId: string;
+}) => {
   const toast = useToast();
-  const [params, setParams] = useSearchParams();
   const [importing, setImporting] = useState(false);
-  const organizerClient = params.get('organizerClient');
-  const organizerVariant = params.get('organizerVariant');
+  const scoped = Boolean(organizerVariant || baseProductId);
+  const detail = useProductWorkflow(organizerClient, organizerVariant, baseProductId, batchId || undefined);
+  const workflow = detail?.workflow;
   const lastErrorRef = useRef<string | null>(null);
   const {
     state,
@@ -75,18 +88,14 @@ export const Wizard: React.FC = () => {
   } = useWizard();
   const isWizardBusy = isSubmitting || isAnalyzing || importing;
   const importOrganizer = async () => {
-    if (!organizerClient || !organizerVariant || state.garments.length || !clients.some(client => client.id === organizerClient)) return;
+    if (!workflow || state.garments.length || !clients.some(client => client.id === organizerClient)) return;
     setImporting(true);
     try {
-      const draft = await organizer<OrganizerDraft>({ action: 'draft', clientId: organizerClient, variantId: organizerVariant });
+      const draft = await organizer<OrganizerDraft>({ action: 'draft', ...workflow.context });
+      if (!draft.context) throw new Error('La importación no devolvió la identidad de la variante.');
       const files = draft.photos.map(photo => new File([Uint8Array.from(atob(photo.base64), char => char.charCodeAt(0))], photo.name, { type: 'image/jpeg' }));
       handleClientChange(organizerClient);
       await product.handleFiles(files, true, draft);
-      setParams(previous => {
-        const next = new URLSearchParams(previous);
-        next.delete('organizerClient'); next.delete('organizerVariant');
-        return next;
-      }, { replace: true });
     } catch (error) {
       toast({ tone: 'error', title: 'No se pudieron importar las referencias', description: (error as Error).message });
     } finally { setImporting(false); }
@@ -124,11 +133,12 @@ export const Wizard: React.FC = () => {
           section={section}
           generationKind={state.generationKind}
           isBusy={isWizardBusy}
+          lockClient={scoped}
           clients={clients}
           models={models}
           spreadsheetTemplates={spreadsheetTemplates}
           spreadsheetCategories={spreadsheetCategories}
-          selectedClientId={state.selectedClientId}
+          selectedClientId={scoped && workflow ? workflow.context.clientId : state.selectedClientId}
           selectedModelId={state.selectedModelId}
           outputMode={state.outputMode}
           outputModeChosen={state.outputModeChosen}
@@ -153,6 +163,11 @@ export const Wizard: React.FC = () => {
         icon={Wand2}
         description="Sube las fotos de referencia, prepara la sesión y envía el lote a generación con revisión automática de calidad."
       />
+      {scoped && <div className="flex flex-wrap items-center gap-3">
+        {organizerClient && organizerVariant && <Link className="tuto-link text-sm" to={workflowUrl('/organizador',
+          workflow?.context || { clientId: organizerClient, variantId: organizerVariant, baseProductId }, { batchId })}>Volver a la ficha del producto</Link>}
+        {workflow && <span className="text-sm text-slate-700">{workflow.baseName} · {[workflow.variant.visual, workflow.variant.color].filter(Boolean).join(' · ')}</span>}
+      </div>}
       <div ref={stepperRef} className="scroll-mt-20">
         <WizardStepper
           steps={getGenerateWizardSteps(state.generationKind)}
@@ -163,14 +178,17 @@ export const Wizard: React.FC = () => {
       </div>
 
       {state.step === 1 && <div className="space-y-6">
-        {contextSection('client')}
-        {organizerClient && organizerVariant && <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        {(!scoped || workflow) && contextSection('client')}
+        {scoped && (!organizerClient || !organizerVariant || detail?.error) && <p role="alert" className="tuto-alert tuto-alert--warning">{detail?.error || 'El enlace de generación requiere cliente y variante.'}</p>}
+        {scoped && organizerClient && organizerVariant && !detail && <LoadingBlock message="Cargando variante…" />}
+        {workflow && <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
           <div><h2 className="font-semibold">Referencias aprobadas del organizador</h2>
-            <p className="text-sm text-slate-600">Importa el artículo y sus vistas aprobadas al lote.</p></div>
-          <Button disabled={isWizardBusy || Boolean(state.garments.length)} loading={importing} onClick={importOrganizer}>Importar referencias</Button>
+            <p className="text-sm text-slate-600">{workflow.variant.referenceState === 'approved' ? 'Importa la variante y sus vistas aprobadas al lote.' : 'Revisa y aprueba las referencias en el Organizador para continuar.'}</p></div>
+          <Button disabled={isWizardBusy || Boolean(state.garments.length) || workflow.variant.referenceState !== 'approved' || !clients.some(client => client.id === organizerClient)} loading={importing} onClick={importOrganizer}>Importar referencias</Button>
         </section>}
         {state.selectedClientId && <GarmentsStep
           garments={state.garments}
+          importedOnly={scoped}
           isSubmitting={isWizardBusy}
           generationKind={state.generationKind}
           onGenerationKindChange={handleGenerationKindChange}

@@ -37,16 +37,16 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
   const templatePath = `client_spreadsheets/${clientId}/vaso/original.xlsx`;
   const real = process.env.TUTO_JISHOP_VASO_TEMPLATE;
   const fixture = XLSX.utils.book_new();
-  const keys = ['supplier_code', 'supplier_sku', 'goods_name', 'main_img', 'detail_img_1', 'stock', 'original_price', 'weight', 'weight_unit'];
+  const keys = ['supplier_code', 'supplier_sku', 'goods_name', 'main_img', 'detail_img_1', 'stock', 'original_price', 'weight', 'weight_unit', 'main_attribute_value', 'attr_1000463'];
   XLSX.utils.book_append_sheet(fixture, XLSX.utils.aoa_to_sheet([['SHEIN'], keys, keys,
     ['Requerido', 'opcional', 'Requerido'], [], []]), 'Vaso(1083-3218)');
   const bytes = real ? await readFile(real) : XLSX.write(fixture, { type: 'buffer', bookType: 'xlsx' });
   const jpg = async (color: string) => sharp({ create: { width: 900, height: 1200, channels: 3, background: color } }).jpeg().toBuffer();
   const refs = [{ id: 'object-reference', version: '1' }];
-  const rows = (version: string, stock: number, names = ['Vaso de prueba', 'Vaso de prueba']) => {
-    const grid = [['SKC', 'SKU', 'Nombre', 'Color', 'Talla', 'Stock', 'Precio de venta', 'Peso (g)'],
-      ['QA-VASO', '00001', names[0], 'Transparente', '300ml', String(stock), '149.5', '325'],
-      ['QA-VASO', '00002', names[1], 'Transparente', '450ml', '', '154', '350']];
+  const rows = (version: string, stock: number, names = ['Vaso de prueba', 'Vaso de prueba'], material = '') => {
+    const grid = [['SKC', 'SKU', 'Nombre', 'Color', 'Talla', 'Stock', 'Precio de venta', 'Peso (g)', 'Materiales en contacto con alimentos', 'Marca'],
+      ['QA-VASO', '00001', names[0], '', '300ml', String(stock), '149.5', '325', material, 'Marca declarada'],
+      ['QA-VASO', '00002', names[1], '', '450ml', '', '154', '350', material, 'Marca declarada']];
     return parseTab({ id: 'drive-qa-source', name: 'Fuente QA.xlsm' }, 'HOGAR', null, grid).rows.map((row: any) => ({ ...row, sourceVersion: version }));
   };
   const writeRows = async (data: any[], variantId = 'object-visual') => {
@@ -58,8 +58,8 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     const path = `generated/${clientId}/${batchId}/${id}/out.jpg`;
     await bucket.file(path).save(await jpg(scene === 'clean' ? 'slategrey' : 'darkgrey'));
     await db.doc(`jobs/${id}`).set({ clientId, batchId, garmentId, garmentName: garmentId, status: 'completed',
-      ...(photoTask ? { photoTask } : { productScene: scene }), currentOutput: { id: `${id}-output`, resultImagePath: path,
-        autoReview: { verdict: 'approved', marketplaceData: { title: 'Título sugerido', description: 'Descripción de prueba' } },
+      ...(photoTask ? { photoTask } : { productScene: scene, productReferencePaths: ['garments/reference.jpg'] }), currentOutput: { id: `${id}-output`, resultImagePath: path,
+        autoReview: { verdict: 'approved', marketplaceData: { title: 'Título sugerido', description: 'Dice que es de acero', primaryColor: 'Rojo' } },
         ...(photoTask ? { photoValidation: { fidelity: true, destinations: [{ channel: 'shein', position: 1, passed: true }] } } : {}) } });
   };
   try {
@@ -72,16 +72,17 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     const category = analyzed.categories[0];
     const mappings = analyzed.template.exportConfig.mappings[category.id];
     mappings.supplier_code = { source: 'variant.skc', required: true, dataType: 'text' };
+    mappings.main_attribute_value = { source: 'variant.color', required: true };
+    mappings.attr_1000463 = { source: 'attribute.foodContactMaterial', required: true };
+    let exportedColor = 'morado';
     if (real) {
       const specification = category.columns.find((column: any) => column.key === 'main_attribute');
       const dependent = category.columns.find((column: any) => column.key === 'main_attribute_value');
       const option = specification.dropdownOptions.find((value: string) => /color/i.test(value));
-      const color = dependent.dropdownDependency.optionsByValue[option].find((value: string) => /transpar/i.test(value));
-      assert.ok(option && color);
+      exportedColor = dependent.dropdownDependency.optionsByValue[option].find((value: string) => /^morado$/i.test(value));
+      assert.ok(option && exportedColor);
       mappings.main_attribute = { source: `literal.${option}`, required: true };
-      mappings.main_attribute_value = { source: 'variant.color', valueMap: { Transparente: color }, required: true };
       mappings.secondary_attribute_1 = { source: 'literal.Talla(87)' };
-      mappings.attr_1000463 = { source: 'attribute.foodContactMaterial', required: true };
     }
     const templateRef = client.collection('spreadsheetTemplates').doc('vaso');
     const timestamp = admin.firestore.Timestamp.now();
@@ -94,6 +95,20 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     const link = await readOrganizerCommerce(organizer, refs);
     assert.equal(link.source.variants[0].values.inventory, '0');
     assert.equal(link.source.variants[1].values.inventory, undefined);
+    const matchingAnalysis = {
+      usedGemini: true, garmentId: 'object-item', photos: [{ storagePath: 'garments/reference.jpg' }],
+      photoAttributes: {
+        color: { value: 'morado', confidence: 0.99, evidence: 'El vaso se ve morado.', source: 'gemini' },
+        transparency: { value: false, confidence: 0.99, evidence: 'El cuerpo del vaso es opaco.', source: 'gemini' },
+        packaging: { value: 'unit', confidence: 0.99, evidence: 'Se ve un vaso.', source: 'gemini' },
+      },
+    };
+    await db.doc('automationJobs/object-intake').set({ clientId, analysisCache: {
+      matching: matchingAnalysis,
+      otherReference: { ...matchingAnalysis, photos: [{ storagePath: 'garments/other.jpg' }], photoAttributes: {
+        color: { value: 'Rojo', confidence: 1, evidence: 'Se ve rojo.', source: 'gemini' },
+      } },
+    } });
     await db.doc('automationJobs/object-intake/organizerCommerce/object-item').set({ ...link, itemId: 'object-item', photos: refs, category: categoryDecision });
     await db.doc('batches/object-batch').set({ clientId, automationJobId: 'object-intake', poseIds: [], productScenes: [{ type: 'clean' }, { type: 'hero' }] });
     await writeScene('object-front', 'object-batch', 'object-item', 'clean');
@@ -101,48 +116,61 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     const initial = await exports.previewMarketplaceExports.run(request(scope));
     const product = initial.products[0];
     assert.equal(product.variants.length, 2);
+    assert.ok(product.variants.every((v: any) => v.values.color === 'morado' && v.attributes.transparency === 'No' && !v.values.pack));
+    assert.equal(product.values.description, undefined);
+    assert.equal(product.values.brand, 'Marca declarada');
+    assert.ok(!initial.channels[0].issues.some((issue: any) => issue.field === 'main_attribute_value'));
     assert.deepEqual(Object.values(product.organizer.source.origins).flat().map((row: any) => [row.fileName, row.version, row.tab, row.row]), [
       ['Fuente QA.xlsm', '1665', 'HOGAR', 2], ['Fuente QA.xlsm', '1665', 'HOGAR', 3],
     ]);
-    assert.ok(initial.channels[0].issues.some((issue: any) => issue.code === 'image_publication'));
-    if (real) assert.ok(initial.channels[0].issues.some((issue: any) => issue.field === 'attr_1000463'));
-    const material = real ? category.attributes.find((attr: any) => /1000463/.test(attr.name))?.values.find((value: string) => /vidrio|cristal/i.test(value)) : null;
+    assert.ok(!initial.channels[0].issues.some((issue: any) => issue.field === 'main_img' || issue.field === 'detail_img_1'));
+    assert.ok(initial.channels[0].issues.some((issue: any) => issue.field === 'attr_1000463'));
+    const material = 'Vidrio'; // Valor de atributo válido para el caso de prueba.
     await exports.saveMasterProduct.run(request({ ...scope, productId: product.id, expectedRevision: 0, organizerSourceRevision: product.organizer.revision,
       values: { ...product.values, description: 'Descripción corregida en Catálogo' }, marketplaces: product.marketplaces,
-      variants: product.variants.map((variant: any) => ({ ...variant, attributes: { ...variant.attributes, ...(real ? { foodContactMaterial: material || 'Vidrio' } : {}) } })),
+      variants: product.variants,
     }));
-    const updates = rows('1666', 12);
+    const updates = rows('1666', 12, undefined, material);
     updates[0].cells.find((cell: any) => cell.header === 'Precio de venta').originalValue = 159.5;
     await writeRows(updates);
     await assert.rejects(() => exports.saveMasterProduct.run(request({ ...scope, productId: product.id, expectedRevision: 1,
       organizerSourceRevision: product.organizer.revision, values: product.values, variants: product.variants, marketplaces: product.marketplaces })), { code: 'aborted' });
-    const published = await publishMarketplaceImages.run(request({ ...publishScope, productId: product.id }));
-    assert.equal(published.failures.length, 0, JSON.stringify(published.failures));
-    assert.equal(published.images.length, 2);
-    assert.deepEqual((await publishMarketplaceImages.run(request({ ...publishScope, productId: product.id }))).images.map((i: any) => i.url), published.images.map((i: any) => i.url));
-    for (const photo of published.images) {
-      assert.match(photo.url, /^https:\/\/storage\.googleapis\.com\/demo-manglar-automation-marketplace-images\//);
-      assert.ok((await publicBucket.file(photo.storagePath).exists())[0]);
-    }
     const ready = await exports.previewMarketplaceExports.run(request(scope));
     assert.equal(ready.products[0].values.description, 'Descripción corregida en Catálogo');
     assert.equal(ready.products[0].variants[0].values.inventory, '12');
     assert.equal(ready.products[0].variants[0].values.price, '159.5');
     assert.equal(ready.channels[0].ready, true, JSON.stringify(ready.channels[0].issues));
-    const input = { ...scope, marketplaceIds: ['shein'], requestId: 'qa-object-xlsx' };
+    const registry = db.doc(`clients/${clientId}/products/${product.id}/marketplaceImages/shein`);
+    assert.equal((await registry.get()).exists, false);
+    const input = { ...scope, marketplaceIds: ['shein'], requestId: 'qa-object-xlsx', authorizePublicImages: true };
+    const denied = await exports.downloadMarketplaceExports.run(request({ ...input, requestId: 'qa-no-consent', authorizePublicImages: false }));
+    assert.equal(denied.downloadUrl, null);
+    assert.match(denied.failures[0].message, /Autoriza la publicación/);
+    assert.equal((await registry.get()).exists, false);
     const downloaded = await exports.downloadMarketplaceExports.run(request(input));
     assert.deepEqual(await exports.downloadMarketplaceExports.run(request(input)), downloaded);
-    assert.equal(downloaded.failures.length, 0);
-    const artifacts = await db.collection('marketplaceExportRequests').get();
-    assert.equal(artifacts.size, 1);
-    const [buffer] = await bucket.file(artifacts.docs[0].get('artifactPath')).download();
+    assert.equal(downloaded.failures.length, 0, JSON.stringify(downloaded.failures));
+    const published = Object.values((await registry.get()).get('images')) as Array<{ jobId: string; url: string; storagePath: string }>;
+    assert.equal(published.length, 2);
+    const manual = await publishMarketplaceImages.run(request({ ...publishScope, productId: product.id }));
+    assert.deepEqual(manual.images.map((i: any) => i.url).sort(), published.map(i => i.url).sort());
+    for (const photo of published) {
+      assert.match(photo.url, /^https:\/\/storage\.googleapis\.com\/demo-manglar-automation-marketplace-images\//);
+      assert.ok((await publicBucket.file(photo.storagePath).exists())[0]);
+    }
+    const requests = await db.collection('marketplaceExportRequests').get();
+    const artifacts = requests.docs.flatMap((doc: { get(field: string): string | undefined }) => doc.get('artifactPath') || []);
+    assert.equal(artifacts.length, 1);
+    const [buffer] = await bucket.file(artifacts[0]).download();
     const sheet = XLSX.read(buffer).Sheets[category.sheetName];
     const cell = (key: string, offset = 0) => sheet[`${category.columns.find((c: any) => c.key === key).letter}${category.rowStart + offset}`];
     assert.equal(cell('supplier_code').v, 'QA-VASO');
     assert.equal(cell('supplier_sku', 1).v, '00002');
     assert.equal(cell('supplier_sku').t, 's');
-    assert.equal(cell('main_img').v, published.images.find((i: any) => i.jobId === 'object-front').url);
-    assert.equal(cell('detail_img_1').v, published.images.find((i: any) => i.jobId === 'object-side').url);
+    assert.equal(cell('main_attribute_value').v, exportedColor);
+    assert.equal(cell('attr_1000463').v, material);
+    assert.equal(cell('main_img').v, published.find(i => i.jobId === 'object-front')!.url);
+    assert.equal(cell('detail_img_1').v, published.find(i => i.jobId === 'object-side')!.url);
     assert.equal(cell(real ? category.columns.find((c: any) => c.key.startsWith('stock[')).key : 'stock').v, 12);
     const [before, after] = await Promise.all([inspectWorkbookPackage(bytes), inspectWorkbookPackage(buffer)]);
     assert.deepEqual(after.namedRanges, before.namedRanges);

@@ -3,17 +3,24 @@ import { QueryConstraint, collection, limit, onSnapshot, orderBy, query } from '
 import { JobOutput } from '../../../shared/src/types';
 import { db } from '../../firebase';
 
+const EMPTY_OUTPUTS: JobOutput[] = [];
+
 export const useJobOutputHistory = (jobId: string | undefined, maxOutputs?: number) => {
   const [outputs, setOutputs] = useState<JobOutput[]>([]);
+  const [loadedJobId, setLoadedJobId] = useState<string>();
+  const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setError(false);
     if (!jobId) {
       setOutputs([]);
       setLoading(false);
       return;
     }
 
+    setLoadedJobId(jobId);
+    setOutputs([]);
     setLoading(true);
 
     const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc')];
@@ -36,6 +43,7 @@ export const useJobOutputHistory = (jobId: string | undefined, maxOutputs?: numb
       },
       (error) => {
         console.error('Error fetching output history:', error);
+        setError(true);
         setOutputs([]);
         setLoading(false);
       },
@@ -44,10 +52,12 @@ export const useJobOutputHistory = (jobId: string | undefined, maxOutputs?: numb
     return unsubscribe;
   }, [jobId, maxOutputs]);
 
+  const scoped = Boolean(jobId && loadedJobId === jobId);
   return {
-    outputs,
-    loading,
-    currentOutput: outputs[0] ?? null,
-    previousOutput: outputs[1] ?? null,
+    outputs: scoped ? outputs : EMPTY_OUTPUTS,
+    loading: Boolean(jobId) && (!scoped || loading),
+    error: scoped && error,
+    currentOutput: scoped ? outputs[0] ?? null : null,
+    previousOutput: scoped ? outputs[1] ?? null : null,
   };
 };

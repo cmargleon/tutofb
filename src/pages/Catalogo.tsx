@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { MarketplaceExportDrawer } from '../features/marketplaces/MarketplaceExportDrawer';
+import { useProductWorkflow, workflowUrl } from '../features/organizer/productWorkflow';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Images } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
-import { PageHeader } from '../components/ui';
+import { Link, useSearchParams } from 'react-router-dom';
+import { LoadingBlock, PageHeader } from '../components/ui';
 import { RetryFailedJobsDialog } from '../components/evaluation/RetryFailedJobsDialog';
 import { useRole } from '../features/auth/AuthProvider';
 import { CatalogSortOrder, useCatalogJobs } from '../features/catalog/useCatalogJobs';
@@ -24,16 +26,25 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
   const urlClientId = client?.id ?? searchParams.get('clientId') ?? '';
   const batchParam = client ? 'productBatchId' : 'batchId';
   const urlBatchId = searchParams.get(batchParam) ?? '';
+  const variantId = client ? '' : searchParams.get('variantId') ?? '';
+  const baseProductId = client ? '' : searchParams.get('baseProductId') ?? '';
+  const scoped = Boolean(variantId || baseProductId);
+  const productDetail = useProductWorkflow(urlClientId, variantId, baseProductId, urlBatchId || undefined);
+  const workflow = scoped && urlBatchId ? productDetail?.workflow : undefined;
+  const generation = workflow?.generations.find(item => item.batchId === urlBatchId);
+  const masterProductId = generation?.masterProductIds.length === 1 ? generation.masterProductIds[0] : undefined;
+  const exportOpen = scoped && searchParams.get('view') === 'export';
   const role = useRole();
   const { config: systemConfig } = useSystemConfig();
-  const selectedClientId = urlClientId;
-  const selectedBatchId = urlBatchId;
+  const selectedClientId = scoped && !generation ? '' : urlClientId;
+  const selectedBatchId = scoped && !generation ? '' : urlBatchId;
   const [pageSize, setPageSize] = useState<number>(25);
   const [sortOrder, setSortOrder] = useState<CatalogSortOrder>('desc');
 
   const {
     batches,
     garmentGroups,
+    generatingJobs,
     loading,
     error,
     currentPage,
@@ -47,6 +58,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
     batchId: selectedBatchId || null,
     pageSize,
     sortOrder,
+    includeAllBatchJobs: scoped,
   });
 
   const {
@@ -68,6 +80,12 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
     batches,
   });
 
+  const relatedGroups = useMemo(() => generation
+    ? garmentGroups.filter(group => generation.itemIds.includes(group.garmentId))
+    : garmentGroups, [generation, garmentGroups]);
+  // The scoped subscription already includes queued jobs, so each thumbnail reflects its live job.
+  const relatedGenerating = useMemo(() => scoped ? [] : generatingJobs, [scoped, generatingJobs]);
+
   const {
     displayGarmentGroups,
     pendingRegenerationJobIds,
@@ -75,7 +93,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
     handleRegenerationQueued,
     handleRegenerationCancelled,
     resetPendingRegenerations,
-  } = useCatalogDisplayGroups({ selectedBatchId, sortOrder, garmentGroups });
+  } = useCatalogDisplayGroups({ generatingJobs: relatedGenerating, sortOrder, garmentGroups: relatedGroups });
 
   const {
     lightbox,
@@ -93,7 +111,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
     setLightbox(null);
     batchActions.resetBatchActionFeedback();
     resetPendingRegenerations();
-  }, [currentPage, pageSize, selectedBatchId, selectedClientId, sortOrder]);
+  }, [currentPage, pageSize, selectedBatchId, selectedClientId, variantId, sortOrder]);
 
   const pageLabel = totalPages ? `Página ${currentPage} de ${totalPages}` : `Página ${currentPage}`;
 
@@ -115,11 +133,35 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
     paginationControls,
   };
 
+  const closeExport = () => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.delete('view');
+    return next;
+  }, { replace: true });
+
+  if (scoped && (!workflow || !generation)) return <div className="tuto-page">
+    <PageHeader title="Revisión del producto" icon={Images} />
+    {urlClientId && variantId && <Link className="tuto-link" to={workflowUrl('/organizador', { clientId: urlClientId, variantId, baseProductId })}>Volver a la ficha del producto</Link>}
+    {!urlClientId || !variantId || !urlBatchId || productDetail?.error
+      ? <p role="alert" className="tuto-alert tuto-alert--warning">{productDetail?.error || 'El enlace de revisión requiere cliente, variante y lote.'}</p>
+      : <LoadingBlock message="Comprobando la relación con el lote…" />}
+  </div>;
+
   return (
     <div className="flex flex-col h-full">
       <div className={`flex-1 space-y-5 ${client ? '' : 'tuto-page !gap-0'}`}>
-        {!client && <PageHeader title="Catálogo" icon={Images} description="Fotografías aprobadas y fallidas por cliente, lote y prenda. Revisa, regenera o exporta a marketplaces." />}
-        <div className="tuto-surface p-4">
+        {workflow && generation && <section className="tuto-surface space-y-3 p-5">
+          <p className="text-sm text-slate-600">{selectedBatch?.clientNameSnapshot || 'Cliente'} · Producto base {workflow.variant.base}</p>
+          <h1 className="text-xl font-semibold">{workflow.baseName} · Revisión</h1>
+          <p className="text-sm text-slate-700">Variante {[workflow.variant.visual, workflow.variant.color, workflow.variant.pack, workflow.variant.capacity].filter(Boolean).join(' · ')} · Lote <span className="break-all font-mono text-xs">{generation.batchId}</span></p>
+          <nav aria-label="Recorrido del producto" className="flex flex-wrap gap-4 text-sm">
+            <Link className="tuto-link" to={workflowUrl('/organizador', workflow.context, { batchId: generation.batchId })}>Volver a la ficha del producto</Link>
+            {masterProductId && <Link className="tuto-link font-semibold" to={workflowUrl('/catalogo', workflow.context, { batchId: generation.batchId, view: 'export' })}>Siguiente paso · Validar exportación por canal</Link>}
+          </nav>
+          {!masterProductId && <p className="text-sm text-amber-800">El lote tiene varias fichas comerciales para esta variante. La exportación individual no se puede determinar desde este enlace.</p>}
+        </section>}
+        {!client && !scoped && <PageHeader title="Catálogo" icon={Images} description="Fotografías aprobadas y fallidas por cliente, lote y prenda. Revisa, regenera o exporta a marketplaces." />}
+        {!scoped && <div className="tuto-surface p-4">
           <CatalogFilters
             client={client}
             clients={clients}
@@ -140,6 +182,10 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
               {...summaryProps}
             />
           )}
+
+          {!client && selectedBatch?.organizerOrigin && <Link className="tuto-link mt-3 inline-block text-sm" to={
+            workflowUrl('/organizador', { clientId: selectedBatch.clientId, ...selectedBatch.organizerOrigin }, { batchId: selectedBatch.id })
+          }>Abrir ficha del producto</Link>}
 
           <CatalogBatchStatusPanel
             selectedBatch={selectedBatch}
@@ -163,9 +209,13 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
             onEditSpreadsheet={() => void batchActions.handleEditSpreadsheet()}
             onExportSpreadsheet={() => void batchActions.handleExportSpreadsheet()}
           />
-        </div>
+        </div>}
 
-        <CatalogStatusMessages
+        {scoped && loading && <LoadingBlock message="Cargando trabajos de la variante…" />}
+        {scoped && (error || batchLinkError) && <p role="alert" className="tuto-alert tuto-alert--warning">{error || batchLinkError}</p>}
+        {scoped && !loading && !error && !displayGarmentGroups.length &&
+          <p className="text-sm text-slate-600">Los trabajos de esta variante ya no están disponibles en el lote.</p>}
+        {!scoped && <CatalogStatusMessages
           selectedClientId={selectedClientId}
           selectedBatchId={selectedBatchId}
           selectedBatch={selectedBatch}
@@ -174,7 +224,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
           error={error}
           batchLinkError={batchLinkError}
           garmentGroupsCount={displayGarmentGroups.length}
-        />
+        />}
 
         <RetryFailedJobsDialog
           isOpen={batchActions.isRetryDialogOpen}
@@ -195,21 +245,28 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
               <CatalogGarmentSection
                 key={group.garmentId}
                 group={group}
+                deferGallery={Boolean(selectedBatchId)}
+                showProductPhotoStatus={scoped}
                 onImageClick={openLightboxForJob}
                 onRegenerationQueued={handleRegenerationQueued}
                 onRegenerationCancelled={handleRegenerationCancelled}
                 pendingRegenerationJobIds={pendingRegenerationJobIds}
               />
             ))}
-            <CatalogPageSummary
+            {!scoped && <CatalogPageSummary
               className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
               {...summaryProps}
-            />
+            />}
           </div>
         )}
       </div>
 
-      {lightbox && resolvedLightboxJob && (
+      {exportOpen && workflow && generation && masterProductId && <MarketplaceExportDrawer
+        key={`${generation.batchId}:${masterProductId}`}
+        scope={{ clientId: workflow.context.clientId, batchIds: [generation.batchId], masterProductId, organizerContext: workflow.context }}
+        onClose={closeExport} />}
+      {lightbox && resolvedLightboxJob && (!scoped || generation?.itemIds.includes(resolvedLightboxJob.garmentId) &&
+        resolvedLightboxJob.batchId === generation.batchId && resolvedLightboxJob.clientId === selectedClientId) && (
         <CatalogLightbox
           job={resolvedLightboxJob}
           disabledProviders={systemConfig.disabledProviders}

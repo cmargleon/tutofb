@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { productPhotoStatus } from '../../../shared/src/productWorkflow';
+import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
@@ -12,20 +13,28 @@ import { useConfirm, useToast } from '../../features/feedback/FeedbackProvider';
 
 interface CatalogGarmentSectionProps {
   group: CatalogGarmentGroup;
+  deferGallery?: boolean;
+  showProductPhotoStatus?: boolean;
   onImageClick: (job: Job) => void;
   onRegenerationQueued?: (job: Job) => void;
   onRegenerationCancelled?: (jobId: string) => void;
   pendingRegenerationJobIds?: Record<string, true>;
 }
 
+const photoStatusLabels = { approved: 'Aprobada', attention: 'Requiere atención', inProgress: 'En curso', cancelled: 'Cancelada' };
+
 export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
   group,
+  deferGallery = false,
+  showProductPhotoStatus = false,
   onImageClick,
   onRegenerationQueued,
   onRegenerationCancelled,
   pendingRegenerationJobIds = {},
 }) => {
   const [expanded, setExpanded] = useState(true);
+  const [galleryOpened, setGalleryOpened] = useState(false);
+  const galleryRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [queueingJobIds, setQueueingJobIds] = useState<Record<string, boolean>>({});
   const [cancellingJobIds, setCancellingJobIds] = useState<Record<string, boolean>>({});
@@ -33,6 +42,21 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
   const toast = useToast();
   const confirm = useConfirm();
   const downloadableJobs = group.jobs.filter((job) => Boolean(resolveApprovedJobOutput(job)?.resultImagePath));
+  const showGallery = !deferGallery || galleryOpened || typeof IntersectionObserver === 'undefined';
+
+  useEffect(() => {
+    const gallery = galleryRef.current;
+    if (!expanded || showGallery || !gallery) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        observer.disconnect();
+        setGalleryOpened(true);
+      }
+    }, { root: gallery.closest('main'), rootMargin: '300px 0px' });
+    observer.observe(gallery);
+    return () => observer.disconnect();
+  }, [expanded, showGallery]);
 
   const handleDownloadAll = async () => {
     if (downloadableJobs.length === 0) {
@@ -165,9 +189,10 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <div className="flex items-center justify-between bg-gray-50 px-4 py-3">
+      <div onFocus={() => setGalleryOpened(true)} className="flex items-center justify-between bg-gray-50 px-4 py-3">
         <button
           type="button"
+          aria-expanded={expanded}
           onClick={() => setExpanded((e) => !e)}
           className="flex min-w-0 cursor-pointer items-center gap-2 text-left"
         >
@@ -196,16 +221,25 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
       </div>
 
       {expanded && (
-        <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+        <div ref={galleryRef} className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
           {group.jobs.map((job) => {
+            // Reserve the same responsive grid space before thumbnails mount.
+            if (!showGallery) {
+              const placeholder = <div key={job.id} className="aspect-[3/4] rounded-lg bg-gray-100" aria-hidden="true" />;
+              return showProductPhotoStatus ? (
+                <div key={job.id} aria-hidden="true">
+                  {placeholder}
+                  <div className="mt-1 h-4" />
+                </div>
+              ) : placeholder;
+            }
             const isRegenerationPending = Boolean(
               job.id && (queueingJobIds[job.id] || pendingRegenerationJobIds[job.id]),
             );
             const isCancelling = Boolean(job.id && cancellingJobIds[job.id]);
             const canCancelRegeneration = role.canRegenerate && (isRegenerationPending || job.status === 'pending' || job.status === 'processing');
 
-            return (
-              <CatalogThumbnail
+            const thumbnail = <CatalogThumbnail
                 key={job.id}
                 job={job}
                 onClick={onImageClick}
@@ -215,8 +249,11 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
                 onDelete={role.canRegenerate ? handleDelete : undefined}
                 regenerationPending={isRegenerationPending}
                 cancellationPending={isCancelling}
-              />
-            );
+              />;
+            return showProductPhotoStatus ? <div key={job.id}>
+              {thumbnail}
+              <p className="mt-1 text-xs font-medium text-slate-700">{photoStatusLabels[productPhotoStatus(job)]}</p>
+            </div> : thumbnail;
           })}
         </div>
       )}

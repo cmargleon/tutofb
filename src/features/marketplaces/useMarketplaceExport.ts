@@ -23,7 +23,7 @@ export function useMarketplaceExport(scope: MarketplaceExportScope) {
     lock.current = true; setBusy(true); setError(null);
     requestId.current ||= crypto.randomUUID();
     try {
-      const response = await downloadMarketplaceExports({ ...JSON.parse(key), marketplaceIds: selected, requestId: requestId.current }); setResult(response);
+      const response = await downloadMarketplaceExports({ ...JSON.parse(key), marketplaceIds: selected, requestId: requestId.current, authorizePublicImages: true }); setResult(response);
       if (response.downloadUrl && response.fileName) {
         const a = document.createElement('a'); a.href = response.downloadUrl; a.download = response.fileName; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
       }

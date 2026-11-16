@@ -33,7 +33,19 @@ export function isMatchingMarketplacePublication(record: PublishedMarketplaceIma
     && record.contentType === 'image/jpeg' && (channel !== 'tiktok-shop' || Math.abs(record.width / record.height - .75) < .002 || Math.abs(record.width / record.height - 4 / 3) < .002) && record.bytes > 0 && record.bytes <= MARKETPLACE_IMAGE_MAX_BYTES;
 }
 
-/** Read-only projection. Publication is never a side effect of opening a preview or downloading an Excel. */
+export function applyMarketplacePublication(product: MasterProduct, record: PublishedMarketplaceImage) {
+  const { marketplaceId: channel, outputId } = record;
+  product.publishedImages ??= {};
+  (product.publishedImages[channel] ??= {})[outputId] = record;
+  const data = product.marketplaces[channel];
+  if (data) {
+    data.imageUrls ??= {};
+    // Preserve explicitly supplied external hosting. Refresh only managed or absent links.
+    if (!data.imageUrls[outputId] || data.imageUrls[outputId].startsWith('https://storage.googleapis.com/')) data.imageUrls[outputId] = record.url;
+  }
+}
+
+/** Read-only projection of existing publications. */
 export async function attachMarketplacePublications(products: MasterProduct[], channels: MarketplaceId[]) {
   const refs = products.flatMap(product => product.approvedImages.length ? channels.map(channel => ({ product, channel, ref: publicationRef(product, channel) })) : []);
   for (let offset = 0; offset < refs.length; offset += 400) {
@@ -45,15 +57,7 @@ export async function attachMarketplacePublications(products: MasterProduct[], c
       for (const image of product.approvedImages) {
         const record = images?.[image.outputId];
         if (!isMatchingMarketplacePublication(record, product, image, channel)) continue;
-        product.publishedImages ??= {};
-        product.publishedImages[channel] ??= {};
-        product.publishedImages[channel]![image.outputId] = record;
-        const data = product.marketplaces[channel];
-        if (data) {
-          data.imageUrls ??= {};
-          // Preserve explicitly supplied external hosting. Refresh only managed or absent links.
-          if (!data.imageUrls[image.outputId] || data.imageUrls[image.outputId].startsWith('https://storage.googleapis.com/')) data.imageUrls[image.outputId] = record.url;
-        }
+        applyMarketplacePublication(product, record);
       }
     }
   }

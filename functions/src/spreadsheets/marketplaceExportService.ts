@@ -1,3 +1,4 @@
+import { assertOrganizerWorkflowAccess, readProductWorkflow } from '../organizer/productWorkflow';
 import * as admin from 'firebase-admin';
 import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
@@ -8,17 +9,25 @@ import { MARKETPLACES, isMarketplaceId, type MarketplaceId } from '../../../shar
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { validId } from '../manglar/access';
-import { applyStoredMasterProduct, masterProductId, projectMasterProducts } from './masterProducts';
+import { applyStoredMasterProduct, jobMasterProductId, projectMasterProducts } from './masterProducts';
 import { inspectWorkbookPackage, patchWorkbookCells, assertPatchableCells, rangeContains, type SheetPatch, type CellPatch, xmlAttrs, validationAccepts } from './ooxmlWorkbook';
 import { sanitizeSpreadsheetFileName } from './batchSpreadsheetExport';
-import { attachMarketplacePublications } from './marketplaceImages';
+import { applyMarketplacePublication, attachMarketplacePublications, publishMarketplaceImage } from './marketplaceImages';
 import { applyOrganizerSource, applyOrganizerVariantOverrides, assignOrganizerImages, loadOrganizerProducts } from './organizerProducts';
 import { digest } from '../organizer/drive';
 
 export function normalizeExportScope(input: MarketplaceExportScope): MarketplaceExportScope {
   const clientId = validId(input?.clientId);
   if (!Array.isArray(input?.batchIds) || !input.batchIds.length || input.batchIds.length > 20) throw new HttpsError('invalid-argument', 'Selecciona entre 1 y 20 lotes.');
-  return { clientId, batchIds: [...new Set(input.batchIds.map(validId))].sort() };
+  const batchIds = [...new Set(input.batchIds.map(validId))].sort();
+  const masterProductId = input.masterProductId === undefined ? undefined : validId(input.masterProductId);
+  if (input.organizerContext === undefined) return { clientId, batchIds, ...(masterProductId ? { masterProductId } : {}) };
+  const origin = input.organizerContext;
+  if (origin?.clientId !== clientId || batchIds.length !== 1 || !masterProductId)
+    throw new HttpsError('invalid-argument', 'La exportación desde la ficha requiere un cliente, producto y lote vinculados.');
+  return { clientId, batchIds, masterProductId,
+    organizerContext: { clientId, baseProductId: validId(origin.baseProductId), variantId: validId(origin.variantId) },
+  };
 }
 export async function loadExportContext(input: MarketplaceExportScope, uid: string) {
   const scope = normalizeExportScope(input); await assertHumanClientAccess(uid, scope.clientId);
@@ -27,6 +36,15 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
   if (!clientSnapshot.exists) throw new HttpsError('not-found', 'Cliente no disponible.');
   const client = { ...clientSnapshot.data(), id: clientSnapshot.id } as Client;
   if (client.status === 'archived') throw new HttpsError('failed-precondition', 'El cliente está archivado.');
+  let itemIds: Set<string> | undefined;
+  if (scope.organizerContext) {
+    const root = await assertOrganizerWorkflowAccess(uid, scope.clientId);
+    const product = await readProductWorkflow(root, scope.organizerContext.variantId, scope.organizerContext.baseProductId, scope.batchIds[0]);
+    const [generation] = product.generations;
+    if (generation.masterProductIds.length !== 1 || generation.masterProductIds[0] !== scope.masterProductId)
+      throw new HttpsError('not-found', 'El producto comercial no pertenece a la variante y lote solicitados.');
+    itemIds = new Set(generation.itemIds);
+  }
   const batches: Batch[] = []; const jobs: Job[] = []; const drafts: ProductDraft[] = [];
   for (const id of scope.batchIds) {
     const ref = db.collection('batches').doc(id); const snapshot = await ref.get();
@@ -35,10 +53,16 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
     batches.push({ ...snapshot.data(), id: snapshot.id } as Batch);
     const [js, ds] = await Promise.all([db.collection('jobs').where('batchId', '==', id).limit(1001).get(), ref.collection('productDrafts').limit(1001).get()]);
     if (js.size > 1000 || ds.size > 1000) throw new HttpsError('resource-exhausted', 'El lote supera el límite de exportación.');
-    jobs.push(...js.docs.map(d => ({ ...d.data(), id: d.id } as Job)));
-    drafts.push(...ds.docs.map(d => ({ ...d.data(), id: d.id } as ProductDraft)));
+    const include = (data: FirebaseFirestore.QueryDocumentSnapshot) => !itemIds || itemIds.has(data.get('garmentId'));
+    if (itemIds && js.docs.some(job => !include(job) && job.get('clientId') === scope.clientId &&
+        jobMasterProductId(batches.at(-1)!, job.data() as Job) === scope.masterProductId))
+      throw new HttpsError('failed-precondition', 'El producto comercial comparte trabajos con otro artículo del lote. Abre la exportación del lote para revisar sus variantes.');
+    jobs.push(...js.docs.filter(include).map(d => ({ ...d.data(), id: d.id } as Job)));
+    drafts.push(...ds.docs.filter(include).map(d => ({ ...d.data(), id: d.id } as ProductDraft)));
   }
-  const products = projectMasterProducts(scope.clientId, batches, jobs, drafts);
+  const projected = projectMasterProducts(scope.clientId, batches, jobs, drafts);
+  const products = scope.masterProductId ? projected.filter(product => product.id === scope.masterProductId) : projected;
+  if (scope.masterProductId && !products.length) throw new HttpsError('not-found', 'Producto no pertenece a los lotes seleccionados.');
   if (products.length > 500) throw new HttpsError('resource-exhausted', 'Exporta hasta 500 productos por descarga.');
   const stored: Record<string, StoredMasterProduct> = {};
   if (products.length) for (const d of await db.getAll(...products.map(p => clientRef.collection('products').doc(p.id)))) if (d.exists) stored[d.id] = d.data() as StoredMasterProduct;
@@ -46,9 +70,7 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
   const commerce = await loadOrganizerProducts(client, batches, jobs);
   const jobsByProduct = new Map<string, Job[]>();
   for (const job of jobs) {
-    const id = job.photoTask
-      ? createHash('sha256').update(`${scope.clientId}\0photo-product\0${job.photoTask.productId}`).digest('hex').slice(0, 40)
-      : masterProductId(byBatch.get(job.batchId)!, job.garmentId);
+    const id = jobMasterProductId(byBatch.get(job.batchId)!, job);
     const group = jobsByProduct.get(id) || [];
     group.push(job);
     jobsByProduct.set(id, group);
@@ -59,15 +81,15 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
     const automationId = scene && byBatch.get(scene.batchId)?.automationJobId;
     const link = automationId && commerce.get(`automationJobs/${automationId}/organizerCommerce/${scene.garmentId}`);
     if (link) {
-      applyOrganizerSource(product, link, scenes);
-      link.revision = digest([link.source, link.category, product.values, product.variants]);
+      applyOrganizerSource(product, link);
+      link.organizer.revision = digest([link.organizer.source, link.organizer.category, product.values, product.variants]);
     }
     const saved = stored[product.id];
     if (saved) {
       applyStoredMasterProduct(product, saved);
       if (link && saved.organizerOverrides) {
         product.variants = applyOrganizerVariantOverrides(product.variants, saved.organizerOverrides);
-        link.confirmedIdentity = saved.organizerOverrides.confirmedIdentity === true;
+        link.organizer.confirmedIdentity = saved.organizerOverrides.confirmedIdentity === true;
       }
     }
     if (link) assignOrganizerImages(product, scenes, byBatch, client);
@@ -118,14 +140,20 @@ export function previewExportContext(context: Context): MarketplaceExportPreview
   return { clientName: client.name, products, templates, categories, channels };
 }
 /** Read-only validation; never serializes or saves a workbook. */
-export async function validateTemplateCoordinates(context: Context, channel: MarketplaceId) {
+export async function validateTemplateCoordinates(context: Context, channel: MarketplaceId, allowPendingImageUrls = false) {
   const groups = new Map<string, Array<{ product: MasterProduct; category: SpreadsheetTemplateCategory; rows: ReturnType<typeof MARKETPLACE_ADAPTERS[MarketplaceId]['prepare']>['rows'] }>>();
+  const pendingImages: Array<{ product: MasterProduct; image: MasterProduct['approvedImages'][number] }> = [];
   for (const product of context.products) {
     const data = product.marketplaces[channel]; const template = context.templates.find(t => t.id === data?.templateId && templateUsable(t, channel, true));
     const category = context.categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
     if (!template || !category) throw new Error('Plantilla o categoría no disponible.');
     const adapted = MARKETPLACE_ADAPTERS[channel].prepare(product, template, category);
     if (adapted.issues.length) throw new Error(adapted.issues.map(i => `${i.productName}: ${i.message}`).join('\n'));
+    if (adapted.pendingImageOutputIds.length) {
+      if (!allowPendingImageUrls) throw new Error(`${product.values.name || product.garmentId}: faltan enlaces de las fotos aprobadas.`);
+      const outputIds = new Set(adapted.pendingImageOutputIds);
+      for (const image of product.approvedImages) if (outputIds.delete(image.outputId)) pendingImages.push({ product, image });
+    }
     const list = groups.get(template.id!) || []; list.push({ product, category, rows: adapted.rows }); groups.set(template.id!, list);
   }
   const plans: Array<{ template: SpreadsheetTemplate; buffer: Buffer; patches: SheetPatch[] }> = [];
@@ -185,11 +213,11 @@ export async function validateTemplateCoordinates(context: Context, channel: Mar
     assertPatchableCells(inspection, patches);
     plans.push({ template, buffer, patches });
   }
-  return plans;
+  return { plans, pendingImages };
 }
 export async function previewMarketplaceExport(input: MarketplaceExportScope, uid: string) {
   const context = await loadExportContext(input, uid); const preview = previewExportContext(context);
-  for (const channel of preview.channels.filter(c => c.ready)) try { await validateTemplateCoordinates(context, channel.marketplaceId); } catch (e) {
+  for (const channel of preview.channels.filter(c => c.ready)) try { await validateTemplateCoordinates(context, channel.marketplaceId, true); } catch (e) {
     channel.ready = false; channel.issues.push({ marketplaceId: channel.marketplaceId, code: 'workbook_validation', message: (e as Error).message });
   }
   return preview;
@@ -219,7 +247,21 @@ export async function downloadMarketplaceExport(input: DownloadMarketplaceExport
       try {
         const readiness = preview.channels.find(c => c.marketplaceId === channel)!;
         if (!readiness.ready) throw new Error(readiness.issues.map(i => `${i.productName || channel}: ${i.message}`).join('\n'));
-        const plans = await validateTemplateCoordinates(context, channel);
+        let { plans, pendingImages } = await validateTemplateCoordinates(context, channel, true);
+        if (pendingImages.length) {
+          if (input.authorizePublicImages !== true) throw new Error('Autoriza la publicación de las fotos aprobadas al descargar desde el Catálogo.');
+          for (const { product, image } of pendingImages) {
+            await assertHumanClientAccess(uid, product.clientId);
+            try {
+              applyMarketplacePublication(product, await publishMarketplaceImage(product, image, channel, uid));
+            } catch (error) {
+              console.error('Marketplace export image publication failed', { clientId: product.clientId, outputId: image.outputId, marketplaceId: channel, error });
+              const detail = error instanceof HttpsError ? ` ${error.message}` : '';
+              throw new Error(`${product.values.name || product.garmentId}: no se pudo preparar el enlace de una foto aprobada.${detail} Vuelve a intentar la descarga.`);
+            }
+          }
+          ({ plans } = await validateTemplateCoordinates(context, channel));
+        }
         const channelFiles = [];
         for (const plan of plans) {
           channelFiles.push({ name: `${sanitizeSpreadsheetFileName(context.client.name).slice(0, 35)}-${sanitizeSpreadsheetFileName(scope.batchIds[0]).slice(0, 30)}${scope.batchIds.length > 1 ? `-y-${scope.batchIds.length - 1}-lotes` : ''}-${channel}-${sanitizeSpreadsheetFileName(plan.template.name).slice(0, 35)}-${plan.patches.filter(p => p.cells.some(c => c.value)).map(p => sanitizeSpreadsheetFileName(p.sheetName)).join('-').slice(0, 45)}-v${plan.template.exportConfig!.version}-${plan.template.id!}.xlsx`, buffer: await patchWorkbookCells(plan.buffer, plan.patches) });

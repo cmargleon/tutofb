@@ -15,6 +15,10 @@ export const useCatalogLightbox = (displayGarmentGroups: CatalogGarmentGroup[]) 
   const [lightboxLiveJob, setLightboxLiveJob] = useState<Job | null>(null);
 
   const lightboxIndexByJobId = useMemo(() => buildCatalogLightboxIndex(displayGarmentGroups), [displayGarmentGroups]);
+  const currentIndexes = lightbox && lightboxIndexByJobId.get(lightbox.jobId);
+  const currentPosition = currentIndexes && lightbox
+    ? { ...currentIndexes, jobId: lightbox.jobId }
+    : lightbox;
 
   useEffect(() => {
     if (!lightbox?.jobId) {
@@ -38,22 +42,15 @@ export const useCatalogLightbox = (displayGarmentGroups: CatalogGarmentGroup[]) 
 
   const handleCloseLightbox = useCallback(() => setLightbox(null), []);
 
-  const previousLightboxTarget = useMemo(
-    () => getPreviousLightboxTarget(displayGarmentGroups, lightbox),
-    [displayGarmentGroups, lightbox],
-  );
-
-  const nextLightboxTarget = useMemo(
-    () => getNextLightboxTarget(displayGarmentGroups, lightbox),
-    [displayGarmentGroups, lightbox],
-  );
+  const previousLightboxTarget = getPreviousLightboxTarget(displayGarmentGroups, currentPosition);
+  const nextLightboxTarget = getNextLightboxTarget(displayGarmentGroups, currentPosition);
 
   const lightboxJob = useMemo(
     () => resolveLightboxJob(displayGarmentGroups, lightbox, lightboxIndexByJobId),
     [displayGarmentGroups, lightbox, lightboxIndexByJobId],
   );
 
-  const resolvedLightboxJob = lightboxJob || lightboxLiveJob;
+  const resolvedLightboxJob = lightboxJob || (lightboxLiveJob?.id === lightbox?.jobId ? lightboxLiveJob : null);
 
   return {
     lightbox,

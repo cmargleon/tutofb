@@ -209,6 +209,7 @@ export interface Job {
   garmentId: string;
   garmentName: string;
   garmentFilePath: string;
+  garmentReferencePaths?: string[];
   garmentPhotoId?: string | null;
   garmentPhotoFileName?: string | null;
   garmentView?: GarmentView | null;
@@ -245,6 +246,7 @@ export interface Job {
   currentOutput: JobOutput | null;
   userSelectedOutputId?: string | null;
   userSelectedOutput?: JobOutput | null;
+  retainedApprovedOutput?: JobOutput | null;
   completedOutputCount: number;
   totalCostUsd: number;
   totalDurationSeconds: number;
@@ -285,13 +287,55 @@ export interface JobLog {
   message: string;
   outputId?: string | null;
   payload: unknown;
+  humanFeedback?: JobRejectionFeedback;
   createdAt: TimestampLike;
+}
+
+export const JOB_REJECTION_REASONS = [
+  'incorrect_color', 'altered_shape', 'incorrect_logo_text', 'lost_texture_details', 'framing', 'other',
+] as const;
+export type JobRejectionReason = typeof JOB_REJECTION_REASONS[number];
+export const MAX_JOB_REVIEW_NOTE = 1500;
+export const MAX_JOB_REVIEW_CORRECTION = 4000;
+
+export interface RecordJobRejectionRequest {
+  jobId: string;
+  outputId: string;
+  reasons: JobRejectionReason[];
+  note?: string;
+}
+
+export interface RecordJobRejectionResponse {
+  feedbackId: string;
+}
+
+export interface JobRejectionFeedback extends Omit<RecordJobRejectionRequest, 'note'> {
+  note: string | null;
+  batchId: string;
+  clientId: string;
+  garmentId: string;
+  generationKind: 'garment' | 'product';
+  garmentBodyArea: GarmentBodyArea | null;
+  productScene: string | null;
+  provider: Provider | null;
+  aspectRatio: AspectRatio | null;
+  imageConfig: ProviderImageConfig | null;
+  photoProfile: NonNullable<JobOutput['photoProfile']> | null;
+  generationAttempt: number | null;
+  authorUid: string;
+  authorDisplayName: string | null;
+}
+
+export interface JobReviewCorrection {
+  feedbackId: string;
+  text: string;
 }
 
 export interface RegenerateJobRequest {
   jobId: string;
   provider: Provider;
   prompt: string;
+  correction?: JobReviewCorrection;
 }
 
 export interface RegenerateJobResponse {

@@ -12,6 +12,7 @@ test('publication requires consent, keeps unsaved fields and fills stable URLs b
     await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Producto sin perder cambios');
     await drawer.getByText('SHEIN · plantilla y datos de salida', { exact: true }).click();
     const shein = drawer.locator('details').filter({ has: page.getByText('SHEIN · plantilla y datos de salida', { exact: true }) });
+    await expect(shein.getByRole('textbox', { name: 'Nombre de salida', exact: true })).toHaveValue('Producto sin perder cambios');
     const prepare = shein.getByRole('button', { name: 'Preparar URL para SHEIN', exact: true });
     await expect(prepare).toBeDisabled();
     expect(await page.evaluate(() => ((window as any).__localCalls || []).some((call: any) => call.name === 'publishMarketplaceImages'))).toBe(false);
@@ -29,6 +30,7 @@ test('publication requires consent, keeps unsaved fields and fills stable URLs b
     await drawer.getByRole('button', { name: 'Guardar y volver a validar', exact: true }).click();
     const save = await page.evaluate(() => (window as any).__localCalls.find((call: any) => call.name === 'saveMasterProduct'));
     expect(save.input.marketplaces.shein.imageUrls['local-output']).toBe(url);
+    expect(save.input.marketplaces.shein.rows).toBeUndefined();
     expect(save.input.values.name).toBe('Producto sin perder cambios');
     await page.screenshot({ path: '/tmp/tuto-marketplace-images-publication.png' });
   } finally { await isolated.close(); }
@@ -49,10 +51,12 @@ test('catalog opens one export drawer, validates without creating files, selects
     await expect(drawer.getByRole('checkbox', { checked: true })).toHaveCount(4);
     await drawer.getByRole('button', { name: 'Deseleccionar todos' }).click(); await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeDisabled();
     await drawer.getByRole('checkbox').first().check();
+    await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toHaveAccessibleDescription(/autorizas crear enlaces públicos/);
     await drawer.getByRole('button', { name: 'Descargar', exact: true }).click();
     await expect(drawer.getByText('Descarga preparada:')).toBeVisible();
     const calls = await page.evaluate(() => (window as any).__localCalls.filter((c: any) => c.name === 'downloadMarketplaceExports'));
     expect(calls).toHaveLength(1); expect(calls[0].input.batchIds).toEqual(['local-batch']); expect(calls[0].input.marketplaceIds).toHaveLength(1);
+    expect(calls[0].input.authorizePublicImages).toBe(true);
     await drawer.getByRole('button', { name: 'Cerrar exportación' }).click(); await expect(drawer).not.toBeVisible();
     await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
     await expect(drawer.getByRole('checkbox', { checked: true })).toHaveCount(0);
@@ -68,10 +72,49 @@ test('only enabled destinations appear, missing templates disable selection, val
     const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
     await expect(drawer.getByRole('checkbox')).toHaveCount(2); await expect(drawer.getByRole('checkbox').first()).toBeDisabled();
     await drawer.getByRole('checkbox').last().check(); await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeDisabled();
-    await drawer.getByText('TikTok Shop · resumen de validación (1)', { exact: true }).click();
+    const pending = drawer.getByRole('button', { name: '2 requisitos pendientes' });
+    const requirements = drawer.locator('#marketplace-requirements-tiktok-shop');
+    await expect(requirements).toBeHidden();
+    await pending.hover();
+    await expect(requirements.getByText('Falta SKU de la variante.')).toBeVisible();
+    await expect(requirements.getByRole('button', { name: 'Producto local: Falta el nombre.' })).toBeVisible();
+    await requirements.hover();
+    await expect(requirements).toBeVisible();
+    await drawer.getByRole('heading', { name: 'Exportar a marketplaces' }).hover();
+    await expect(requirements).toBeHidden();
+    await pending.press('Enter');
+    await expect(pending).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Escape');
+    await expect(requirements).toBeHidden();
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole('checkbox').last()).toBeChecked();
+    await drawer.getByText('TikTok Shop · resumen de validación (2)', { exact: true }).click();
     await expect(drawer.getByText('Falta SKU de la variante.')).toBeVisible();
+    await pending.click();
+    await requirements.getByRole('button', { name: 'Producto local: Falta el nombre.' }).click();
+    await expect(drawer.getByRole('textbox', { name: 'Nombre de salida', exact: true })).toBeFocused();
+    await expect(requirements).toBeHidden();
     expect(await drawer.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     expect(await page.evaluate(() => ((window as any).__localCalls || []).some((c: any) => c.name === 'downloadMarketplaceExports'))).toBe(false);
+  } finally { await isolated.close(); }
+});
+test('one requirement opens its marketplace and focuses the correct variant field', async () => {
+  const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 390, height: 844 } });
+  try {
+    const { page, baseURL } = isolated;
+    await page.goto(`${baseURL}/catalogo?clientId=local-client&batchId=local-batch`);
+    await page.evaluate(() => (window as any).__setMarketplaceFixture('single-requirement'));
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
+    await drawer.getByRole('button', { name: '1 requisito pendiente', exact: true }).click();
+    const fields = drawer.getByRole('textbox', { name: 'SKU', exact: true });
+    await expect(fields).toHaveCount(2);
+    await expect(fields.last()).toBeFocused();
+    await expect(fields.last()).toBeInViewport();
+    await fields.last().fill('SKU-VARIANTE-2');
+    await drawer.getByRole('button', { name: 'Guardar y volver a validar', exact: true }).click();
+    const save = await page.evaluate(() => (window as any).__localCalls.find((call: any) => call.name === 'saveMasterProduct'));
+    expect(save.input.marketplaces.shein.rows.find((row: any) => row.id === 'second-variant').values.sku).toBe('SKU-VARIANTE-2');
   } finally { await isolated.close(); }
 });
 test('client marketplace cards retain switches and show template administration only for enabled channels', async () => {

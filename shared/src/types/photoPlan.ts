@@ -86,6 +86,7 @@ export interface PhotoPlan {
   estimate: { uniqueImages: number; generations: number; reviews: number; estimatedCostUsd: number };
 }
 export interface CreateMarketplacePhotoBatchRequest extends PhotoPlanInput {
+  organizerContext?: import('./organizer').OrganizerProductContext;
   requestId: string; approvedPlanId: string; prompt: string; modelId?: string | null;
 }
 export interface PhotoAssignment extends PhotoDestination { taskId: string; angle: string; outputId: string | null; jobId: string; eligible: boolean }

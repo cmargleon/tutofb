@@ -1,5 +1,6 @@
+import { JobPhotoReview } from './JobPhotoReview';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Batch, Job, JobOutput, Provider } from '../../../shared/src/types';
+import { Batch, Job, JobOutput, JobReviewCorrection, Provider } from '../../../shared/src/types';
 import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
 import { useStorageAssetUrl } from '../../features/storage/useStorageAssetUrl';
@@ -55,7 +56,7 @@ export interface PoseViewProps {
   regenerationError: string | null;
   cancellationError: string | null;
   onUpdateDraft: (updates: Partial<{ provider: Provider; prompt: string }>) => void;
-  onRegenerate: () => void;
+  onRegenerate: (correction?: JobReviewCorrection) => Promise<boolean>;
   onCancelGeneration: () => Promise<void>;
   selectedOutputId: string | null;
   onSelectOutput?: (outputId: string | null, output: JobOutput | null) => void;
@@ -110,15 +111,15 @@ export const PoseView: React.FC<PoseViewProps> = ({
   const [gestureDirection, setGestureDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
   const gesturePointerIdRef = useRef<number | null>(null);
   const gestureStartRef = useRef<{ x: number; y: number } | null>(null);
-  const { outputs } = useJobOutputHistory(job.id, HISTORY_LIMIT);
+  const { outputs, loading: historyLoading, error: historyError } = useJobOutputHistory(job.id, HISTORY_LIMIT);
 
   const outputsDesc = useMemo(() => {
     const merged = new Map<string, JobOutput>();
-    [job.userSelectedOutput, job.currentOutput, ...outputs].forEach((output) => {
+    [...outputs, job.currentOutput, job.userSelectedOutput, job.retainedApprovedOutput].forEach((output) => {
       if (output?.id && !merged.has(output.id)) merged.set(output.id, output);
     });
     return [...merged.values()].sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
-  }, [job.currentOutput, job.userSelectedOutput, outputs]);
+  }, [job.currentOutput, job.userSelectedOutput, job.retainedApprovedOutput, outputs]);
 
   const currentOutput = job.currentOutput || outputsDesc[0] || null;
   const displayedOutput = useMemo(
@@ -300,7 +301,7 @@ export const PoseView: React.FC<PoseViewProps> = ({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
+      if (document.querySelector('dialog[data-job-photo-review][open]') || isTypingTarget(event.target)) return;
 
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
@@ -370,6 +371,10 @@ export const PoseView: React.FC<PoseViewProps> = ({
           Prenda {garmentIndex + 1} / {totalGarments}
         </p>
       </div>
+
+      <div className="px-3 pt-3"><JobPhotoReview job={job} outputs={outputsDesc} displayedOutput={displayedOutput}
+          historyLoading={historyLoading} historyError={historyError} regenerationDisabled={controlsDisabled}
+          regenerationError={regenerationError} onRegenerate={onRegenerate} /></div>
 
       {historyOutputs.length > 0 ? (
         <div className="border-b border-slate-100 px-3 py-3">

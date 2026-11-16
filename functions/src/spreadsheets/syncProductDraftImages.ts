@@ -36,7 +36,7 @@ const resolveDetailImageIndexFromKey = (key: string): number | null => {
 };
 
 const resolveEffectiveOutput = (job: Job): JobOutput | null =>
-  job.userSelectedOutput || job.currentOutput || null;
+  job.userSelectedOutput || job.retainedApprovedOutput || job.currentOutput || null;
 
 const buildPoseOrderMap = (batch: Pick<Batch, 'poseIds'>): Map<string, number> =>
   new Map((batch.poseIds || []).map((poseId, index) => [poseId, index]));

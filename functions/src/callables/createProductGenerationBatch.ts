@@ -1,3 +1,4 @@
+import { resolveOrganizerBatchOrigin } from '../organizer/productWorkflow';
 import { COMMERCIAL_PHOTO_PROFILE, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
 import { automationScenePatch } from '../automation/recovery';
@@ -25,12 +26,19 @@ export const createProductGenerationBatchCore = async (
   const batchId = automation ? `automation-${automation.id}` : `product-${createHash('sha256').update(`${uid}:${data.requestId}`).digest('hex')}`;
   const batchRef = db.collection('batches').doc(batchId);
   const clientRef = db.collection('clients').doc(data.clientId);
+  const organizerOrigin = automation ? undefined : await resolveOrganizerBatchOrigin(
+    input.organizerContext, data.clientId, data.items.map(item => item.id), uid,
+  );
   const userSnapshot = await db.collection('users').doc(uid).get();
   const now = FieldValue.serverTimestamp();
   return db.runTransaction(async (tx) => {
     const existing = await tx.get(batchRef);
     if (existing.exists) {
-      if (existing.data()!.createdByUid !== uid) throw new HttpsError('permission-denied', 'Lote no disponible.');
+      if (existing.data()!.createdByUid !== uid || existing.get('clientId') !== data.clientId) throw new HttpsError('permission-denied', 'Lote no disponible.');
+      const previousOrigin = existing.get('organizerOrigin') as Batch['organizerOrigin'];
+      if (previousOrigin?.variantId !== organizerOrigin?.variantId || previousOrigin?.itemId !== organizerOrigin?.itemId ||
+          previousOrigin?.baseProductId !== organizerOrigin?.baseProductId)
+        throw new HttpsError('already-exists', 'La solicitud ya se usó con otro artículo vinculado.');
       return { batchId, createdJobs: existing.data()!.totalJobs as number };
     }
     const clientSnapshot = await tx.get(clientRef);
@@ -71,6 +79,7 @@ export const createProductGenerationBatchCore = async (
       }
     }
     const batch: Omit<Batch, 'id'> = {
+      ...(organizerOrigin ? { organizerOrigin } : {}),
       ...(automation ? { automationJobId: automation.id } : {}), generationKind: 'product', clientId: data.clientId, clientNameSnapshot: client.name,
       modelId: '', modelNameSnapshot: 'Producto', outputMode: 'photos_only', provider: data.provider,
       aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig, ...profilePatch, promptBase: data.prompt, productScenes: data.scenes,

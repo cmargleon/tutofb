@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import type { OrganizerClient, OrganizerConfig, OrganizerInterpretation, OrganizerMode, OrganizerPage, OrganizerPhoto, OrganizerPlanItem, OrganizerRequest, OrganizerResponse, OrganizerRun, OrganizerSettings, OrganizerTab, OrganizerVariant } from '../../../shared/src/types';
 import { useConfirm, useToast } from '../feedback/FeedbackProvider';
@@ -8,13 +9,23 @@ export type CatalogItem = OrganizerVariant | OrganizerPhoto | OrganizerRun | Org
 
 export function useOrganizer() {
   const [clients, setClients] = useState<OrganizerPage<OrganizerClient>>({ items: [], next: null });
-  const [clientId, setClientId] = useState('');
-  const [config, setConfig] = useState<OrganizerConfig | null>(null);
-  const [run, setRun] = useState<OrganizerRun | null>(null);
-  const activeRunRef = useRef<string | null>(null);
-  const [view, setView] = useState<CatalogView>('products');
+  const [params, setParams] = useSearchParams();
+  const [defaultClientId, setDefaultClientId] = useState('');
+  const clientId = params.get('clientId') ?? defaultClientId;
+  const variantId = params.get('variantId') || '';
+  const baseProductId = params.get('baseProductId') || '';
+  const batchId = params.get('batchId') || '';
+  const [loadedConfig, setConfig] = useState<OrganizerConfig | null>(null);
+  const [loadedRun, setRun] = useState<OrganizerRun | null>(null);
+  const config = loadedConfig?.clientId === clientId ? loadedConfig : null;
+  const run = loadedRun?.clientId === clientId ? loadedRun : null;
+  const activeRunRef = useRef<{ clientId: string; id: string } | null>(null);
+  const requestedView = params.get('view');
+  const view: CatalogView = requestedView === 'photos' || (!variantId &&
+    (requestedView === 'conflicts' || requestedView === 'tabs' || requestedView === 'runs' || requestedView === 'plan' || requestedView === 'interpretations'))
+    ? requestedView : 'products';
   const [page, setPage] = useState<OrganizerPage<CatalogItem>>({ items: [], next: null });
-  const [filterVariant, setFilterVariant] = useState('');
+  const filterVariant = view === 'photos' ? variantId || params.get('photoVariantId') || '' : '';
   const [filterStatus, setFilterStatus] = useState<OrganizerVariant['status'] | ''>('');
   const [products, setProducts] = useState<OrganizerVariant[]>([]);
   const [planRunId, setPlanRunId] = useState<string>();
@@ -28,7 +39,7 @@ export function useOrganizer() {
   useEffect(() => {
     let current = true;
     void organizer<OrganizerPage<OrganizerClient>>({ action: 'clients' }).then(result => {
-      if (current) { setClients(result); setClientId(old => old || result.items[0]?.id || ''); }
+      if (current) { setClients(result); setDefaultClientId(result.items[0]?.id || ''); }
     }).catch(error => { if (current) setLoadError(error.message); });
     return () => { current = false; };
   }, []);
@@ -41,8 +52,8 @@ export function useOrganizer() {
         const result = await organizer<OrganizerConfig | null>({ action: 'config', clientId });
         if (!current) return;
         setConfig(result);
-        const activeId = result?.activeRunId || activeRunRef.current;
-        activeRunRef.current = result?.activeRunId || null;
+        const activeId = result?.activeRunId || (activeRunRef.current?.clientId === clientId ? activeRunRef.current.id : null);
+        activeRunRef.current = result?.activeRunId ? { clientId, id: result.activeRunId } : null;
         if (!activeId) return;
         const active = await organizer<OrganizerRun>({ action: 'run', clientId, runId: activeId });
         if (current) {
@@ -57,7 +68,7 @@ export function useOrganizer() {
   }, [clientId, revision]);
 
   const configured = config?.clientId === clientId;
-  const simulation = run?.status === 'completed' && ['dry_run', 'inventory'].includes(run.mode) ? run.id : undefined;
+  const simulation = !variantId && run?.status === 'completed' && ['dry_run', 'inventory'].includes(run.mode) ? run.id : undefined;
   useEffect(() => {
     if (run?.status === 'completed' && run.mode === 'dry_run') setPlanRunId(run.id);
   }, [run?.id, run?.status]);
@@ -77,7 +88,7 @@ export function useOrganizer() {
   }, [clientId, configured, revision, simulation]);
   useEffect(() => {
     setPage({ items: [], next: null });
-    if (!configured) return;
+    if (!configured || (variantId && view === 'products')) return;
     let current = true;
     if (view === 'plan' && !run?.id) return;
     const request: OrganizerRequest = view === 'plan' ? { action: 'plan', clientId, runId: run!.id } : view === 'interpretations' ? { action: view, clientId } :
@@ -86,7 +97,7 @@ export function useOrganizer() {
       if (current) setPage(result);
     }).catch(error => { if (current) setLoadError(error.message); });
     return () => { current = false; };
-  }, [clientId, configured, revision, view, filterVariant, simulation, filterStatus, run?.id]);
+  }, [clientId, configured, revision, view, filterVariant, variantId, simulation, filterStatus, run?.id]);
 
   const perform = async <Result extends OrganizerResponse>(input: OrganizerRequest, success?: string) => {
     setBusy(true);
@@ -100,12 +111,19 @@ export function useOrganizer() {
     } finally { setBusy(false); }
   };
   const selectClient = (id: string) => {
-    activeRunRef.current = null;
-    setConfig(null); setRun(null); setProducts([]); setPlanRunId(undefined); setFilterVariant(''); setFilterStatus(''); setLoadError(''); setClientId(id);
+    setParams(new URLSearchParams({ clientId: id }));
   };
-  const selectView = (value: CatalogView, variantId = '') => {
-    if (value !== view || variantId !== filterVariant) setPage({ items: [], next: null });
-    setFilterVariant(variantId); setView(value);
+  useEffect(() => {
+    setProducts([]); setPlanRunId(undefined); setFilterStatus(''); setLoadError('');
+  }, [clientId]);
+  const selectView = (value: CatalogView, targetVariantId = '') => {
+    if (value !== view || targetVariantId !== filterVariant) setPage({ items: [], next: null });
+    const next = new URLSearchParams(params);
+    if (clientId) next.set('clientId', clientId);
+    if (value === 'products') next.delete('view'); else next.set('view', value);
+    next.delete('photoVariantId');
+    if (!variantId && targetVariantId) next.set('photoVariantId', targetVariantId);
+    setParams(next);
   };
   const loadClients = async () => {
     if (!clients.next) return;
@@ -147,5 +165,5 @@ export function useOrganizer() {
     const result = await perform<OrganizerRun>({ action, clientId, runId: run.id });
     if (result) { setRun(result); refresh(); }
   };
-  return { clients, clientId, config, run, view, page, busy, loadError, products, simulation, filterStatus, setFilterStatus, selectClient, selectView, loadClients, loadMore, save, start, control, perform, refresh, setRun };
+  return { clients, clientId, baseProductId, variantId, batchId, revision, config, run, view, page, busy, loadError, products, simulation, filterStatus, setFilterStatus, selectClient, selectView, loadClients, loadMore, save, start, control, perform, refresh, setRun };
 }

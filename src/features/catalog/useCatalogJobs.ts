@@ -16,8 +16,10 @@ import { db } from '../../firebase';
 import { Batch, Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero } from '../../../shared/src/utils/dateUtils';
+import { subscribeToCatalogBatchJobs } from './firebase';
 
 const BATCH_OPTIONS_LIMIT = 200;
+const EMPTY_JOBS: Job[] = [];
 
 type JobDocumentSnapshot = QueryDocumentSnapshot<DocumentData>;
 export type CatalogSortOrder = 'asc' | 'desc';
@@ -33,12 +35,19 @@ interface CatalogJobsParams {
   batchId: string | null;
   pageSize: number;
   sortOrder: CatalogSortOrder;
+  includeAllBatchJobs?: boolean;
 }
 
 interface CatalogPage {
   jobs: Job[];
   lastVisible: JobDocumentSnapshot | null;
   hasMore: boolean;
+}
+
+interface CatalogBatchResult {
+  scope: string;
+  jobs: Job[];
+  error: string | null;
 }
 
 const isRenderableCatalogJob = (job: Job): boolean =>
@@ -53,39 +62,30 @@ const compareJobsByCreatedAt = (left: Job, right: Job, sortOrder: CatalogSortOrd
 
 const buildCatalogQueryConstraints = ({
   clientId,
-  batchId,
   sortOrder,
-}: Pick<CatalogJobsParams, 'clientId' | 'batchId' | 'sortOrder'>): QueryConstraint[] => (
-      batchId
-    ? [
-        where('batchId', '==', batchId),
-        where('clientId', '==', clientId),
-        where('status', 'in', ['completed', 'failed']),
-        orderBy('createdAt', sortOrder),
-      ]
-    : [
-        where('clientId', '==', clientId),
-        where('status', 'in', ['completed', 'failed']),
-        orderBy('createdAt', sortOrder),
-      ]
-);
+}: Pick<CatalogJobsParams, 'clientId' | 'sortOrder'>): QueryConstraint[] => [
+  where('clientId', '==', clientId),
+  where('status', 'in', ['completed', 'failed']),
+  orderBy('createdAt', sortOrder),
+];
 
-export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: CatalogJobsParams) => {
+export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, includeAllBatchJobs = false }: CatalogJobsParams) => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [pages, setPages] = useState<CatalogPage[]>([]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
-  const [batchJobs, setBatchJobs] = useState<Job[]>([]);
+  const [batchResult, setBatchResult] = useState<CatalogBatchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
   const liveFirstPageSignatureRef = useRef('');
 
   const currentPage = currentPageIndex + 1;
+  const batchScope = JSON.stringify([clientId, batchId, sortOrder]);
+  const activeBatchResult = batchResult?.scope === batchScope ? batchResult : null;
 
   useEffect(() => {
     setPages([]);
     setCurrentPageIndex(0);
-    setBatchJobs([]);
     setLoading(false);
     setError(null);
     liveFirstPageSignatureRef.current = '';
@@ -122,44 +122,29 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
     return () => unsubscribe();
   }, [clientId]);
 
-  // ── Batch-specific mode: real-time subscription with no pagination ──
+  // Keep every job needed for grouping, review and article downloads. One
+  // snapshot also keeps transitions between generating and finished atomic.
   useEffect(() => {
-    if (!clientId || !batchId) {
-      setBatchJobs([]);
-      return undefined;
-    }
+    setBatchResult(null);
+    if (!clientId || !batchId) return undefined;
 
-    setLoading(true);
-    setError(null);
-
-    const batchJobsQuery = query(
-      collection(db, 'jobs'),
-      ...buildCatalogQueryConstraints({ clientId, batchId, sortOrder }),
+    return subscribeToCatalogBatchJobs(
+      clientId,
+      batchId,
+      sortOrder,
+      (jobs) => setBatchResult({ scope: batchScope, jobs, error: null }),
+      () => setBatchResult((current) => ({
+        scope: batchScope,
+        jobs: current?.jobs ?? EMPTY_JOBS,
+        error: 'Error cargando imágenes del catálogo',
+      })),
     );
-
-    const unsubscribe = onSnapshot(
-      batchJobsQuery,
-      (snapshot) => {
-        setBatchJobs(
-          snapshot.docs
-            .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job)
-            .filter(isRenderableCatalogJob),
-        );
-        setLoading(false);
-      },
-      () => {
-        setError('Error cargando imágenes del catálogo');
-        setLoading(false);
-      },
-    );
-
-    return () => unsubscribe();
-  }, [clientId, batchId, sortOrder]);
+  }, [clientId, batchId, sortOrder, batchScope]);
 
   const fetchPage = useCallback(
     async (cursor: JobDocumentSnapshot | null): Promise<CatalogPage> => {
       if (!clientId) return { jobs: [], lastVisible: null, hasMore: false };
-      const constraints = [...buildCatalogQueryConstraints({ clientId, batchId, sortOrder }), limit(pageSize + 1)];
+      const constraints = [...buildCatalogQueryConstraints({ clientId, sortOrder }), limit(pageSize + 1)];
       const catalogQuery = cursor
         ? query(collection(db, 'jobs'), ...constraints, startAfter(cursor))
         : query(collection(db, 'jobs'), ...constraints);
@@ -177,7 +162,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
         hasMore,
       };
     },
-    [clientId, batchId, pageSize, sortOrder],
+    [clientId, pageSize, sortOrder],
   );
 
   // ── Client-wide paginated mode (only when no batchId selected) ──
@@ -192,7 +177,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
 
     const liveQuery = query(
       collection(db, 'jobs'),
-      ...buildCatalogQueryConstraints({ clientId, batchId, sortOrder }),
+      ...buildCatalogQueryConstraints({ clientId, sortOrder }),
       limit(pageSize + 1),
     );
 
@@ -216,6 +201,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
         liveFirstPageSignatureRef.current = nextSignature;
         setPages((prev) => (shouldResetCachedPages ? [livePage] : [livePage, ...prev.slice(1)]));
         if (shouldResetCachedPages) {
+          requestIdRef.current += 1;
           setCurrentPageIndex(0);
         }
         setLoading(false);
@@ -226,7 +212,10 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
       },
     );
 
-    return () => unsubscribe();
+    return () => {
+      requestIdRef.current += 1;
+      unsubscribe();
+    };
   }, [clientId, batchId, pageSize, sortOrder]);
 
   // Prefetch the next page silently whenever the current page has more data and the
@@ -244,8 +233,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
     fetchPage(currentPage.lastVisible).then((nextPage) => {
       if (cancelled) return;
       setPages((prev) => {
-        // Only append if the slot is still empty (avoid race with goToNextPage)
-        if (prev[currentPageIndex + 1]) return prev;
+        if (prev[currentPageIndex] !== currentPage || prev[currentPageIndex + 1]) return prev;
         const updated = [...prev];
         updated[currentPageIndex + 1] = nextPage;
         return updated;
@@ -280,7 +268,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
     try {
       const nextPage = await fetchPage(current.lastVisible);
       if (requestId !== requestIdRef.current) return;
-      setPages((prev) => [...prev, nextPage]);
+      setPages((prev) => prev[currentPageIndex + 1] ? prev : [...prev, nextPage]);
       setCurrentPageIndex((page) => page + 1);
     } catch {
       if (requestId !== requestIdRef.current) return;
@@ -292,11 +280,14 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
     }
   }, [clientId, batchId, pages, currentPageIndex, fetchPage]);
 
-  // When a specific batch is selected, use batchJobs directly (no pagination).
-  // When browsing all client jobs, use the paginated pages.
+  const batchJobs = activeBatchResult?.jobs ?? EMPTY_JOBS;
   const jobs = useMemo(
-    () => (batchId ? batchJobs : (pages[currentPageIndex]?.jobs ?? [])),
-    [batchId, batchJobs, pages, currentPageIndex],
+    () => (batchId ? (includeAllBatchJobs ? batchJobs : batchJobs.filter(isRenderableCatalogJob)) : (pages[currentPageIndex]?.jobs ?? EMPTY_JOBS)),
+    [batchId, batchJobs, includeAllBatchJobs, pages, currentPageIndex],
+  );
+  const generatingJobs = useMemo(
+    () => batchJobs.filter((job) => job.status === 'pending' || job.status === 'processing'),
+    [batchJobs],
   );
 
   const garmentGroups: CatalogGarmentGroup[] = useMemo(() => {
@@ -324,10 +315,10 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder }: Catal
 
   return {
     batches,
-    jobs,
     garmentGroups,
-    loading,
-    error,
+    generatingJobs,
+    loading: batchId ? Boolean(clientId && !activeBatchResult) : loading,
+    error: activeBatchResult?.error ?? error,
     currentPage,
     totalPages,
     hasPreviousPage,

@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { Batch, Job, MasterProduct, ProductDraft, StoredMasterProduct } from '../../../shared/src/types';
+import { isApprovedProductPhoto } from '../../../shared/src/productWorkflow';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 
 export const masterProductId = (batch: Pick<Batch, 'id' | 'automationJobId'>, garmentId: string) => createHash('sha256').update(`${batch.automationJobId || batch.id}\0${garmentId}`).digest('hex').slice(0, 40);
-export const isApprovedMasterProductOutput = (job: Job, output = resolveApprovedJobOutput(job)): boolean => Boolean(
-  job.status === 'completed' && !job.manuallyFlagged && output && typeof output.id === 'string' && output.id
-  && typeof output.resultImagePath === 'string' && output.resultImagePath.startsWith(`generated/${job.clientId}/${job.batchId}/`)
-  && (Boolean(job.userSelectedOutput?.id && job.userSelectedOutput.id === output.id) || output.autoReview?.verdict === 'approved'),
-);
+export const jobMasterProductId = (batch: Pick<Batch, 'id' | 'automationJobId'>, job: Pick<Job, 'clientId' | 'photoTask' | 'garmentId'>) => job.photoTask
+  ? createHash('sha256').update(`${job.clientId}\0photo-product\0${job.photoTask.productId}`).digest('hex').slice(0, 40)
+  : masterProductId(batch, job.garmentId);
+export { isApprovedProductPhoto as isApprovedMasterProductOutput };
 const productAliases: Record<string, string[]> = { name: ['goods_name', 'item_name', 'product_name', 'title'], description: ['goods_description', 'product_description', 'description'], brand: ['brand', 'brand_name'], material: ['material'], composition: ['composition'] };
 const variantAliases: Record<string, string[]> = { sku: ['sku_code', 'item_sku', 'seller_sku', 'sku'], color: ['main_attribute_value', 'color', 'colour'], size: ['secondary_attribute_1_value', 'size'], price: ['price', 'standard_price', 'retail_price'], inventory: ['quantity', 'inventory'], gtin: ['gtin', 'ean', 'upc'], asin: ['asin'], spu: ['supplier_code'], skc: ['skc'] };
 export function projectMasterProducts(clientId: string, batches: Batch[], jobs: Job[], drafts: ProductDraft[], stored: Record<string, StoredMasterProduct> = {}): MasterProduct[] {
@@ -16,7 +16,7 @@ export function projectMasterProducts(clientId: string, batches: Batch[], jobs: 
   for (const item of [...drafts, ...jobs]) {
     const batch = batchMap.get(item.batchId);
     if (!batch || item.clientId !== clientId) throw new Error('Relación de producto fuera del cliente o lote.');
-    const id = 'photoTask' in item && item.photoTask ? createHash('sha256').update(`${clientId}\0photo-product\0${item.photoTask.productId}`).digest('hex').slice(0, 40) : masterProductId(batch, item.garmentId);
+    const id = jobMasterProductId(batch, item);
     if (!products.has(id)) products.set(id, { id, clientId, garmentId: 'photoTask' in item && item.photoTask ? item.photoTask.productId : item.garmentId, batchIds: [], values: { name: item.garmentName || '' }, evidence: {}, variants: [], legacyDrafts: [], originalImages: [], generatedImages: [], approvedImages: [], pendingImages: 0, marketplaces: {}, revision: 0 });
     const p = products.get(id)!;
     if (!p.batchIds.includes(item.batchId)) p.batchIds.push(item.batchId);
@@ -35,11 +35,11 @@ export function projectMasterProducts(clientId: string, batches: Batch[], jobs: 
         const task = item.photoTask;
         p.photoAssignments ??= [];
         for (const d of task.destinations) p.photoAssignments.push({ ...d, taskId: task.id, angle: task.sceneId || task.view, jobId: item.id!, outputId: output?.id || null,
-          eligible: isApprovedMasterProductOutput(item, output) && output?.photoValidation?.fidelity === true && output.photoValidation.destinations.some(v => v.channel === d.channel && v.position === d.position && v.passed) });
+          eligible: isApprovedProductPhoto(item, output) && output?.photoValidation?.fidelity === true && output.photoValidation.destinations.some(v => v.channel === d.channel && v.position === d.position && v.passed) });
         if (!p.variants.some(v => v.id === task.variantId)) p.variants.push({ id: task.variantId, values: { color: batch.photoPlan?.articles.find(a => a.itemId === task.itemId)?.attributes.color?.value || '' } });
       }
       // A manual selection is an explicit approval in the existing review flow.
-      const approved = isApprovedMasterProductOutput(item, output);
+      const approved = isApprovedProductPhoto(item, output);
       if (output?.id && output.resultImagePath && !p.generatedImages!.some(i => i.outputId === output.id)) p.generatedImages!.push({ outputId: output.id, jobId: item.id!, storagePath: output.resultImagePath, approved: Boolean(approved) });
       if (approved && output && !p.approvedImages.some(i => i.outputId === output.id)) p.approvedImages.push({ outputId: output.id, jobId: item.id!, storagePath: output.resultImagePath });
       else if (!approved) p.pendingImages++;

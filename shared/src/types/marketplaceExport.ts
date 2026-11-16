@@ -77,7 +77,7 @@ export interface MarketplaceTemplateConfig {
   mappings: Record<string, Record<string, TemplateColumnMapping>>;
   confirmedAt?: TimestampLike;
 }
-export interface MarketplaceExportScope { clientId: string; batchIds: string[] }
+export interface MarketplaceExportScope { clientId: string; batchIds: string[]; masterProductId?: string; organizerContext?: import('./organizer').OrganizerProductContext }
 export interface PublishMarketplaceImagesRequest extends MarketplaceExportScope {
   productId: string; marketplaceId: MarketplaceId; authorizePublicImages: boolean;
 }
@@ -85,13 +85,26 @@ export interface PublishMarketplaceImagesResponse {
   images: PublishedMarketplaceImage[];
   failures: Array<{ outputId: string; message: string }>;
 }
-export interface MarketplaceExportIssue { marketplaceId: MarketplaceId; productId?: string; productName?: string; field?: string; code: string; message: string }
+export interface MarketplaceExportIssue {
+  marketplaceId: MarketplaceId;
+  productId?: string;
+  productName?: string;
+  variantId?: string;
+  field?: string;
+  code: string;
+  message: string;
+}
 export interface MarketplaceReadiness { marketplaceId: MarketplaceId; ready: boolean; compatibleTemplates: number; issues: MarketplaceExportIssue[] }
 export interface MarketplaceExportPreview {
   clientName: string; products: MasterProduct[]; templates: SpreadsheetTemplate[];
   categories: SpreadsheetTemplateCategory[]; channels: MarketplaceReadiness[];
 }
-export interface DownloadMarketplaceExportRequest extends MarketplaceExportScope { marketplaceIds: MarketplaceId[]; requestId: string }
+export interface DownloadMarketplaceExportRequest extends MarketplaceExportScope {
+  marketplaceIds: MarketplaceId[];
+  requestId: string;
+  /** Allows publication of approved images needed for the selected exports. */
+  authorizePublicImages?: boolean;
+}
 export interface DownloadMarketplaceExportResponse {
   fileName: string | null; downloadUrl: string | null; expiresAt: number;
   failures: Array<{ marketplaceId: MarketplaceId; message: string }>; exportedMarketplaces: MarketplaceId[];

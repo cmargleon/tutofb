@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { FirebaseError } from 'firebase/app';
 import { resolveStorageAssetUrl } from './assets';
 
-export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
+export const useStorageAssetUrl = (storagePath: string | null | undefined, retry = 0) => {
   const { user, appUser } = useAuth();
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(storagePath));
@@ -58,7 +58,7 @@ export const useStorageAssetUrl = (storagePath: string | null | undefined) => {
       isMounted = false;
       revokeObjectUrl?.();
     };
-  }, [storagePath, user?.uid, appUser]);
+  }, [storagePath, user?.uid, appUser, retry]);
 
   return { url, loading, error };
 };

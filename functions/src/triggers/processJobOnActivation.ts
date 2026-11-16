@@ -19,6 +19,7 @@ export const processJobOnActivation = onDocumentUpdated(
     timeoutSeconds: 540,
     memory: '2GiB',
     maxInstances: 20,
+    concurrency: 30,
     secrets: [FAL_KEY, GEMINI_API_KEY],
   },
   async (event) => {

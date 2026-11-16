@@ -52,6 +52,8 @@ export interface MasterProduct {
   generatedImages?: Array<{ outputId: string; jobId: string; storagePath: string; approved: boolean }>;
   /** Server projection of publications still associated with approved outputs. */
   publishedImages?: Partial<Record<MarketplaceId, Record<string, PublishedMarketplaceImage>>>;
+  /** Template choices vetted by the server for this export context. */
+  marketplaceAutofill?: Partial<Record<MarketplaceId, MarketplaceAutofillRow[]>>;
   pendingImages: number;
   marketplaces: Partial<Record<MarketplaceId, ProductMarketplaceData>>;
   revision: number;
@@ -77,6 +79,17 @@ export interface MarketplaceTemplateConfig {
   mappings: Record<string, Record<string, TemplateColumnMapping>>;
   confirmedAt?: TimestampLike;
 }
+/**
+ * Gemini's choice for each template dropdown of one variant. Values are always valid template options and
+ * are exported unless the operator overrides them. Tentative fields carry Gemini's reason in `reasons`;
+ * `failures` explains fields left pending after the automatic retry.
+ */
+export type MarketplaceAutofillRow = ProductDraftRow & {
+  inferredFields: string[];
+  tentativeFields?: string[];
+  reasons?: Record<string, string>;
+  failures?: Record<string, string>;
+};
 export interface MarketplaceExportScope { clientId: string; batchIds: string[]; masterProductId?: string; organizerContext?: import('./organizer').OrganizerProductContext }
 export interface PublishMarketplaceImagesRequest extends MarketplaceExportScope {
   productId: string; marketplaceId: MarketplaceId; authorizePublicImages: boolean;
@@ -91,6 +104,7 @@ export interface MarketplaceExportIssue {
   productName?: string;
   variantId?: string;
   field?: string;
+  blocking?: false;
   code: string;
   message: string;
 }
@@ -98,7 +112,13 @@ export interface MarketplaceReadiness { marketplaceId: MarketplaceId; ready: boo
 export interface MarketplaceExportPreview {
   clientName: string; products: MasterProduct[]; templates: SpreadsheetTemplate[];
   categories: SpreadsheetTemplateCategory[]; channels: MarketplaceReadiness[];
+  /** Gemini failed or produced no valid option for some fields after its automatic retry. */
+  autofillIncomplete?: boolean;
+  /** Some Gemini analyses are not available yet; request the preview again with `analyzeAutofill`. */
+  autofillPending?: boolean;
 }
+/** `analyzeAutofill` runs (or waits for) the Gemini analyses that the plain preview reports as pending. */
+export interface MarketplaceExportPreviewRequest extends MarketplaceExportScope { analyzeAutofill?: boolean }
 export interface DownloadMarketplaceExportRequest extends MarketplaceExportScope {
   marketplaceIds: MarketplaceId[];
   requestId: string;

@@ -1,4 +1,5 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import type { MasterProduct, MarketplaceExportIssue, MarketplaceExportPreview, MarketplaceExportScope, ProductDraftInput, PublishedMarketplaceImage, SpreadsheetTemplateCategory } from '../../../shared/src/types';
 import { PRODUCT_FIELDS, VARIANT_FIELDS } from '../../../shared/src/types';
 import { MARKETPLACES, type MarketplaceId } from '../../../shared/src/marketplaces';
@@ -39,8 +40,22 @@ function focusRequirement(editor: HTMLElement, issue: MarketplaceExportIssue) {
   target.scrollIntoView({ block: 'center' });
 }
 
-export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue, onSaved }: {
+/** Warning beside a field whose Gemini option is uncertain; the reason shows on hover, keyboard focus or tap. */
+function AutofillWarning({ reason }: { reason: string }) {
+  const [open, setOpen] = useState(false); const id = useId();
+  return <span className="relative shrink-0 pt-2" onPointerEnter={e => { if (e.pointerType === 'mouse') setOpen(true); }} onPointerLeave={e => { if (e.pointerType === 'mouse') setOpen(false); }}>
+    <button type="button" aria-label="Sugerencia de Gemini con poca certeza" aria-describedby={id} aria-expanded={open}
+      className="rounded text-amber-600 hover:text-amber-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500"
+      onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onClick={() => setOpen(true)} onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}>
+      <AlertTriangle aria-hidden="true" className="h-4 w-4" />
+    </button>
+    <span role="tooltip" id={id} hidden={!open} className="absolute right-0 top-full z-30 mt-1 w-72 max-w-[80vw] rounded-lg border border-amber-200 bg-white p-3 text-xs leading-relaxed text-slate-700 shadow-lg">{reason}</span>
+  </span>;
+}
+
+export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue, analyzing = false, onSaved }: {
   product: MasterProduct;
+  analyzing?: boolean;
   preview: MarketplaceExportPreview;
   scope: MarketplaceExportScope;
   focusedIssue: MarketplaceExportIssue | null;
@@ -50,6 +65,11 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
   const [publicUrlsAuthorized, setPublicUrlsAuthorized] = useState(false);
   const [confirmIdentity, setConfirmIdentity] = useState(false);
   const editor = useRef<HTMLFieldSetElement>(null);
+  // A finished Gemini analysis refreshes the suggestions without discarding the operator's unsaved edits.
+  useEffect(() => {
+    setValue(current => current.marketplaceAutofill === product.marketplaceAutofill ? current
+      : { ...current, marketplaceAutofill: product.marketplaceAutofill, evidence: { ...current.evidence, ...product.evidence } });
+  }, [product]);
   useLayoutEffect(() => {
     if (editor.current && focusedIssue) focusRequirement(editor.current, focusedIssue);
   }, [focusedIssue]);
@@ -87,13 +107,36 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
       const templates = preview.templates.filter(t => t.exportConfig?.marketplaceId === id && (t.status !== 'archived' || (t.id === data?.templateId && !!t.exportConfig.supersededByTemplateId)) && t.exportConfig.validationStatus === 'compatible');
       const categories = preview.categories.filter(c => c.templateId === data?.templateId); const category = categories.find(c => c.id === data?.categoryId);
       const template = templates.find(t => t.id === data?.templateId);
-      const resolvedRows = category && template ? MARKETPLACE_ADAPTERS[id].prepare(value, template, category).rows : [];
-      const resolvedValuesByRow = Object.fromEntries(resolvedRows.map(row => [row.variantId, row.values]));
+      const original = product.marketplaces[id];
+      const sameTemplate = data?.templateId === original?.templateId && data?.categoryId === original?.categoryId;
+      const projection = sameTemplate ? value : { ...value, marketplaceAutofill: { ...value.marketplaceAutofill, [id]: undefined } };
+      // The form, validation and workbook share this projection: overrides first, then Gemini's options.
+      const adapted = category && template ? MARKETPLACE_ADAPTERS[id].prepare(projection, template, category) : undefined;
+      const resolvedValuesByRow = Object.fromEntries((adapted?.rows || []).map(row => [row.variantId, row.values]));
+      const autofillRows = sameTemplate ? value.marketplaceAutofill?.[id] || [] : [];
+      const notices = new Set(adapted?.issues.filter(issue => ['verify_suggestion', 'autofill_failed', 'required'].includes(issue.code))
+        .map(issue => JSON.stringify([issue.code, issue.variantId, issue.field])));
+      const draftRows = value.variants.map(variant => ({ id: variant.id, values: data?.rows?.find(row => row.id === variant.id)?.values || {} }));
       return <details key={id} data-export-channel={id} className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-semibold">{MARKETPLACES.find(m => m.id === id)?.name} · plantilla y datos de salida</summary><div className="mt-4 space-y-4">
         <label className="block text-xs font-medium">Plantilla<select data-export-template className={INPUT_CLASS} value={data?.templateId || ''} onChange={e => { const c = preview.categories.find(c => c.templateId === e.target.value); patchChannel(id, { templateId: e.target.value, categoryId: c?.id || '', rows: [], imageUrls: { ...Object.fromEntries(Object.values((value.publishedImages?.[id] || {}) as Record<string, PublishedMarketplaceImage>).map(image => [image.outputId, image.url])), ...data?.imageUrls }, ...(id === 'amazon' ? { requirements: { gtinExemptionByVariant: {} } } : {}) }); }}><option value="">Seleccionar plantilla</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name} · v{t.exportConfig!.version}{t.status === 'archived' ? ' · Histórica vinculada' : ''}</option>)}</select></label>
         {data?.templateId && <label className="block text-xs font-medium">Categoría<select data-export-category className={INPUT_CLASS} value={data.categoryId} onChange={e => patchChannel(id, { categoryId: e.target.value, rows: [], ...(id === 'amazon' ? { requirements: { gtinExemptionByVariant: {} } } : {}) })}><option value="">Seleccionar categoría</option>{categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
         {data && category && id === 'amazon' && <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-xs text-amber-900">Exenciones de GTIN de Amazon. Confirma la aprobación externamente para esta marca/categoría; este requisito no se comparte con otros destinos.</p>{value.variants.map(variant => <label key={variant.id} className="block text-xs">Exención · {variant.values.sku || variant.id}<select data-draft-field="gtinExemption" data-draft-row={variant.id} className={INPUT_CLASS} value={data.requirements ? data.requirements.gtinExemptionByVariant?.[variant.id] || '' : variant.values.gtinExemption || ''} onChange={e => { const next = { ...data.requirements?.gtinExemptionByVariant }; if (e.target.value) next[variant.id] = e.target.value as 'pending' | 'approved'; else delete next[variant.id]; patchChannel(id, { requirements: { gtinExemptionByVariant: next, brandSnapshot: value.values.brand || '', categoryIdSnapshot: data.categoryId } }); }}><option value="">Sin exención confirmada</option><option value="pending">Pendiente de autorización externa</option><option value="approved">Aprobada externamente para Amazon</option></select></label>)}</div>}
-        {data && category && <><p className="text-xs text-slate-500">El formulario muestra los valores que se exportarán. Si editas un campo aquí, el cambio se aplica a este destino.</p><ProductDraftEditor categories={[category]} drafts={[draft(category.id!, value.variants.map(v => ({ id: v.id, values: data.rows?.find(r => r.id === v.id)?.values || {} })))]} resolvedValuesByRow={resolvedValuesByRow} layout="form" showDraftTabs={false} showSummaryCard={false} showGeneratedImagesSummary={false} showAddRowButton={false} showRowActions={false} onChangeRows={(_, rows) => patchChannel(id, { rows })} />
+        {data && category && <><p className="text-xs text-slate-500">Las opciones de Gemini ya están seleccionadas y se incluirán en el Excel. El icono de advertencia indica poca certeza; un cambio manual tiene prioridad y se aplica solo a este destino.</p>
+          {analyzing && <p role="status" className="flex items-center gap-2 text-xs text-indigo-800"><Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />Analizando con Gemini…</p>}
+          <ProductDraftEditor categories={[category]} drafts={[draft(category.id!, draftRows)]} resolvedValuesByRow={resolvedValuesByRow}
+            layout="form" showDraftTabs={false} showSummaryCard={false} showGeneratedImagesSummary={false} showAddRowButton={false} showRowActions={false}
+            onChangeRows={(_, rows) => patchChannel(id, { rows })}
+            renderFieldAdornment={(row, column) => {
+              if (!notices.has(JSON.stringify(['verify_suggestion', row.id, column.key]))) return null;
+              const reason = autofillRows.find(item => item.id === row.id)?.reasons?.[column.key];
+              return <AutofillWarning reason={`Gemini sugiere «${resolvedValuesByRow[row.id]?.[column.key]}» con poca certeza.${reason ? ` ${reason}` : ''}`} />;
+            }}
+            renderFieldNote={(row, column) => {
+              const failure = autofillRows.find(item => item.id === row.id)?.failures?.[column.key];
+              if (!failure || resolvedValuesByRow[row.id]?.[column.key]
+                || !['autofill_failed', 'required'].some(code => notices.has(JSON.stringify([code, row.id, column.key])))) return null;
+              return <p className="mt-1 text-xs text-amber-800">Pendiente: {failure}</p>;
+            }} />
           {value.photoAssignments && <div className="rounded-lg border p-3 text-xs"><p className="font-medium">Selección del plan por variante y posición</p>{value.photoAssignments.filter(a => a.channel === id).sort((a, b) => a.variantId.localeCompare(b.variantId) || a.position - b.position).map(a => <p key={`${a.variantId}-${a.position}`}>{a.variantId} · {a.role === 'main' ? 'Portada' : `Foto ${a.position}`} · {a.eligible ? 'Validada' : a.required ? 'Obligatoria pendiente' : 'Pendiente'}{a.eligible && value.photoAssignments!.filter(other => other.outputId === a.outputId && other.eligible).length > 1 ? ' · compartida con otros destinos' : ''}</p>)}</div>}
           <div data-export-photos tabIndex={-1} className="rounded-lg bg-slate-50 p-3 text-xs"><p>{value.approvedImages.length} imágenes aprobadas · {value.pendingImages} pendientes</p><p className="mt-2">Los enlaces que falten se crean al descargar el Excel. Si necesitas copiarlos antes, puedes prepararlos aquí o registrar enlaces de tu propio alojamiento. Cualquier persona con el enlace puede ver la copia publicada.</p>
             <label className="mt-3 flex items-start gap-2"><input type="checkbox" checked={publicUrlsAuthorized} onChange={e => setPublicUrlsAuthorized(e.target.checked)} />Autorizo publicar copias de estas fotografías aprobadas y usar sus URL públicas en marketplaces.</label>

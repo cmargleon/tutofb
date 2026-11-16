@@ -30,6 +30,7 @@ export const permanentlyDeleteClient = onCall<
   }
 
   await deletePublishedMarketplaceImages(id);
+  await db.recursiveDelete(clientRef.collection('marketplaceAutofill'));
   await clientRef.delete();
 
   return {

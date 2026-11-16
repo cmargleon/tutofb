@@ -36,7 +36,13 @@ export function projectMasterProducts(clientId: string, batches: Batch[], jobs: 
         p.photoAssignments ??= [];
         for (const d of task.destinations) p.photoAssignments.push({ ...d, taskId: task.id, angle: task.sceneId || task.view, jobId: item.id!, outputId: output?.id || null,
           eligible: isApprovedProductPhoto(item, output) && output?.photoValidation?.fidelity === true && output.photoValidation.destinations.some(v => v.channel === d.channel && v.position === d.position && v.passed) });
-        if (!p.variants.some(v => v.id === task.variantId)) p.variants.push({ id: task.variantId, values: { color: batch.photoPlan?.articles.find(a => a.itemId === task.itemId)?.attributes.color?.value || '' } });
+        if (!p.variants.some(v => v.id === task.variantId)) {
+          const color = batch.photoPlan?.articles.find(a => a.itemId === task.itemId)?.attributes.color;
+          p.variants.push({ id: task.variantId, values: { color: color?.value || '' } });
+          if (color?.value && color.source === 'gemini') p.evidence[`variant.${task.variantId}.color`] = {
+            original: color.evidence, normalized: color.value, source: 'ai', confidence: color.confidence,
+          };
+        }
       }
       // A manual selection is an explicit approval in the existing review flow.
       const approved = isApprovedProductPhoto(item, output);

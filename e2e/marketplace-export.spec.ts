@@ -117,6 +117,59 @@ test('one requirement opens its marketplace and focuses the correct variant fiel
     expect(save.input.marketplaces.shein.rows.find((row: any) => row.id === 'second-variant').values.sku).toBe('SKU-VARIANTE-2');
   } finally { await isolated.close(); }
 });
+test('the first opening shows the Gemini analysis and fills the form when it ends, keeping edits made meanwhile', async () => {
+  const isolated = await openIsolatedBrowser(chromium);
+  try {
+    const { page, baseURL } = isolated;
+    await page.goto(`${baseURL}/catalogo?clientId=local-client&batchId=local-batch`);
+    await page.evaluate(() => (window as any).__setMarketplaceFixture('analysis-pending'));
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
+    await expect(drawer.getByText('Analizando con Gemini… El formulario', { exact: false })).toBeVisible();
+    await drawer.getByRole('checkbox', { name: 'SHEIN' }).check();
+    await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeDisabled();
+    await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
+    await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Editado durante el análisis');
+    await drawer.getByText('SHEIN · plantilla y datos de salida', { exact: true }).click();
+    const field = drawer.getByRole('combobox', { name: 'Materiales en contacto con alimentos', exact: true });
+    await expect(field).toHaveValue('');
+    await page.evaluate(() => (window as any).__finishMarketplaceAnalysis());
+    await expect(field).toHaveValue('Vidrio');
+    await expect(drawer.getByText('Analizando con Gemini…', { exact: false })).toHaveCount(0);
+    await expect(drawer.getByRole('textbox', { name: 'Nombre', exact: true })).toHaveValue('Editado durante el análisis');
+    await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeEnabled();
+    const calls = await page.evaluate(() => (window as any).__localCalls.filter((call: any) => call.name === 'previewMarketplaceExports'));
+    expect(calls.some((call: any) => call.input.analyzeAutofill === true)).toBe(true);
+    expect(await drawer.getByRole('button', { name: 'Volver a validar', exact: true }).count()).toBe(0);
+  } finally { await isolated.close(); }
+});
+test('a low-certainty option is preselected, exportable and explained; a manual change clears its warning', async () => {
+  const isolated = await openIsolatedBrowser(chromium);
+  try {
+    const { page, baseURL } = isolated;
+    await page.goto(`${baseURL}/catalogo?clientId=local-client&batchId=local-batch`);
+    await page.evaluate(() => (window as any).__setMarketplaceFixture('tentative-suggestion'));
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
+    await drawer.getByRole('checkbox', { name: 'SHEIN' }).check();
+    await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeEnabled();
+    await drawer.getByRole('button', { name: '1 aviso de Gemini', exact: true }).click();
+    const field = drawer.getByRole('combobox', { name: 'Materiales en contacto con alimentos', exact: true });
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue('Acero inoxidable');
+    await expect(drawer.getByRole('button', { name: 'Confirmar opción' })).toHaveCount(0);
+    const warning = drawer.getByRole('button', { name: 'Sugerencia de Gemini con poca certeza', exact: true });
+    await warning.focus();
+    await expect(drawer.getByRole('tooltip')).toContainText('la composición del interior está por verificar');
+    await field.selectOption('Vidrio');
+    await expect(warning).toHaveCount(0);
+    await drawer.getByRole('button', { name: 'Guardar y volver a validar', exact: true }).click();
+    await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeEnabled();
+    const save = await page.evaluate(() => (window as any).__localCalls.find((call: any) => call.name === 'saveMasterProduct'));
+    expect(save.input.marketplaces.shein.rows[0].values.attr_1000463).toBe('Vidrio');
+  } finally { await isolated.close(); }
+});
+
 test('client marketplace cards retain switches and show template administration only for enabled channels', async () => {
   const isolated = await openIsolatedBrowser(chromium);
   const { page, baseURL } = isolated;

@@ -162,7 +162,40 @@ if (window.__marketplaceClientEnabled) {
   const tiktok = records['clients/local-client/spreadsheetTemplates'].find(t => t.exportConfig.marketplaceId === 'tiktok-shop');
   records['clients/local-client/spreadsheetTemplates'].push({ ...tiktok, id: 'tiktok-shoes', name: 'Calzado TikTok', categories: [{ id: 'shoes', label: 'Calzado' }], status: 'archived' });
 }
-const marketplacePreview = () => {
+const marketplacePreview = (input = {}) => {
+  if (marketplaceScenario === 'analysis-pending') {
+    // First opening without cache: the plain preview reports the analysis; the analyzing request returns its options.
+    const variant = masterFixture.variants[0];
+    const field = 'attr_1000463';
+    const analyzed = input.analyzeAutofill === true;
+    const product = analyzed ? { ...masterFixture, marketplaceAutofill: { shein: [{ id: variant.id, values: { [field]: 'Vidrio' }, inferredFields: [], tentativeFields: [] }] } } : masterFixture;
+    const category = { ...exportCategories[0], validationMode: 'template', columns: [...exportCategories[0].columns, {
+      key: field, label: 'Materiales en contacto con alimentos', index: 2, letter: 'C', required: true, dropdownOptions: ['Acero inoxidable', 'Vidrio'],
+    }] };
+    return { clientName: 'Cliente local', products: [product], templates: exportTemplates, categories: [category], ...(analyzed ? {} : { autofillPending: true }),
+      channels: [{ marketplaceId: 'shein', ready: analyzed, compatibleTemplates: 1, issues: analyzed ? [] : [{
+        marketplaceId: 'shein', productId: product.id, productName: product.values.name, field, variantId: variant.id, code: 'required',
+        message: 'Falta Materiales en contacto con alimentos en variante 1.',
+      }] }] };
+  }
+  if (marketplaceScenario === 'tentative-suggestion') {
+    const variant = masterFixture.variants[0];
+    const field = 'attr_1000463';
+    const corrected = Boolean(masterFixture.marketplaces.shein.rows?.find(row => row.id === variant.id)?.values[field]);
+    const reason = 'Sugiere acero inoxidable por el acabado metálico; la composición del interior está por verificar.';
+    const product = { ...masterFixture, marketplaceAutofill: {
+      shein: [{ id: variant.id, values: { [field]: 'Acero inoxidable' }, inferredFields: [], tentativeFields: [field], reasons: { [field]: reason } }],
+    } };
+    const category = { ...exportCategories[0], validationMode: 'template', columns: [...exportCategories[0].columns, {
+      key: field, label: 'Materiales en contacto con alimentos', index: 2, letter: 'C', required: true, dropdownOptions: ['Acero inoxidable', 'Vidrio'],
+    }] };
+    return { clientName: 'Cliente local', products: [product], templates: exportTemplates, categories: [category], channels: [{
+      marketplaceId: 'shein', ready: true, compatibleTemplates: 1, issues: corrected ? [] : [{
+        marketplaceId: 'shein', productId: product.id, productName: product.values.name, field, blocking: false,
+        variantId: variant.id, code: 'verify_suggestion', message: `Materiales en contacto con alimentos (variante 1): Gemini sugiere «Acero inoxidable» con poca certeza. ${reason}`,
+      }],
+    }] };
+  }
   if (marketplaceScenario === 'single-requirement') {
     const product = { ...masterFixture, variants: [...masterFixture.variants, { id: 'second-variant', values: {} }] };
     return { clientName: 'Cliente local', products: [product], templates: exportTemplates, categories: exportCategories, channels: [{
@@ -218,7 +251,8 @@ export const httpsCallable = (_, name) => async input => {
   }
   if (name === 'saveMasterProduct') { masterFixture = { ...masterFixture, values: input.values, variants: input.variants, marketplaces: { ...masterFixture.marketplaces, ...input.marketplaces }, revision: masterFixture.revision + 1 }; return { data: { success: true, revision: masterFixture.revision } }; }
   if (name === 'previewMarketplaceExports') {
-    const data = marketplacePreview();
+    if (input.analyzeAutofill) await new Promise(resolve => { window.__finishMarketplaceAnalysis = resolve; });
+    const data = marketplacePreview(input);
     const batchId = input.batchIds[0];
     if (productWorkflow) {
       if (input.masterProductId !== 'local-master' || input.organizerContext?.variantId !== workflowVariant.id) return unexpected();

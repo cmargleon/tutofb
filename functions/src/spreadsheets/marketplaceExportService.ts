@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
 import { HttpsError } from 'firebase-functions/v2/https';
-import type { Batch, Client, DownloadMarketplaceExportRequest, DownloadMarketplaceExportResponse, Job, MasterProduct, MarketplaceExportPreview, MarketplaceExportScope, ProductDraft, SpreadsheetTemplate, SpreadsheetTemplateCategory, StoredMasterProduct } from '../../../shared/src/types';
+import type { Batch, Client, DownloadMarketplaceExportRequest, DownloadMarketplaceExportResponse, Job, MasterProduct, MarketplaceExportIssue, MarketplaceExportPreview, MarketplaceExportPreviewRequest, MarketplaceExportScope, ProductDraft, SpreadsheetTemplate, SpreadsheetTemplateCategory, StoredMasterProduct } from '../../../shared/src/types';
 import { MARKETPLACE_ADAPTERS } from '../../../shared/src/marketplaceExport/adapters';
 import { MARKETPLACES, isMarketplaceId, type MarketplaceId } from '../../../shared/src/marketplaces';
 import { assertHumanClientAccess } from '../auth/clientAccess';
@@ -14,6 +14,8 @@ import { inspectWorkbookPackage, patchWorkbookCells, assertPatchableCells, range
 import { sanitizeSpreadsheetFileName } from './batchSpreadsheetExport';
 import { applyMarketplacePublication, attachMarketplacePublications, publishMarketplaceImage } from './marketplaceImages';
 import { applyOrganizerSource, applyOrganizerVariantOverrides, assignOrganizerImages, loadOrganizerProducts } from './organizerProducts';
+import { applyMarketplaceAutofill } from './marketplaceAutofill';
+import { getGeminiGarmentViewClassificationModel } from '../config/runtime';
 import { digest } from '../organizer/drive';
 
 export function normalizeExportScope(input: MarketplaceExportScope): MarketplaceExportScope {
@@ -107,20 +109,32 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
     if (legacy && t.categoryIds.includes(legacy.categoryId)) p.marketplaces[t.exportConfig.marketplaceId] = { templateId: t.id!, categoryId: legacy.categoryId };
   }
   await attachMarketplacePublications(products, MARKETPLACES.filter(channel => client.marketplaces?.[channel.id]?.enabled).map(channel => channel.id));
-  return { scope, client, products, templates, categories };
+  return { scope, client, products, templates, categories, jobsByProduct, batches };
 }
 type Context = Awaited<ReturnType<typeof loadExportContext>>;
 // Supersession retires a default, while explicit archival revokes use (including history).
 export const templateUsable = (t: SpreadsheetTemplate, channel: MarketplaceId, historicallyLinked = false) =>
   (t.status !== 'archived' || (historicallyLinked && !!t.exportConfig?.supersededByTemplateId))
   && t.exportConfig?.marketplaceId === channel && t.exportConfig.validationStatus === 'compatible';
+function resolveMarketplaceAutofill(context: Context, channels: MarketplaceId[], uid: string, apiKey?: string, analyze = false) {
+  const inputs = context.products.flatMap(product => {
+    if (product.organizer?.source.issue && !product.organizer.confirmedIdentity) return [];
+    return channels.flatMap(channel => {
+      const channelData = product.marketplaces[channel];
+      const template = context.templates.find(t => t.id === channelData?.templateId && templateUsable(t, channel, true));
+      const category = context.categories.find(c => c.templateId === template?.id && c.id === channelData?.categoryId);
+      return template && category ? [{ channel, product, template, category, jobs: context.jobsByProduct.get(product.id) || [], batches: context.batches }] : [];
+    });
+  });
+  return applyMarketplaceAutofill(inputs, { model: getGeminiGarmentViewClassificationModel(), uid, apiKey, analyze });
+}
 export function previewExportContext(context: Context): MarketplaceExportPreview {
   const { client, products, templates, categories } = context;
   const channels = MARKETPLACES.filter(m => client.marketplaces?.[m.id]?.enabled).map(({ id }) => {
     // Readiness is scoped to these products, including their linked history even
     // when no current version remains available for new assignments.
     const available = templates.filter(t => templateUsable(t, id, products.some(p => p.marketplaces[id]?.templateId === t.id)));
-    const issues = products.flatMap(p => {
+    const issues = products.flatMap<MarketplaceExportIssue>(p => {
       const data = p.marketplaces[id]; const template = templates.find(t => t.id === data?.templateId && templateUsable(t, id, true));
       const category = categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
       const issue = (code: string, message: string) => ({ marketplaceId: id, productId: p.id, productName: p.values.name || p.garmentId, code, message });
@@ -135,7 +149,7 @@ export function previewExportContext(context: Context): MarketplaceExportPreview
     });
     if (!products.length) issues.push({ marketplaceId: id, productId: '', productName: '', code: 'products', message: 'El lote no contiene productos recuperables.' });
     if (!available.length && !issues.length) issues.push({ marketplaceId: id, productId: '', productName: '', code: 'template', message: 'Falta plantilla compatible activa.' });
-    return { marketplaceId: id, compatibleTemplates: available.length, ready: issues.length === 0, issues };
+    return { marketplaceId: id, compatibleTemplates: available.length, ready: issues.every(issue => issue.blocking === false), issues };
   });
   return { clientName: client.name, products, templates, categories, channels };
 }
@@ -148,7 +162,8 @@ export async function validateTemplateCoordinates(context: Context, channel: Mar
     const category = context.categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
     if (!template || !category) throw new Error('Plantilla o categoría no disponible.');
     const adapted = MARKETPLACE_ADAPTERS[channel].prepare(product, template, category);
-    if (adapted.issues.length) throw new Error(adapted.issues.map(i => `${i.productName}: ${i.message}`).join('\n'));
+    const blocking = adapted.issues.filter(issue => issue.blocking !== false);
+    if (blocking.length) throw new Error(blocking.map(i => `${i.productName}: ${i.message}`).join('\n'));
     if (adapted.pendingImageOutputIds.length) {
       if (!allowPendingImageUrls) throw new Error(`${product.values.name || product.garmentId}: faltan enlaces de las fotos aprobadas.`);
       const outputIds = new Set(adapted.pendingImageOutputIds);
@@ -215,8 +230,14 @@ export async function validateTemplateCoordinates(context: Context, channel: Mar
   }
   return { plans, pendingImages };
 }
-export async function previewMarketplaceExport(input: MarketplaceExportScope, uid: string) {
-  const context = await loadExportContext(input, uid); const preview = previewExportContext(context);
+/** Without `analyzeAutofill` only cached Gemini choices are used, so the panel opens at once and reports pending analyses. */
+export async function previewMarketplaceExport(input: MarketplaceExportPreviewRequest, uid: string, apiKey?: string) {
+  const context = await loadExportContext(input, uid);
+  const enabled = MARKETPLACES.filter(({ id }) => context.client.marketplaces?.[id]?.enabled).map(({ id }) => id);
+  const autofill = await resolveMarketplaceAutofill(context, enabled, uid, apiKey, input?.analyzeAutofill === true);
+  const preview = previewExportContext(context);
+  if (autofill.incomplete) preview.autofillIncomplete = true;
+  if (autofill.pending) preview.autofillPending = true;
   for (const channel of preview.channels.filter(c => c.ready)) try { await validateTemplateCoordinates(context, channel.marketplaceId, true); } catch (e) {
     channel.ready = false; channel.issues.push({ marketplaceId: channel.marketplaceId, code: 'workbook_validation', message: (e as Error).message });
   }
@@ -242,11 +263,12 @@ export async function downloadMarketplaceExport(input: DownloadMarketplaceExport
   if (cached) return cached;
   try {
     const files: Array<{ name: string; buffer: Buffer }> = []; const failures: DownloadMarketplaceExportResponse['failures'] = []; const exportedMarketplaces: MarketplaceId[] = [];
+    await resolveMarketplaceAutofill(context, channels, uid);
     const preview = previewExportContext(context);
     for (const channel of channels) {
       try {
         const readiness = preview.channels.find(c => c.marketplaceId === channel)!;
-        if (!readiness.ready) throw new Error(readiness.issues.map(i => `${i.productName || channel}: ${i.message}`).join('\n'));
+        if (!readiness.ready) throw new Error(readiness.issues.filter(i => i.blocking !== false).map(i => `${i.productName || channel}: ${i.message}`).join('\n'));
         let { plans, pendingImages } = await validateTemplateCoordinates(context, channel, true);
         if (pendingImages.length) {
           if (input.authorizePublicImages !== true) throw new Error('Autoriza la publicación de las fotos aprobadas al descargar desde el Catálogo.');

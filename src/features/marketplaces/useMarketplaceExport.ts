@@ -7,19 +7,27 @@ export function useMarketplaceExport(scope: MarketplaceExportScope) {
   const [selected, setSelected] = useState<MarketplaceId[]>([]);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false); const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [result, setResult] = useState<DownloadMarketplaceExportResponse | null>(null);
   const version = useRef(0); const lock = useRef(false); const requestId = useRef<string | null>(null);
   const key = JSON.stringify(scope);
   const refresh = useCallback(async () => {
-    const current = ++version.current; setLoading(true); setError(null); requestId.current = null;
-    try { const next = await previewMarketplaceExports(JSON.parse(key)); if (current === version.current) setPreview(next); }
-    catch (e) { if (current === version.current) { setPreview(null); setError((e as Error).message); } }
+    const current = ++version.current; setLoading(true); setError(null); setAnalyzing(false); setAnalysisError(null); requestId.current = null;
+    let next: MarketplaceExportPreview;
+    try { next = await previewMarketplaceExports(JSON.parse(key)); if (current === version.current) setPreview(next); }
+    catch (e) { if (current === version.current) { setPreview(null); setError((e as Error).message); } return; }
     finally { if (current === version.current) setLoading(false); }
+    if (!next.autofillPending || current !== version.current) return;
+    // The form opens with cached data while Gemini runs; the server joins any analysis already in progress.
+    setAnalyzing(true);
+    try { const analyzed = await previewMarketplaceExports({ ...JSON.parse(key), analyzeAutofill: true }); if (current === version.current) setPreview(analyzed); }
+    catch (e) { if (current === version.current) setAnalysisError((e as Error).message); }
+    finally { if (current === version.current) setAnalyzing(false); }
   }, [key]);
   useEffect(() => { setPreview(null); setSelected([]); setResult(null); void refresh(); return () => { version.current++; }; }, [refresh]);
   const select = (ids: MarketplaceId[]) => { if (lock.current) return; requestId.current = null; setSelected(ids); setResult(null); };
   const download = async () => {
-    if (lock.current || !selected.length || !preview || selected.some(id => !preview.channels.find(c => c.marketplaceId === id)?.ready)) return;
+    if (lock.current || analyzing || !selected.length || !preview || selected.some(id => !preview.channels.find(c => c.marketplaceId === id)?.ready)) return;
     lock.current = true; setBusy(true); setError(null);
     requestId.current ||= crypto.randomUUID();
     try {
@@ -32,5 +40,5 @@ export function useMarketplaceExport(scope: MarketplaceExportScope) {
     } catch (e) { setError((e as Error).message); }
     finally { lock.current = false; setBusy(false); }
   };
-  return { preview, selected, select, loading, busy, error, result, refresh, download };
+  return { preview, selected, select, loading, analyzing, analysisError, busy, error, result, refresh, download };
 }

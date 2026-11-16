@@ -37,7 +37,7 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
   const templatePath = `client_spreadsheets/${clientId}/vaso/original.xlsx`;
   const real = process.env.TUTO_JISHOP_VASO_TEMPLATE;
   const fixture = XLSX.utils.book_new();
-  const keys = ['supplier_code', 'supplier_sku', 'goods_name', 'main_img', 'detail_img_1', 'stock', 'original_price', 'weight', 'weight_unit', 'main_attribute_value', 'attr_1000463'];
+  const keys = ['supplier_code', 'supplier_sku', 'goods_name', 'main_img', 'detail_img_1', 'stock', 'original_price', 'weight', 'weight_unit', 'main_attribute_value', 'attr_1000463', 'attr_1000411'];
   XLSX.utils.book_append_sheet(fixture, XLSX.utils.aoa_to_sheet([['SHEIN'], keys, keys,
     ['Requerido', 'opcional', 'Requerido'], [], []]), 'Vaso(1083-3218)');
   const bytes = real ? await readFile(real) : XLSX.write(fixture, { type: 'buffer', bookType: 'xlsx' });
@@ -74,7 +74,7 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     mappings.supplier_code = { source: 'variant.skc', required: true, dataType: 'text' };
     mappings.main_attribute_value = { source: 'variant.color', required: true };
     mappings.attr_1000463 = { source: 'attribute.foodContactMaterial', required: true };
-    let exportedColor = 'morado';
+    let exportedColor = 'Morado';
     if (real) {
       const specification = category.columns.find((column: any) => column.key === 'main_attribute');
       const dependent = category.columns.find((column: any) => column.key === 'main_attribute_value');
@@ -83,7 +83,28 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
       assert.ok(option && exportedColor);
       mappings.main_attribute = { source: `literal.${option}`, required: true };
       mappings.secondary_attribute_1 = { source: 'literal.Talla(87)' };
+    } else {
+      category.columns.find((column: any) => column.key === 'main_attribute_value').dropdownOptions = ['Rojo', 'Morado'];
+      category.columns.find((column: any) => column.key === 'attr_1000463').dropdownOptions = ['Vidrio', 'Acero inoxidable'];
+      category.columns.find((column: any) => column.key === 'attr_1000411').dropdownOptions = ['1 pieza', '2 piezas'];
     }
+    process.env.GEMINI_API_KEY = 'emulator-only';
+    const originalFetch = globalThis.fetch;
+    let geminiCalls = 0;
+    t.mock.method(globalThis, 'fetch', async (url: string, init?: RequestInit) => {
+      if (!String(url).startsWith('https://generativelanguage.googleapis.com/')) return originalFetch(url, init);
+      geminiCalls++;
+      const body = JSON.parse(String(init?.body));
+      const { fields } = JSON.parse(body.contents[0].parts[0].text);
+      const color = fields.find((field: { key: string }) => field.key === 'main_attribute_value');
+      if (color) assert.ok(color.options.includes(exportedColor));
+      const selected = color ? [{ key: color.key, value: exportedColor, source: 'visual', evidence: 'Se ve morado.', confidence: 0.99 }] : [];
+      const quantity = fields.find((field: { key: string }) => field.key === 'attr_1000411');
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify([
+        ...selected, { key: 'attr_1000463', value: 'Vidrio', source: 'estimate', evidence: 'La composición requiere verificación.', confidence: 0.4 },
+        ...(quantity ? [{ key: quantity.key, value: quantity.options[0], source: 'estimate', evidence: 'Cantidad por verificar.', confidence: 0.4 }] : []),
+      ]) }] } }] }), { status: 200 });
+    });
     const templateRef = client.collection('spreadsheetTemplates').doc('vaso');
     const timestamp = admin.firestore.Timestamp.now();
     await templateRef.set({ ...parsed.template, createdAt: timestamp, updatedAt: timestamp });
@@ -113,7 +134,16 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     await db.doc('batches/object-batch').set({ clientId, automationJobId: 'object-intake', poseIds: [], productScenes: [{ type: 'clean' }, { type: 'hero' }] });
     await writeScene('object-front', 'object-batch', 'object-item', 'clean');
     await writeScene('object-side', 'object-batch', 'object-item', 'hero');
-    const initial = await exports.previewMarketplaceExports.run(request(scope));
+    // First opening: the plain preview answers from cache only and reports the pending analysis.
+    const opened = await exports.previewMarketplaceExports.run(request(scope));
+    assert.equal(opened.autofillPending, true);
+    assert.equal(geminiCalls, 0);
+    // Two simultaneous openings share one Gemini analysis per variant and both receive its options.
+    const [initial, concurrent] = await Promise.all([1, 2].map(() =>
+      exports.previewMarketplaceExports.run(request({ ...scope, analyzeAutofill: true }))));
+    assert.equal(geminiCalls, initial.products[0].variants.length);
+    assert.deepEqual(concurrent.products[0].marketplaceAutofill, initial.products[0].marketplaceAutofill);
+    assert.ok(!initial.autofillPending && !concurrent.autofillPending);
     const product = initial.products[0];
     assert.equal(product.variants.length, 2);
     assert.ok(product.variants.every((v: any) => v.values.color === 'morado' && v.attributes.transparency === 'No' && !v.values.pack));
@@ -124,18 +154,38 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
       ['Fuente QA.xlsm', '1665', 'HOGAR', 2], ['Fuente QA.xlsm', '1665', 'HOGAR', 3],
     ]);
     assert.ok(!initial.channels[0].issues.some((issue: any) => issue.field === 'main_img' || issue.field === 'detail_img_1'));
-    assert.ok(initial.channels[0].issues.some((issue: any) => issue.field === 'attr_1000463'));
+    // A low-certainty valid option completes the field: it is a warning with Gemini's reason, never a blocker.
+    const materialIssues = initial.channels[0].issues.filter((issue: any) => issue.field === 'attr_1000463');
+    assert.ok(materialIssues.length && materialIssues.every((issue: any) => issue.code === 'verify_suggestion' && issue.blocking === false
+      && /La composición requiere verificación\./.test(issue.message)), JSON.stringify(materialIssues));
+    if (!real) {
+      assert.ok(product.marketplaceAutofill.shein.every((row: any) => row.values.attr_1000463 === 'Vidrio'
+        && row.tentativeFields.includes('attr_1000463') && row.reasons.attr_1000463 === 'La composición requiere verificación.'));
+      assert.ok(initial.channels[0].issues.some((issue: any) => issue.field === 'attr_1000411' && issue.blocking === false));
+    }
+    const calls = geminiCalls;
+    const reopened = await exports.previewMarketplaceExports.run(request(scope));
+    assert.equal(geminiCalls, calls);
+    assert.ok(!reopened.autofillPending);
+    assert.deepEqual(reopened.products[0].marketplaceAutofill, product.marketplaceAutofill);
     const material = 'Vidrio'; // Valor de atributo válido para el caso de prueba.
+    // A manual correction wins over Gemini and does not invalidate the cached analysis of the other fields.
+    const firstVariant = product.variants[0].id;
+    const corrected = real ? product.marketplaces : { ...product.marketplaces, shein: { ...product.marketplaces.shein,
+      rows: [{ id: firstVariant, values: { attr_1000411: '2 piezas' } }] } };
     await exports.saveMasterProduct.run(request({ ...scope, productId: product.id, expectedRevision: 0, organizerSourceRevision: product.organizer.revision,
-      values: { ...product.values, description: 'Descripción corregida en Catálogo' }, marketplaces: product.marketplaces,
+      values: { ...product.values, description: 'Descripción corregida en Catálogo' }, marketplaces: corrected,
       variants: product.variants,
     }));
+    const afterCorrection = await exports.previewMarketplaceExports.run(request(scope));
+    assert.equal(geminiCalls, calls);
+    if (!real) assert.ok(!afterCorrection.channels[0].issues.some((issue: any) => issue.field === 'attr_1000411' && issue.variantId === firstVariant));
     const updates = rows('1666', 12, undefined, material);
     updates[0].cells.find((cell: any) => cell.header === 'Precio de venta').originalValue = 159.5;
     await writeRows(updates);
     await assert.rejects(() => exports.saveMasterProduct.run(request({ ...scope, productId: product.id, expectedRevision: 1,
       organizerSourceRevision: product.organizer.revision, values: product.values, variants: product.variants, marketplaces: product.marketplaces })), { code: 'aborted' });
-    const ready = await exports.previewMarketplaceExports.run(request(scope));
+    const ready = await exports.previewMarketplaceExports.run(request({ ...scope, analyzeAutofill: true }));
     assert.equal(ready.products[0].values.description, 'Descripción corregida en Catálogo');
     assert.equal(ready.products[0].variants[0].values.inventory, '12');
     assert.equal(ready.products[0].variants[0].values.price, '159.5');
@@ -147,7 +197,9 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     assert.equal(denied.downloadUrl, null);
     assert.match(denied.failures[0].message, /Autoriza la publicación/);
     assert.equal((await registry.get()).exists, false);
+    const callsBeforeDownload = geminiCalls;
     const downloaded = await exports.downloadMarketplaceExports.run(request(input));
+    assert.equal(geminiCalls, callsBeforeDownload);
     assert.deepEqual(await exports.downloadMarketplaceExports.run(request(input)), downloaded);
     assert.equal(downloaded.failures.length, 0, JSON.stringify(downloaded.failures));
     const published = Object.values((await registry.get()).get('images')) as Array<{ jobId: string; url: string; storagePath: string }>;
@@ -169,6 +221,10 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     assert.equal(cell('supplier_sku').t, 's');
     assert.equal(cell('main_attribute_value').v, exportedColor);
     assert.equal(cell('attr_1000463').v, material);
+    if (!real) {
+      assert.equal(cell('attr_1000411').v, '2 piezas', 'The manual correction reaches the workbook');
+      assert.equal(cell('attr_1000411', 1).v, '1 pieza', 'Optional suggestions reach the workbook unless corrected');
+    }
     assert.equal(cell('main_img').v, published.find(i => i.jobId === 'object-front')!.url);
     assert.equal(cell('detail_img_1').v, published.find(i => i.jobId === 'object-side')!.url);
     assert.equal(cell(real ? category.columns.find((c: any) => c.key.startsWith('stock[')).key : 'stock').v, 12);

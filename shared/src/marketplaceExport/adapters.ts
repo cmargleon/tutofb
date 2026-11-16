@@ -65,9 +65,10 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
     category = { ...category, validationMode: 'template' };
     const issues: MarketplaceExportIssue[] = [];
     const pendingImageOutputIds = new Set<string>();
-    const issue = (code: string, message: string, field?: string, variantId?: string) => issues.push({
+    const issue = (code: string, message: string, field?: string, variantId?: string, blocking = true) => issues.push({
       marketplaceId: id, productId: product.id, productName: product.values.name || product.garmentId, code, message,
       ...(field ? { field } : {}), ...(variantId ? { variantId } : {}),
+      ...(blocking ? {} : { blocking: false as const }),
     });
     const data = product.marketplaces[id];
     if (!data || data.templateId !== template.id || data.categoryId !== category.id) { issue('category', 'Categoría sin configurar.'); return { rows: [], issues, pendingImageOutputIds: [] }; }
@@ -92,6 +93,9 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
     const rows = product.variants.map((variant, rowIndex) => {
       const rowIssue = (code: string, message: string, field?: string) => issue(code, message, field, variant.id);
       const overrides = data.rows?.find(r => r.id === variant.id)?.values || {};
+      const autoRow = product.marketplaceAutofill?.[id]?.find(row => row.id === variant.id);
+      const autofill = autoRow?.values || {};
+      const tentative = new Set<string>();
       const imageOutputs = new Map<string, string>();
       const values: Record<string, string> = Object.fromEntries(category.columns.map(column => {
         const mapping = mappings[column.key];
@@ -104,25 +108,46 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         return [column.key, mapped];
       }));
       // Normalize only an exact equivalent of a mapped value. Explicit overrides stay as entered.
-      for (const column of dropdownColumns) {
+      const autoFields = new Set([...Object.keys(autofill), ...(autoRow?.inferredFields || [])]);
+      const columnsToResolve = autoFields.size
+        ? [...dropdownColumns, ...category.columns.filter(column => autoFields.has(column.key) && !dropdownColumns.includes(column))]
+        : dropdownColumns;
+      const resolved = new Set<string>();
+      const resolveOption = (column: SpreadsheetTemplateCategory['columns'][number]) => {
+        if (resolved.has(column.key)) return;
+        resolved.add(column.key);
+        const parent = column.dropdownDependency && columnsToResolve.find(c => c.key === column.dropdownDependency?.columnKey);
+        if (parent) resolveOption(parent);
         const value = values[column.key];
-        if (!value || (Object.prototype.hasOwnProperty.call(overrides, column.key) && overrides[column.key].trim())) continue;
+        if (Object.hasOwn(overrides, column.key) && overrides[column.key].trim()) return;
         const allowed = getProductDraftColumnAllowedValues(category, column, values);
-        if (allowed.includes(value)) continue;
+        if (Object.hasOwn(autofill, column.key) && allowed.includes(autofill[column.key])) {
+          values[column.key] = autofill[column.key];
+          if (autoRow?.tentativeFields?.includes(column.key) || parent && tentative.has(parent.key)) tentative.add(column.key);
+          return;
+        }
+        if (autoRow?.inferredFields.includes(column.key)) { values[column.key] = ''; return; }
+        if (!value || allowed.includes(value)) return;
         const normalize = (text: string) => text.trim().normalize('NFC').toLowerCase();
         const matches = allowed.filter(option => normalize(option) === normalize(value));
         if (matches.length === 1) values[column.key] = matches[0];
-      }
+      };
+      columnsToResolve.forEach(resolveOption);
       for (const column of category.columns) {
         const mapping: TemplateColumnMapping | undefined = mappings[column.key];
         const value = values[column.key];
         const outputId = imageOutputs.get(column.key);
         const normalizedKey = normalizeMarketplaceColumnKey(column.key);
+        // A valid low-certainty suggestion completes the field; it is reported only as a warning.
+        if (tentative.has(column.key)) issue('verify_suggestion', `${column.label} (variante ${rowIndex + 1}): Gemini sugiere «${value}» con poca certeza.`
+          + (autoRow?.reasons?.[column.key] ? ` ${autoRow.reasons[column.key]}` : ''), column.key, variant.id, false);
+        const failure = !value.trim() && !Object.hasOwn(autofill, column.key) ? autoRow?.failures?.[column.key] : undefined;
         if (!value.trim() && outputId && !data.imageUrls?.[outputId]) {
           pendingImageOutputIds.add(outputId);
           continue;
         }
-        if ((column.required || mapping?.required) && !value.trim()) rowIssue('required', `Falta ${column.label} en variante ${rowIndex + 1}.`, column.key);
+        if ((column.required || mapping?.required) && !value.trim()) rowIssue('required', `Falta ${column.label} en variante ${rowIndex + 1}.${failure ? ` ${failure}` : ''}`, column.key);
+        else if (failure) issue('autofill_failed', `${column.label} (variante ${rowIndex + 1}) sigue pendiente. ${failure}`, column.key, variant.id, false);
         const allowed = getProductDraftColumnAllowedValues(category, column, values);
         if (value && allowed.length && !allowed.includes(value)) rowIssue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
         if (value && column.dropdownFormula && !allowed.length) rowIssue('unresolved_list', `${column.label}: lista dependiente sin resolver; requiere un adaptador específico.`, column.key);

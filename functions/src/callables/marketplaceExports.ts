@@ -2,12 +2,13 @@ import * as admin from 'firebase-admin';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import type { ConfigureMarketplaceTemplateRequest, DownloadMarketplaceExportRequest, MarketplaceExportScope, SaveMasterProductRequest, SpreadsheetTemplate, StoredMasterProduct } from '../../../shared/src/types';
+import type { ConfigureMarketplaceTemplateRequest, DownloadMarketplaceExportRequest, MarketplaceExportPreviewRequest, SaveMasterProductRequest, SpreadsheetTemplate, StoredMasterProduct } from '../../../shared/src/types';
 import { PRODUCT_FIELDS, VARIANT_FIELDS } from '../../../shared/src/types';
 import { isMarketplaceId } from '../../../shared/src/marketplaces';
 import { safePublicImageUrl, normalizeMarketplaceColumnKey } from '../../../shared/src/marketplaceExport/adapters';
 import { assertCallableRoles } from '../auth/roles';
 import { getAppFirestore } from '../firebase/appFirestore';
+import { GEMINI_API_KEY } from '../config/runtime';
 import { validId } from '../manglar/access';
 import { downloadMarketplaceExport, loadExportContext, previewMarketplaceExport, templateUsable } from '../spreadsheets/marketplaceExportService';
 import { analyzeMarketplaceTemplate, assertTemplateDocumentLimits } from '../spreadsheets/marketplaceTemplates';
@@ -21,9 +22,9 @@ const rethrowTransactionConflict = (error: unknown): never => {
     throw new HttpsError('aborted', 'La información cambió durante el guardado. Actualiza antes de reintentar.');
   throw error;
 };
-export const previewMarketplaceExports = onCall<MarketplaceExportScope>(options, async request => {
+export const previewMarketplaceExports = onCall<MarketplaceExportPreviewRequest>({ ...options, secrets: [GEMINI_API_KEY] }, async request => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
-  return previewMarketplaceExport(request.data, request.auth!.uid);
+  return previewMarketplaceExport(request.data, request.auth!.uid, GEMINI_API_KEY.value());
 });
 export const downloadMarketplaceExports = onCall<DownloadMarketplaceExportRequest>(options, async request => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);

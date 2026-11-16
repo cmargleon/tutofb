@@ -32,6 +32,9 @@ interface ProductDraftEditorProps {
   showAddRowButton?: boolean;
   showRowActions?: boolean;
   resolvedValuesByRow?: Record<string, ProductDraftRow['values']>;
+  renderFieldNote?: (row: ProductDraftRow, column: SpreadsheetTemplateCategoryColumn) => React.ReactNode;
+  /** Rendered beside the form field, e.g. a warning icon. */
+  renderFieldAdornment?: (row: ProductDraftRow, column: SpreadsheetTemplateCategoryColumn) => React.ReactNode;
   resolveDropdownChoices?: (
     draft: EditableDraft,
     row: ProductDraftRow,
@@ -164,6 +167,8 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
   showAddRowButton = true,
   showRowActions = true,
   resolvedValuesByRow,
+  renderFieldNote,
+  renderFieldAdornment,
   resolveDropdownChoices,
   resolveVisibleColumns,
   onChangeRows,
@@ -446,7 +451,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
                         </div>
                         <div className="mt-1 font-mono text-[10px] text-slate-400">{column.key}</div>
                       </div>
-                      <div>{renderField(row, column, true)}</div>
+                      <div><div className="flex items-start gap-2"><div className="min-w-0 flex-1">{renderField(row, column, true)}</div>{renderFieldAdornment?.(row, column)}</div>{renderFieldNote?.(row, column)}</div>
                     </div>
                   ))}
                 </div>

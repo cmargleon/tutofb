@@ -19,6 +19,8 @@ import {
 } from '../state';
 
 interface UseGenerateWizardSubmitParams {
+  /** Runs once the batch exists, before leaving the wizard. */
+  onBatchCreated?: () => void;
   photoPlanInput?: import('../../../../../shared/src/types').PhotoPlanInput & { modelId?: string | null };
   state: WizardState;
   draftBatchId: string | null;
@@ -40,6 +42,7 @@ export interface UseGenerateWizardSubmitReturn {
 }
 
 export const useGenerateWizardSubmit = ({
+  onBatchCreated,
   state,
   photoPlanInput,
   draftBatchId,
@@ -104,9 +107,12 @@ export const useGenerateWizardSubmit = ({
       return;
     }
     const organizerPatch = imported ? { organizerContext: imported } : {};
-    const openResults = (batchId: string) => navigate(imported
+    const openResults = (batchId: string) => {
+      onBatchCreated?.();
+      return navigate(imported
       ? workflowUrl('/catalogo', imported, { batchId })
       : `/catalogo?${new URLSearchParams({ clientId: state.selectedClientId!, batchId })}`);
+    };
 
     if (state.outputMode === 'spreadsheet' && state.sourceSpreadsheet?.status === 'uploading') {
       setFlowError('Espera a que termine la subida del spreadsheet fuente antes de crear el lote.');

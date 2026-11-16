@@ -264,6 +264,9 @@ const uploadSinglePhoto = async ({
   totalPhotos: number;
   onProgress?: UploadGarmentDraftsOptions['onProgress'];
 }): Promise<string> => {
+  if (!photo.file) {
+    throw new Error(`La foto ${photo.fileName} ya no está disponible en este navegador. Quita el artículo y vuelve a cargarla.`);
+  }
   const uploadFile = await getUploadFile(photo.file);
   const storagePath = getStoragePath(draftBatchId, garment, photo, uploadFile.name);
   const storageRef = ref(storage, storagePath);

@@ -67,7 +67,8 @@ export const createInitialGarmentPhotoClassificationState = (
 
 export interface GarmentOriginalPhotoDraft {
   id: string;
-  file: File;
+  /** Null for photos restored from a saved draft: they are already in Storage. */
+  file: File | null;
   fileName: string;
   sourceIndex: number;
   previewUrl: string;

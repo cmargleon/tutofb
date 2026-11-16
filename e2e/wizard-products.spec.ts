@@ -3,11 +3,16 @@ import { test, expect, type Page } from '@playwright/test';
 // Isolate the real wizard from Firebase: no live reads, uploads or paid generation.
 const previewUrl = process.env.WIZARD_TEST_URL || 'http://localhost:3000';
 const image = (name: string) => ({ name, mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII=', 'base64') });
-async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}, options: { confidence?: number; failAnalysisOnce?: boolean; templates?: boolean; failPreviewOnce?: boolean; marketplaces?: boolean } = {}) {
+async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}, options: { confidence?: number; failAnalysisOnce?: boolean; templates?: boolean; failPreviewOnce?: boolean; marketplaces?: boolean; drafts?: boolean } = {}) {
   page.on('pageerror', (error) => console.error(error.message));
   const hookModule = await (await page.request.get(`${previewUrl}/src/features/generate/wizard/hooks/useGenerateWizard.ts`)).text();
   const routerModule = hookModule.match(/from ["']([^"']*react-router-dom\.js[^"']*)["']/)?.[1];
   if (!routerModule) throw new Error('Vite router module not found');
+  // Use the same optimized React copies as the app; the cache directory is configurable.
+  const mainModule = await (await page.request.get(`${previewUrl}/src/main.tsx`)).text();
+  const reactModule = hookModule.match(/from ["']([^"']*\/deps\/react\.js[^"']*)["']/)?.[1];
+  const reactDomModule = mainModule.match(/from ["']([^"']*\/deps\/react-dom_client\.js[^"']*)["']/)?.[1];
+  if (!reactModule || !reactDomModule) throw new Error('Vite React modules not found');
   await page.route('**/src/features/generate/wizard/hooks/useGenerateWizardCatalog.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `
     const clients = [{ id: 'client', name: 'Cliente de prueba', marketplaces: ${options.marketplaces ? JSON.stringify(Object.fromEntries(['amazon', 'shein', 'tiktok-shop', 'mercado-libre'].map(id => [id, { enabled: true }]))) : '{}'} }];
     const poses = ['front', 'back'].map(view => ({ id: 'pose-' + view, fileName: view + '.jpg', storagePath: 'test/' + view + '.jpg',
@@ -65,6 +70,27 @@ async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}
     export const createGenerationBatch = async request => { window.__garmentRequest = request; return { batchId: 'garment-test', createdJobs: 1 }; };
     export const createProductGenerationBatch = async (request) => { window.__productRequest = request; return { batchId: 'product-test', createdJobs: request.items.length * request.scenes.length }; };
   ` }));
+  // Drafts need an identity and a catalog/Storage check; both stay local. A test can mark
+  // entities or paths as gone through localStorage before reloading.
+  if (options.drafts) await page.route('**/src/features/generate/wizard/draftEnvironment.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body: `
+    export const useWizardDraftIdentity = () => ({ uid: 'user', project: 'e2e', isCurrent: () => true });
+    export const loadDraftCatalog = async (draft) => {
+      window.__draftRestores = (window.__draftRestores || 0) + 1;
+      const gone = JSON.parse(localStorage.getItem('e2e:gone') || '[]');
+      const poses = ['front', 'back'].map(view => ({ id: 'pose-' + view })).filter(pose => !gone.includes(pose.id));
+      const paths = new Map([
+        ...draft.garments.flatMap(garment => garment.originalPhotos.map(photo => photo.storagePath)),
+        ...(draft.state.sourceSpreadsheet ? [draft.state.sourceSpreadsheet.storagePath] : []),
+      ].map(path => [path, gone.some(entry => path.includes(entry)) ? { status: 'missing' } : { status: 'ok', url: 'data:image/png;base64,${image('x').buffer.toString('base64')}' }]));
+      return {
+        clients: [{ id: 'client', name: 'Cliente de prueba' }].filter(client => !gone.includes(client.id)),
+        models: [{ id: 'model', name: 'Modelo de prueba', poses }, { id: 'model2', name: 'Segundo modelo', poses }].filter(model => !gone.includes(model.id)),
+        templates: ${options.templates ? "[{ id: 'template', name: 'Plantilla de prueba' }]" : '[]'},
+        categories: [{ id: 'category' }],
+        paths,
+      };
+    };
+  ` }));
   await page.route('**/src/features/storage/useStorageAssetUrl.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
     export const useStorageAssetUrl = () => ({ url: null, loading: false, error: null });
   ` }));
@@ -72,8 +98,8 @@ async function openWizard(page: Page, promptConfig: Record<string, unknown> = {}
   await page.route('**/wizard-preview*', (route) => route.fulfill({ contentType: 'text/html', body: `<!DOCTYPE html><html class="theme-dark"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root" style="padding:20px"></div>
     <script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script>
     <script type="module">
-      import React from '/node_modules/.vite/deps/react.js';
-      import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+      import React from '${reactModule}';
+      import ReactDOM from '${reactDomModule}';
       import { BrowserRouter } from '${routerModule}';
       import { FeedbackProvider } from '/src/features/feedback/FeedbackProvider.tsx';
       import { Wizard } from '/src/pages/Wizard.tsx';
@@ -360,4 +386,128 @@ test('objects keep six scenes and the original callable when all marketplaces ar
   expect(request.marketplace).toBeUndefined();
   expect(request.product.scenes).toHaveLength(6);
   expect(request.product.scenes.map((s: any) => s.type)).toEqual(['clean', 'lifestyle_1', 'lifestyle_2', 'hero', 'human_use_1', 'human_use_2']);
+});
+
+
+const storedDraft = (page: Page) => page.evaluate(() => {
+  const key = Object.keys(localStorage).find(entry => entry.startsWith('tuto:generate-draft:'));
+  return key ? JSON.parse(localStorage.getItem(key)!) : null;
+});
+const reloadWizard = async (page: Page) => {
+  await expect.poll(() => storedDraft(page).then(draft => draft?.savedAt ?? 0)).toBeGreaterThan(0);
+  await page.waitForTimeout(400); // let the debounced save capture the latest edit
+  await page.reload();
+};
+const restoredNotice = (page: Page) => page.getByTestId('wizard-draft-notice');
+
+test('garment wizard survives a reload on every step without uploading or analysing again', async ({ page }) => {
+  await openWizard(page, {}, { drafts: true });
+  await uploadItem(page, ['shirt-front.png', 'shirt-back.png']);
+  await expect(next(page)).toBeEnabled();
+  await reloadWizard(page);
+  await expect(restoredNotice(page)).toContainText('Recuperamos el lote');
+  await expect(page.getByRole('combobox', { name: 'Cliente', exact: true })).toHaveValue('client');
+  await expect(page.getByText('Lote de ropa · Prepararemos fotos con modelo')).toBeVisible();
+  await next(page).click();
+  await page.getByRole('button', { name: /Segundo modelo/ }).click();
+  await expect(next(page)).toBeEnabled();
+  const poseState = async () => page.getByRole('button', { pressed: true }).allInnerTexts();
+  const posesBefore = await poseState();
+  await reloadWizard(page);
+  await expect(page).toHaveURL(/step=2/);
+  await expect(page.getByRole('button', { name: /Segundo modelo/ })).toHaveAttribute('aria-pressed', 'true');
+  expect(await poseState()).toEqual(posesBefore);
+  await next(page).click();
+  await page.getByRole('button', { name: /Seedream v4\.5/ }).click();
+  await openAdvanced(page);
+  const labels = page.getByRole('textbox', { name: 'Tratamiento de etiquetas interiores', exact: true });
+  await labels.fill('Etiquetas editadas antes de recargar');
+  await reloadWizard(page);
+  await expect(page).toHaveURL(/step=3/);
+  await expect(page.getByRole('button', { name: /Seedream v4\.5/ })).toHaveAttribute('aria-pressed', 'true');
+  if (!(await labels.isVisible())) await openAdvanced(page);
+  await expect(labels).toHaveValue('Etiquetas editadas antes de recargar');
+  expect(await page.evaluate(() => ({ uploads: (window as any).__uploadCalls, analysis: (window as any).__analysisRequests }))).toEqual({});
+  await page.getByRole('button', { name: /Crear lote y abrir evaluación/ }).click();
+  await expect(page).toHaveURL(/batchId=garment-test/);
+  const request = await page.evaluate(() => (window as any).__garmentRequest);
+  expect(request.modelId).toBe('model2');
+  expect(request.provider).toBe('fal-seedream');
+  expect(request.garments[0].photos.map((photo: any) => photo.storagePath)).toEqual(
+    expect.arrayContaining([expect.stringMatching(/^garments\/drafts\/user\//)]));
+  expect(request.approvedPrompts[0].text).toContain('Etiquetas editadas antes de recargar');
+  expect(await storedDraft(page)).toBeNull();
+});
+
+test('object wizard restores scenes and prompt after reloading on steps 2 and 3', async ({ page }) => {
+  await openWizard(page, {}, { drafts: true });
+  await uploadItem(page, ['front.png', 'side.png']);
+  await next(page).click();
+  await page.getByRole('checkbox', { name: /Ambiente cotidiano/ }).uncheck();
+  await reloadWizard(page);
+  await expect(page).toHaveURL(/step=2/);
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(5);
+  await expect(page.getByRole('checkbox', { name: /Ambiente cotidiano/ })).not.toBeChecked();
+  await next(page).click();
+  await openAdvanced(page);
+  await page.getByRole('textbox', { name: 'Instrucciones generales de fotografía de producto' }).fill('Luz cálida');
+  await reloadWizard(page);
+  await expect(page).toHaveURL(/step=3/);
+  if (!(await page.getByRole('textbox', { name: 'Instrucciones generales de fotografía de producto' }).isVisible())) await openAdvanced(page);
+  await expect(page.getByRole('textbox', { name: 'Instrucciones generales de fotografía de producto' })).toHaveValue('Luz cálida');
+  await page.getByRole('button', { name: 'Crear lote y abrir evaluación (5)', exact: true }).click();
+  await expect(page).toHaveURL(/batchId=product-test/);
+  const request = await page.evaluate(() => (window as any).__productRequest);
+  expect(request.scenes.map((scene: any) => scene.type)).not.toContain('lifestyle_1');
+  expect(request.prompt).toBe('Luz cálida');
+  expect(request.items[0].referencePaths).toHaveLength(2);
+  expect(await storedDraft(page)).toBeNull();
+});
+
+test('marketplace article attributes and plan survive reloads on steps 2 and 3', async ({ page }) => {
+  await openWizard(page, {}, { drafts: true, marketplaces: true });
+  await uploadItem(page, ['shirt-front.png']);
+  await next(page).click();
+  const article = page.getByRole('group', { name: 'shirt-front', exact: true });
+  const selects: Array<[RegExp, string]> = [[/^Categoría/, 'Ropa ordinaria'], [/^Público/, 'Adulto'], [/^Zona corporal/, 'Superior'],
+    [/^Género comercial/, 'Unisex'], [/^Presentación/, 'Unidad'], [/^Transparencia/, 'No']];
+  for (const [name, label] of selects) await article.getByRole('combobox', { name }).selectOption({ label });
+  await article.getByRole('textbox', { name: 'Componentes y cantidades vendidos' }).fill('1 camiseta');
+  await article.getByRole('textbox', { name: 'Color / variante' }).fill('Azul marino');
+  await expect(next(page)).toBeEnabled();
+  await reloadWizard(page);
+  await expect(page).toHaveURL(/step=2/);
+  for (const [name, label] of selects) await expect(article.getByRole('combobox', { name }).locator('option:checked')).toHaveText(label);
+  await expect(article.getByRole('textbox', { name: 'Color / variante' })).toHaveValue('Azul marino');
+  await next(page).click();
+  await expect(page).toHaveURL(/step=3/);
+  const summary = await page.getByText(/imágenes únicas/).first().innerText();
+  await reloadWizard(page);
+  await expect(page).toHaveURL(/step=3/);
+  await expect(page.getByText(/imágenes únicas/).first()).toHaveText(summary);
+  await page.getByRole('button', { name: /Crear lote y abrir evaluación/ }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__marketplaceRequest?.articles?.[0]?.references?.length)).toBeGreaterThan(0);
+  const request = await page.evaluate(() => (window as any).__marketplaceRequest);
+  expect(request.articles[0].references[0].storagePath).toMatch(/^garments\/drafts\/user\//);
+});
+
+test('restore drops what the catalog lost and reset clears the draft', async ({ page }) => {
+  await openWizard(page, {}, { drafts: true });
+  await uploadItem(page, ['shirt-front.png']);
+  await next(page).click();
+  await page.getByRole('button', { name: /Segundo modelo/ }).click();
+  await next(page).click();
+  await page.evaluate(() => localStorage.setItem('e2e:gone', JSON.stringify(['model2'])));
+  await reloadWizard(page);
+  await expect(restoredNotice(page)).toContainText('El modelo guardado ya no está activo');
+  await expect(page).toHaveURL(/step=2/);
+  await expect(page.getByRole('button', { name: /Segundo modelo/ })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'Reiniciar' }).click();
+  await page.getByRole('button', { name: 'Sí, reiniciar' }).click();
+  await expect(page).toHaveURL(/step=1/);
+  await expect(page.getByRole('combobox', { name: 'Cliente', exact: true })).toHaveValue('');
+  await expect.poll(() => storedDraft(page)).toBeNull();
+  await page.reload();
+  await expect(restoredNotice(page)).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Cliente', exact: true })).toHaveValue('');
 });

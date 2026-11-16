@@ -26,7 +26,7 @@ export const useProductGeneration = ({ state, setState, setFlowError, defaultSce
           itemKindConfidence: 1, itemKindReasoning: 'Referencias aprobadas en el Organizador inteligente',
           matchedColor: catalog.color || null,
           originalPhotos: prepared[0].originalPhotos.map(photo => {
-            const view = catalog.photos[files.indexOf(photo.file)]?.view || catalog.photos[photo.sourceIndex]?.view;
+            const view = catalog.photos[photo.file ? files.indexOf(photo.file) : -1]?.view || catalog.photos[photo.sourceIndex]?.view;
             return view ? { ...photo, classification: { status: 'classified', view, confidence: 1,
               reasoning: 'Vista aprobada en el Organizador inteligente', classifiedBy: 'gemini', error: null } } : photo;
           }),

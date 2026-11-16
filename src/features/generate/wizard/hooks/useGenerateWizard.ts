@@ -2,11 +2,12 @@ import { activePhotoChannels, buildMarketplacePhotoPlan } from '../../../../../s
 import { wizardPhotoPlanInput } from '../marketplacePlan';
 import { seedTryOnPrompt } from '../../../../../shared/src/approvedTryOnPrompt';
 import { createDefaultProductGeneration } from '../../../../../shared/src/productGeneration';
-import { useToast } from '../../../feedback/FeedbackProvider';
+import { useConfirm, useToast } from '../../../feedback/FeedbackProvider';
 import { useProductGeneration } from './useProductGeneration';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DEFAULT_TRY_ON_PROMPT } from '../../../../../shared/src/domain';
+import { configSnapshot } from '../../../../../shared/src/configSnapshot';
 import { useSystemConfig } from '../../../system/useSystemConfig';
 import {
   buildGarmentSuggestionSignature,
@@ -26,6 +27,7 @@ import {
 import { canSelectWizardStep, clampWizardStep } from '../../../wizard/navigation';
 import { useGenerateWizardCatalog } from './useGenerateWizardCatalog';
 import { useGenerateWizardSubmit } from './useGenerateWizardSubmit';
+import { useGenerateWizardDraft } from './useGenerateWizardDraft';
 import { useGarmentPreparation } from './useGarmentPreparation';
 import { countCompatiblePoseMatchesForGarments, getSuggestedPoseIdsForGarments } from './garmentClassification';
 import {
@@ -112,8 +114,9 @@ const getStepFromSearchParams = (searchParams: URLSearchParams): GenerateWizardS
   return clampWizardStep(rawStep, 1, GENERATE_WIZARD_MAX_STEP) as GenerateWizardStepId;
 };
 
-export const useGenerateWizard = () => {
+export const useGenerateWizard = ({ draftScope = '' }: { draftScope?: string } = {}) => {
   const toast = useToast();
+  const confirm = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const garmentUrlsRef = useRef<UploadedGarmentDraft[]>([]);
   const stepperRef = useRef<HTMLDivElement | null>(null);
@@ -126,6 +129,24 @@ export const useGenerateWizard = () => {
   const [areProductScenesDirty, setAreProductScenesDirty] = useState(false);
   const [excludedItemsNotice, setExcludedItemsNotice] = useState<string | null>(null);
   const excludedSignatureRef = useRef('');
+  // A restore sets the generation kind and its dirty prompt flags together; the
+  // kind-change reset below must not wipe the flags it just restored.
+  const skipDirtyResetRef = useRef(false);
+  // After a restore, step checks wait until the restored client and model reach the catalog.
+  const [awaitingRestoredCatalog, setAwaitingRestoredCatalog] = useState(false);
+  const wizardDraft = useGenerateWizardDraft(draftScope, createInitialGenerateWizardState, (result) => {
+    skipDirtyResetRef.current = result.state.generationKind !== null;
+    setIsPromptDirty(result.dirty.prompt);
+    setArePromptBlocksDirty(result.dirty.promptBlocks);
+    setAreProductScenesDirty(result.dirty.productScenes);
+    setDraftBatchId(result.draftBatchId);
+    setState(result.state);
+    setAwaitingRestoredCatalog(Boolean(result.state.selectedClientId));
+    if (result.warnings.length) {
+      toast({ tone: 'warning', title: 'Recuperamos tu lote con cambios', description: result.warnings.join(' '), durationMs: 10000 });
+    }
+  });
+  const stepSyncPaused = wizardDraft.restoring || awaitingRestoredCatalog;
 
   const { config: systemConfig, loading: systemConfigLoading } = useSystemConfig();
   const productDefaults = useMemo(() => createDefaultProductGeneration(systemConfig), [systemConfig.systemPromptProduct, systemConfig.systemProductScenePrompts]);
@@ -163,6 +184,10 @@ export const useGenerateWizard = () => {
   }, [state.garments, toast]);
 
   useEffect(() => {
+    if (skipDirtyResetRef.current) {
+      skipDirtyResetRef.current = false;
+      return;
+    }
     setIsPromptDirty(false);
     setArePromptBlocksDirty(false);
   }, [state.generationKind]);
@@ -350,7 +375,8 @@ export const useGenerateWizard = () => {
   const canAdvance = useMemo(() => getGenerateWizardCanAdvance(state), [state]);
   const lastAccessibleStep = useMemo(() => getGenerateWizardLastAccessibleStep(state), [state]);
   const suggestionSignature = useMemo(
-    () => JSON.stringify([selectedModel?.poses, buildGarmentSuggestionSignature(state.selectedModelId, state.garments, {
+    // Firestore may deliver pose fields in another key order after a reload; compare by content.
+    () => configSnapshot([selectedModel?.poses, buildGarmentSuggestionSignature(state.selectedModelId, state.garments, {
       outputMode: state.outputMode,
       selectedSpreadsheetCategoryId: state.selectedSpreadsheetCategoryId,
       selectedSpreadsheetCategoryLabel: selectedSpreadsheetCategory?.label ?? null,
@@ -366,7 +392,22 @@ export const useGenerateWizard = () => {
   );
   const productDraftSignature = useMemo(() => buildProductDraftSignature(state), [state]);
 
+  useEffect(() => {
+    if (!awaitingRestoredCatalog) return undefined;
+    const ready = (!state.selectedClientId || selectedClient)
+      && (!state.selectedModelId || selectedModel)
+      && !loadingSpreadsheetTemplates;
+    if (ready) {
+      setAwaitingRestoredCatalog(false);
+      return undefined;
+    }
+    // The restore already checked these entities; never block the wizard on a slow listener.
+    const timeout = window.setTimeout(() => setAwaitingRestoredCatalog(false), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [awaitingRestoredCatalog, loadingSpreadsheetTemplates, selectedClient, selectedModel, state.selectedClientId, state.selectedModelId]);
+
   const submit = useGenerateWizardSubmit({
+    onBatchCreated: () => wizardDraft.clear(true),
     state,
     photoPlanInput: selectedClient && marketplacePlan ? wizardPhotoPlanInput(state, selectedClient, selectedModel) : undefined,
     draftBatchId,
@@ -439,6 +480,7 @@ export const useGenerateWizard = () => {
   };
 
   useEffect(() => {
+    if (stepSyncPaused) return;
     if (!searchParams.has('step')) {
       syncStepToUrl(state.step, true);
       return;
@@ -459,13 +501,56 @@ export const useGenerateWizard = () => {
           : { ...current, step: normalizedStep }
       ));
     }
-  }, [canSelectStep, lastAccessibleStep, searchParams, state.step]);
+  }, [canSelectStep, lastAccessibleStep, searchParams, state.step, stepSyncPaused]);
 
   useEffect(() => {
+    if (stepSyncPaused) return;
     if (state.step > lastAccessibleStep) {
       updateStep(lastAccessibleStep, true);
     }
-  }, [lastAccessibleStep, state.step]);
+  }, [lastAccessibleStep, state.step, stepSyncPaused]);
+
+  const { save: saveDraft } = wizardDraft;
+  useEffect(() => {
+    if (stepSyncPaused) return;
+    saveDraft({
+      state,
+      draftBatchId,
+      dirty: { prompt: isPromptDirty, promptBlocks: arePromptBlocksDirty, productScenes: areProductScenesDirty },
+      submitting: submit.submitStage === 'creating-batch',
+    });
+  }, [areProductScenesDirty, arePromptBlocksDirty, draftBatchId, isPromptDirty, saveDraft, state, stepSyncPaused, submit.submitStage]);
+
+  const hasWork = Boolean(state.selectedClientId || state.garments.length);
+  const handleReset = async () => {
+    if (submit.isSubmitting || isAnalyzing) return;
+    const accepted = await confirm({
+      title: 'Reiniciar el lote en preparación',
+      description: 'Se quitarán el cliente, el modelo, las fotos, las poses y la configuración elegidos.',
+      impact: 'Las fotos ya subidas para este lote se borrarán de Storage. Esta acción no se puede deshacer.',
+      confirmLabel: 'Sí, reiniciar',
+      cancelLabel: 'Seguir preparando',
+      tone: 'warning',
+    });
+    if (!accepted) return;
+    const storagePaths = [
+      ...state.garments.flatMap((garment) => garment.originalPhotos.map((photo) => photo.upload.storagePath)),
+      state.sourceSpreadsheet?.storagePath,
+    ].filter((value): value is string => Boolean(value));
+    void Promise.allSettled(storagePaths.map((storagePath) => deleteGarmentDraftByStoragePath(storagePath)));
+    revokeGarmentUrls(state.garments);
+    wizardDraft.clear();
+    excludedSignatureRef.current = '';
+    setExcludedItemsNotice(null);
+    setFlowError(null);
+    setIsPromptDirty(false);
+    setArePromptBlocksDirty(false);
+    setAreProductScenesDirty(false);
+    setDraftBatchId(null);
+    submit.resetDraftBatch();
+    setState(createInitialGenerateWizardState());
+    syncStepToUrl(1, true);
+  };
 
   const removeGarment = (garmentId: string) => {
     const garmentToRemove = state.garments.find((item) => item.id === garmentId);
@@ -720,7 +805,12 @@ export const useGenerateWizard = () => {
     spreadsheetCategories,
     selectedClientHasSpreadsheetTemplates,
     loadingSpreadsheetTemplates,
-    loadingData: loadingData || systemConfigLoading,
+    loadingData: loadingData || systemConfigLoading || stepSyncPaused,
+    restoringDraft: stepSyncPaused,
+    draftNotice: wizardDraft.notice,
+    dismissDraftNotice: wizardDraft.dismissNotice,
+    hasWork,
+    handleReset,
     isSubmitting: submit.isSubmitting,
     isAnalyzing,
     excludedItemsNotice,

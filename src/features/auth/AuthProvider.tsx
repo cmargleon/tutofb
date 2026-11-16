@@ -5,6 +5,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { clearStorageAssetCache } from '../storage/assets';
 import { clearClientDrafts } from '../clients/draftStorage';
+import { clearWizardDrafts } from '../generate/wizard/draft';
 import { User as AppUser } from '../../../shared/src/types';
 
 interface AuthContextType {
@@ -52,7 +53,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearStorageAssetCache();
       unsubscribeDoc?.();
       unsubscribeDoc = undefined;
-      if (identity && identity !== firebaseUser?.uid) clearClientDrafts(auth.app.options.projectId!, identity);
+      if (identity && identity !== firebaseUser?.uid) {
+        clearClientDrafts(auth.app.options.projectId!, identity);
+        clearWizardDrafts(auth.app.options.projectId!, identity);
+      }
       identity = firebaseUser?.uid ?? null;
       setAppUser(null);
       setLoading(true);

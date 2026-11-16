@@ -5,7 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useProductWorkflow, workflowUrl } from '../features/organizer/productWorkflow';
 import { organizer } from '../features/organizer/firebase';
 import type { OrganizerDraft } from '../../shared/src/types';
-import { Wand2 } from 'lucide-react';
+import { RotateCcw, Wand2 } from 'lucide-react';
 import { Button, LoadingBlock, PageHeader } from '../components/ui';
 import { WizardStepper } from '../components/WizardStepper';
 import { WizardFooter } from '../components/wizard/WizardFooter';
@@ -85,7 +85,15 @@ const GenerationWizard = ({ organizerVariant, organizerClient, baseProductId, ba
     handlePromptBlocksChange,
     handleRetryPoseSuggestions,
     handleRetryProductDraftPreparation,
-  } = useWizard();
+    restoringDraft,
+    draftNotice,
+    dismissDraftNotice,
+    hasWork,
+    handleReset,
+  } = useWizard({
+    // Organizer links get their own draft so a plain /generate draft never leaks into them.
+    draftScope: scoped ? JSON.stringify([organizerClient, organizerVariant, baseProductId, batchId]) : 'generate',
+  });
   const isWizardBusy = isSubmitting || isAnalyzing || importing;
   const importOrganizer = async () => {
     if (!workflow || state.garments.length || !clients.some(client => client.id === organizerClient)) return;
@@ -123,7 +131,7 @@ const GenerationWizard = ({ organizerVariant, organizerClient, baseProductId, ba
   if (loadingData) {
     return (
       <div className="tuto-page">
-        <LoadingBlock message="Cargando clientes y modelos…" />
+        <LoadingBlock message={restoringDraft ? 'Recuperando el lote que estabas preparando…' : 'Cargando clientes y modelos…'} />
       </div>
     );
   }
@@ -162,7 +170,26 @@ const GenerationWizard = ({ organizerVariant, organizerClient, baseProductId, ba
         title="Generar fotos"
         icon={Wand2}
         description="Sube las fotos de referencia, prepara la sesión y envía el lote a generación con revisión automática de calidad."
+        actions={hasWork || draftNotice?.failed ? (
+          <Button variant="secondary" disabled={isWizardBusy} onClick={() => void handleReset()}>
+            <RotateCcw aria-hidden="true" className="h-4 w-4" /> Reiniciar
+          </Button>
+        ) : undefined}
       />
+      {draftNotice && (
+        <div role="status" data-testid="wizard-draft-notice"
+          className={`tuto-alert ${draftNotice.failed || draftNotice.warnings.length ? 'tuto-alert--warning' : 'tuto-alert--info'} flex flex-wrap items-start justify-between gap-3`}>
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">{draftNotice.failed
+              ? 'No pudimos recuperar el lote que estabas preparando.'
+              : `Recuperamos el lote que estabas preparando (guardado ${new Date(draftNotice.savedAt).toLocaleString('es')}).`}</p>
+            {draftNotice.warnings.length > 0 && <ul className="list-disc pl-5">
+              {draftNotice.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+            </ul>}
+          </div>
+          <button type="button" className="tuto-link text-sm" onClick={dismissDraftNotice}>Entendido</button>
+        </div>
+      )}
       {scoped && <div className="flex flex-wrap items-center gap-3">
         {organizerClient && organizerVariant && <Link className="tuto-link text-sm" to={workflowUrl('/organizador',
           workflow?.context || { clientId: organizerClient, variantId: organizerVariant, baseProductId }, { batchId })}>Volver a la ficha del producto</Link>}

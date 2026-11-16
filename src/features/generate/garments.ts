@@ -376,7 +376,8 @@ export const buildGarmentSuggestionSignature = (
       matchedCategoryLabel: garment.matchedCategoryLabel ?? null,
       photos: garment.originalPhotos.map((photo) => ({
         id: photo.id,
-        fingerprint: fileFingerprint(photo.file),
+        // Uploaded photos are identified by their Storage path so a restored draft keeps its signature.
+        fingerprint: photo.upload.storagePath ?? (photo.file ? fileFingerprint(photo.file) : null),
       })),
     })),
   });

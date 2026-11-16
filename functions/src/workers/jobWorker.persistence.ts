@@ -17,6 +17,7 @@ import {
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
 import { createLog } from './jobWorker.claims';
+import { countProviderReferences } from './jobWorker.generation';
 import { buildAutomaticRetryPromptPatch, extensionForContentType } from './jobWorker.helpers';
 import { bucket, db } from './jobWorker.resources';
 
@@ -36,19 +37,15 @@ export const buildStoredReview = (
   reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
 });
 
-export const persistGeneratedAttempt = async ({
-  claimedJob,
-  providerResult,
-  durationSeconds,
-  generationAttempt,
-  nextStatus,
-  autoReview,
-  failureInfo,
-  lastError,
-  nextPromptBase, automationGate,
-}: {
+type ProviderResult = Awaited<ReturnType<typeof generateWithProvider>>;
+type NormalizedImageConfig = ReturnType<typeof normalizeProviderImageConfig>;
+type StoredImage = { bytes: Buffer; contentType: string; storedImage?: JobOutput['storedImage'] };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type JobUpdate = Record<string, any>;
+
+type PersistAttemptInput = {
   claimedJob: Job;
-  providerResult: Awaited<ReturnType<typeof generateWithProvider>>;
+  providerResult: ProviderResult;
   durationSeconds: number | null;
   generationAttempt: number;
   nextStatus: Job['status'];
@@ -57,38 +54,94 @@ export const persistGeneratedAttempt = async ({
   lastError: string | null;
   nextPromptBase?: string;
   automationGate?: Job['automationGate'];
-}): Promise<boolean> => {
-  const jobId = claimedJob.id!;
-  const jobRef = db.collection('jobs').doc(jobId);
-  const reuseOutput = Boolean(claimedJob.automationManaged && claimedJob.automationReviewPending && claimedJob.currentOutputId);
-  const outputRef = reuseOutput ? jobRef.collection('outputs').doc(claimedJob.currentOutputId!) : jobRef.collection('outputs').doc();
-  const outputId = outputRef.id;
-  const normalizedImageConfig = normalizeProviderImageConfig(
-    claimedJob.provider as Provider,
-    claimedJob.imageConfig,
-    claimedJob.aspectRatio,
-  );
-  const storedImage = reuseOutput ? { bytes: providerResult.imageBytes, contentType: claimedJob.currentOutput!.contentType, storedImage: claimedJob.currentOutput!.storedImage } : providerResult.preparedPhoto || await compressGeneratedImageIfNeeded({
+};
+
+/** Where the attempt's image lives and what it costs. A reviewed existing output keeps its file and cost. */
+type AttemptImage = {
+  storedImage: StoredImage;
+  destinationPath: string;
+  thumbnailPath: string | null;
+  /** Amount added to the job/provider cost counters for this attempt. */
+  chargedCostUsd: number;
+};
+
+/**
+ * An automation job whose review is pending updates its current output in place: no new file, output or
+ * cost. Note: keyed on currentOutputId, while the worker's resume check uses currentOutput.
+ */
+const reusesExistingOutput = (job: Job): boolean =>
+  Boolean(job.automationManaged && job.automationReviewPending && job.currentOutputId);
+
+const generatedImagePath = (job: Job, jobId: string, outputId: string, contentType: string): string =>
+  `generated/${job.clientId}/${job.batchId}/${jobId}/${outputId}.${extensionForContentType(contentType)}`;
+
+/** Paid generations cost the provider price; reused outputs and reused reference photos cost nothing. */
+const generationCostUsd = (job: Job, imageConfig: NormalizedImageConfig): number => {
+  if (job.photoTask?.composition === 'reference') return 0;
+  return getProviderCostUsd(job.provider as Provider, imageConfig.imageConfig, countProviderReferences(job));
+};
+
+const existingOutputImage = (job: Job, providerResult: ProviderResult): AttemptImage => ({
+  storedImage: {
+    bytes: providerResult.imageBytes,
+    contentType: job.currentOutput!.contentType,
+    storedImage: job.currentOutput!.storedImage,
+  },
+  destinationPath: job.currentOutput!.resultImagePath,
+  thumbnailPath: null,
+  chargedCostUsd: 0,
+});
+
+/** Compresses (unless already prepared as a planned photo), uploads the image and creates its thumbnail. */
+const storeNewOutputImage = async (
+  job: Job,
+  jobId: string,
+  outputId: string,
+  providerResult: ProviderResult,
+  imageConfig: NormalizedImageConfig,
+): Promise<AttemptImage> => {
+  const storedImage = providerResult.preparedPhoto || await compressGeneratedImageIfNeeded({
     bytes: providerResult.imageBytes,
     contentType: providerResult.contentType,
-    photoProfile: claimedJob.photoProfile, imageConfig: normalizedImageConfig.imageConfig,
+    photoProfile: job.photoProfile,
+    imageConfig: imageConfig.imageConfig,
   });
-  const extension = extensionForContentType(storedImage.contentType);
-  const destinationPath = reuseOutput ? claimedJob.currentOutput!.resultImagePath : `generated/${claimedJob.clientId}/${claimedJob.batchId}/${jobId}/${outputId}.${extension}`;
-
-  if (!reuseOutput) await bucket.file(destinationPath).save(storedImage.bytes, {
+  const destinationPath = generatedImagePath(job, jobId, outputId, storedImage.contentType);
+  await bucket.file(destinationPath).save(storedImage.bytes, {
     resumable: false,
     metadata: {
       contentType: storedImage.contentType,
       cacheControl: 'private, max-age=31536000',
     },
   });
-  const thumbnailPath = reuseOutput ? null : await createGeneratedThumbnail({ bucket, bytes: storedImage.bytes, resultImagePath: destinationPath });
+  const thumbnailPath = await createGeneratedThumbnail({
+    bucket,
+    bytes: storedImage.bytes,
+    resultImagePath: destinationPath,
+  });
+  return { storedImage, destinationPath, thumbnailPath, chargedCostUsd: generationCostUsd(job, imageConfig) };
+};
 
-  const costUsd = reuseOutput || claimedJob.photoTask?.composition === 'reference' ? 0 : getProviderCostUsd(claimedJob.provider as Provider, normalizedImageConfig.imageConfig, claimedJob.generationKind === 'product' ? (claimedJob.productReferencePaths || [claimedJob.poseImagePath]).length : 2);
-  const persistedFailureInfo = withFailureOutputId(failureInfo, outputId);
-
-  const currentOutput: JobOutput = {
+const buildOutputDocument = ({
+  input,
+  jobId,
+  outputId,
+  imageConfig,
+  image,
+  persistedFailureInfo,
+  reuseOutput,
+}: {
+  input: PersistAttemptInput;
+  jobId: string;
+  outputId: string;
+  imageConfig: NormalizedImageConfig;
+  image: AttemptImage;
+  persistedFailureInfo: Job['failureInfo'] | null;
+  reuseOutput: boolean;
+}): JobOutput => {
+  const { claimedJob, providerResult, autoReview } = input;
+  const existing = reuseOutput ? claimedJob.currentOutput! : null;
+  const output: JobOutput = {
     ...(autoReview?.photoValidation ? { photoValidation: autoReview.photoValidation } : {}),
     id: outputId,
     jobId,
@@ -105,72 +158,218 @@ export const persistGeneratedAttempt = async ({
     ...(claimedJob.promptFormat ? { promptFormat: claimedJob.promptFormat } : {}),
     promptBase: claimedJob.promptBase,
     finalPrompt: claimedJob.finalPrompt,
-    aspectRatio: normalizedImageConfig.aspectRatio,
-    imageConfig: normalizedImageConfig.imageConfig,
+    aspectRatio: imageConfig.aspectRatio,
+    imageConfig: imageConfig.imageConfig,
     ...(claimedJob.photoProfile ? { photoProfile: claimedJob.photoProfile } : {}),
-    ...(storedImage.storedImage ? { storedImage: storedImage.storedImage } : {}),
-    resultImagePath: destinationPath,
-    ...(thumbnailPath ? { thumbnailPath } : {}),
-    contentType: storedImage.contentType,
+    ...(image.storedImage.storedImage ? { storedImage: image.storedImage.storedImage } : {}),
+    resultImagePath: image.destinationPath,
+    ...(image.thumbnailPath ? { thumbnailPath: image.thumbnailPath } : {}),
+    contentType: image.storedImage.contentType,
     remoteUrl: providerResult.remoteUrl,
     requestId: providerResult.requestId,
-    costUsd: reuseOutput ? claimedJob.currentOutput!.costUsd : costUsd,
-    durationSeconds: reuseOutput ? claimedJob.currentOutput!.durationSeconds : durationSeconds,
+    costUsd: existing ? existing.costUsd : image.chargedCostUsd,
+    durationSeconds: existing ? existing.durationSeconds : input.durationSeconds,
     providerResponseSummary: providerResult.responseSummary,
-    generationAttempt,
+    generationAttempt: input.generationAttempt,
     autoReview,
     failureInfo: persistedFailureInfo,
     isCurrent: true,
-    createdAt: reuseOutput ? claimedJob.currentOutput!.createdAt : admin.firestore.FieldValue.serverTimestamp(),
-    ...(reuseOutput ? { ...claimedJob.currentOutput!, autoReview, failureInfo: persistedFailureInfo, isCurrent: true } : {}),
+    createdAt: existing ? existing.createdAt : admin.firestore.FieldValue.serverTimestamp(),
   };
+  if (!existing) return output;
 
-  const shouldResetForNextAttempt = nextStatus === 'pending' || nextStatus === 'failed';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const baseJobUpdate: Record<string, any> = {
+  // The existing output wins over every rebuilt field; only the review result and current flag change.
+  return { ...output, ...existing, autoReview, failureInfo: persistedFailureInfo, isCurrent: true };
+};
+
+/** Automation jobs track whether the review is still pending; a failed review (not budget) uses a retry. */
+const buildAutomationReviewState = (input: PersistAttemptInput): JobUpdate => {
+  if (!input.claimedJob.automationManaged) return {};
+  const reviewMissing = input.autoReview === null;
+  const consumesRetry = reviewMissing && input.automationGate !== 'budget';
+  return {
+    automationReviewPending: reviewMissing,
+    ...(consumesRetry ? { retryCount: (input.claimedJob.retryCount || 0) + 1 } : {}),
+  };
+};
+
+const buildJobUpdate = ({
+  input,
+  outputId,
+  currentOutput,
+  imageConfig,
+  image,
+  persistedFailureInfo,
+  reuseOutput,
+}: {
+  input: PersistAttemptInput;
+  outputId: string;
+  currentOutput: JobOutput;
+  imageConfig: NormalizedImageConfig;
+  image: AttemptImage;
+  persistedFailureInfo: Job['failureInfo'] | null;
+  reuseOutput: boolean;
+}): JobUpdate => {
+  const { claimedJob, providerResult, nextStatus, autoReview, automationGate } = input;
+  const { increment, serverTimestamp } = admin.firestore.FieldValue;
+  const newOutputs = reuseOutput ? 0 : 1;
+  const addedDurationSeconds = reuseOutput ? 0 : input.durationSeconds || 0;
+  const providerUsage = `providerUsage.${providerResult.provider}`;
+
+  const update: JobUpdate = {
     ...(automationGate !== undefined ? { automationGate } : {}),
-    ...(claimedJob.automationManaged ? { automationReviewPending: autoReview === null,
-      ...(autoReview === null && automationGate !== 'budget' ? { retryCount: (claimedJob.retryCount || 0) + 1 } : {}) } : {}),
+    ...buildAutomationReviewState(input),
     provider: providerResult.provider,
-    aspectRatio: normalizedImageConfig.aspectRatio,
-    imageConfig: normalizedImageConfig.imageConfig,
+    aspectRatio: imageConfig.aspectRatio,
+    imageConfig: imageConfig.imageConfig,
     status: nextStatus,
     queuePriority: nextStatus === 'pending' ? 1 : 0,
     claimToken: null,
     claimedBy: null,
     claimExpiresAt: null,
     timeoutAt: null,
-    completedAt: nextStatus === 'completed' ? admin.firestore.FieldValue.serverTimestamp() : null,
-    ...(!reuseOutput ? { latestOutputCreatedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+    completedAt: nextStatus === 'completed' ? serverTimestamp() : null,
+    ...(!reuseOutput ? { latestOutputCreatedAt: serverTimestamp() } : {}),
     currentOutputId: outputId,
     currentOutput,
-    completedOutputCount: admin.firestore.FieldValue.increment(reuseOutput ? 0 : 1),
-    totalCostUsd: admin.firestore.FieldValue.increment(costUsd),
-    totalDurationSeconds: admin.firestore.FieldValue.increment(reuseOutput ? 0 : durationSeconds || 0),
-    [`providerUsage.${providerResult.provider}.completedOutputs`]: admin.firestore.FieldValue.increment(reuseOutput ? 0 : 1),
-    [`providerUsage.${providerResult.provider}.totalCostUsd`]: admin.firestore.FieldValue.increment(costUsd),
-    [`providerUsage.${providerResult.provider}.totalDurationSeconds`]: admin.firestore.FieldValue.increment(
-      reuseOutput ? 0 : durationSeconds || 0,
-    ),
-    generationAttemptCount: generationAttempt,
+    completedOutputCount: increment(newOutputs),
+    totalCostUsd: increment(image.chargedCostUsd),
+    totalDurationSeconds: increment(addedDurationSeconds),
+    [`${providerUsage}.completedOutputs`]: increment(newOutputs),
+    [`${providerUsage}.totalCostUsd`]: increment(image.chargedCostUsd),
+    [`${providerUsage}.totalDurationSeconds`]: increment(addedDurationSeconds),
+    generationAttemptCount: input.generationAttempt,
     latestAutoReview: autoReview,
     failureInfo: persistedFailureInfo,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    lastError,
+    updatedAt: serverTimestamp(),
+    lastError: input.lastError,
     ...(autoReview ? buildAutoReviewSignalsPatch(claimedJob, autoReview.verdict) : {}),
   };
 
   if (nextStatus === 'completed') {
-    baseJobUpdate['traceability.lastCompletedAt'] = admin.firestore.FieldValue.serverTimestamp();
+    update['traceability.lastCompletedAt'] = serverTimestamp();
   }
-
-  if (shouldResetForNextAttempt) {
-    baseJobUpdate.startedAt = null;
+  if (nextStatus === 'pending' || nextStatus === 'failed') {
+    update.startedAt = null;
   }
-
   if (nextStatus === 'pending') {
-    Object.assign(baseJobUpdate, buildAutomaticRetryPromptPatch(claimedJob, nextPromptBase));
+    Object.assign(update, buildAutomaticRetryPromptPatch(claimedJob, input.nextPromptBase));
   }
+  return update;
+};
+
+const describeReviewVerdict = (verdict: JobAutoReview['verdict'], nextStatus: Job['status']) => {
+  if (verdict === 'approved') return { level: 'info' as const, message: 'Gemini aprobó la imagen generada.' };
+  if (nextStatus === 'pending') {
+    return { level: 'warn' as const, message: 'Gemini rechazó la imagen y programó un nuevo intento.' };
+  }
+  return { level: 'error' as const, message: 'Gemini rechazó la imagen y se agotó el máximo de intentos.' };
+};
+
+const writeAttemptLogs = (
+  transaction: FirebaseFirestore.Transaction,
+  jobRef: FirebaseFirestore.DocumentReference,
+  { input, outputId, image, persistedFailureInfo, reuseOutput }: {
+    input: PersistAttemptInput;
+    outputId: string;
+    image: AttemptImage;
+    persistedFailureInfo: Job['failureInfo'] | null;
+    reuseOutput: boolean;
+  },
+): void => {
+  const { providerResult, autoReview, generationAttempt, nextStatus } = input;
+  const createdAt = () => admin.firestore.FieldValue.serverTimestamp();
+
+  transaction.set(jobRef.collection('logs').doc(), {
+    type: reuseOutput ? 'quality_review' : 'provider_response',
+    level: 'info',
+    message: reuseOutput
+      ? 'Se actualizó la revisión del output existente sin duplicar generación ni costos.'
+      : 'Proveedor completó la generación y el resultado fue guardado.',
+    outputId,
+    payload: {
+      provider: providerResult.provider,
+      requestId: providerResult.requestId,
+      remoteUrl: providerResult.remoteUrl,
+      summary: providerResult.responseSummary,
+      generationAttempt,
+    },
+    createdAt: createdAt(),
+  });
+
+  if (autoReview) {
+    transaction.set(jobRef.collection('logs').doc(), {
+      type: 'quality_review',
+      ...describeReviewVerdict(autoReview.verdict, nextStatus),
+      outputId,
+      payload: {
+        model: autoReview.model,
+        verdict: autoReview.verdict,
+        summary: autoReview.summary,
+        failureInfo: persistedFailureInfo,
+        reviewPrompt: autoReview.reviewPrompt,
+        revisedPrompt: autoReview.revisedPrompt,
+        criteria: autoReview.criteria,
+        marketplaceData: autoReview.marketplaceData,
+        attemptNumber: generationAttempt,
+      },
+      createdAt: createdAt(),
+    });
+  }
+
+  if (nextStatus === 'completed') {
+    transaction.set(jobRef.collection('logs').doc(), {
+      type: 'completed',
+      level: 'info',
+      message: 'Trabajo completado y aprobado por la autoevaluación.',
+      outputId,
+      payload: {
+        destinationPath: image.destinationPath,
+        durationSeconds: input.durationSeconds,
+        costUsd: image.chargedCostUsd,
+        generationAttempt,
+      },
+      createdAt: createdAt(),
+    });
+  }
+};
+
+/** Removes the uploaded image and thumbnail of an attempt whose transaction did not commit. */
+const discardUploadedImage = async (image: AttemptImage): Promise<void> => {
+  try {
+    await bucket.file(image.destinationPath).delete();
+    if (image.thumbnailPath) await bucket.file(image.thumbnailPath).delete({ ignoreNotFound: true });
+  } catch (cleanupError) {
+    console.warn('Could not delete discarded generated file:', cleanupError);
+  }
+};
+
+/**
+ * Stores the attempt's image and output and moves the job to `nextStatus`, only while this worker still
+ * holds the claim. Returns false (and discards a newly uploaded image) when the claim was lost.
+ */
+export const persistGeneratedAttempt = async (input: PersistAttemptInput): Promise<boolean> => {
+  const { claimedJob } = input;
+  const jobId = claimedJob.id!;
+  const jobRef = db.collection('jobs').doc(jobId);
+  const reuseOutput = reusesExistingOutput(claimedJob);
+  const outputRef = reuseOutput
+    ? jobRef.collection('outputs').doc(claimedJob.currentOutputId!)
+    : jobRef.collection('outputs').doc();
+  const outputId = outputRef.id;
+  const imageConfig = normalizeProviderImageConfig(
+    claimedJob.provider as Provider,
+    claimedJob.imageConfig,
+    claimedJob.aspectRatio,
+  );
+
+  const image = reuseOutput
+    ? existingOutputImage(claimedJob, input.providerResult)
+    : await storeNewOutputImage(claimedJob, jobId, outputId, input.providerResult, imageConfig);
+  const persistedFailureInfo = withFailureOutputId(input.failureInfo, outputId);
+  const attempt = { input, outputId, imageConfig, image, persistedFailureInfo, reuseOutput };
+  const currentOutput = buildOutputDocument({ ...attempt, jobId });
+  const jobUpdate = buildJobUpdate({ ...attempt, currentOutput });
 
   const committed = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(jobRef);
@@ -184,94 +383,27 @@ export const persistGeneratedAttempt = async ({
     }
 
     transaction.set(outputRef, currentOutput);
-
     if (latestJob.currentOutputId && !reuseOutput) {
-      transaction.set(
-        jobRef.collection('outputs').doc(latestJob.currentOutputId),
-        {
-          isCurrent: false,
-        },
-        { merge: true },
-      );
+      const previousOutputRef = jobRef.collection('outputs').doc(latestJob.currentOutputId);
+      transaction.set(previousOutputRef, { isCurrent: false }, { merge: true });
     }
-
-    transaction.update(jobRef, baseJobUpdate);
-
-    transaction.set(jobRef.collection('logs').doc(), {
-      type: reuseOutput ? 'quality_review' : 'provider_response',
-      level: 'info',
-      message: reuseOutput ? 'Se actualizó la revisión del output existente sin duplicar generación ni costos.' : 'Proveedor completó la generación y el resultado fue guardado.',
-      outputId,
-      payload: {
-        provider: providerResult.provider,
-        requestId: providerResult.requestId,
-        remoteUrl: providerResult.remoteUrl,
-        summary: providerResult.responseSummary,
-        generationAttempt,
-      },
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-
-    if (autoReview) {
-      transaction.set(jobRef.collection('logs').doc(), {
-        type: 'quality_review',
-        level:
-          autoReview.verdict === 'approved'
-            ? 'info'
-            : nextStatus === 'pending'
-              ? 'warn'
-              : 'error',
-        message:
-          autoReview.verdict === 'approved'
-            ? 'Gemini aprobó la imagen generada.'
-            : nextStatus === 'pending'
-              ? 'Gemini rechazó la imagen y programó un nuevo intento.'
-              : 'Gemini rechazó la imagen y se agotó el máximo de intentos.',
-        outputId,
-        payload: {
-          model: autoReview.model,
-          verdict: autoReview.verdict,
-          summary: autoReview.summary,
-          failureInfo: persistedFailureInfo,
-          reviewPrompt: autoReview.reviewPrompt,
-          revisedPrompt: autoReview.revisedPrompt,
-          criteria: autoReview.criteria,
-          marketplaceData: autoReview.marketplaceData,
-          attemptNumber: generationAttempt,
-        },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-
-    if (nextStatus === 'completed') {
-      transaction.set(jobRef.collection('logs').doc(), {
-        type: 'completed',
-        level: 'info',
-        message: 'Trabajo completado y aprobado por la autoevaluación.',
-        outputId,
-        payload: {
-          destinationPath,
-          durationSeconds,
-          costUsd,
-          generationAttempt,
-        },
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    }
-
+    transaction.update(jobRef, jobUpdate);
+    writeAttemptLogs(transaction, jobRef, attempt);
     return true;
   });
 
   if (!committed && !reuseOutput) {
-    try {
-      await bucket.file(destinationPath).delete();
-      if (thumbnailPath) await bucket.file(thumbnailPath).delete({ ignoreNotFound: true });
-    } catch (cleanupError) {
-      console.warn('Could not delete discarded generated file:', cleanupError);
-    }
+    await discardUploadedImage(image);
   }
 
   return committed;
+};
+
+/** Automation jobs retry a failed review (unless the budget ran out); manual jobs fail and keep the image. */
+const statusAfterReviewError = (job: Job, error: unknown): Job['status'] => {
+  const canRetry = (job.retryCount || 0) < job.maxRetries;
+  if (job.automationManaged && !(error instanceof AutomationBudgetError) && canRetry) return 'pending';
+  return 'failed';
 };
 
 export const failGeneratedAttemptAfterReviewError = async ({
@@ -282,7 +414,7 @@ export const failGeneratedAttemptAfterReviewError = async ({
   error,
 }: {
   claimedJob: Job;
-  providerResult: Awaited<ReturnType<typeof generateWithProvider>>;
+  providerResult: ProviderResult;
   durationSeconds: number | null;
   generationAttempt: number;
   error: unknown;
@@ -298,7 +430,7 @@ export const failGeneratedAttemptAfterReviewError = async ({
     providerResult,
     durationSeconds,
     generationAttempt,
-    nextStatus: claimedJob.automationManaged && !(error instanceof AutomationBudgetError) && (claimedJob.retryCount || 0) < claimedJob.maxRetries ? 'pending' : 'failed',
+    nextStatus: statusAfterReviewError(claimedJob, error),
     ...(error instanceof AutomationBudgetError ? { automationGate: 'budget' as const } : {}),
     autoReview: null,
     failureInfo,

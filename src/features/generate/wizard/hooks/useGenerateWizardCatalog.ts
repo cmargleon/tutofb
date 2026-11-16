@@ -43,6 +43,8 @@ export const useGenerateWizardCatalog = ({
   const [spreadsheetTemplates, setSpreadsheetTemplates] = useState<SpreadsheetTemplate[]>([]);
   const [spreadsheetCategories, setSpreadsheetCategories] = useState<SpreadsheetTemplateCategory[]>([]);
   const [loadingSpreadsheetTemplates, setLoadingSpreadsheetTemplates] = useState(false);
+  // Templates belong to one client; until that client's first snapshot arrives they are still loading.
+  const [spreadsheetTemplatesClientId, setSpreadsheetTemplatesClientId] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,11 +102,13 @@ export const useGenerateWizardCatalog = ({
       selectedClientId,
       (nextTemplates) => {
         setSpreadsheetTemplates(nextTemplates.filter((template) => template.status !== 'archived' && !template.exportConfig));
+        setSpreadsheetTemplatesClientId(selectedClientId);
         setLoadingSpreadsheetTemplates(false);
       },
       (loadError) => {
         console.error(loadError);
         setError('No se pudieron cargar los spreadsheets del cliente.');
+        setSpreadsheetTemplatesClientId(selectedClientId);
         setLoadingSpreadsheetTemplates(false);
       },
     );
@@ -164,7 +168,8 @@ export const useGenerateWizardCatalog = ({
     selectedSpreadsheetTemplate,
     selectedSpreadsheetCategory,
     selectedClientHasSpreadsheetTemplates,
-    loadingSpreadsheetTemplates,
+    loadingSpreadsheetTemplates: loadingSpreadsheetTemplates
+      || Boolean(selectedClientId && spreadsheetTemplatesClientId !== selectedClientId),
     loadingData,
     error,
   };

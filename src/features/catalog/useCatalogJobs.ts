@@ -14,9 +14,9 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Batch, Job } from '../../../shared/src/types';
-import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero } from '../../../shared/src/utils/dateUtils';
 import { subscribeToCatalogBatchJobs } from './firebase';
+import { buildCatalogPage, CatalogChunk, CatalogPagingState, isRenderableCatalogJob } from './catalogPaging';
 
 const BATCH_OPTIONS_LIMIT = 200;
 const EMPTY_JOBS: Job[] = [];
@@ -40,7 +40,8 @@ interface CatalogJobsParams {
 
 interface CatalogPage {
   jobs: Job[];
-  lastVisible: JobDocumentSnapshot | null;
+  /** Read-ahead state the following page starts from. */
+  next: CatalogPagingState<JobDocumentSnapshot>;
   hasMore: boolean;
 }
 
@@ -50,9 +51,7 @@ interface CatalogBatchResult {
   error: string | null;
 }
 
-const isRenderableCatalogJob = (job: Job): boolean =>
-  job.status === 'failed'
-  || (job.status === 'completed' && Boolean(resolveApprovedJobOutput(job)?.resultImagePath));
+const toJob = (docSnapshot: JobDocumentSnapshot): Job => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job;
 
 const compareJobsByCreatedAt = (left: Job, right: Job, sortOrder: CatalogSortOrder): number => (
   sortOrder === 'asc'
@@ -78,6 +77,9 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, include
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
   const liveFirstPageSignatureRef = useRef('');
+  // Chunks already read for this scope, keyed by cursor: prefetch, navigation and
+  // live first-page rebuilds share them instead of reading the same documents again.
+  const chunkCacheRef = useRef(new Map<string, Promise<CatalogChunk<JobDocumentSnapshot>>>());
 
   const currentPage = currentPageIndex + 1;
   const batchScope = JSON.stringify([clientId, batchId, sortOrder]);
@@ -89,6 +91,7 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, include
     setLoading(false);
     setError(null);
     liveFirstPageSignatureRef.current = '';
+    chunkCacheRef.current = new Map();
   }, [batchId, clientId, pageSize, sortOrder]);
 
   useEffect(() => {
@@ -141,28 +144,33 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, include
     );
   }, [clientId, batchId, sortOrder, batchScope]);
 
-  const fetchPage = useCallback(
-    async (cursor: JobDocumentSnapshot | null): Promise<CatalogPage> => {
-      if (!clientId) return { jobs: [], lastVisible: null, hasMore: false };
-      const constraints = [...buildCatalogQueryConstraints({ clientId, sortOrder }), limit(pageSize + 1)];
+  const fetchChunk = useCallback(
+    (cursor: JobDocumentSnapshot | null, chunkLimit: number): Promise<CatalogChunk<JobDocumentSnapshot>> => {
+      if (!clientId) return Promise.resolve({ jobs: [], cursor: null, exhausted: true });
+      const cacheKey = `${cursor?.id ?? ''}:${chunkLimit}`;
+      const cached = chunkCacheRef.current.get(cacheKey);
+      if (cached) return cached;
+      const constraints = [...buildCatalogQueryConstraints({ clientId, sortOrder }), limit(chunkLimit)];
       const catalogQuery = cursor
         ? query(collection(db, 'jobs'), ...constraints, startAfter(cursor))
         : query(collection(db, 'jobs'), ...constraints);
-
-      const snapshot = await getDocs(catalogQuery);
-      const hasMore = snapshot.docs.length > pageSize;
-      const pageDocs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
-      const jobs = pageDocs
-        .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job)
-        .filter(isRenderableCatalogJob);
-
-      return {
-        jobs,
-        lastVisible: pageDocs[pageDocs.length - 1] ?? null,
-        hasMore,
-      };
+      const cache = chunkCacheRef.current;
+      const promise = getDocs(catalogQuery).then((snapshot) => ({
+        jobs: snapshot.docs.map(toJob),
+        cursor: snapshot.docs[snapshot.docs.length - 1] ?? cursor,
+        exhausted: snapshot.docs.length < chunkLimit,
+      }));
+      cache.set(cacheKey, promise);
+      promise.catch(() => cache.delete(cacheKey));
+      return promise;
     },
-    [clientId, pageSize, sortOrder],
+    [clientId, sortOrder],
+  );
+
+  const fetchPage = useCallback(
+    (start: CatalogPagingState<JobDocumentSnapshot>): Promise<CatalogPage> =>
+      buildCatalogPage(start, pageSize, fetchChunk),
+    [fetchChunk, pageSize],
   );
 
   // ── Client-wide paginated mode (only when no batchId selected) ──
@@ -181,30 +189,42 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, include
       limit(pageSize + 1),
     );
 
+    let snapshotSequence = 0;
     const unsubscribe = onSnapshot(
       liveQuery,
       (snapshot) => {
-        const hasMore = snapshot.docs.length > pageSize;
-        const pageDocs = hasMore ? snapshot.docs.slice(0, pageSize) : snapshot.docs;
-        const jobs = pageDocs
-          .map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }) as Job)
-          .filter(isRenderableCatalogJob);
-        const livePage: CatalogPage = {
-          jobs,
-          lastVisible: pageDocs[pageDocs.length - 1] ?? null,
-          hasMore,
-        };
-        const nextSignature = pageDocs.map((docSnapshot) => docSnapshot.id).join('|');
-        const shouldResetCachedPages =
-          liveFirstPageSignatureRef.current !== '' && liveFirstPageSignatureRef.current !== nextSignature;
+        // The live head may end inside an article: complete it (and fill the page) from cached reads.
+        const sequence = ++snapshotSequence;
+        const head = snapshot.docs;
+        fetchPage({
+          buffer: head.map(toJob),
+          cursor: head[head.length - 1] ?? null,
+          exhausted: head.length <= pageSize,
+        }).then((livePage) => {
+          if (sequence !== snapshotSequence) return;
+          const nextSignature = [
+            ...livePage.jobs.map((job) => job.id),
+            '>',
+            ...livePage.next.buffer.map((job) => job.id),
+            livePage.next.cursor?.id ?? '',
+          ].join('|');
+          const shouldResetCachedPages =
+            liveFirstPageSignatureRef.current !== '' && liveFirstPageSignatureRef.current !== nextSignature;
 
-        liveFirstPageSignatureRef.current = nextSignature;
-        setPages((prev) => (shouldResetCachedPages ? [livePage] : [livePage, ...prev.slice(1)]));
-        if (shouldResetCachedPages) {
-          requestIdRef.current += 1;
-          setCurrentPageIndex(0);
-        }
-        setLoading(false);
+          liveFirstPageSignatureRef.current = nextSignature;
+          setPages((prev) => (shouldResetCachedPages ? [livePage] : [livePage, ...prev.slice(1)]));
+          if (shouldResetCachedPages) {
+            // Later pages are rebuilt from fresh reads, as before this paging existed.
+            chunkCacheRef.current = new Map();
+            requestIdRef.current += 1;
+            setCurrentPageIndex(0);
+          }
+          setLoading(false);
+        }).catch(() => {
+          if (sequence !== snapshotSequence) return;
+          setError('Error cargando imágenes del catálogo');
+          setLoading(false);
+        });
       },
       () => {
         setError('Error cargando imágenes del catálogo');
@@ -213,10 +233,11 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, include
     );
 
     return () => {
+      snapshotSequence += 1;
       requestIdRef.current += 1;
       unsubscribe();
     };
-  }, [clientId, batchId, pageSize, sortOrder]);
+  }, [clientId, batchId, pageSize, sortOrder, fetchPage]);
 
   // Prefetch the next page silently whenever the current page has more data and the
   // following page is not yet cached. The user sees no loading indicator for this.
@@ -226,11 +247,11 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, include
     const currentPage = pages[currentPageIndex];
     const nextPageAlreadyCached = Boolean(pages[currentPageIndex + 1]);
 
-    if (!currentPage?.hasMore || !currentPage.lastVisible || nextPageAlreadyCached) return undefined;
+    if (!currentPage?.hasMore || nextPageAlreadyCached) return undefined;
 
     let cancelled = false;
 
-    fetchPage(currentPage.lastVisible).then((nextPage) => {
+    fetchPage(currentPage.next).then((nextPage) => {
       if (cancelled) return;
       setPages((prev) => {
         if (prev[currentPageIndex] !== currentPage || prev[currentPageIndex + 1]) return prev;
@@ -259,14 +280,14 @@ export const useCatalogJobs = ({ clientId, batchId, pageSize, sortOrder, include
     }
 
     const current = pages[currentPageIndex];
-    if (!current?.hasMore || !current.lastVisible) return;
+    if (!current?.hasMore) return;
 
     const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
 
     try {
-      const nextPage = await fetchPage(current.lastVisible);
+      const nextPage = await fetchPage(current.next);
       if (requestId !== requestIdRef.current) return;
       setPages((prev) => prev[currentPageIndex + 1] ? prev : [...prev, nextPage]);
       setCurrentPageIndex((page) => page + 1);

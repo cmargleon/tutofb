@@ -61,9 +61,38 @@ test('marketplace callable requires authenticated current admin before client da
     assert.equal(name, 'users');
     return { doc: () => ({ get: async () => ({ exists: true, data: () => ({ active: true, role: currentRole }) }) }) };
   } }));
-  await assert.rejects(() => updateClientMarketplace.run({ data: {} }), { code: 'unauthenticated' });
+  const data = { clientId: 'a', marketplaceId: 'shein', photoRecipe: { general: { views: ['side'] }, categories: {} }, expectedPhotoRecipeRevision: 0 };
+  await assert.rejects(() => updateClientMarketplace.run({ data }), { code: 'unauthenticated' });
   for (const role of ['operador', 'revisor']) {
     currentRole = role;
-    await assert.rejects(() => updateClientMarketplace.run({ data: {}, auth: { uid: 'user', token: { role: 'admin' } } }), { code: 'permission-denied' });
+    await assert.rejects(() => updateClientMarketplace.run({ data, auth: { uid: 'user', token: { role: 'admin' } } }), { code: 'permission-denied' });
   }
+});
+
+test('photo recipes validate allowed decisions, version isolated patches, and reject stale writes after restoration', async () => {
+  const { records, db, writes } = fixture();
+  const target = { clientId: 'a', marketplaceId: 'amazon' };
+  for (const photoRecipe of [
+    { general: { views: ['front'] }, categories: {} },
+    { general: { views: ['back', 'back'] }, categories: {} },
+    { general: { mainBackground: 'neutral' }, categories: {} },
+    { general: {}, categories: { object: { views: [] } } },
+    { general: { ruleIds: [] }, categories: {} },
+  ]) await assert.rejects(() => saveClientMarketplace({ ...target, photoRecipe, expectedPhotoRecipeRevision: 0 }, db), { code: 'invalid-argument' });
+  assert.equal(writes.length, 0);
+  const photoRecipe = { general: { views: ['side', 'back'] }, categories: { underwear: { missingReference: 'review' } } };
+  await assert.rejects(() => saveClientMarketplace({ ...target, photoRecipe }, db), { code: 'invalid-argument' });
+  const saved = await saveClientMarketplace({ ...target, photoRecipe, expectedPhotoRecipeRevision: 0 }, db);
+  assert.equal(saved.current.photoRecipeRevision, 1);
+  assert.equal(records.a.marketplaces.amazon.enabled, false);
+  assert.deepEqual(records.a.marketplaces.amazon.photoRecipe, photoRecipe);
+  await saveClientMarketplace({ ...target, enabled: true, expected: { enabled: false } }, db);
+  assert.deepEqual(records.a.marketplaces.amazon.photoRecipe, photoRecipe);
+  assert.deepEqual(records.a.marketplaces.shein, { enabled: true });
+  await assert.rejects(() => saveClientMarketplace({ ...target, photoRecipe: null, expectedPhotoRecipeRevision: 0 }, db), { code: 'aborted' });
+  const restored = await saveClientMarketplace({ ...target, photoRecipe: null, expectedPhotoRecipeRevision: 1 }, db);
+  assert.equal(restored.current.photoRecipeRevision, 2);
+  assert.equal(records.a.marketplaces.amazon.photoRecipe, undefined);
+  assert.equal(records.a.marketplaces.amazon.settings.region, 'MX');
+  await assert.rejects(() => saveClientMarketplace({ ...target, photoRecipe, expectedPhotoRecipeRevision: 0 }, db), { code: 'aborted' });
 });

@@ -55,6 +55,12 @@ test('marketplaces persist independently and client rules reject browser writes 
     const endpoint = `http://${process.env.FIRESTORE_EMULATOR_HOST}/v1/projects/${projectId}/databases/(default)/documents/clients`;
     const headers = { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' };
     const get = await fetch(`${endpoint}/${clientId}`, { headers }); assert.equal(get.status, 200);
+    const directRecipe = await fetch(`${endpoint}/${clientId}?updateMask.fieldPaths=marketplaces.amazon.photoRecipe`, {
+      method: 'PATCH', headers, body: JSON.stringify({ fields: { marketplaces: { mapValue: { fields: {
+        amazon: { mapValue: { fields: { photoRecipe: { mapValue: { fields: {} } } } } },
+      } } } } }),
+    });
+    assert.equal(directRecipe.status, 403);
     for (const field of ['marketplaces', 'automation']) {
       const result = await fetch(`${endpoint}/${clientId}?updateMask.fieldPaths=${field}`, { method: 'PATCH', headers, body: JSON.stringify({ fields: { [field]: { mapValue: { fields: {} } } } }) });
       assert.equal(result.status, 403);

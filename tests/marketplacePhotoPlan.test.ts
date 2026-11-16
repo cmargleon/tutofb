@@ -96,11 +96,71 @@ test('bases need observed posture/framing/background/provenance; recipe alone ca
 });
 test('wizard and automation use equivalent planner inputs and task counts', () => {
   const i = input(); const a = article();
+  i.marketplaces!.shein = { enabled: true, photoRecipeRevision: 2, photoRecipe: { general: { views: ['back'] }, categories: { ordinary: { views: ['side', 'back'], mainBackground: 'white' } } } };
   const state: any = { provider: i.provider, providerImageConfigs: { [i.provider]: i.imageConfig }, generationKind: 'garment', productScenes: [], garments: [{ id: a.itemId, name: a.name, photoAttributes: a.attributes,
     originalPhotos: a.references.map(r => ({ id: r.id, upload: { storagePath: r.storagePath }, classification: { view: r.view } })) }] };
   const wizardInput = wizardPhotoPlanInput(state, { id: i.clientId, marketplaces: i.marketplaces } as any, null);
   const automationInput = { ...i, objectScenes: [], articles: [{ ...a, productId: a.itemId, variantId: a.itemId }] };
   assert.deepEqual(buildMarketplacePhotoPlan(wizardInput), buildMarketplacePhotoPlan(automationInput));
+});
+
+test('recipe precedence is per field and per channel, without expanding reference evidence', () => {
+  const ordinary = article();
+  const underwear = article({ itemId: 'swim', attributes: { ...ordinary.attributes, category: attr('swimwear') } });
+  const i = input(['shein', 'mercado-libre'], [ordinary, underwear]);
+  i.marketplaces!.shein = { enabled: true, photoRecipeRevision: 7, photoRecipe: {
+    general: { views: ['side', 'back'], mainBackground: 'white', additionalComposition: 'flat_lay' },
+    categories: { ordinary: { views: ['back', 'detail'], mainBackground: 'neutral' } },
+  } };
+  const plan = buildMarketplacePhotoPlan(i);
+  const gallery = (itemId: string, channel: string) => plan.tasks.filter(t => t.itemId === itemId)
+    .flatMap(t => t.destinations.filter(d => d.channel === channel).map(d => ({ ...d, view: t.view, composition: t.composition })))
+    .sort((a, b) => a.position - b.position);
+  assert.deepEqual(gallery(ordinary.itemId, 'shein').map(t => t.view), ['front', 'back']);
+  assert.deepEqual(gallery(underwear.itemId, 'shein').map(t => t.view), ['front', 'side', 'back']);
+  assert.deepEqual(gallery(ordinary.itemId, 'mercado-libre').map(t => t.view), ['front', 'back', 'side']);
+  assert.equal(gallery(ordinary.itemId, 'shein')[1].composition, 'flat_lay');
+  assert.deepEqual(gallery(ordinary.itemId, 'shein')[0].recipeSources, { background: 'category', composition: 'default' });
+  assert.ok(plan.tasks.find(t => t.itemId === ordinary.itemId && t.view === 'front')!.destinations.length === 2);
+  assert.ok(plan.tasks.filter(t => t.itemId === ordinary.itemId && t.view === 'back').length === 2);
+  assert.ok(plan.issues.some(issue => issue.code === 'optional-detail-shein' && !issue.blocking));
+  assert.deepEqual(plan.recipeSnapshot?.channels, [{ channel: 'mercado-libre', revision: 0 }, { channel: 'shein', revision: 7 }]);
+  assert.equal(plan.recipeSnapshot?.articles[0].channels[1].sources.additionalComposition, 'client');
+  assert.equal(plan.estimate.uniqueImages, plan.tasks.length);
+});
+
+test('recipe review holds the article without dropping references and channel restrictions still govern appearance', () => {
+  const child = article();
+  child.attributes.audience = attr('child');
+  child.references.push({ id: 'detail', storagePath: 'garments/drafts/operator/detail.jpg', view: 'detail' });
+  const i = input(['tiktok-shop', 'shein'], [child]);
+  i.marketplaces!['tiktok-shop'] = { enabled: true, photoRecipeRevision: 1, photoRecipe: {
+    general: { views: ['back', 'detail'], missingReference: 'review', additionalBackground: 'neutral', mainComposition: 'model' }, categories: {},
+  } };
+  const held = buildMarketplacePhotoPlan(i);
+  assert.equal(held.tasks.length, 0);
+  assert.deepEqual(held.articles[0].references, child.references);
+  assert.ok(held.issues.some(issue => issue.code === 'recipe-reference-detail-tiktok-shop' && issue.blocking));
+  i.marketplaces!['tiktok-shop'].photoRecipe!.general.missingReference = 'omit';
+  const plan = buildMarketplacePhotoPlan(i);
+  const tiktok = plan.tasks.filter(t => t.destinations.some(d => d.channel === 'tiktok-shop'));
+  assert.deepEqual(tiktok.map(t => [t.view, t.background, t.composition]), [['front', 'white', 'flat_lay'], ['back', 'white', 'flat_lay']]);
+  assert.equal(tiktok[0].destinations[0].recipeSources?.composition, 'constraint');
+  assert.ok(plan.issues.some(issue => issue.code === 'tiktok-child-detail' && !issue.blocking));
+  assert.equal(buildMarketplacePhotoPlan({ ...i, articles: [article({ references: [] })] }).tasks.length, 0);
+});
+
+test('restoring defaults preserves legacy approval ID and optional gallery while a revision changes a configured plan ID', () => {
+  const i = input(['amazon']);
+  const original = buildMarketplacePhotoPlan(i);
+  i.marketplaces!.amazon!.photoRecipe = { general: { views: [] }, categories: {} };
+  i.marketplaces!.amazon!.photoRecipeRevision = 1;
+  const configured = buildMarketplacePhotoPlan(i);
+  assert.deepEqual(configured.tasks.map(t => t.view), ['front']);
+  i.marketplaces!.amazon!.photoRecipeRevision = 2;
+  assert.notEqual(buildMarketplacePhotoPlan(i).id, configured.id);
+  delete i.marketplaces!.amazon!.photoRecipe;
+  assert.deepEqual(buildMarketplacePhotoPlan(i), original);
 });
 test('retry prompts retain plan obligations, including manually regenerated historical job compatibility', () => {
   const task = buildMarketplacePhotoPlan(input()).tasks[0];

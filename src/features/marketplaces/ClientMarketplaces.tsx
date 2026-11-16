@@ -7,6 +7,7 @@ import { MARKETPLACES } from '../../../shared/src/marketplaces';
 import { useClientMarketplace } from './useClientMarketplace';
 import { Alert, Badge, Button, Field, Switch } from '../../components/ui';
 import { INPUT_BASE } from '../../components/clients/clientUtils';
+import { MarketplacePhotoRecipeEditor } from './MarketplacePhotoRecipeEditor';
 
 const MarketplaceCard: React.FC<{ client: Client; channel: typeof MARKETPLACES[number]; templates: SpreadsheetTemplate[] }> = ({ client, channel, templates }) => {
   const state = useClientMarketplace(client, channel.id);
@@ -37,6 +38,7 @@ const MarketplaceCard: React.FC<{ client: Client; channel: typeof MARKETPLACES[n
         <Field label="Identificador de vendedor"><input className={INPUT_BASE} maxLength={200} value={state.value.sellerId} onChange={e => state.setValue({ ...state.value, sellerId: e.target.value })} /></Field>
       </fieldset>
       <div className="mt-3 flex flex-wrap items-center gap-2"><Button size="sm" disabled={disabled || !state.dirty} onClick={() => void state.save({ settings: state.value })}>Guardar ajustes de {channel.name}</Button>{state.dirty && <><span className="text-xs text-[var(--color-warning)]">Cambios sin guardar · borrador conservado en esta sesión</span><Button size="sm" variant="ghost" onClick={state.discard}>Descartar borrador de {channel.name}</Button></>}</div>
+      {open && <MarketplacePhotoRecipeEditor client={client} channel={channel.id} />}
     </div>
     {state.enabled && <MarketplaceTemplates client={client} channel={channel.id} templates={templates} />}
     {state.conflict && <div className="mt-3 space-y-2 rounded-lg border border-amber-300 bg-[var(--color-warning-soft)] p-3 text-sm"><p>Valores actuales: región {state.conflict.region || '(vacía)'} · vendedor {state.conflict.sellerId || '(vacío)'} · {state.conflict.enabled ? 'habilitado' : 'deshabilitado'}</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={state.keepDraft}>Conservar mi borrador y revisar antes de guardar</Button><Button size="sm" variant="ghost" onClick={state.discard}>Usar valores actuales</Button></div></div>}

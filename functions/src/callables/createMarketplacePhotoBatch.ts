@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { AutomationJob, Batch, Client, CreateMarketplacePhotoBatchRequest, Job, Model, PhotoPlan, PhotoPlanInput } from '../../../shared/src/types';
 import { activePhotoChannels, buildMarketplacePhotoPlan, canonicalPhotoJson } from '../../../shared/src/marketplacePhotoPlan';
+import { photoRecipeRevisions } from '../../../shared/src/marketplacePhotoRecipe';
 import { normalizePhotoAttributes, withDeclaredModelAge } from '../../../shared/src/photoAttributes';
 import { COMMERCIAL_PHOTO_PROFILE, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getAppFirestore } from '../firebase/appFirestore';
@@ -66,6 +67,8 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
     const client = clientSnapshot.data() as Client;
     if (!client || client.status === 'archived' || plan.channels.some(channel => client.marketplaces?.[channel]?.enabled !== true)) throw new HttpsError('failed-precondition', 'Un canal del plan ya no está habilitado. Prepara un nuevo plan.');
     if (!automation && canonicalPhotoJson(activePhotoChannels(client.marketplaces)) !== canonicalPhotoJson(plan.channels)) throw new HttpsError('failed-precondition', 'Los destinos cambiaron. Revisa el plan.');
+    if (!automation && canonicalPhotoJson(photoRecipeRevisions(plan.channels, client.marketplaces)) !== canonicalPhotoJson(plan.recipeSnapshot?.channels))
+      throw new HttpsError('failed-precondition', 'La receta cambió. Revisa el plan antes de generar.');
     const now = admin.firestore.FieldValue.serverTimestamp();
     const batch: Omit<Batch, 'id'> = { photoPlan: plan, photoProfile: COMMERCIAL_PHOTO_PROFILE, generationKind: data.articles[0].kind,
       ...(automation ? { automationJobId: automation.id } : {}),

@@ -110,6 +110,35 @@ test('photo plan: authoritative creation, replay, frozen channels, automation pa
     const multiPlan = (await db.doc(`automationJobs/${multi.jobId}`).get()).get('photoPlan');
     assert.ok(multiPlan.tasks.some((task: any) => task.view === 'back'));
     assert.ok(multiPlan.tasks.some((task: any) => task.view === 'side'));
+
+    const { saveClientMarketplace } = require('../functions/lib/functions/src/callables/updateClientMarketplace.js');
+    const recipeTarget = { clientId, marketplaceId: 'shein' };
+    await saveClientMarketplace({ ...recipeTarget, expectedPhotoRecipeRevision: 0, photoRecipe: {
+      general: { views: ['side'], additionalBackground: 'white' }, categories: { ordinary: { mainBackground: 'white', additionalComposition: 'flat_lay' } },
+    } }, db);
+    const references = multiInputs.map(({ fileName, storagePath }, index) => ({ id: `shirt-${index}`, storagePath, view: fileName.split('.')[0] }));
+    const recipeInput = { ...input, articles: [{ ...input.articles[0], references }] };
+    const recipePlan = await service.resolveMarketplacePhotoPlan({ ...recipeInput, marketplaces }, uid);
+    assert.equal(recipePlan.recipeSnapshot.channels.find((entry: any) => entry.channel === 'shein').revision, 1);
+    const recipeRequest = { ...recipeInput, requestId: 'with-recipe', approvedPlanId: recipePlan.id, prompt: 'Commercial photograph' };
+    const recipeBatch = await service.createMarketplacePhotoBatchCore(recipeRequest, uid);
+    const recipeAuthorization = await planService.prepareAutomationPlan({ source: 'api', externalId: 'recipe-parity', clientId, jobType: 'garment', provider: input.provider,
+      inputImages: multiInputs.map(image => ({ ...image, itemId: 'shirt' })),
+      metadata: { photoArticles: { shirt: { referenceViews: { 'front.jpg': 'front', 'back.jpg': 'back', 'side.jpg': 'side' } } } },
+      budgetUsd: 10, maxReviewAttempts: 1, maxOperationalRetries: 0, allowEstimatedCosts: true, authorizeClassification: true }, uid, 'operador');
+    assert.ok(recipeAuthorization.items[0].sceneIds.includes('side-white-model'));
+    await saveClientMarketplace({ ...recipeTarget, expectedPhotoRecipeRevision: 1, photoRecipe: null }, db);
+    await assert.rejects(service.createMarketplacePhotoBatchCore({ ...recipeRequest, requestId: 'stale-recipe' }, uid), /plan cambió/);
+    assert.deepEqual(await service.createMarketplacePhotoBatchCore(recipeRequest, uid), recipeBatch);
+    const recipeAuto = await planService.executeAutomationPlan(recipeAuthorization.id, uid, 'operador');
+    await require('../functions/lib/functions/src/automation/worker.js').processAutomation(recipeAuto.jobId);
+    const frozenJob = (await db.doc(`automationJobs/${recipeAuto.jobId}`).get()).data();
+    assert.equal(frozenJob.status, 'processing', JSON.stringify(frozenJob.error));
+    const savedManual = (await db.doc(`batches/${recipeBatch.batchId}`).get()).get('photoPlan');
+    assert.deepEqual(frozenJob.photoPlan.recipeSnapshot, savedManual.recipeSnapshot);
+    const production = (plan: any) => plan.tasks.map(({ view, composition, background, destinations }: any) => ({ view, composition, background, destinations }));
+    assert.deepEqual(production(frozenJob.photoPlan), production(savedManual));
+
     await db.doc(`clients/${clientId}`).update({ 'marketplaces.amazon.enabled': false });
     assert.deepEqual(await service.createMarketplacePhotoBatchCore(request, uid), created);
     await assert.rejects(service.createMarketplacePhotoBatchCore({ ...request, requestId: 'new' }, uid), /plan cambió/);

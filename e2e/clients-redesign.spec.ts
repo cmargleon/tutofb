@@ -51,6 +51,16 @@ async function setup(page: Page, role = 'admin') {
       client.marketplaces ??= {};
       const previous = client.marketplaces[input.marketplaceId];
       const current: Record<string, unknown> = { enabled: previous?.enabled === true, region: previous?.settings?.region ?? '', sellerId: previous?.settings?.sellerId ?? '' };
+      if ('photoRecipe' in input) {
+        const revision = previous?.photoRecipeRevision ?? 0;
+        const recipeCurrent = { ...current, photoRecipe: previous?.photoRecipe ?? null, photoRecipeRevision: revision };
+        if (input.expectedPhotoRecipeRevision !== revision) return { _conflict: { current: recipeCurrent } };
+        const next = { enabled: false, ...previous, photoRecipeRevision: revision + 1 };
+        if (input.photoRecipe) next.photoRecipe = input.photoRecipe;
+        else delete next.photoRecipe;
+        client.marketplaces[input.marketplaceId] = next;
+        return { success: true, current: { ...recipeCurrent, photoRecipe: input.photoRecipe, photoRecipeRevision: next.photoRecipeRevision } };
+      }
       const patch = { ...input.settings, ...('enabled' in input ? { enabled: input.enabled } : {}) };
       if (Object.keys(patch).some(key => input.expected?.[key] !== current[key])) return { _conflict: { current } };
       client.marketplaces[input.marketplaceId] = { enabled: false, ...previous, ...('enabled' in input ? { enabled: input.enabled } : {}), ...('settings' in input ? { settings: { ...previous?.settings, ...Object.fromEntries(Object.entries(input.settings).map(([key, value]) => [key, (value as string).trim()])) } } : {}) };
@@ -297,6 +307,41 @@ test('marketplace drafts stay independent by client and channel, survive errors 
   await amazon.getByRole('button', { name: 'Configurar', exact: true }).click();
   await expect(amazon.getByRole('textbox', { name: 'País o región' })).toHaveValue('BR');
   expect(state.clients[1].marketplaces).toBeUndefined();
+});
+
+test('edits, previews and restores a channel photo recipe with a category exception', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/clients/client-0?tab=marketplaces');
+  const shein = page.locator('article').filter({ has: page.getByRole('heading', { name: 'SHEIN', exact: true }) });
+  await shein.getByRole('button', { name: 'Configurar' }).click();
+  await shein.getByText('Requisitos obligatorios del canal').click();
+  await expect(shein.getByText(/Principal SKC por color/)).toBeVisible();
+  await shein.getByRole('button', { name: 'Personalizar vistas' }).click();
+  await shein.getByRole('checkbox', { name: 'Detalle', exact: true }).uncheck();
+  await shein.getByRole('button', { name: 'Subir Lateral' }).click();
+  await shein.getByRole('combobox', { name: 'Alcance de la receta' }).selectOption('underwear');
+  await shein.getByRole('combobox', { name: 'Fondo de portada' }).selectOption('white');
+  await shein.getByRole('combobox', { name: 'Si falta una referencia' }).selectOption('review');
+
+  await shein.getByText('Vista previa del plan').click();
+  await expect(shein.getByText('3 imágenes únicas')).toBeVisible();
+  await expect(shein.getByText(/Frente · Con modelo · Blanco puro/)).toBeVisible();
+  const references = shein.getByRole('group', { name: 'Referencias disponibles en el ejemplo' });
+  await references.getByRole('checkbox', { name: 'Lateral' }).uncheck();
+  await expect(shein.getByText(/Revisión requerida.*Falta evidencia utilizable para lateral/)).toBeVisible();
+
+  await shein.getByRole('button', { name: 'Guardar receta' }).click();
+  await expect(shein.getByText('Versión 1', { exact: true })).toBeVisible();
+  expect(state.clients[0].marketplaces.shein).toMatchObject({ enabled: false, photoRecipeRevision: 1, photoRecipe: {
+    general: { views: ['side', 'back'] }, categories: { underwear: { mainBackground: 'white', missingReference: 'review' } },
+  } });
+  await page.reload();
+  await shein.getByRole('button', { name: 'Configurar' }).click();
+  await expect(shein.getByText('Versión 1', { exact: true })).toBeVisible();
+  await shein.getByRole('button', { name: 'Restaurar valores predeterminados' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restaurar valores predeterminados' }).click();
+  await expect(shein.getByText('Valores predeterminados', { exact: true })).toBeVisible();
+  expect(state.clients[0].marketplaces.shein).toEqual({ enabled: false, photoRecipeRevision: 2 });
 });
 
 test('static create route, editing, confirmed archive and reactivation preserve the client', async ({ page }) => {

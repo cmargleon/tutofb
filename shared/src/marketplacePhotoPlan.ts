@@ -1,6 +1,7 @@
 import type { PhotoArticle, PhotoAttribute, PhotoPlan, PhotoPlanInput, PhotoRequirement, PhotoTask } from './types/photoPlan';
 import type { MarketplaceId } from './marketplaces';
 import { getProviderCostUsd } from './constants/providerCosts';
+import { effectivePhotoRecipe, photoRecipeAllowsAppearance, photoRecipeRevisions, PHOTO_RECIPE_VERSION } from './marketplacePhotoRecipe';
 
 export const PHOTO_PLAN_VERSION = 'marketplace-photo-v1' as const;
 export const PHOTO_CHANNELS: MarketplaceId[] = ['amazon', 'mercado-libre', 'tiktok-shop', 'shein'];
@@ -42,11 +43,18 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
     effectiveConfig: { provider: input.provider, imageConfig: input.imageConfig, aspectRatio: input.aspectRatio },
     estimate: { uniqueImages: 0, generations: 0, reviews: 0, estimatedCostUsd: 0 } };
   const issue = (itemId: string, code: string, message: string, blocking = true) => plan.issues.push({ itemId, code, message, blocking });
-  if (!channels.length) { plan.id = photoIdentity(plan); return plan; }
+  const recipeSnapshot: NonNullable<PhotoPlan['recipeSnapshot']> = {
+    version: PHOTO_RECIPE_VERSION, channels: photoRecipeRevisions(channels, input.marketplaces), articles: [],
+  };
+  const hasRecipes = channels.some(channel => input.marketplaces?.[channel]?.photoRecipe);
   for (const article of input.articles.filter(a => a.kind === 'garment').sort((a, b) => a.itemId.localeCompare(b.itemId))) {
+    if (!channels.length) break;
     const a = article.attributes;
     const category = knownPhotoAttribute(a.category), audience = knownPhotoAttribute(a.audience), packaging = knownPhotoAttribute(a.packaging);
     const area = knownPhotoAttribute(a.bodyArea);
+    const recipeCategory = category === 'object' ? null : category;
+    const selections = channels.map(channel => ({ channel, ...effectivePhotoRecipe(input.marketplaces?.[channel]?.photoRecipe, recipeCategory) }));
+    recipeSnapshot.articles.push({ itemId: article.itemId, category: recipeCategory, channels: selections });
     const startingIssues = plan.issues.length;
     if (!article.references.length || !article.references.some(r => r.view === 'front')) issue(article.itemId, 'front-reference', 'Falta referencia frontal fiel de esta variante.');
     if (article.kind === 'garment') {
@@ -58,8 +66,19 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
     const child = audience === 'child' || audience === 'baby';
     const pack = packaging === 'multipack' || packaging === 'set';
     const sensitiveChild = child && (category === 'underwear' || category === 'swimwear' || category === 'bodysuit' || category === 'fitted_child');
+    const hasReference = (view: PhotoTask['view']) => article.references.some(r => r.view === view);
+    const restrictedDetail = (channel: MarketplaceId) => child && channel === 'tiktok-shop';
+    for (const { channel, preferences } of selections) {
+      if (preferences.missingReference !== 'review') continue;
+      for (const view of preferences.views) {
+        if (!hasReference(view) || (view === 'detail' && restrictedDetail(channel)))
+          issue(article.itemId, `recipe-reference-${view}-${channel}`, `${channel}: la receta solicita revisión. Falta evidencia utilizable para ${view === 'back' ? 'espalda' : view === 'side' ? 'lateral' : 'detalle'}.`);
+      }
+    }
+    // Hold this article for review before adding any destinations or reserving generations.
+    if (plan.issues.length > startingIssues) continue;
     const positions = new Map<MarketplaceId, number>();
-    const add = (channel: MarketplaceId, view: PhotoTask['view'], background: PhotoTask['background'], flat: boolean, main: boolean, scene?: { type: string; prompt: string }) => {
+    const add = (channel: MarketplaceId, view: PhotoTask['view'], background: PhotoTask['background'], flat: boolean, main: boolean, recipeSources?: PhotoTask['destinations'][number]['recipeSources'], scene?: { type: string; prompt: string }) => {
       const composition: PhotoTask['composition'] = view === 'detail' ? 'reference' : article.kind === 'product' ? 'product' : flat ? 'flat_lay' : 'model';
       const refs = article.references.filter(r => r.view === view).map(r => r.storagePath).sort();
       if (!refs.length) return;
@@ -92,17 +111,35 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
         plan.tasks.push(task);
       }
       task.destinations.push({ channel, productId: article.productId, variantId: article.variantId, position, role: main ? 'main' : 'alternative', required: main, ruleIds,
+        ...(recipeSources ? { recipeSources } : {}),
         ...(channel === 'shein' && main ? { imageType: 1, imageSort: 1 } : {}) });
     };
-    for (const channel of channels) {
+    for (const { channel, preferences, sources } of selections) {
       const flat = pack || sensitiveChild || (child && channel === 'tiktok-shop') || (audience === 'baby' && channel === 'mercado-libre');
-      const background = channel === 'tiktok-shop' || article.kind === 'garment' && channel === 'amazon' || pack ? 'white' : 'neutral';
-      add(channel, 'front', background, flat, true);
-      for (const view of ['back', 'side', 'detail'] as const) if (article.references.some(r => r.view === view)) {
-        if (view === 'detail' && child && channel === 'tiktok-shop') issue(article.itemId, 'tiktok-child-detail', 'TikTok infantil: el detalle real no se asigna sin evidencia de flat lay sin personas. Las otras vistas planas se conservan.', false);
-        else add(channel, view, child && channel === 'tiktok-shop' ? 'white' : view === 'detail' ? 'original' : 'neutral', flat, false);
+      const addView = (view: PhotoTask['view'], defaultBackground: PhotoTask['background']) => {
+        const main = view === 'front';
+        const bgField = main ? 'mainBackground' : 'additionalBackground';
+        const compField = main ? 'mainComposition' : 'additionalComposition';
+        const canChooseBackground = view !== 'detail' && photoRecipeAllowsAppearance(channel, bgField, recipeCategory, audience, pack, flat);
+        const canChooseComposition = view !== 'detail' && photoRecipeAllowsAppearance(channel, compField, recipeCategory, audience, pack, flat);
+        const background = (canChooseBackground ? preferences[bgField] : undefined) ?? defaultBackground;
+        const composition = canChooseComposition ? preferences[compField] : undefined;
+        add(channel, view, background, composition ? composition === 'flat_lay' : flat, main, hasRecipes ? {
+          background: canChooseBackground ? sources[bgField] : 'constraint',
+          composition: canChooseComposition ? sources[compField] : (view === 'detail' || flat || channel === 'amazon' && main ? 'constraint' : 'default'),
+        } : undefined);
+      };
+      addView('front', channel === 'tiktok-shop' || channel === 'amazon' || pack ? 'white' : 'neutral');
+      for (const view of preferences.views) {
+        if (hasReference(view)) {
+          if (view === 'detail' && restrictedDetail(channel)) issue(article.itemId, 'tiktok-child-detail', 'TikTok infantil: el detalle real no se asigna sin evidencia de flat lay sin personas. Las otras vistas planas se conservan.', false);
+          else addView(view, restrictedDetail(channel) ? 'white' : view === 'detail' ? 'original' : 'neutral');
+        } else if (sources.views !== 'default' || sources.missingReference !== 'default') {
+          issue(article.itemId, `optional-${view}-${channel}`, `${channel}: se omite ${view === 'back' ? 'espalda' : view === 'side' ? 'lateral' : 'detalle'} por falta de referencia.`, false);
+        }
       }
-      if (!article.references.some(r => r.view === 'back')) issue(article.itemId, `optional-back-${channel}`, `${channel}: sin referencia de espalda; no se inventará esa vista.`, false);
+      if (!hasReference('back') && sources.views === 'default' && sources.missingReference === 'default')
+        issue(article.itemId, `optional-back-${channel}`, `${channel}: sin referencia de espalda; no se inventará esa vista.`, false);
     }
   }
   // All merged destinations carry the strictest compatible obligations in the approved task prompt.
@@ -114,7 +151,9 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
   plan.estimate.generations = plan.tasks.filter(t => t.composition !== 'reference').length;
   plan.estimate.reviews = plan.tasks.length;
   plan.estimate.estimatedCostUsd = Number(plan.tasks.reduce((sum, t) => sum + (t.composition === 'reference' ? 0 : getProviderCostUsd(input.provider, input.imageConfig, t.referencePaths.length + (t.base || t.identityBase ? 1 : 0))) + .01, 0).toFixed(6));
-  plan.id = photoIdentity({ ...plan, id: '' });
+  // Preserve approvals issued by the legacy wizard for clients using the unchanged defaults.
+  plan.id = photoIdentity(hasRecipes ? { ...plan, recipeSnapshot } : plan);
+  plan.recipeSnapshot = recipeSnapshot;
   return plan;
 }
 

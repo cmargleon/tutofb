@@ -49,12 +49,21 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   let sceneIds: string[];
   let modelOptions: AutomationModelOption[] | undefined;
   const photoChannels = data.jobType === 'garment' ? activePhotoChannels(client.marketplaces) : [];
-  if (data.jobType === 'garment' && !photoChannels.length) {
+  if (photoChannels.length) {
+    // Until the references are classified, include every appearance the saved recipes could add.
+    const whiteAlternatives = photoChannels.some(channel => {
+      const recipe = client.marketplaces?.[channel]?.photoRecipe;
+      return recipe && [recipe.general, ...Object.values(recipe.categories)].some(prefs => prefs?.additionalBackground === 'white');
+    });
+    sceneIds = ['front-white-model', 'front-white-flat', 'front-neutral-model', 'front-neutral-flat',
+      'back-neutral-model', 'back-neutral-flat', 'back-white-flat', 'side-neutral-model', 'side-neutral-flat', 'side-white-flat', 'real-detail'];
+    if (whiteAlternatives) sceneIds.push('back-white-model', 'side-white-model');
+  } else if (data.jobType === 'garment') {
     try { modelOptions = await loadAutomationModelOptions(data.clientId, client, data.modelId || resolved.config.modelId, preset.poseIds); }
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
     // Until classification, estimate using the model with the most poses per item.
     sceneIds = modelOptions.reduce<string[]>((largest, option) => option.poseIds.length > largest.length ? option.poseIds : largest, []);
-  } else sceneIds = photoChannels.length ? ['front-white-model', 'front-white-flat', 'front-neutral-model', 'front-neutral-flat', 'back-neutral-model', 'back-neutral-flat', 'back-white-flat', 'side-neutral-model', 'side-neutral-flat', 'side-white-flat', 'real-detail'] : preset.scenes!.map((scene) => scene.type);
+  } else sceneIds = preset.scenes!.map(scene => scene.type);
   const modelId = modelOptions?.length === 1 ? modelOptions[0].modelId : photoChannels.length ? resolved.modelId : null;
   const photoModel = modelId && photoChannels.length ? (await db.doc(`models/${modelId}`).get()).data() as import('../../../shared/src/types').Model | undefined : undefined;
   if (modelId && photoChannels.length && (!photoModel || photoModel.clientId !== data.clientId || photoModel.active === false || photoModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo del plan no disponible.');

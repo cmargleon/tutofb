@@ -1444,7 +1444,7 @@
         "raw": {
           "message": "Simulated provider failure",
           "name": "Error",
-          "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:215:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+          "stack": "Error: Simulated provider failure"
         },
         "reasonCode": "unknown",
         "requestId": null,
@@ -1534,7 +1534,7 @@
           "error": {
             "message": "Simulated provider failure",
             "name": "Error",
-            "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:215:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated provider failure"
           },
           "failureInfo": {
             "attemptNumber": null,
@@ -1548,7 +1548,7 @@
             "raw": {
               "message": "Simulated provider failure",
               "name": "Error",
-              "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:215:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated provider failure"
             },
             "reasonCode": "unknown",
             "requestId": null,
@@ -2339,7 +2339,7 @@
           "error": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:217:29)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "failureInfo": {
             "attemptNumber": 1,
@@ -2353,7 +2353,7 @@
             "raw": {
               "message": "Simulated review unavailable",
               "name": "Error",
-              "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:217:29)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated review unavailable"
             },
             "reasonCode": "unknown",
             "requestId": "req-1",
@@ -2888,7 +2888,7 @@
           "error": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:219:25)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "failureInfo": {
             "attemptNumber": 1,
@@ -2902,7 +2902,7 @@
             "raw": {
               "message": "Simulated review unavailable",
               "name": "Error",
-              "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:219:25)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated review unavailable"
             },
             "reasonCode": "unknown",
             "requestId": "req-1",
@@ -3216,7 +3216,7 @@
           "raw": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:217:29)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "reasonCode": "unknown",
           "requestId": "req-1",
@@ -3266,7 +3266,7 @@
         "raw": {
           "message": "Simulated review unavailable",
           "name": "Error",
-          "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:217:29)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+          "stack": "Error: Simulated review unavailable"
         },
         "reasonCode": "unknown",
         "requestId": "req-1",
@@ -3345,7 +3345,7 @@
           "raw": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:217:29)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "reasonCode": "unknown",
           "requestId": "req-1",
@@ -3394,7 +3394,7 @@
           "error": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:217:29)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "failureInfo": {
             "attemptNumber": 1,
@@ -3408,7 +3408,7 @@
             "raw": {
               "message": "Simulated review unavailable",
               "name": "Error",
-              "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:217:29)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated review unavailable"
             },
             "reasonCode": "unknown",
             "requestId": "req-1",
@@ -3617,7 +3617,7 @@
           "raw": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:219:25)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "reasonCode": "unknown",
           "requestId": "req-1",
@@ -3667,7 +3667,7 @@
         "raw": {
           "message": "Simulated review unavailable",
           "name": "Error",
-          "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:219:25)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+          "stack": "Error: Simulated review unavailable"
         },
         "reasonCode": "unknown",
         "requestId": "req-1",
@@ -3746,7 +3746,7 @@
           "raw": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:219:25)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "reasonCode": "unknown",
           "requestId": "req-1",
@@ -3795,7 +3795,7 @@
           "error": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:219:25)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "failureInfo": {
             "attemptNumber": 1,
@@ -3809,7 +3809,7 @@
             "raw": {
               "message": "Simulated review unavailable",
               "name": "Error",
-              "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:219:25)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated review unavailable"
             },
             "reasonCode": "unknown",
             "requestId": "req-1",
@@ -5389,7 +5389,7 @@
           "raw": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:197:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "reasonCode": "unknown",
           "requestId": "req-1",
@@ -5439,7 +5439,7 @@
         "raw": {
           "message": "Simulated review unavailable",
           "name": "Error",
-          "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:197:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+          "stack": "Error: Simulated review unavailable"
         },
         "reasonCode": "unknown",
         "requestId": "req-1",
@@ -5518,7 +5518,7 @@
           "raw": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:197:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "reasonCode": "unknown",
           "requestId": "req-1",
@@ -5567,7 +5567,7 @@
           "error": {
             "message": "Simulated review unavailable",
             "name": "Error",
-            "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:197:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated review unavailable"
           },
           "failureInfo": {
             "attemptNumber": 1,
@@ -5581,7 +5581,7 @@
             "raw": {
               "message": "Simulated review unavailable",
               "name": "Error",
-              "stack": "Error: Simulated review unavailable\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:91:41)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:154:52)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:197:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated review unavailable"
             },
             "reasonCode": "unknown",
             "requestId": "req-1",
@@ -5710,7 +5710,7 @@
         "raw": {
           "message": "Simulated provider failure",
           "name": "Error",
-          "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:199:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+          "stack": "Error: Simulated provider failure"
         },
         "reasonCode": "unknown",
         "requestId": null,
@@ -5766,7 +5766,7 @@
           "error": {
             "message": "Simulated provider failure",
             "name": "Error",
-            "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:199:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated provider failure"
           },
           "failureInfo": {
             "attemptNumber": null,
@@ -5780,7 +5780,7 @@
             "raw": {
               "message": "Simulated provider failure",
               "name": "Error",
-              "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:199:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated provider failure"
             },
             "reasonCode": "unknown",
             "requestId": null,
@@ -5882,7 +5882,7 @@
         "raw": {
           "message": "Simulated provider failure",
           "name": "Error",
-          "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:198:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+          "stack": "Error: Simulated provider failure"
         },
         "reasonCode": "unknown",
         "requestId": null,
@@ -5972,7 +5972,7 @@
           "error": {
             "message": "Simulated provider failure",
             "name": "Error",
-            "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:198:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Simulated provider failure"
           },
           "failureInfo": {
             "attemptNumber": null,
@@ -5986,7 +5986,7 @@
             "raw": {
               "message": "Simulated provider failure",
               "name": "Error",
-              "stack": "Error: Simulated provider failure\n    at <anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:84:43)\n    at Object.apply (node:internal/test_runner/mock/mock:757:20)\n    at processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:108:304)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:198:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Simulated provider failure"
             },
             "reasonCode": "unknown",
             "requestId": null,
@@ -6118,7 +6118,7 @@
         "raw": {
           "message": "Archivo final fuera del perfil fotográfico.",
           "name": "Error",
-          "stack": "Error: Archivo final fuera del perfil fotográfico.\n    at inspectPlannedPhoto (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/media/photoPlanFile.ts:17:108)\n    at async validatePlannedPhotoReview (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/media/photoPlanFile.ts:32:21)\n    at async processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:201:31)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:209:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+          "stack": "Error: Archivo final fuera del perfil fotográfico."
         },
         "reasonCode": "unknown",
         "requestId": null,
@@ -6235,7 +6235,7 @@
           "error": {
             "message": "Archivo final fuera del perfil fotográfico.",
             "name": "Error",
-            "stack": "Error: Archivo final fuera del perfil fotográfico.\n    at inspectPlannedPhoto (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/media/photoPlanFile.ts:17:108)\n    at async validatePlannedPhotoReview (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/media/photoPlanFile.ts:32:21)\n    at async processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:201:31)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:209:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+            "stack": "Error: Archivo final fuera del perfil fotográfico."
           },
           "failureInfo": {
             "attemptNumber": null,
@@ -6249,7 +6249,7 @@
             "raw": {
               "message": "Archivo final fuera del perfil fotográfico.",
               "name": "Error",
-              "stack": "Error: Archivo final fuera del perfil fotográfico.\n    at inspectPlannedPhoto (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/media/photoPlanFile.ts:17:108)\n    at async validatePlannedPhotoReview (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/media/photoPlanFile.ts:32:21)\n    at async processJobCore (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/functions/src/workers/jobWorker.ts:201:31)\n    at async run (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:186:7)\n    at async TestContext.<anonymous> (/Users/claudiomatias/Documents/projects/tuto/app/privada/tutofb/tutofb/tests/jobWorkerPipeline.integration.test.ts:209:7)\n    at async Test.run (node:internal/test_runner/test:1208:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)"
+              "stack": "Error: Archivo final fuera del perfil fotográfico."
             },
             "reasonCode": "unknown",
             "requestId": null,

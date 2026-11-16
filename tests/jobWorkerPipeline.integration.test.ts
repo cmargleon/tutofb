@@ -25,6 +25,8 @@ const normalize = (value: any, replacements: Array<[string, string]>, key = ''):
   if (value instanceof AbortSignal) return '<signal>';
   if (typeof value === 'object' && typeof value.toMillis === 'function') return '<ts>';
   if (typeof value === 'number' && VOLATILE_NUMBER_KEYS.has(key)) return '<n>';
+  // Stack traces carry source line numbers, which any edit changes; keep only the first line (the message).
+  if (typeof value === 'string' && key === 'stack') return value.split('\n')[0];
   if (typeof value === 'string') {
     let out = value;
     for (const [from, to] of replacements) if (from) out = out.split(from).join(to);

@@ -1,13 +1,13 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
-  BatchStatus,
   CancelPendingBatchJobsRequest,
   CancelPendingBatchJobsResponse,
   Job,
 } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { buildManualCancellationFailureInfo, toFailureSummary } from '../errors/jobFailure';
+import { recomputeBatchCounters } from '../batches/batchCounters';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 export const cancelPendingBatchJobs = onCall<
@@ -80,34 +80,9 @@ export const cancelPendingBatchJobs = onCall<
 
   await writeBatch.commit();
 
-  // Recompute batch counters directly from Firestore to avoid race conditions
-  // with concurrent onJobStatusChange triggers that may exhaust retry limits.
-  const batchRef = db.collection('batches').doc(batchId);
-  const allJobsAfter = await db.collection('jobs').where('batchId', '==', batchId).get();
-  let newPendingJobs = 0, newProcessingJobs = 0, newCompletedJobs = 0, newFailedJobs = 0;
-  for (const doc of allJobsAfter.docs) {
-    const s = (doc.data() as Job).status;
-    if (s === 'pending') newPendingJobs++;
-    else if (s === 'processing') newProcessingJobs++;
-    else if (s === 'completed') newCompletedJobs++;
-    else if (s === 'failed') newFailedJobs++;
-  }
-  const total = allJobsAfter.size;
-  let newStatus: BatchStatus;
-  if (newCompletedJobs === total) newStatus = 'completed';
-  else if (newFailedJobs === total) newStatus = 'failed';
-  else if (newCompletedJobs + newFailedJobs === total) newStatus = 'partial_failed';
-  else if (newProcessingJobs > 0) newStatus = 'processing';
-  else newStatus = 'pending';
-
-  await batchRef.update({
-    pendingJobs: newPendingJobs,
-    processingJobs: newProcessingJobs,
-    completedJobs: newCompletedJobs,
-    failedJobs: newFailedJobs,
-    status: newStatus,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  // Recompute batch counters right away; the onJobStatusChange triggers for the cancelled
+  // jobs converge on the same values, and the countersAsOf guard keeps the newest result.
+  await recomputeBatchCounters(db, batchId);
 
   return {
     success: true,

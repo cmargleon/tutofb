@@ -67,6 +67,8 @@ export interface Batch {
   completedJobs: number;
   failedJobs: number;
   completedOutputCount?: number;
+  /** Read time of the job snapshot the counters and status were computed from (backend only). */
+  countersAsOf?: TimestampLike | null;
   status: BatchStatus;
   latestJobCreatedAt: TimestampLike | null;
   lastJobCompletedAt?: TimestampLike | null;

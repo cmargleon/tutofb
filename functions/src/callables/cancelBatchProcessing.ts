@@ -1,13 +1,13 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
-  BatchStatus,
   CancelBatchProcessingRequest,
   CancelBatchProcessingResponse,
   Job,
 } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { buildManualCancellationFailureInfo, toFailureSummary } from '../errors/jobFailure';
+import { recomputeBatchCounters } from '../batches/batchCounters';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 export const cancelBatchProcessing = onCall<
@@ -94,39 +94,9 @@ export const cancelBatchProcessing = onCall<
     await bulkWriter.close();
   }
 
-  // Always recompute and set batch counters directly — even when no active jobs were found,
-  // this corrects any stale status left by previous trigger race conditions.
-  // When jobs were cancelled, re-read from Firestore to get updated states; otherwise use the
-  // already-fetched snapshot (no jobs changed).
-  const jobsToCount: Job[] = activeJobs.length > 0
-    ? (await db.collection('jobs').where('batchId', '==', batchId).get()).docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as Job),
-      )
-    : allJobs;
-
-  let newPendingJobs = 0, newProcessingJobs = 0, newCompletedJobs = 0, newFailedJobs = 0;
-  for (const job of jobsToCount) {
-    if (job.status === 'pending') newPendingJobs++;
-    else if (job.status === 'processing') newProcessingJobs++;
-    else if (job.status === 'completed') newCompletedJobs++;
-    else if (job.status === 'failed') newFailedJobs++;
-  }
-  const total = jobsToCount.length;
-  let newStatus: BatchStatus;
-  if (newCompletedJobs === total) newStatus = 'completed';
-  else if (newFailedJobs === total) newStatus = 'failed';
-  else if (newCompletedJobs + newFailedJobs === total) newStatus = 'partial_failed';
-  else if (newProcessingJobs > 0) newStatus = 'processing';
-  else newStatus = 'pending';
-
-  await batchRef.update({
-    pendingJobs: newPendingJobs,
-    processingJobs: newProcessingJobs,
-    completedJobs: newCompletedJobs,
-    failedJobs: newFailedJobs,
-    status: newStatus,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  // Always recompute batch counters — even when no active jobs were found, this corrects
+  // any stale status. The countersAsOf guard keeps it from overwriting a newer result.
+  await recomputeBatchCounters(db, batchId);
 
   const cancelledPendingJobs = activeJobs.filter((job) => job.status === 'pending').length;
   const cancelledProcessingJobs = activeJobs.length - cancelledPendingJobs;

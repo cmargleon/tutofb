@@ -1,7 +1,7 @@
-import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { BatchStatus, Job } from '../../../shared/src/types';
+import { Job } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
+import { recomputeBatchCounters } from '../batches/batchCounters';
 import { getAppFirestore } from '../firebase/appFirestore';
 
 export const deleteJob = onCall<{ jobId: string }, Promise<{ success: boolean; jobId: string }>>(
@@ -35,39 +35,8 @@ export const deleteJob = onCall<{ jobId: string }, Promise<{ success: boolean; j
     await jobRef.delete();
 
     if (batchId) {
-      const batchRef = db.collection('batches').doc(batchId);
-      const allJobsSnapshot = await db.collection('jobs').where('batchId', '==', batchId).get();
-
-      let pendingJobs = 0;
-      let processingJobs = 0;
-      let completedJobs = 0;
-      let failedJobs = 0;
-
-      for (const jobDoc of allJobsSnapshot.docs) {
-        const status = (jobDoc.data() as Job).status;
-        if (status === 'pending') pendingJobs++;
-        else if (status === 'processing') processingJobs++;
-        else if (status === 'completed') completedJobs++;
-        else if (status === 'failed') failedJobs++;
-      }
-
-      const totalJobs = allJobsSnapshot.size;
-      let batchStatus: BatchStatus;
-      if (totalJobs === 0 || completedJobs === totalJobs) batchStatus = 'completed';
-      else if (failedJobs === totalJobs) batchStatus = 'failed';
-      else if (completedJobs + failedJobs === totalJobs) batchStatus = 'partial_failed';
-      else if (processingJobs > 0) batchStatus = 'processing';
-      else batchStatus = 'pending';
-
-      await batchRef.update({
-        totalJobs,
-        pendingJobs,
-        processingJobs,
-        completedJobs,
-        failedJobs,
-        status: batchStatus,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      // Deleting a job fires no onJobStatusChange, so totalJobs is recomputed here too.
+      await recomputeBatchCounters(db, batchId, { writeTotalJobs: true });
     }
 
     return { success: true, jobId };

@@ -12,6 +12,7 @@ const masterCategory = categoryFor('producto-maestro', PRODUCT_FIELDS); const va
 export const MarketplaceProductEditor = ({ product, preview, scope, onSaved }: { product: MasterProduct; preview: MarketplaceExportPreview; scope: MarketplaceExportScope; onSaved: () => Promise<void> }) => {
   const [value, setValue] = useState(product); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [publicUrlsAuthorized, setPublicUrlsAuthorized] = useState(false);
+  const [confirmIdentity, setConfirmIdentity] = useState(false);
   const publication = useMarketplaceImagePublication(scope, product.id, (channel, images) => setValue(current => ({
     ...current,
     publishedImages: { ...current.publishedImages, [channel]: { ...current.publishedImages?.[channel], ...Object.fromEntries(images.map(image => [image.outputId, image])) } },
@@ -27,10 +28,17 @@ export const MarketplaceProductEditor = ({ product, preview, scope, onSaved }: {
   };
   const save = async () => {
     setBusy(true); setError(null);
-    try { await saveMasterProduct({ ...scope, productId: value.id, expectedRevision: product.revision, authorizePublicImages: publicUrlsAuthorized, values: value.values, variants: value.variants, marketplaces: Object.fromEntries(Object.entries(value.marketplaces).filter(([id]) => preview.channels.some(c => c.marketplaceId === id))) }); await onSaved(); }
+    try { await saveMasterProduct({ ...scope, productId: value.id, expectedRevision: product.revision, organizerSourceRevision: product.organizer?.revision, confirmOrganizerIdentity: confirmIdentity, authorizePublicImages: publicUrlsAuthorized, values: value.values, variants: value.variants, marketplaces: Object.fromEntries(Object.entries(value.marketplaces).filter(([id]) => preview.channels.some(c => c.marketplaceId === id))) }); await onSaved(); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
   return <fieldset disabled={busy || publication.busyChannel !== null} className="space-y-5 border-t border-slate-200 pt-4">
+    {product.organizer?.source.issue && <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+      <p>{product.organizer.source.issue}</p>
+      {product.organizer.confirmedIdentity ? <p className="mt-2">Identidad confirmada en Catálogo.</p> : <label className="mt-2 flex gap-2">
+        <input type="checkbox" checked={confirmIdentity} onChange={event => setConfirmIdentity(event.target.checked)} />
+        Verifiqué el SKC o SKU y la correspondencia de las fotos para cada variante que guardo.
+      </label>}
+    </div>}
     <p className="text-xs text-slate-500">Los campos desconocidos permanecen vacíos. Indica moneda y unidades explícitamente; las asociaciones de la plantilla deben usar las mismas unidades. Las correcciones se comparten entre destinos.</p>
     <ProductDraftEditor categories={[masterCategory]} drafts={[draft(masterCategory.id!, [{ id: value.id, values: value.values }])]} layout="form" showDraftTabs={false} showSummaryCard={false} showGeneratedImagesSummary={false} showAddRowButton={false} showRowActions={false} onChangeRows={(_, rows) => changeMasterValues(rows[0].values)} />
     <details><summary className="cursor-pointer text-sm font-semibold">Variantes · {value.variants.length}</summary><ProductDraftEditor categories={[variantCategory]} drafts={[draft(variantCategory.id!, value.variants.map(v => ({ id: v.id, values: v.values })))]} showDraftTabs={false} showSummaryCard={true} showGeneratedImagesSummary={false} onChangeRows={(_, rows) => setValue({ ...value, variants: rows.map(r => ({ id: r.id, values: r.values, attributes: value.variants.find(v => v.id === r.id)?.attributes || {} })), marketplaces: Object.fromEntries(Object.entries(value.marketplaces as MasterProduct['marketplaces']).map(([id, data]) => [id, !preview.channels.some(c => c.marketplaceId === id) ? data : { ...data, rows: data.rows?.filter(r => rows.some(v => v.id === r.id)), ...(data.requirements ? { requirements: { ...data.requirements, gtinExemptionByVariant: Object.fromEntries(Object.entries(data.requirements.gtinExemptionByVariant || {}).filter(([variantId]) => rows.some(row => row.id === variantId))) } } : {}) }])) })} /></details>
@@ -53,7 +61,11 @@ export const MarketplaceProductEditor = ({ product, preview, scope, onSaved }: {
           </div></>}
       </div></details>;
     })}
-    <details className="text-xs text-slate-500"><summary className="cursor-pointer">Procedencia y sugerencias de IA</summary>{Object.entries(value.evidence as MasterProduct['evidence']).map(([key, e]) => <p className="mt-2 break-words" key={key}>{key}: {e.original} · {e.source} · confianza {e.confidence ?? 'no disponible'}</p>)}</details>
+    <details className="text-xs text-slate-500"><summary className="cursor-pointer">Procedencia y sugerencias de IA</summary>
+      {Object.entries(value.organizer?.source.origins || {}).flatMap(([id, rows]) => rows.map(row => <p className="mt-2 break-words" key={`${id}-${row.fileId}-${row.tab}-${row.row}`}>{value.variants.find(v => v.id === id)?.values.skc || value.variants.find(v => v.id === id)?.values.sku || ''} · {row.fileName} · versión {row.version} · {row.tab} · fila {row.row}</p>))}
+      {value.organizer?.category && <p className="mt-2">{value.organizer.category.marketplaceId} · {value.organizer.category.categoryId || 'Categoría pendiente'}{value.organizer.category.version && ` · plantilla v${value.organizer.category.version}`} · confianza {value.organizer.category.confidence ?? 'no disponible'} · {value.organizer.category.reason}</p>}
+      {Object.entries(value.evidence as MasterProduct['evidence']).map(([key, e]) => <p className="mt-2 break-words" key={key}>{key}: {e.original} · {e.source} · confianza {e.confidence ?? 'no disponible'}</p>)}
+    </details>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {publication.error && <p role="alert" className="whitespace-pre-line text-sm text-red-700">{publication.error}</p>}
     <Button size="sm" loading={busy} onClick={() => void save()}>Guardar y volver a validar</Button>

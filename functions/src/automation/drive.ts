@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { createHash } from 'node:crypto';
 import { defineString } from 'firebase-functions/params';
 import { HttpsError } from 'firebase-functions/v2/https';
-import type { AutomationInput } from '../../../shared/src/types';
+import type { AutomationInput, Client } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { MAX_INPUT_BYTES, normalizeInputImage } from '../media/normalizeInputImage';
 
@@ -72,15 +72,34 @@ export const googleDrive: DriveClient = {
     return files;
   },
 };
-export const validateDriveFolder = async (id: string, drive: DriveClient = googleDrive): Promise<void> => {
+export const validateDriveFolder = async (id: string, drive: Pick<DriveClient, 'metadata'> = googleDrive): Promise<DriveMetadata> => {
   const folder = await drive.metadata(id);
   if (folder.trashed || folder.mimeType !== 'application/vnd.google-apps.folder') throw new HttpsError('failed-precondition', 'El ID no corresponde a una carpeta de Drive accesible.');
+  return folder;
+};
+export const assertDriveFolderInSources = async (folderId: string, sourceIds: readonly string[], drive: Pick<DriveClient, 'metadata'> = googleDrive): Promise<void> => {
+  const roots = new Set(sourceIds);
+  const pending = roots.size ? [folderId] : [];
+  const visited = new Set<string>();
+  // Bound metadata calls and reject cycles.
+  while (pending.length && visited.size <= 100) {
+    const id = pending.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const folder = await validateDriveFolder(id, drive);
+    if (roots.has(id)) return;
+    pending.push(...(folder.parents ?? []));
+  }
+  throw new HttpsError('permission-denied', 'Carpeta de Drive no autorizada para este cliente.');
+};
+export const authorizeDriveFolder = async (clientId: string, folderId: string, drive: Pick<DriveClient, 'metadata'> = googleDrive): Promise<void> => {
+  const client = (await getAppFirestore().collection('clients').doc(clientId).get()).data() as Client | undefined;
+  if (!client || client.status === 'archived' || client.automation?.enabled === false) throw new HttpsError('permission-denied', 'Carpeta de Drive no autorizada para este cliente.');
+  await assertDriveFolderInSources(folderId, client.automation?.driveFolderIds ?? [], drive);
 };
 export const authorizeDriveFile = async (clientId: string, image: AutomationInput, drive: DriveClient = googleDrive): Promise<DriveMetadata> => {
   const source = image.driveFile!;
-  const client = (await getAppFirestore().collection('clients').doc(clientId).get()).data();
-  if (!client || client.status === 'archived' || client.automation?.enabled === false || !client.automation?.driveFolderIds?.includes(source.folderId)) throw new HttpsError('permission-denied', 'Carpeta de Drive no autorizada para este cliente.');
-  await validateDriveFolder(source.folderId, drive);
+  await authorizeDriveFolder(clientId, source.folderId, drive);
   const file = await drive.metadata(source.fileId);
   if (file.trashed || !file.parents?.includes(source.folderId) || !['image/jpeg', 'image/png', 'image/webp'].includes(file.mimeType) || Number(file.size) >= MAX_INPUT_BYTES) throw new HttpsError('permission-denied', 'La fotografía no pertenece a la carpeta autorizada o no es compatible.');
   if (source.version && file.version !== source.version) throw new HttpsError('failed-precondition', 'El archivo de Drive cambió; prepara un nuevo plan.');

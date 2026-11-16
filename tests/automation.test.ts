@@ -6,7 +6,32 @@ const domain = require('../functions/lib/functions/src/automation/domain.js') as
 const { resolveAutomationPreset, PRODUCT_PRESETS } = require('../functions/lib/functions/src/automation/presets.js') as typeof import('../functions/src/automation/presets');
 const { resolveAutomationPoseIds } = require('../functions/lib/functions/src/automation/presets.js') as typeof import('../functions/src/automation/presets');
 const { assertImportUrl } = require('../functions/lib/functions/src/automation/imports.js') as typeof import('../functions/src/automation/imports');
+const { assertDriveFolderInSources } = require('../functions/lib/functions/src/automation/drive.js') as typeof import('../functions/src/automation/drive');
 const payload = { source: 'api', externalId: 'order-1', clientId: 'client-1', jobType: 'garment', inputImages: [{ itemId: 'sku-1', fileName: 'front.jpg', storagePath: 'garments/drafts/user/draft/sku/front.jpg' }] };
+
+test('Drive authorization follows real parent folders to a client source', async () => {
+  const folders = new Map([
+    ['source', []], ['child', ['source']], ['nested', ['child']],
+    ['other', []], ['cycle', ['cycle']], ['shortcut', ['source']], ['trashed', ['source']],
+  ]);
+  const drive = {
+    async metadata(id: string) {
+      assert.ok(folders.has(id));
+      return {
+        id, name: id, parents: folders.get(id), trashed: id === 'trashed',
+        mimeType: id === 'shortcut' ? 'application/vnd.google-apps.shortcut' : 'application/vnd.google-apps.folder',
+      };
+    },
+  };
+  await assertDriveFolderInSources('source', ['source'], drive);
+  await assertDriveFolderInSources('nested', ['source'], drive);
+  for (const id of ['other', 'cycle']) {
+    await assert.rejects(assertDriveFolderInSources(id, ['source'], drive), { code: 'permission-denied' });
+  }
+  for (const id of ['shortcut', 'trashed']) {
+    await assert.rejects(assertDriveFolderInSources(id, ['source'], drive), { code: 'failed-precondition' });
+  }
+});
 
 test('automation excludes inactive poses from defaults and presets without replacing explicit selections', () => {
   const model = { poses: [

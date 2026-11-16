@@ -28,12 +28,13 @@ const readUploadBindings = async (tx: FirebaseFirestore.Transaction, data: impor
   return snapshots.filter((snapshot) => !snapshot.exists).map((snapshot) => snapshot.ref);
 };
 
-export const createAutomation = async (input: unknown, uid: string, role: string, plan?: AutomationPlan): Promise<AutomationJobReceipt> => {
+export const createAutomation = async (input: unknown, uid: string, role: string, plan?: AutomationPlan,
+  organizer?: import('../organizer/commerce').OrganizerCommercialLink): Promise<AutomationJobReceipt> => {
   const data = validateAutomationInput(input, uid);
   if (role !== 'automation') await assertHumanClientAccess(uid, data.clientId);
   if (role === 'automation') await authorizeMachineJob(uid, data.clientId, data.jobType);
   const db = getAppFirestore();
-  const keys = automationKeys(data).map((key) => db.collection('automationKeys').doc(key));
+  const keys = automationKeys(data).map(key => db.collection('automationKeys').doc(organizer ? `organizer-${key}` : key));
   const ref = db.collection('automationJobs').doc();
   const receipt = await db.runTransaction(async (tx) => {
     const keyDocs = await tx.getAll(...keys);
@@ -43,6 +44,8 @@ export const createAutomation = async (input: unknown, uid: string, role: string
       const existing = await tx.get(db.collection('automationJobs').doc(jobIds[0]));
       const job = existing.data() as AutomationJob | undefined;
       if (!job || !canReadAutomation(job, uid, role) || (job.clientId !== data.clientId || job.jobType !== data.jobType)) throw new HttpsError('permission-denied', 'Identificador no disponible.');
+      if (organizer && !(await tx.get(existing.ref.collection('organizerCommerce').doc(organizer.itemId))).exists)
+        throw new HttpsError('failed-precondition', 'La solicitud existente no tiene el vínculo comercial del Organizador.');
       if (plan) tx.update(db.collection('automationPlans').doc(plan.id), { executedJobId: existing.id });
       keys.forEach((key) => tx.set(key, { jobId: existing.id }));
       return { jobId: existing.id, status: job.status, duplicate: true };
@@ -62,6 +65,7 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     if (photoModel && (photoModel.clientId !== data.clientId || photoModel.active === false || photoModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo no disponible.');
     const photoBases = plan?.photoBases ?? (photoModel?.poses || []).filter(p => p.active !== false && (!resolved?.config.poseIds || resolved.config.poseIds.includes(p.id))).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) }));
     const job: AutomationJob = {
+      ...(organizer ? { organizerCommerce: true as const } : {}),
       ...(plan ? (plan.photoProfile ? { photoProfile: plan.photoProfile } : {}) : { photoProfile: COMMERCIAL_PHOTO_PROFILE, resolvedPreset: resolved!.config }),
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
       ...(data.jobType === 'garment' && (plan?.photoMarketplaces !== undefined || !plan) ? { photoBases, photoModelId } : {}),
@@ -78,6 +82,7 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     };
     uploadBindings.forEach((binding) => tx.create(binding, { inputClientId: data.clientId }));
     tx.create(ref, job);
+    if (organizer) tx.create(ref.collection('organizerCommerce').doc(organizer.itemId), organizer);
     if (plan) tx.update(db.collection('automationPlans').doc(plan.id), { executedJobId: ref.id });
     keys.forEach((key) => tx.create(key, { jobId: ref.id }));
     return { jobId: ref.id, status: 'pending' as const, duplicate: false };
@@ -97,6 +102,7 @@ export const retryAutomation = async (input: RetryAutomationJobRequest, uid: str
     if (role !== 'automation') await assertHumanClientAccess(uid, job.clientId);
     if (!canReadAutomation(job, uid, role)) throw new HttpsError('permission-denied', 'Sin acceso.');
     if (job.batchId) throw new HttpsError('failed-precondition', 'Usa los controles de reintento del batch existente.');
+    if (job.organizerCommerce && input.inputImages) throw new HttpsError('failed-precondition', 'Para cambiar las referencias, inicia una nueva selección en el Organizador.');
     const system = await tx.get(db.collection('system_config').doc('main'));
     const client = await tx.get(db.collection('clients').doc(job.clientId));
     const global = system.data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET;

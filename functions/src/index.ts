@@ -86,7 +86,7 @@ export { getManglarConnectionRequest, decideManglarConnection, listManglarConnec
 export { saveClient, saveModel, setClientArchived, setModelArchived, replaceModelPose, setJobManualFlag } from './manglar/catalogService';
 
 export { organizerAction } from './organizer/api';
-export { organizerScheduler } from './organizer/worker';
+export { organizerManualRun, organizerScheduler } from './organizer/worker';
 
 export { manageDriveBackup, scheduledDriveBackup, driveBackupWorker, agentDriveWorkspace } from "./backups/functions";
 export { previewMarketplaceExports, downloadMarketplaceExports, saveMasterProduct, configureMarketplaceTemplate, archiveMarketplaceTemplate } from './callables/marketplaceExports';

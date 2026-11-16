@@ -94,6 +94,7 @@ test('photo plan: authoritative creation, replay, frozen channels, automation pa
     t.mock.method(classifier, 'classifyGarmentWithGemini', async ({ garment }: any) => ({ photoAttributes: attributes, itemKind: 'garment', itemKindConfidence: 1, photos: garment.photos.map((p: any) => ({ ...p, view: 'front', confidence: 1 })), garmentBodyArea: 'upper_body' }));
     const { createAutomation } = require('../functions/lib/functions/src/automation/persistence.js');
     const auto = await createAutomation({ source: 'api', externalId: 'parity', clientId, jobType: 'garment', provider: input.provider, inputImages: [{ itemId: 'shirt', fileName: 'front.jpg', storagePath: path }], budgetUsd: 10, maxReviewAttempts: 1, maxOperationalRetries: 0, allowEstimatedCosts: true, authorizeClassification: true }, uid, 'operador');
+    await db.doc(`automationJobs/${auto.jobId}`).update({ photoPlan: { ...plan, tasks: [], issues: [] } });
     await require('../functions/lib/functions/src/automation/worker.js').processAutomation(auto.jobId);
     const autoJob = (await db.doc(`automationJobs/${auto.jobId}`).get()).data();
     assert.equal(autoJob.status, 'processing', JSON.stringify(autoJob.error)); assert.equal(autoJob.photoPlan.tasks.length, plan.tasks.length);

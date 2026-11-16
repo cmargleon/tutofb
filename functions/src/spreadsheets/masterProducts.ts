@@ -54,10 +54,17 @@ export function projectMasterProducts(clientId: string, batches: Batch[], jobs: 
     p.originalImages = p.originalImages.filter((image, i, all) => all.findIndex(v => v.storagePath === image.storagePath) === i);
     const saved = stored[p.id];
     if (saved) {
-      if (saved.clientId !== clientId) throw new Error('Producto fuera del cliente.');
-      p.values = { ...p.values, ...saved.values }; p.variants = saved.variants; p.marketplaces = saved.marketplaces; p.revision = saved.revision;
-      for (const [key, value] of Object.entries(saved.values)) p.evidence[key] = { original: value!, normalized: value!, source: 'manual', confidence: 1 };
+      applyStoredMasterProduct(p, saved);
     }
   }
   return [...products.values()];
+}
+
+export function applyStoredMasterProduct(p: MasterProduct, saved: StoredMasterProduct) {
+  if (saved.clientId !== p.clientId) throw new Error('Producto fuera del cliente.');
+  p.values = { ...p.values, ...saved.values };
+  if (!saved.organizerOverrides) p.variants = saved.variants;
+  p.marketplaces = { ...p.marketplaces, ...saved.marketplaces };
+  p.revision = saved.revision;
+  for (const [key, value] of Object.entries(saved.values)) p.evidence[key] = { original: value!, normalized: value!, source: 'manual', confidence: 1 };
 }

@@ -82,28 +82,28 @@ const TOAST_STYLES: Record<
 > = {
   success: {
     icon: CheckCircle2,
-    container: 'border-emerald-200 bg-emerald-50/95',
+    container: 'tuto-toast tuto-toast-success border-emerald-200 bg-emerald-50/95',
     iconColor: 'text-emerald-600',
     titleColor: 'text-emerald-950',
     descriptionColor: 'text-emerald-800',
   },
   error: {
     icon: XCircle,
-    container: 'border-red-200 bg-red-50/95',
+    container: 'tuto-toast tuto-toast-error border-red-200 bg-red-50/95',
     iconColor: 'text-red-600',
     titleColor: 'text-red-950',
     descriptionColor: 'text-red-800',
   },
   warning: {
     icon: TriangleAlert,
-    container: 'border-amber-200 bg-amber-50/95',
+    container: 'tuto-toast tuto-toast-warning border-amber-200 bg-amber-50/95',
     iconColor: 'text-amber-600',
     titleColor: 'text-amber-950',
     descriptionColor: 'text-amber-800',
   },
   info: {
     icon: Info,
-    container: 'border-indigo-200 bg-indigo-50/95',
+    container: 'tuto-toast tuto-toast-info border-indigo-200 bg-indigo-50/95',
     iconColor: 'text-indigo-600',
     titleColor: 'text-indigo-950',
     descriptionColor: 'text-indigo-800',

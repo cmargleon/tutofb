@@ -31,6 +31,7 @@ export interface SystemAlertSettings {
 
 export interface SystemConfig {
   automationRules?: Partial<import('./automation').AutomationRules>;
+  organizerWatcherEnabled?: boolean;
   organizerAutoGenerationEnabled?: boolean;
   automationBudget?: import('./automation').AutomationBudgetConfig;
   jobMaxRetries: number;

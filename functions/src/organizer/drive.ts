@@ -9,7 +9,7 @@ const FIELDS = 'id,name,mimeType,parents,trashed,driveId,owners(permissionId),ow
 export const digest = (input: unknown) => createHash('sha256').update(JSON.stringify(input)).digest('hex');
 export const versionOf = (file: DriveFile) => file.version || file.sha256Checksum || file.md5Checksum || file.modifiedTime || '';
 export const isImage = (file: DriveFile) => file.mimeType.startsWith('image/');
-export const isWorkbook = (file: DriveFile) => file.mimeType === SHEET || /spreadsheet|ms-excel/.test(file.mimeType) || /\.xlsx?$/i.test(file.name);
+export const isWorkbook = (file: DriveFile) => file.mimeType === SHEET || /spreadsheet|ms-excel/.test(file.mimeType) || /\.(?:xls|xlsx|xlsm)$/i.test(file.name);
 export const fileUrl = (file: DriveFile) => file.webViewLink || `https://drive.google.com/open?id=${file.id}`;
 const id = (value: string) => {
   if (!/^[\w-]{1,200}$/.test(value)) throw new HttpsError('invalid-argument', 'Identificador de Drive inválido.');
@@ -177,8 +177,21 @@ export class OrganizerDrive {
     return this.sheetValues(fileId, tab, 'FORMULA');
   }
 
+  private async sourceChains(sources: string[]) {
+    const chains = await Promise.all(sources.map(source => this.lineage(source)));
+    for (const chain of chains) if (chain[0].mimeType !== FOLDER || chain.some(item => item.appProperties?.organizerTenant) ||
+      chain.slice(1).some(item => sources.includes(item.id))) {
+      throw new HttpsError('failed-precondition', 'Los orígenes deben ser carpetas independientes y fuera del espacio administrado.');
+    }
+    return chains;
+  }
+
+  async originals(sources: string[]) {
+    return (await this.sourceChains(sources)).map(chain => chain[0]);
+  }
+
   async zone(sources: string[], parentId: string, allowInheritedAccess: boolean) {
-    const [parentChain, ...sourceChains] = await Promise.all([parentId, ...sources].map(value => this.lineage(value)));
+    const [parentChain, sourceChains] = await Promise.all([this.lineage(parentId), this.sourceChains(sources)]);
     const parent = parentChain[0];
     await this.destinationGuard(parent.id, id => this.metadata(id));
     if (parent.mimeType !== FOLDER || !parent.capabilities?.canAddChildren ||
@@ -190,8 +203,7 @@ export class OrganizerDrive {
       const source = chain[0];
       const sameDrive = source.driveId ? source.driveId === parent.driveId : !parent.driveId &&
         Boolean(source.owners?.some(owner => parent.owners?.some(other => owner.permissionId === other.permissionId)));
-      if (source.mimeType !== FOLDER || !sameDrive || chain.some(item => item.appProperties?.organizerTenant) ||
-          chain.slice(1).some(item => sources.includes(item.id))) {
+      if (!sameDrive) {
         throw new HttpsError('failed-precondition', 'Los orígenes deben ser independientes y pertenecer al mismo Drive que el destino.');
       }
     }

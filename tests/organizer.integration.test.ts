@@ -222,6 +222,16 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
 
     const configRef = clientRef(clientId);
     await configRef.update({ enabled: true, generationActor: admin.firestore.FieldValue.delete() });
+    const systemConfig = db.collection('system_config').doc('main');
+    await systemConfig.set({ organizerWatcherEnabled: false }, { merge: true });
+    const lastPollAt = (await configRef.get()).data()?.lastPollAt;
+    await tickOrganizer(drive);
+    assert.equal((await configRef.get()).data()?.lastPollAt, lastPollAt);
+    assert.equal((await configRef.get()).data()?.enabled, true);
+    const manualWhileDisabled = (await enqueue(clientId, 'inventory', 'global-watch-disabled', actor.uid))!;
+    await tickOrganizer(drive);
+    assert.equal((await runRef(clientId, manualWhileDisabled.id).get()).data()?.status, 'completed');
+    await systemConfig.update({ organizerWatcherEnabled: true });
     await tickOrganizer(drive);
     assert.equal((await configRef.get()).data()?.changeCursor, 'changes-0');
     assert.equal((await configRef.get()).data()?.watcher, 'idle');

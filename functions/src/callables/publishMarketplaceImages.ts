@@ -18,10 +18,12 @@ export const publishMarketplaceImages = onCall<PublishMarketplaceImagesRequest>(
     if (!context.client.marketplaces?.[input.marketplaceId]?.enabled) throw new HttpsError('permission-denied', 'Marketplace deshabilitado.');
     const product = context.products.find(product => product.id === validId(input.productId));
     if (!product) throw new HttpsError('not-found', 'El producto no pertenece a los lotes seleccionados.');
-    if (!product.approvedImages.length) throw new HttpsError('failed-precondition', 'No hay fotografías aprobadas para publicar.');
-    if (product.approvedImages.length > 20) throw new HttpsError('resource-exhausted', 'Selecciona lotes con hasta 20 fotografías aprobadas por producto.');
+    const images = product.organizer && product.photoAssignments ? product.approvedImages.filter(image => product.photoAssignments!.some(
+      assignment => assignment.channel === input.marketplaceId && assignment.eligible && assignment.outputId === image.outputId)) : product.approvedImages;
+    if (!images.length) throw new HttpsError('failed-precondition', 'No hay fotografías aprobadas para publicar en este canal.');
+    if (images.length > 20) throw new HttpsError('resource-exhausted', 'Selecciona lotes con hasta 20 fotografías aprobadas por producto.');
     const result: PublishMarketplaceImagesResponse = { images: [], failures: [] };
-    for (const image of product.approvedImages) {
+    for (const image of images) {
       await assertHumanClientAccess(request.auth!.uid, product.clientId);
       try { result.images.push(await publishMarketplaceImage(product, image, input.marketplaceId, request.auth!.uid)); }
       catch (error) {

@@ -41,7 +41,7 @@ export interface OrganizerConfig extends OrganizerSettings {
 }
 
 export type OrganizerRunStatus = 'queued' | 'running' | 'paused' | 'cancelled' | 'budget_exhausted' | 'failed' | 'completed';
-export type OrganizerMode = 'inventory' | 'dry_run' | 'classify' | 'sync';
+export type OrganizerMode = 'inventory' | 'dry_run' | 'classify' | 'sync' | 'generate';
 export interface OrganizerRun {
   id: string;
   clientId: string;
@@ -67,8 +67,10 @@ export interface OrganizerRun {
 
 export interface OrganizerSourceCell {
   column: string;
+  header?: string;
   value: string;
   originalValue: string | number | boolean;
+  calculatedValue?: number;
   field: string;
 }
 export interface OrganizerProductRow {

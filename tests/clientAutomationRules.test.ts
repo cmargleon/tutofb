@@ -64,8 +64,15 @@ test('updateSystemConfig validates rules and persists optional overrides through
   const { updateSystemConfig } = require('../functions/lib/functions/src/callables/updateSystemConfig.js');
   let saved: any;
   t.mock.method(roles, 'assertCallableRoles', async () => {});
-  t.mock.method(firestore, 'getAppFirestore', () => ({ collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ displayName: 'Admin' }) }) }) }) }));
-  t.mock.method(system, 'getSystemConfigDocRef', () => ({ get: async () => ({ exists: true, data: () => ({ jobMaxRetries: 7 }) }), set: async (value: any) => { saved = value; } }));
+  const ref = {};
+  t.mock.method(firestore, 'getAppFirestore', () => ({
+    collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ displayName: 'Admin' }) }) }) }),
+    runTransaction: (update: (tx: unknown) => Promise<unknown>) => update({
+      get: async () => ({ data: () => saved ?? { jobMaxRetries: 7 } }),
+      set: (_ref: unknown, value: unknown) => { saved = value; },
+    }),
+  }));
+  t.mock.method(system, 'getSystemConfigDocRef', () => ref);
   for (const value of [0.49, 0.96, Infinity, NaN, '0.8']) {
     await assert.rejects(() => updateSystemConfig.run({ auth: { uid: 'admin' }, data: { automationRules: { garmentGenderMinConfidence: value } } }), { code: 'invalid-argument' });
     assert.equal(saved, undefined);
@@ -74,4 +81,10 @@ test('updateSystemConfig validates rules and persists optional overrides through
   assert.deepEqual(saved.automationRules, { garmentGenderMinConfidence: 0.8 });
   assert.equal(saved.jobMaxRetries, 7);
   assert.deepEqual(response.config.automationRules, saved.automationRules);
+  assert.equal(saved.organizerWatcherEnabled, true);
+  await assert.rejects(() => updateSystemConfig.run({ auth: { uid: 'admin' }, data: { organizerWatcherEnabled: 'false' } }), { code: 'invalid-argument' });
+  await updateSystemConfig.run({ auth: { uid: 'admin' }, data: { organizerWatcherEnabled: false } });
+  await updateSystemConfig.run({ auth: { uid: 'admin' }, data: { organizerAutoGenerationEnabled: true } });
+  assert.equal(saved.organizerWatcherEnabled, false);
+  assert.equal(saved.organizerAutoGenerationEnabled, true);
 });

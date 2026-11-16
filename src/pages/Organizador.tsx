@@ -39,6 +39,22 @@ const views: { id: CatalogView; label: string }[] = [
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="grid gap-1.5 text-sm font-medium text-slate-700">{label}{children}</label>;
 }
+function GenerateFromOriginals({ disabled, start }: { disabled: boolean; start: (photoIds: string[]) => void }) {
+  const [value, setValue] = useState('');
+  const ids = value.trim().split(/\s+/).filter(Boolean).map(entry =>
+    entry.match(/^https:\/\/drive\.google\.com\/file\/d\/([\w-]+)(?:\/[^\s]*)?$/)?.[1] || entry);
+  const valid = ids.length > 0 && ids.length <= 4 && ids.every(id => /^[\w-]{1,200}$/.test(id));
+  return <details className={pane}>
+    <summary className="cursor-pointer font-semibold">Generar desde originales de Drive</summary>
+    <form className="mt-3 space-y-3" onSubmit={event => { event.preventDefault(); if (valid) start(ids); }}>
+      <Field label="Enlaces o IDs de las fotos originales">
+        <textarea className={input} rows={2} value={value} onChange={event => setValue(event.target.value)}
+          placeholder="Hasta cuatro fotos del mismo artículo, una por línea" />
+      </Field>
+      <Button type="submit" disabled={disabled || !valid}>Preparar generación</Button>
+    </form>
+  </details>;
+}
 function Setup({ config, clientName, driveFolderIds, busy, save }: {
   config: OrganizerConfig | null; clientName: string; driveFolderIds: string[]; busy: boolean; save: (settings: OrganizerSettings) => void;
 }) {
@@ -71,7 +87,7 @@ function Setup({ config, clientName, driveFolderIds, busy, save }: {
             </span>
           </label>)}</div>}
       </fieldset>
-      <Field label="Carpeta contenedora del destino"><input className={input} name="parent" required disabled={Boolean(config?.destinationId)} defaultValue={config?.parentId} placeholder="Enlace o ID de Drive" /></Field>
+      <Field label="Carpeta contenedora para copias y vigilancia"><input className={input} name="parent" disabled={Boolean(config?.destinationId)} defaultValue={config?.parentId} placeholder="Opcional para generar desde originales" /></Field>
       <Field label="Nombre de la carpeta organizada"><input className={input} name="name" required disabled={Boolean(config?.destinationId)} defaultValue={config?.folderName || `${clientName} - ORGANIZADO POR MANGLAR`} /></Field>
       <Field label="Ventana de agrupación en minutos"><input className={input} name="debounce" type="number" min="2" max="1440" required defaultValue={config?.debounceMinutes ?? 10} /></Field>
       <Field label="Presupuesto estimado por ejecución en USD"><input className={input} name="budget" type="number" min=".11" max="40" step=".01" required defaultValue={config?.budgetUsd ?? ORGANIZER_DEFAULT_BUDGET_USD} /></Field>
@@ -174,6 +190,8 @@ export function Organizador() {
         <Button icon={Play} disabled={busy || !hasSources || locked && !canReplace} onClick={() => state.start('classify')}>{canReplace ? 'Autorizar presupuesto nuevo' : 'Clasificar'}</Button>
         <Button variant="secondary" disabled={busy || locked || !hasSources} onClick={() => state.start('sync')}>Sincronizar cambios</Button>
       </div>}
+      {access.canCreateBatches && <GenerateFromOriginals key={clientId} disabled={busy || locked || !hasSources}
+        start={photoIds => void state.start('generate', { photoIds })} />}
       {run && <RunCard run={run} controller={state.control} busy={busy} canRun={access.canCreateBatches} active={run.id === config.activeRunId} />}
       <section className={pane} aria-label="Catálogo organizado">
         <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-4">{views.map(view =>
@@ -229,6 +247,7 @@ export function Organizador() {
               <a className={link} href={item.sourceUrl} target="_blank" rel="noreferrer">Origen</a>
               {item.copyUrl && <a className={link} href={item.copyUrl} target="_blank" rel="noreferrer">Copia</a>}
               {access.canCreateBatches && !state.simulation && <Button size="sm" variant="ghost" disabled={busy || locked || Boolean(state.simulation)} onClick={() => state.start('classify', { photoIds: [item.id] })}>Reanalizar</Button>}
+              {access.canCreateBatches && <Button size="sm" variant="ghost" disabled={busy || locked} onClick={() => state.start('generate', { photoIds: [item.id] })}>Generar desde original</Button>}
             </div>
             <PhotoReview clientId={clientId} photo={item} products={state.products} disabled={locked || busy || Boolean(state.simulation)}
               group={(state.page.items as OrganizerPhoto[]).filter(other => other.path.slice(0, -1).join('/') === item.path.slice(0, -1).join('/') &&

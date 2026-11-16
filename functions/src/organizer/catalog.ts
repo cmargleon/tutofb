@@ -2,7 +2,7 @@ import * as xlsx from 'xlsx';
 import { type OrganizerDocumentStatus, type OrganizerProductRow, type OrganizerTab, type OrganizerVariant } from '../../../shared/src/types';
 import { digest, SHEET, type DriveFile, type OrganizerDrive } from './drive';
 
-export const ALGORITHM_VERSION = '3';
+export const ALGORITHM_VERSION = '5';
 export const normalize = (value: string) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toUpperCase();
 export const code = (value: string) => normalize(value).replace(/\s*-\s*/g, '-').replace(/PACK[ -]*(\d+)/g, 'PACK$1');
 const aliases: Record<string, string> = {
@@ -25,7 +25,7 @@ export type TabMapping = { headerRow: number; fields: string[] };
 export const parseTab = (file: Pick<DriveFile, 'id' | 'name'>, name: string, tabId: number | null, grid: string[][], startRow = 0, startColumn = 0,
   original = (row: number, col: number): string | number | boolean => grid[row]?.[col] || '',
   merged: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [], mapping?: TabMapping,
-  hyperlinks: { url: string; cell: string }[] = []) => {
+  hyperlinks: { url: string; cell: string }[] = [], calculated?: (row: number, col: number) => number | undefined) => {
   const tab: OrganizerTab = { id: digest([file.id, tabId ?? name]), fileId: file.id, fileName: file.name, name, tabId,
     headerRow: null, imported: 0, skipped: 0, issue: null, samples: grid.slice(0, 16).map((row, r) => ({ values: row.slice(0, 24), originalValues: row.slice(0, 24).map((_, c) => original(r, c)) })), sampleStartRow: startRow + 1,
     links: [...hyperlinks, ...grid.flatMap((row, r) => row.flatMap((value, c) =>
@@ -52,6 +52,7 @@ export const parseTab = (file: Pick<DriveFile, 'id' | 'name'>, name: string, tab
   }
   tab.headerRow = startRow + header + 1;
   let fields = mapping?.fields || fieldsFor(grid[header]);
+  let headers = grid[header];
   tab.columnMap = fields;
   let anchor: OrganizerProductRow | undefined;
   for (let index = header + 1; index < grid.length; index++) {
@@ -59,11 +60,13 @@ export const parseTab = (file: Pick<DriveFile, 'id' | 'name'>, name: string, tab
     if (!row.some(value => value.trim())) { anchor = undefined; continue; }
     const repeated = fieldsFor(row);
     if (repeated.some(field => field === 'skc' || field === 'sku') && repeated.filter(Boolean).length >= 2) {
-      fields = repeated; anchor = undefined; continue;
+      fields = repeated; headers = row; anchor = undefined; continue;
     }
     const cells = row.flatMap((value, col) => {
       const originalValue = original(index, col);
-      return value === '' && originalValue === '' ? [] : [{ column: xlsx.utils.encode_col(startColumn + col), value, originalValue, field: fields[col] || '' }];
+      const calculatedValue = calculated?.(index, col);
+      return value === '' && originalValue === '' ? [] : [{ column: xlsx.utils.encode_col(startColumn + col), header: headers[col] || '', value, originalValue, field: fields[col] || '',
+        ...(calculatedValue === undefined ? {} : { calculatedValue }) }];
     });
     const inferred: NonNullable<OrganizerProductRow['inferred']> = mapping ? distinct(fields.filter(Boolean)).map(field => ({
       field, fromLine: tab.headerRow!, reason: 'Mapeo de columnas propuesto por IA',
@@ -135,7 +138,10 @@ export async function* readWorkbook(drive: Pick<OrganizerDrive, 'tabs' | 'tabVal
       const cell = worksheet[xlsx.utils.encode_cell({ r: start.r + row, c: start.c + col })];
       return cell?.f ? '=' + cell.f : cell?.v ?? '';
     }, worksheet['!merges'] || [], mappings.get(digest([file.id, name])), Object.entries(worksheet).flatMap(([cell, value]) =>
-      !cell.startsWith('!') && value?.l?.Target ? [{ cell, url: value.l.Target }] : []));
+      !cell.startsWith('!') && value?.l?.Target ? [{ cell, url: value.l.Target }] : []), (row, col) => {
+      const cell = worksheet[xlsx.utils.encode_cell({ r: start.r + row, c: start.c + col })];
+      return cell?.f && cell.t === 'n' && typeof cell.v === 'number' ? cell.v : undefined;
+    });
     parsed.rows.forEach(row => row.sourceVersion = file.version || file.modifiedTime || '');
     yield parsed;
   }

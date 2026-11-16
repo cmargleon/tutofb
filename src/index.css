@@ -633,3 +633,13 @@ input[type="radio"]:not(:disabled) {
 .theme-dark .recharts-tooltip-item {
   color: var(--color-text-primary) !important;
 }
+
+/* Toasts (FeedbackProvider) — opaque dark surface with tinted accent */
+.theme-dark .tuto-toast { background-color: rgba(17, 24, 39, 0.97); }
+.theme-dark .tuto-toast p:first-child { color: #F1F5F9; }
+.theme-dark .tuto-toast p + p { color: #CBD5E1; }
+.theme-dark .tuto-toast-success { border-color: rgba(110, 227, 176, 0.45); box-shadow: inset 3px 0 0 #6EE3B0; }
+.theme-dark .tuto-toast-error   { border-color: rgba(232, 93, 93, 0.45);   box-shadow: inset 3px 0 0 #E85D5D; }
+.theme-dark .tuto-toast-warning { border-color: rgba(240, 160, 80, 0.45);  box-shadow: inset 3px 0 0 #F0A050; }
+.theme-dark .tuto-toast-info    { border-color: rgba(129, 140, 248, 0.45); box-shadow: inset 3px 0 0 #818CF8; }
+.theme-dark .tuto-toast button:hover { background-color: rgba(255, 255, 255, 0.08); color: #E2E8F0; }

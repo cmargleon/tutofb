@@ -8,9 +8,11 @@ test('el organizador permite configurar un cliente y simular sin confirmar gasto
   const router = module.match(/from ["']([^"']*react-router-dom\.js[^"']*)["']/)?.[1];
   const hook = await (await page.request.get('/src/features/organizer/useOrganizer.ts')).text();
   const feedback = hook.match(/from ["']([^"']*FeedbackProvider\.tsx[^"']*)["']/)?.[1];
-  if (!router || !feedback) throw new Error('No se encontraron los módulos de Vite');
+  const react = hook.match(/from ["']([^"']*\/react\.js[^"']*)["']/)?.[1];
+  if (!router || !feedback || !react) throw new Error('No se encontraron los módulos de Vite');
+  const reactDom = react.replace(/\/react\.js/, '/react-dom_client.js');
   await page.route('**/src/features/auth/AuthProvider.tsx*', route => route.fulfill({
-    contentType: 'application/javascript', body: 'export const useRole = () => ({ isAdmin: true, canCreateBatches: true });',
+    contentType: 'application/javascript', body: 'export const useRole = () => ({ isAdmin: true, canCreateBatches: true }); export const useAuth = () => ({ user: null });',
   }));
   await page.route('**/src/features/organizer/firebase.ts*', route => route.fulfill({
     contentType: 'application/javascript', body: `
@@ -49,11 +51,11 @@ test('el organizador permite configurar un cliente y simular sin confirmar gasto
   }));
   await page.route('**/organizer-preview', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div>
     <script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script>
-    <script type="module">import React from '/node_modules/.vite/deps/react.js'; import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js'; import { BrowserRouter } from '${router}'; import { FeedbackProvider } from '${feedback}'; import { Organizador } from '/src/pages/Organizador.tsx'; import '/src/index.css'; ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(BrowserRouter, null, React.createElement(FeedbackProvider, null, React.createElement(Organizador))));</script></body></html>` }));
+    <script type="module">import React from '${react}'; import ReactDOM from '${reactDom}'; import { BrowserRouter } from '${router}'; import { FeedbackProvider } from '${feedback}'; import { Organizador } from '/src/pages/Organizador.tsx'; import '/src/index.css'; ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(BrowserRouter, null, React.createElement(FeedbackProvider, null, React.createElement(Organizador))));</script></body></html>` }));
   await page.goto('/organizer-preview');
   await expect(page.getByRole('heading', { name: 'Organizador inteligente' })).toBeVisible();
   await page.getByRole('checkbox', { name: 'folder-a' }).check();
-  await page.getByLabel('Carpeta contenedora del destino').fill('destination');
+  await page.getByLabel('Carpeta contenedora para copias y vigilancia').fill('destination');
   await page.getByRole('button', { name: 'Guardar configuración' }).click();
   await expect(page.getByRole('button', { name: 'Simular' })).toBeEnabled();
   await page.getByRole('button', { name: 'Fotografías', exact: true }).click();

@@ -49,8 +49,7 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
       <Card className="overflow-hidden rounded-2xl">
         <CardHeader as="h3" title="Google Drive" description="Carpetas de origen compartidas por la automatización y el Organizador inteligente." />
         <CardBody>
-          <fieldset disabled={archived || automation.saving}><ClientDriveFolders state={automation} /></fieldset>
-          <ClientAutomationSave state={automation} section="sources" disabled={archived} />
+          <ClientDriveFolders state={automation} disabled={archived || automation.saving} />
         </CardBody>
       </Card>
       <ClientSpreadsheetSection client={client} templates={templates.filter(t => !t.exportConfig)} uploadingTemplateClientId={management.uploadingTemplateClientId} savingTemplateCategoryId={management.savingTemplateCategoryId} deletingTemplateId={management.deletingTemplateId} onUpload={management.handleTemplateUpload} onCategoryChange={management.handleTemplateCategoryChange} onDelete={management.handleTemplateDelete} />
@@ -61,7 +60,7 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
         <CardHeader title="Automatizaciones" description="Guarda los ajustes de esta pestaña de forma independiente. Define las reglas y la generación posterior al Organizador para este cliente. Los valores vacíos heredan Sistema." />
         <CardBody className="pt-0">
           <ClientAutomationFields client={client} state={automation} />
-          <ClientAutomationSave state={automation} section="automation" disabled={archived} />
+          <ClientAutomationSave state={automation} disabled={archived} />
         </CardBody>
       </Card>
     </section>

@@ -12,6 +12,8 @@ import { parseDriveFolderId, validateDriveFolder } from './drive';
 import { configSnapshot } from '../../../shared/src/configSnapshot';
 import { selectClientAutomationSection } from '../../../shared/src/clientAutomationSections';
 import { validateAutomationRules } from '../../../shared/src/automationConfig';
+import { ORGANIZER_SOURCE_FIELDS } from '../../../shared/src/types';
+import { isMarketplaceId } from '../../../shared/src/marketplaces';
 
 export const saveClientAutomation = async (input: UpdateClientAutomationRequest, db: Firestore = getAppFirestore()): Promise<ClientAutomationConfig> => {
   if (!input || typeof input.clientId !== 'string' || !/^[\w-]{1,200}$/.test(input.clientId) || !input.automation || typeof input.automation !== 'object') throw new HttpsError('invalid-argument', 'Configuración de cliente inválida.');
@@ -68,8 +70,12 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
     if (raw.organizerGeneration !== undefined) {
       const value = raw.organizerGeneration;
       if (!value || typeof value !== 'object' || Array.isArray(value)
-        || Object.keys(value).some(key => !['enabled', 'preset'].includes(key))
+        || Object.keys(value).some(key => !['enabled', 'preset', 'marketplaceId', 'sourceColumns'].includes(key))
         || (value.enabled !== undefined && typeof value.enabled !== 'boolean')
+        || (value.marketplaceId !== undefined && !isMarketplaceId(value.marketplaceId))
+        || (value.sourceColumns !== undefined && (!value.sourceColumns || typeof value.sourceColumns !== 'object' || Array.isArray(value.sourceColumns) ||
+          Object.entries(value.sourceColumns).some(([field, header]) => !ORGANIZER_SOURCE_FIELDS.includes(field as never) ||
+            typeof header !== 'string' || header.length > 160 || /[\u0000-\u001F]/.test(header))))
         || (value.preset !== undefined && (typeof value.preset !== 'string'
           || (!['standard', 'generic_product'].includes(value.preset) && !Object.hasOwn(config.presets, value.preset))))) {
         throw new HttpsError('invalid-argument', 'Generación desde el Organizador inválida: revisa la activación y el preset en Cliente → Automatizaciones.');
@@ -77,6 +83,9 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
       const organizerGeneration = {
         ...(value.enabled !== undefined ? { enabled: value.enabled } : {}),
         ...(value.preset !== undefined ? { preset: value.preset } : {}),
+        ...(value.marketplaceId !== undefined ? { marketplaceId: value.marketplaceId } : {}),
+        ...(value.sourceColumns !== undefined ? { sourceColumns: Object.fromEntries(Object.entries(value.sourceColumns)
+          .filter(([, header]) => header.trim()).map(([field, header]) => [field, header.trim()])) } : {}),
       };
       if (Object.keys(organizerGeneration).length) config.organizerGeneration = organizerGeneration;
     }

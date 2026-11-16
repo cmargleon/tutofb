@@ -73,9 +73,10 @@ service firebase.storage {
 
     match /client_spreadsheets/{clientId}/{templateId}/{fileName} {
       allow read: if canAccessClient(clientId);
+      // Storage can consult only two Firestore documents. The import callable
+      // checks the client's status before registering a staged upload.
       allow create: if isAdmin() && isSpreadsheetUpload()
-        && !firestore.exists(/databases/(default)/documents/clients/$(clientId)/spreadsheetTemplates/$(templateId))
-        && firestore.get(/databases/(default)/documents/clients/$(clientId)).data.get('status', 'active') != 'archived';
+        && !firestore.exists(/databases/(default)/documents/clients/$(clientId)/spreadsheetTemplates/$(templateId));
       allow update: if false;
       allow delete: if isAdmin() && !firestore.exists(/databases/(default)/documents/clients/$(clientId)/spreadsheetTemplates/$(templateId));
     }

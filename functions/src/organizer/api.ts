@@ -52,7 +52,9 @@ const validateSettings = (input: OrganizerSettings, name: string): OrganizerSett
     throw new HttpsError('invalid-argument', 'Selecciona hasta 20 carpetas de origen.');
   const sourceIds = [...new Set(input.sourceIds.map(driveId))].sort();
   const enabled = bool(input.enabled);
+  const parentId = input.parentId ? driveId(input.parentId) : '';
   if (enabled && !sourceIds.length) throw new HttpsError('invalid-argument', 'Selecciona al menos un origen para activar la vigilancia.');
+  if (enabled && !parentId) throw new HttpsError('invalid-argument', 'Configura el destino de las copias para activar la vigilancia.');
   const operatorUids = input.operatorUids ?? [];
   if (!Array.isArray(operatorUids) || operatorUids.length > 100) throw new HttpsError('invalid-argument', 'Lista de operadores inválida.');
   const model = text(input.model, ORGANIZER_DEFAULT_MODEL);
@@ -62,7 +64,7 @@ const validateSettings = (input: OrganizerSettings, name: string): OrganizerSett
   const directories = Object.fromEntries(Object.entries(ORGANIZER_DIRECTORIES).map(([key, value]) =>
     [key, folderName(input.directories?.[key as keyof typeof ORGANIZER_DIRECTORIES], value)])) as typeof ORGANIZER_DIRECTORIES;
   if (new Set(Object.values(directories)).size !== Object.keys(directories).length) throw new HttpsError('invalid-argument', 'Las carpetas de organización deben tener nombres distintos.');
-  return { sourceIds, parentId: driveId(input.parentId), folderName: folderName(input.folderName, `${name} - ORGANIZADO POR MANGLAR`),
+  return { sourceIds, parentId, folderName: folderName(input.folderName, `${name} - ORGANIZADO POR MANGLAR`),
     enabled, debounceMinutes: number(input.debounceMinutes, 10, 2, 1440, true),
     budgetUsd: Math.round(number(input.budgetUsd, ORGANIZER_DEFAULT_BUDGET_USD, 0.11, 40) * 100) / 100, model, escalationModel,
     minimumConfidence: number(input.minimumConfidence, 0.75, 0.55, 0.99), controlSheet: bool(input.controlSheet),
@@ -112,14 +114,18 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
     const limitedConnection = actor.delegated && actor.delegated.allowedClientIds !== null;
     assertSourceFolders(settings.sourceIds, client.data()?.automation?.driveFolderIds ?? [], limitedConnection ? [] : config?.sourceIds);
     const drive = new OrganizerDrive();
-    await drive.zone(settings.sourceIds, settings.parentId, settings.allowInheritedAccess);
-    const [parentChain, ...chains] = await Promise.all([settings.parentId, ...settings.sourceIds].map(id => drive.lineage(id)));
+    if (settings.parentId) await drive.zone(settings.sourceIds, settings.parentId, settings.allowInheritedAccess);
+    else await drive.originals(settings.sourceIds);
+    const [parentChain, chains] = await Promise.all([
+      settings.parentId ? drive.lineage(settings.parentId) : [],
+      Promise.all(settings.sourceIds.map(id => drive.lineage(id))),
+    ]);
     const parentAncestors = new Set(parentChain.map(item => item.id));
     const sourceAncestors = new Set(chains.flatMap(chain => chain.map(item => item.id)));
     const otherConfigs = (await configs().get()).docs.filter(doc => doc.id !== clientId);
     for (const doc of otherConfigs) {
       const other = doc.data() as StoredConfig;
-      if ((await drive.lineage(other.parentId)).some(item => settings.sourceIds.includes(item.id)))
+      if (other.parentId && (await drive.lineage(other.parentId)).some(item => settings.sourceIds.includes(item.id)))
         throw new HttpsError('failed-precondition', 'Un destino de otro cliente quedaría dentro de estos orígenes.');
       for (const source of other.sourceIds) {
         if (parentAncestors.has(source) || sourceAncestors.has(source) || (await drive.lineage(source)).some(item => settings.sourceIds.includes(item.id)))
@@ -148,15 +154,17 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
   switch (request.action) {
     case 'start': {
       if (actor.role === 'revisor') throw new HttpsError('permission-denied', 'El revisor no puede iniciar una ejecución.');
-      if (!['inventory', 'dry_run', ...paidModes].includes(request.mode)) throw new HttpsError('invalid-argument', 'Modo inválido.');
+      if (!['inventory', 'dry_run', 'generate', ...paidModes].includes(request.mode)) throw new HttpsError('invalid-argument', 'Modo inválido.');
       const ids = request.photoIds || [];
       if (!Array.isArray(ids) || ids.length > 100 || ids.length && request.variantId)
         throw new HttpsError('invalid-argument', 'Selecciona hasta 100 fotos o una variante.');
       const photoIds = [...new Set(ids.map(checkedId))].sort();
       const variantId = request.variantId === undefined ? undefined : checkedId(request.variantId);
-      if ((photoIds.length || variantId) && request.mode !== 'classify') throw new HttpsError('invalid-argument', 'El reanálisis requiere el modo clasificación.');
+      if (request.mode === 'generate' && (!photoIds.length || photoIds.length > 4 || variantId || request.planRunId))
+        throw new HttpsError('invalid-argument', 'Selecciona de una a cuatro fotos originales para la generación manual.');
+      if ((photoIds.length || variantId) && !['classify', 'generate'].includes(request.mode)) throw new HttpsError('invalid-argument', 'La selección requiere clasificación o generación manual.');
       if (variantId && !(await root.collection('products').doc(variantId).get()).exists) throw new HttpsError('not-found', 'Variante no disponible.');
-      if (photoIds.length) {
+      if (photoIds.length && request.mode !== 'generate') {
         const photos = await getAppFirestore().getAll(...photoIds.map(id => root.collection('photos').doc(id)));
         if (photos.some(photo => !photo.exists)) throw new HttpsError('not-found', 'Una fotografía no está disponible.');
       }

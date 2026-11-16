@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { FieldPath, type DocumentReference } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as xlsx from 'xlsx';
 import { type OrganizerBaseProduct, type OrganizerCommercialVariant, type OrganizerPhoto, type OrganizerProductRow, type OrganizerVariant } from '../../../shared/src/types';
 import { GEMINI_API_KEY, GOOGLE_PRIVATE_KEY } from '../config/runtime';
-import { getAppFirestore } from '../firebase/appFirestore';
+import { getSystemConfigDocRef, isOrganizerWatcherEnabled } from '../admin/systemConfig';
+import { APP_FIRESTORE_DATABASE_ID, getAppFirestore } from '../firebase/appFirestore';
 import { assertDelegatedStamp } from '../manglar/access';
 import { ALGORITHM_VERSION, associatePhotos, associationIndex, groupProductRows, identityFromFilename, normalize, productVariant, readWorkbook, type TabMapping } from './catalog';
 import { digest, fileUrl, FOLDER, isImage, isWorkbook, OrganizerDrive, OrganizerDriveError, SHEET, versionOf, type DriveEntry, type DriveFile, type ManagedZone } from './drive';
-import { assertLease, clientRef, configs, createAttemptRecorder, documents, requiresCopy, runRef, whileLeased, writePages, type StoredConfig, type StoredRun } from './store';
+import { appliesCatalog, assertLease, clientRef, configs, createAttemptRecorder, documents, requiresCopy, runRef, whileLeased, writePages, type StoredConfig, type StoredRun } from './store';
 import { analyze, OrganizerBudgetExhausted, reconcileReservations, type VisionPhoto } from './vision';
 import { interpretStructure, rankCandidates, matchObservation } from './interpretation';
 import { photoDecisionKey, planFile, stableDestination } from './planning';
@@ -30,7 +32,8 @@ async function inventory(drive: OrganizerDrive, config: StoredConfig, run: Store
   const folders = doc.collection('scanFolders');
   const files = doc.collection('files');
   if (!run.cursor) {
-    const { sources } = await drive.zone(config.sourceIds, config.parentId, config.allowInheritedAccess);
+    const sources = run.mode === 'generate' || !config.parentId ? await drive.originals(config.sourceIds)
+      : (await drive.zone(config.sourceIds, config.parentId, config.allowInheritedAccess)).sources;
     await whileLeased(doc, lease, tx => {
       for (const source of sources) tx.set(folders.doc(source.id), { entry: { ...source, path: [source.name], sourceId: source.id, ancestorIds: [] as string[] }, page: '', done: false });
       tx.update(doc, { cursor: 'started' });
@@ -79,7 +82,9 @@ const getCatalogFiles = async (doc: DocumentReference) => {
 async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, run: StoredRun, lease: string, deadline: number) {
   const files = await getCatalogFiles(doc);
   const fingerprint = inventoryFingerprint(files);
-  const apply = requiresCopy(run.mode);
+  const apply = appliesCatalog(run.mode);
+  if (run.mode === 'generate' && run.photoIds.some(id => !files.some(file => file.entry.id === id && isImage(file.entry))))
+    throw new Error('Una foto seleccionada no es una imagen original de los orígenes autorizados.');
   if (run.expectedFingerprint && run.expectedFingerprint !== fingerprint)
     throw new Error('Las fuentes cambiaron después de la simulación. Revisa un plan nuevo antes de aplicar.');
   if (run.createdBy === 'watcher' && run.fingerprint !== fingerprint) {
@@ -143,7 +148,7 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
   await writePages(doc.collection('files'), fileUpdates);
   const prior = new Map<string, OrganizerVariant>();
   for await (const item of documents(root.collection('products'))) prior.set(item.id, item.data() as OrganizerVariant);
-  if (apply) {
+  if (requiresCopy(run.mode)) {
     const initial = groupProductRows(rows);
     const initialVariants = [...initial.groups].map(([id, entries]) => productVariant(id, entries, prior.get(id), initial.anchors.get(id)));
     const tabs = (await root.collection('tabs').get()).docs.filter(tab => seenTabs.has(tab.id)).map(tab => tab.data() as import('../../../shared/src/types').OrganizerTab);
@@ -266,7 +271,7 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
   counts.variants = variants.length;
   counts.skcs = new Set(variants.flatMap(variant => variant.skcs)).size;
   counts.skus = new Set(variants.flatMap(variant => variant.skus)).size;
-  await whileLeased(doc, lease, tx => tx.update(doc, { fingerprint, counts, phase: apply ? 'copy' : 'report', cursor: null }));
+  await whileLeased(doc, lease, tx => tx.update(doc, { fingerprint, counts, phase: run.mode === 'generate' ? 'vision' : apply ? 'copy' : 'report', cursor: null }));
 }
 
 async function copySources(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string, deadline: number) {
@@ -320,12 +325,14 @@ async function vision(drive: OrganizerDrive, root: DocumentReference, doc: Docum
     const forced = run.photoIds.includes(photo.id) || Boolean(run.variantId && photo.variantIds?.includes(run.variantId));
     const selected = (!run.photoIds.length && !run.variantId) || forced;
     const key = digest([photo.version, photo.name, photo.path, photo.variantIds || [], contextKey, config.model, config.escalationModel, config.minimumConfidence, ALGORITHM_VERSION]);
-    if (photo.copyUrl && selected && (forced || photo.visionKey !== key)) {
+    if ((photo.copyUrl || run.mode === 'generate') && selected && (photo.visionKey !== key || (forced && run.mode !== 'generate'))) {
       try {
         const file = (await doc.collection('files').doc(photo.id).get()).data() as RunFile;
-        const copy = (await manifestRef(root, file.entry).get()).data();
-        if (!copy?.copiedId) throw new Error('Copia verificada no disponible.');
-        const input = [{ file: { ...file.entry, id: copy.copiedId as string }, candidateIds: photo.candidates }];
+        const original = run.mode === 'generate';
+        const copy = original ? null : (await manifestRef(root, file.entry).get()).data();
+        if (original) await drive.assertSource(file.entry);
+        else if (!copy?.copiedId) throw new Error('Copia verificada no disponible.');
+        const input = [{ file: original ? file.entry : { ...file.entry, id: copy!.copiedId as string }, candidateIds: photo.candidates }];
         let result = await analyze(drive, root, doc, lease, config.model, input, [], false);
         let view = result?.photos[0];
         if (view && view.confidence < config.minimumConfidence && config.escalationModel && config.escalationModel !== config.model) {
@@ -388,7 +395,7 @@ async function vision(drive: OrganizerDrive, root: DocumentReference, doc: Docum
     await root.collection('products').doc(id).update({ references: refs, referenceState: ok ? 'suggested' : 'pending', issues,
       status: ok ? product.status : 'review' });
   }
-  await whileLeased(doc, lease, tx => tx.update(doc, { phase: 'organize', cursor: null }));
+  await whileLeased(doc, lease, tx => tx.update(doc, { phase: run.mode === 'generate' ? 'automation' : 'organize', cursor: null }));
 }
 
 async function organize(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string, deadline: number) {
@@ -441,7 +448,7 @@ async function organize(drive: OrganizerDrive, root: DocumentReference, doc: Doc
 
 async function finish(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string) {
   const apply = requiresCopy(run.mode);
-  const data = apply ? root : doc;
+  const data = appliesCatalog(run.mode) ? root : doc;
   const files = await getCatalogFiles(doc);
   const counts = { ...run.counts, copied: 0, verified: 0, associated: 0, unassigned: 0, conflicts: 0, errors: 0,
     selectedReferences: 0, missingReferences: 0, productsWithoutPhotos: 0, sharedPhotos: 0, humanReviewed: 0, identityNeedsReview: 0, inaccessibleSources: 0 };
@@ -560,7 +567,9 @@ async function work(drive: OrganizerDrive, config: StoredConfig, deadline: numbe
 export const tickOrganizer = async (drive = new OrganizerDrive()) => {
   const deadline = Date.now() + sliceMs;
   const cursor = getAppFirestore().collection('system_config').doc('organizer_scheduler');
-  const start = (await cursor.get()).data()?.clientId as string | undefined;
+  const [position, settings] = await Promise.all([cursor.get(), getSystemConfigDocRef().get()]);
+  const start = position.data()?.clientId as string | undefined;
+  const watcherEnabled = isOrganizerWatcherEnabled(settings.data());
   const query = configs().orderBy(FieldPath.documentId());
   const snapshot = await (start ? query.startAfter(start) : query).limit(40).get();
   for (const item of snapshot.docs) {
@@ -569,7 +578,7 @@ export const tickOrganizer = async (drive = new OrganizerDrive()) => {
     try {
       const client = await getAppFirestore().collection('clients').doc(config.clientId).get();
       if (!client.exists || client.data()?.status === 'archived') continue;
-      const activeRunId = config.activeRunId || (await watch(drive, config))?.id;
+      const activeRunId = config.activeRunId || (watcherEnabled ? (await watch(drive, config))?.id : undefined);
       if (activeRunId && Date.now() < deadline) {
         await work(drive, { ...config, activeRunId }, Math.min(deadline, Date.now() + 90_000));
       }
@@ -579,6 +588,15 @@ export const tickOrganizer = async (drive = new OrganizerDrive()) => {
   }
   if (snapshot.size < 40) await cursor.set({ clientId: null });
 };
+
+export const organizerManualRun = onDocumentCreated({
+  document: 'organizers/{clientId}/runs/{runId}', database: APP_FIRESTORE_DATABASE_ID,
+  timeoutSeconds: 540, memory: '1GiB', secrets: [GEMINI_API_KEY, GOOGLE_PRIVATE_KEY],
+}, async event => {
+  if (event.data?.get('mode') !== 'generate') return;
+  const config = (await clientRef(event.params.clientId).get()).data() as StoredConfig | undefined;
+  if (config?.activeRunId === event.params.runId) await work(new OrganizerDrive(), config, Date.now() + sliceMs);
+});
 
 export const organizerScheduler = onSchedule({ schedule: '0 12,18 * * *', timeZone: 'America/Mexico_City', retryCount: 0, timeoutSeconds: 540,
   memory: '1GiB', maxInstances: 1, concurrency: 1, secrets: [GOOGLE_PRIVATE_KEY, GEMINI_API_KEY] }, () => tickOrganizer());

@@ -8,7 +8,12 @@ const initialClients = () => Array.from({ length: 45 }, (_, index) => ({
 async function setup(page: Page, role = 'admin') {
   const routerSource = await (await page.request.get('/src/app/AppRouter.tsx')).text();
   const routerImport = routerSource.match(/from ["']([^"']*react-router-dom[^"']*)/)![1];
-  const controls = { rejectMarketplace: false, readError: false, readDelayMs: 0 };
+  const mainSource = await (await page.request.get('/src/main.tsx')).text();
+  const reactImport = mainSource.match(/from ["']([^"']*\/react\.js[^"']*)/)![1];
+  const reactDomImport = mainSource.match(/from ["']([^"']*\/react-dom_client\.js[^"']*)/)![1];
+  const appSource = await (await page.request.get('/src/app/App.tsx')).text();
+  const feedbackImport = appSource.match(/from ["']([^"']*\/FeedbackProvider\.tsx[^"']*)/)![1];
+  const controls = { rejectSource: false, rejectMarketplace: false, readError: false, readDelayMs: 0 };
   const clients: any[] = initialClients();
   const calls: { name: string; input: any }[] = [];
   const reads: any[] = [];
@@ -38,6 +43,7 @@ async function setup(page: Page, role = 'admin') {
     }
     if (name === 'update') { if (input.name !== undefined) client.name = input.name; if (input.generationPromptBase !== undefined) client.generationPromptBase = input.generationPromptBase; }
     if (name === 'automation') {
+      if (input.section === 'sources' && controls.rejectSource) throw new Error('No se pudo verificar el acceso a la carpeta');
       if (input.section === 'sources') client.automation = { ...client.automation, driveFolderIds: input.automation.driveFolderIds };
       else client.automation = { ...input.automation, driveFolderIds: client.automation.driveFolderIds };
     }
@@ -62,6 +68,7 @@ async function setup(page: Page, role = 'admin') {
     import { mutate } from '/__clients-fixture.js';
     export const updateClientMarketplace = input => mutate('marketplace', input);
   ` }));
+  await page.route('**/src/features/system/useSystemConfig.ts*', route => route.fulfill({ contentType: 'application/javascript', body: 'export const useSystemConfig = () => ({ config: {}, loading: false });' }));
   await page.route('**/src/features/clients/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
     import { sub, mutate } from '/__clients-fixture.js';
     export const listClients = input => window.__clientsRead('page', JSON.stringify(input));
@@ -83,13 +90,13 @@ async function setup(page: Page, role = 'admin') {
     { id: 'woman', name: 'Modelo femenino', clientId: 'client-0', status: 'active', identityTraits: { sex: 'female' }, poses: [] },
   ]); return () => {}; };` }));
   await page.route('**/src/features/auth/AuthProvider.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `export const useRole = () => ({ isAdmin: true, canRegenerate: true, canEvaluate: true }); export const useAuth = () => ({ user: { uid: 'admin' }, appUser: { active: true, role: '${role}' }, loading: false });` }));
-  await page.route('**/src/components/Layout.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '/node_modules/.vite/deps/react.js'; import { Outlet } from '${routerImport}'; export const Layout = () => React.createElement('main', { style: { padding: 16 } }, React.createElement(Outlet));` }));
-  await page.route('**/src/pages/Dashboard.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '/node_modules/.vite/deps/react.js'; export const Dashboard = () => React.createElement('h1', null, 'Inicio');` }));
+  await page.route('**/src/components/Layout.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '${reactImport}'; import { Outlet } from '${routerImport}'; export const Layout = () => React.createElement('main', { style: { padding: 16 } }, React.createElement(Outlet));` }));
+  await page.route('**/src/pages/Dashboard.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '${reactImport}'; export const Dashboard = () => React.createElement('h1', null, 'Inicio');` }));
   await page.route('http://localhost:3000/**', route => {
     if (!route.request().isNavigationRequest()) return route.fallback();
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="es" class="theme-dark"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div>
       <script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script>
-      <script type="module">import React from '/node_modules/.vite/deps/react.js'; import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js'; import { FeedbackProvider } from '/src/features/feedback/FeedbackProvider.tsx'; import { AppRouter } from '/src/app/AppRouter.tsx'; import '/src/index.css'; ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(FeedbackProvider, null, React.createElement(AppRouter)));</script></body></html>` });
+      <script type="module">import React from '${reactImport}'; import ReactDOM from '${reactDomImport}'; import { FeedbackProvider } from '${feedbackImport}'; import { AppRouter } from '/src/app/AppRouter.tsx'; import '/src/index.css'; ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(FeedbackProvider, null, React.createElement(AppRouter)));</script></body></html>` });
   });
   return { clients, calls, reads, controls };
 }
@@ -129,12 +136,28 @@ test('compact list filters the full collection, pages in URL, returns to context
 test('detail preserves shared automation drafts, channel settings and general settings across tabs and navigation', async ({ page }) => {
   const state = await setup(page);
   await page.goto('/clients/client-0?tab=fuentes&list=q%3DCliente%2B00');
-  const folders = page.getByRole('textbox', { name: 'Carpetas autorizadas de Google Drive' });
-  await expect(folders).toHaveValue('folder-a');
+  const folderInput = page.getByRole('textbox', { name: 'Enlace de carpeta de Google Drive' });
+  const addFolder = page.getByRole('button', { name: 'Agregar', exact: true });
+  const folderList = page.getByRole('region', { name: 'Carpetas autorizadas de Google Drive' });
+  const folderIds = ['folder-a', 'folder-b', 'folder-c'];
+  const folderLinks = folderIds.map(id => `https://drive.google.com/drive/folders/${id}`);
+  await expect(folderList.getByRole('link')).toHaveText(folderLinks.slice(0, 1));
   await expect(page.getByText('Plantilla real simulada', { exact: true })).toBeVisible();
-  await folders.fill('folder-a\nfolder-b');
+  await folderInput.fill('https://drive.google.com/file/d/folder-b/view');
+  await addFolder.click();
+  await expect(page.getByText('Pega el enlace completo de una carpeta de Google Drive.')).toBeVisible();
+  await folderInput.fill(`${folderLinks[0]}?usp=sharing`);
+  await addFolder.click();
+  await expect(page.getByText('Esta carpeta ya está en la lista.')).toBeVisible();
+  expect(state.calls).toEqual([]);
   await page.getByRole('button', { name: 'Automatizaciones', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Presupuesto por pedido (USD)' }).fill('6');
+  await page.getByRole('button', { name: 'Fuentes de datos', exact: true }).click();
+  await folderInput.fill('https://drive.google.com/drive/u/0/folders/folder-b?usp=sharing');
+  await folderInput.press('Enter');
+  await expect(folderInput).toHaveValue('');
+  await expect(folderList.getByRole('link')).toHaveText(folderLinks.slice(0, 2));
+  await expect(page.getByRole('button', { name: 'Guardar fuentes de datos', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Configuración', exact: true }).click();
   await page.getByRole('textbox', { name: 'Nombre del cliente' }).fill('Nombre pendiente');
   await page.getByRole('button', { name: 'Marketplaces', exact: true }).click();
@@ -144,11 +167,10 @@ test('detail preserves shared automation drafts, channel settings and general se
   await page.getByRole('link', { name: 'Volver a la lista' }).click();
   await page.getByRole('link', { name: 'Cliente 00', exact: true }).click();
   await page.getByRole('button', { name: 'Fuentes de datos', exact: true }).click();
-  await expect(folders).toHaveValue('folder-a\nfolder-b');
+  await expect(folderList.getByRole('link')).toHaveText(folderLinks.slice(0, 2));
   page.on('dialog', dialog => dialog.accept());
   await page.reload();
-  await expect(folders).toHaveValue('folder-a\nfolder-b');
-  await page.getByRole('button', { name: 'Guardar fuentes de datos', exact: true }).click();
+  await expect(folderList.getByRole('link')).toHaveText(folderLinks.slice(0, 2));
   await expect.poll(() => state.clients[0].automation.driveFolderIds).toEqual(['folder-a', 'folder-b']);
   expect(state.clients[0].automation.defaultBudgetUsd).toBe(4);
   expect(state.calls[0].input.automation).toEqual({ driveFolderIds: ['folder-a', 'folder-b'] });
@@ -167,16 +189,22 @@ test('detail preserves shared automation drafts, channel settings and general se
   expect(state.clients[0].automation.maxOperationalRetries).toBe(2);
   expect(state.calls[0].input.expectedAutomation.defaultBudgetUsd).toBe(4);
   await page.getByRole('button', { name: 'Fuentes de datos', exact: true }).click();
-  await folders.fill('folder-a\nfolder-b\nfolder-c');
+  state.controls.rejectSource = true;
+  await folderInput.fill(folderLinks[2]);
+  await addFolder.click();
+  await expect(page.getByText('No se pudo verificar el acceso a la carpeta')).toBeVisible();
+  await expect(folderInput).toHaveValue(folderLinks[2]);
+  await expect(folderList.getByRole('link')).toHaveText(folderLinks.slice(0, 2));
+  state.controls.rejectSource = false;
+  await addFolder.click();
+  await expect(folderList.getByRole('link')).toHaveText(folderLinks);
+  await folderList.getByRole('button', { name: 'Quitar carpeta 1', exact: true }).click();
+  await expect(folderList.getByRole('link')).toHaveText(folderLinks.slice(1));
   await page.getByRole('button', { name: 'Automatizaciones', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Presupuesto por pedido (USD)' }).fill('7');
   await page.getByRole('button', { name: 'Guardar automatizaciones', exact: true }).click();
   await expect.poll(() => state.clients[0].automation.defaultBudgetUsd).toBe(7);
-  expect(state.clients[0].automation.driveFolderIds).toEqual(['folder-a', 'folder-b']);
-  await page.getByRole('button', { name: 'Fuentes de datos', exact: true }).click();
-  await expect(folders).toHaveValue('folder-a\nfolder-b\nfolder-c');
-  await page.getByRole('button', { name: 'Descartar cambios de esta pestaña', exact: true }).click();
-  await expect(folders).toHaveValue('folder-a\nfolder-b');
+  expect(state.clients[0].automation.driveFolderIds).toEqual(['folder-b', 'folder-c']);
   await page.getByRole('button', { name: 'Configuración', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Nombre del cliente' })).toHaveValue('Nombre pendiente');
   await page.getByRole('button', { name: 'Guardar datos generales' }).click();

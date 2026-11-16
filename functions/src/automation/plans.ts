@@ -16,7 +16,7 @@ import { canReadAutomation, validateAutomationInput } from './domain';
 import { resolveAutomationPreset } from './presets';
 import { loadAutomationModelOptions } from './models';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
-import { authorizeDriveFile, googleDrive, validateDriveFolder } from './drive';
+import { authorizeDriveFile, authorizeDriveFolder, googleDrive } from './drive';
 import { estimateGenerationHold, GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
 import { createAutomation } from './persistence';
 import { authorizeMachineJob } from './machineAuth';
@@ -117,8 +117,6 @@ export const executeAutomationPlan = async (id: string, uid: string, role: strin
   return { ...receipt, ...automationPolling(job) };
 };
 export const listAuthorizedDriveFiles = async (clientId: string, folderId: string) => {
-  const client = (await getAppFirestore().collection('clients').doc(clientId).get()).data() as Client | undefined;
-  if (!client || client.status === 'archived' || client.automation?.enabled === false || !client.automation?.driveFolderIds?.includes(folderId)) throw new HttpsError('permission-denied', 'Carpeta no autorizada.');
-  await validateDriveFolder(folderId);
+  await authorizeDriveFolder(clientId, folderId);
   return { clientId, folderId, files: (await googleDrive.list(folderId)).filter((f) => f.mimeType.startsWith('image/')).map((f) => ({ fileId: f.id, fileName: f.name, version: f.version || null, revisionId: f.headRevisionId || null })), requiresExplicitItemMapping: true };
 };

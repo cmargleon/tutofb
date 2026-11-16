@@ -46,6 +46,7 @@ export interface CreateAutomationJobRequest {
   allowEstimatedCosts?: boolean;
 }
 export interface AutomationJob extends CreateAutomationJobRequest {
+  organizerCommerce?: true;
   photoBases?: import('./photoPlan').PhotoBase[];
   photoModelId?: string | null;
   photoMarketplaces?: import('./client').Client['marketplaces'];
@@ -97,7 +98,7 @@ export interface AutomationBudgetConfig {
 }
 export interface ClientAutomationConfig {
   rules?: Partial<AutomationRules>;
-  organizerGeneration?: { enabled?: boolean; preset?: string };
+  organizerGeneration?: { enabled?: boolean; preset?: string; marketplaceId?: import('../marketplaces').MarketplaceId; sourceColumns?: import('./marketplaceExport').OrganizerSourceColumns };
   enabled?: boolean;
   driveFolderIds?: string[];
   defaultModelId?: string;

@@ -1,6 +1,8 @@
-import React from 'react';
-import type { ClientAutomationSection as AutomationSection } from '../../../shared/src/clientAutomationSections';
+import React, { useId, useRef, useState } from 'react';
+import { Folder, Plus } from 'lucide-react';
 import type { Client, Provider } from '../../../shared/src/types';
+import { ORGANIZER_SOURCE_FIELDS } from '../../../shared/src/types';
+import { MARKETPLACES, isMarketplaceId } from '../../../shared/src/marketplaces';
 import { DEFAULT_IMAGE_PROVIDER, PROVIDER_VALUES, PROVIDER_LABELS } from '../../../shared/src/domain';
 import { createCommercialProviderImageConfig } from '../../../shared/src/commercialPhoto';
 import { createDefaultProductScenes, PRODUCT_SCENES } from '../../../shared/src/productGeneration';
@@ -9,16 +11,75 @@ import { Button, INPUT_CLASS, LoadingBlock } from '../ui';
 import { ProviderImageConfigSelection } from '../wizard/ProviderImageConfigSelection';
 
 const inputClass = INPUT_CLASS;
+const sourceColumnLabels = { price: 'Precio de venta', inventory: 'Stock', weight: 'Peso', weightUnit: 'Unidad de peso',
+  length: 'Largo', width: 'Ancho', height: 'Alto', dimensionUnit: 'Unidad de dimensiones' };
 type AutomationState = ReturnType<typeof useClientAutomationConfig>;
 
-export const ClientDriveFolders = ({ state }: { state: AutomationState }) => <label className="tuto-form-field"><span className="tuto-label">Carpetas autorizadas de Google Drive</span><textarea rows={4} className={inputClass} value={state.folders} onChange={(e) => state.setFolders(e.target.value)} /><span className="tuto-hint">Hasta 20 enlaces o IDs, uno por línea. Es la misma lista de automatización y del Organizador inteligente. Se verifica el acceso al guardar; retira los orígenes del Organizador antes de quitar una carpeta.</span></label>;
+export const ClientDriveFolders = ({ state, disabled }: { state: AutomationState; disabled: boolean }) => {
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+  const inputId = useId();
+  const errorId = useId();
+  const headingId = useId();
+  const addFolder = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (disabled || !url.trim()) return;
+    setError('');
+    const result = await state.addFolder(url);
+    if (result.error) {
+      setError(result.error);
+      input.current?.focus();
+    }
+    if (result.saved) setUrl('');
+  };
+
+  return <div className="space-y-5">
+    <form onSubmit={addFolder} noValidate>
+      <fieldset disabled={disabled} className="tuto-form-field">
+        <label className="tuto-label" htmlFor={inputId}>Enlace de carpeta de Google Drive</label>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            ref={input}
+            id={inputId}
+            type="url"
+            autoComplete="off"
+            className={`${inputClass} min-w-0 flex-1`}
+            placeholder="https://drive.google.com/drive/folders/…"
+            value={url}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
+            onChange={event => { setUrl(event.target.value); setError(''); }}
+          />
+          <Button type="submit" variant="secondary" icon={Plus} disabled={!url.trim()}>Agregar</Button>
+        </div>
+        {error && <p id={errorId} role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
+      </fieldset>
+      {state.savingSection === 'sources' && <p className="tuto-hint" role="status">Guardando cambios…</p>}
+    </form>
+    <section aria-labelledby={headingId} className="space-y-2">
+      <h4 id={headingId} className="tuto-label">Carpetas autorizadas de Google Drive</h4>
+      {state.folders.length > 0 ? <ul className="rounded-xl border border-slate-200">
+        {state.folders.map((id, index) => {
+          const href = `https://drive.google.com/drive/folders/${encodeURIComponent(id)}`;
+          return <li key={id} className="flex items-center gap-3 px-3 py-2 [&+li]:border-t [&+li]:border-slate-200">
+            <Folder className="h-4 w-4 shrink-0 text-[var(--color-text-muted)]" aria-hidden="true" />
+            <a href={href} target="_blank" rel="noreferrer" className="min-w-0 flex-1 break-all text-sm hover:underline">{href}</a>
+            <Button type="button" size="sm" variant="ghost" disabled={disabled} aria-label={`Quitar carpeta ${index + 1}`} onClick={() => { setError(''); void state.removeFolder(id); }}>Quitar</Button>
+          </li>;
+        })}
+      </ul> : <p className="tuto-hint">Todavía no hay carpetas en la lista.</p>}
+      <p className="tuto-hint">Puedes agregar hasta 20 carpetas. Si una carpeta se usa en el Organizador inteligente, retírala primero de allí.</p>
+    </section>
+  </div>;
+};
 
 export const ClientAutomationSection = ({ client }: { client: Client }) => {
   const state = useClientAutomationConfig(client);
-  return <details className="mt-5 rounded-xl border border-slate-200 p-4"><summary>Google Drive y automatización · {client.automation?.driveFolderIds?.length ?? 0} carpetas</summary><ClientDriveFolders state={state} /><ClientAutomationSave state={state} section="sources" disabled={client.status === 'archived'} /><ClientAutomationFields client={client} state={state} /><ClientAutomationSave state={state} section="automation" disabled={client.status === 'archived'} /></details>;
+  return <details className="mt-5 rounded-xl border border-slate-200 p-4"><summary>Google Drive y automatización · {client.automation?.driveFolderIds?.length ?? 0} carpetas</summary><ClientDriveFolders state={state} disabled={client.status === 'archived' || state.saving} /><ClientAutomationFields client={client} state={state} /><ClientAutomationSave state={state} disabled={client.status === 'archived'} /></details>;
 };
 
-export const ClientAutomationSave = ({ state, disabled, section }: { state: AutomationState; disabled: boolean; section: AutomationSection }) => <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4"><Button disabled={disabled || state.saving} loading={state.savingSection === section} onClick={() => void state.save(section)}>{section === 'sources' ? 'Guardar fuentes de datos' : 'Guardar automatizaciones'}</Button>{state.isDirty(section) && <><span className="text-sm text-[var(--color-warning)]" role="status">Cambios sin guardar en {section === 'sources' ? 'Fuentes de datos' : 'Automatizaciones'} · borrador conservado en esta sesión</span><Button disabled={state.saving} variant="ghost" onClick={() => state.discardSection(section)}>Descartar cambios de esta pestaña</Button></>}</div>;
+export const ClientAutomationSave = ({ state, disabled }: { state: AutomationState; disabled: boolean }) => <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4"><Button disabled={disabled || state.saving} loading={state.savingSection === 'automation'} onClick={() => void state.saveAutomation()}>Guardar automatizaciones</Button>{state.isDirty('automation') && <><span className="text-sm text-[var(--color-warning)]" role="status">Cambios sin guardar en Automatizaciones · borrador conservado en esta sesión</span><Button disabled={state.saving} variant="ghost" onClick={() => state.discardSection('automation')}>Descartar cambios de esta pestaña</Button></>}</div>;
 
 const sourceLabels = { cliente: 'Cliente', sistema: 'Sistema', predeterminado: 'Predeterminado' } as const;
 const Source = ({ source }: { source: keyof typeof sourceLabels }) => <span className="ml-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{sourceLabels[source]}</span>;
@@ -31,7 +92,7 @@ const AutomationFlowSummary = ({ state }: { state: AutomationState }) => {
     <h3 className="text-sm font-semibold">Resumen del flujo</h3>
     <p className="text-xs text-slate-500">Vista previa con los ajustes que estás editando. Drive → Organizador → preset → modelo → intentos → presupuesto.</p>
     <ol className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-      <li><span className="block text-xs text-slate-500">Drive</span>{state.value.driveFolderIds?.filter(id => id.trim()).length || 0} carpetas autorizadas<Source source={state.value.driveFolderIds === undefined ? 'predeterminado' : 'cliente'} /></li>
+      <li><span className="block text-xs text-slate-500">Drive</span>{state.folders.length} carpetas autorizadas<Source source={state.value.driveFolderIds === undefined ? 'predeterminado' : 'cliente'} /></li>
       <li><span className="block text-xs text-slate-500">Después del Organizador</span>{effective.organizerGenerationEnabled.value ? 'Generación activada' : 'Generación desactivada'}<Source source={effective.organizerGenerationEnabled.source} /></li>
       <li><span className="block text-xs text-slate-500">Preset por defecto</span>{effective.defaultPreset.value}<Source source={effective.defaultPreset.source} /><span className="mt-1 block text-xs text-slate-500">Desde el Organizador: {effective.organizerGenerationPreset.value}<Source source={effective.organizerGenerationPreset.source} /></span></li>
       <li className="space-y-1"><span className="block text-xs text-slate-500">Modelo según género</span><span className="block">Masculino: {modelName(effective.maleModelId.value)}<Source source={effective.maleModelId.source} /></span><span className="block">Femenino: {modelName(effective.femaleModelId.value)}<Source source={effective.femaleModelId.source} /></span><span className="block text-xs text-slate-500">Confianza de género: {effective.garmentGenderMinConfidence.value}<Source source={effective.garmentGenderMinConfidence.source} /></span><span className="block text-xs text-slate-500">Clasificación: {effective.classificationMinConfidence.value}<Source source={effective.classificationMinConfidence.source} /></span></li>
@@ -76,6 +137,21 @@ export const ClientAutomationFields = ({ client, state }: { client: Client; stat
             if (event.target.value) organizerGeneration.preset = event.target.value; else delete organizerGeneration.preset;
             const next = { ...value }; if (Object.keys(organizerGeneration).length) next.organizerGeneration = organizerGeneration; else delete next.organizerGeneration; setValue(next);
           }}><option value="">Preset por defecto del cliente</option><option value="standard">Standard (prendas)</option><option value="generic_product">Producto genérico</option>{Object.keys(value.presets || {}).filter(name => !['standard', 'generic_product'].includes(name)).map(name => <option key={name} value={name}>{name}</option>)}{value.organizerGeneration?.preset && !['standard', 'generic_product'].includes(value.organizerGeneration.preset) && !value.presets?.[value.organizerGeneration.preset] && <option value={value.organizerGeneration.preset}>Preset no disponible · elige otro</option>}</select></label>
+          <label className="block space-y-2 text-sm">Marketplace para clasificar la ficha<select className={inputClass} value={value.organizerGeneration?.marketplaceId || ''} onChange={event => {
+            const organizerGeneration = { ...value.organizerGeneration };
+            const id = event.target.value;
+            if (isMarketplaceId(id)) organizerGeneration.marketplaceId = id;
+            else delete organizerGeneration.marketplaceId;
+            setValue({ ...value, organizerGeneration });
+          }}><option value="">Único marketplace habilitado</option>{MARKETPLACES.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}</select></label>
+          <details className="text-sm"><summary className="cursor-pointer font-medium">Columnas del Excel fuente</summary>
+            <p className="mt-2 text-xs text-slate-500">Escribe los encabezados exactos para reemplazar la detección predeterminada. Usa «Precio mínimo» aquí solo si el cliente lo usa como precio de venta.</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">{ORGANIZER_SOURCE_FIELDS.map(field => <label key={field} className="block text-xs">{sourceColumnLabels[field]}
+              <input className={inputClass} maxLength={160} value={value.organizerGeneration?.sourceColumns?.[field] || ''} placeholder="Detectar encabezado" onChange={event => setValue({
+                ...value, organizerGeneration: { ...value.organizerGeneration, sourceColumns: { ...value.organizerGeneration?.sourceColumns, [field]: event.target.value } },
+              })} />
+            </label>)}</div>
+          </details>
           {state.systemConfig.organizerAutoGenerationEnabled === false && <p role="status" className="text-sm text-amber-800">El interruptor general de Sistema está apagado. Este cliente no enviará fotos a generar después de organizar hasta que se active.</p>}
           <p className="text-xs text-slate-500">También deben estar habilitados los pedidos automáticos de este cliente y el interruptor general de Sistema.</p>
         </fieldset>

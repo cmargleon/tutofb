@@ -11,12 +11,27 @@ import { useClientDraft } from '../clients/useClientDraft';
 import { configSnapshot } from '../../../shared/src/configSnapshot';
 import { mergeClientAutomationSection, selectClientAutomationSection, type ClientAutomationSection } from '../../../shared/src/clientAutomationSections';
 
+const MAX_DRIVE_FOLDERS = 20;
+const driveFolderIdFromUrl = (url: string) =>
+  /^https:\/\/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([\w-]{1,200})\/?(?:[?#][^\s]*)?$/.exec(url)?.[1];
+
+// Older configurations may contain multiple entries in one textarea line.
+const readDriveFolders = (entries: string[] = []) =>
+  entries.flatMap(entry => entry.split(/[\n,]+/)).map(entry => entry.trim()).filter(Boolean);
+
 export const useClientAutomationConfig = (client: Client) => {
   const draft = useClientDraft<ClientAutomationConfig | null>(`${client.id}:automation`, client.automation ?? null, isAutomationDraft);
   const value: ClientAutomationConfig = { ...draft.value, enabled: draft.value?.enabled ?? true };
   const setValue = (next: ClientAutomationConfig | ((current: ClientAutomationConfig) => ClientAutomationConfig)) => draft.setValue(current => typeof next === 'function' ? next({ ...current, enabled: current?.enabled ?? true }) : next);
-  const folders = (value.driveFolderIds || []).join('\n');
-  const setFolders = (text: string) => draft.setValue(current => ({ ...current, driveFolderIds: text.split('\n') }));
+  const folders = [...new Set(readDriveFolders(draft.base?.driveFolderIds).map(entry => driveFolderIdFromUrl(entry) ?? entry))];
+  const savedFolders = configSnapshot(client.automation?.driveFolderIds ?? []);
+  useEffect(() => {
+    // Folder edits now persist immediately. Rebase old session drafts on the live folder list.
+    const source = selectClientAutomationSection(client.automation, 'sources');
+    if (configSnapshot(draft.value?.driveFolderIds ?? []) === savedFolders
+      && configSnapshot(draft.base?.driveFolderIds ?? []) === savedFolders) return;
+    draft.markSavedPartial(current => mergeClientAutomationSection(current, source, 'sources'));
+  }, [savedFolders]);
   const [models, setModels] = useState<Model[]>([]);
   const [presetName, setPresetName] = useState('');
   const [savingSection, setSavingSection] = useState<ClientAutomationSection | null>(null);
@@ -45,27 +60,37 @@ export const useClientAutomationConfig = (client: Client) => {
   const isDirty = (section: ClientAutomationSection) => configSnapshot(selectClientAutomationSection(draft.value, section)) !== configSnapshot(selectClientAutomationSection(draft.base, section));
   const applySection = (saved: ClientAutomationConfig | null, section: ClientAutomationSection) => {
     const other = section === 'sources' ? 'automation' : 'sources';
-    const preserveOther = isDirty(other);
+    const preserveOther = other === 'automation' && isDirty(other);
     draft.markSavedPartial(current => {
       const next = mergeClientAutomationSection(current, saved, section);
       return preserveOther ? next : mergeClientAutomationSection(next, saved, other);
     });
   };
   const discardSection = (section: ClientAutomationSection) => applySection(client.automation ?? null, section);
-  const save = async (section: ClientAutomationSection) => {
+  const save = async (section: ClientAutomationSection, automation: ClientAutomationConfig) => {
+    if (saving || client.status === 'archived') return false;
     setSavingSection(section);
     try {
       if (section === 'automation') validateAutomationRules(value.rules ?? {});
-      const automation = section === 'sources'
-        ? { driveFolderIds: folders.split(/[\n,]+/).map((id) => id.trim()).filter(Boolean) }
-        : { ...selectClientAutomationSection(value, 'automation'), ...genderDefaults };
       const result = await updateClientAutomation({ clientId: client.id!, section, expectedAutomation: draft.base, automation });
       applySection(result.automation, section);
       toast({ tone: 'success', title: section === 'sources' ? 'Fuentes de datos guardadas' : 'Automatizaciones guardadas' });
-    } catch (error) { toast({ tone: 'error', title: 'No se pudo guardar', description: (error as Error).message }); }
+      return true;
+    } catch (error) {
+      toast({ tone: 'error', title: 'No se pudo guardar', description: (error as Error).message });
+      return false;
+    }
     finally { setSavingSection(null); }
   };
-  return { effectiveConfig, inheritedRules, setRule, systemConfig, systemLoading, isDirty, discardSection, value, setValue, folders, setFolders, presetName, setPresetName, preset, updatePreset, models: availableModels,
+  const addFolder = async (url: string) => {
+    const folderId = driveFolderIdFromUrl(url.trim());
+    if (!folderId) return { error: 'Pega el enlace completo de una carpeta de Google Drive.' };
+    if (folders.includes(folderId)) return { error: 'Esta carpeta ya está en la lista.' };
+    if (folders.length >= MAX_DRIVE_FOLDERS) return { error: 'Puedes agregar hasta 20 carpetas por cliente.' };
+    return { saved: await save('sources', { driveFolderIds: [...folders, folderId] }) };
+  };
+  const removeFolder = (folderId: string) => save('sources', { driveFolderIds: folders.filter(id => id !== folderId) });
+  return { effectiveConfig, inheritedRules, setRule, systemConfig, systemLoading, isDirty, discardSection, value, setValue, folders, addFolder, removeFolder, presetName, setPresetName, preset, updatePreset, models: availableModels,
     genderDefaults, maleModels: availableModels.filter(model => getModelGender(model) !== 'female'),
-    femaleModels: availableModels.filter(model => getModelGender(model) !== 'male'), saving, savingSection, save };
+    femaleModels: availableModels.filter(model => getModelGender(model) !== 'male'), saving, savingSection, saveAutomation: () => save('automation', { ...selectClientAutomationSection(value, 'automation'), ...genderDefaults }) };
 };

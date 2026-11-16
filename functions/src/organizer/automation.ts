@@ -12,6 +12,7 @@ import { withManglarContext } from '../manglar/context';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { digest, isImage, versionOf, type DriveEntry, type OrganizerDrive } from './drive';
 import { documents, whileLeased, type StoredConfig, type StoredRun } from './store';
+import { readOrganizerCommerce } from './commerce';
 
 export type GenerationPhoto = OrganizerPhoto & { kind?: string; visualConfidence?: number };
 export type GenerationSource = { entry: DriveEntry; photo: GenerationPhoto };
@@ -59,22 +60,26 @@ export function selectGenerationReferences(sources: GenerationSource[], minimumC
 export async function automateNewPhotos(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference,
   config: StoredConfig, run: StoredRun, lease: string, deadline: number) {
   const sources: GenerationSource[] = [];
+  const manual = run.mode === 'generate';
   for await (const file of documents(doc.collection('files'))) {
     const value = file.data() as { entry: DriveEntry; added?: boolean; changed?: boolean };
     if (!isImage(value.entry)) continue;
     const photo = (await root.collection('photos').doc(file.id).get()).data() as GenerationPhoto | undefined;
     const forced = run.photoIds.includes(file.id) || Boolean(run.variantId && photo?.variantIds?.includes(run.variantId));
+    if (manual && !forced) continue;
     if ((!value.added && !value.changed && !forced) || !photo) continue;
     if ((await root.collection('generationSources').doc(generationSourceKey(value.entry)).get()).exists) continue;
     sources.push({ entry: value.entry, photo });
   }
   const groups = groupGenerationSources(sources);
+  if (manual && groups.length > 1)
+    throw new HttpsError('failed-precondition', 'Las fotos seleccionadas corresponden a grupos distintos. Envía un artículo por ejecución manual.');
   let organizerGeneration: ClientAutomationConfig['organizerGeneration'];
   const isEnabled = async () => {
     const [system, client] = await Promise.all([getSystemConfigDocRef().get(), getAppFirestore().collection('clients').doc(config.clientId).get()]);
     organizerGeneration = client.data()?.automation?.organizerGeneration;
-    return sanitizeSystemConfig(system.data()).organizerAutoGenerationEnabled && client.exists &&
-      client.data()?.status !== 'archived' && client.data()?.automation?.enabled !== false && organizerGeneration?.enabled !== false;
+    return client.exists && client.data()?.status !== 'archived' && client.data()?.automation?.enabled !== false &&
+      (manual || (sanitizeSystemConfig(system.data()).organizerAutoGenerationEnabled && organizerGeneration?.enabled !== false));
   };
   let skipped = 0;
   for (const [index, group] of groups.entries()) {
@@ -88,7 +93,7 @@ export async function automateNewPhotos(drive: OrganizerDrive, root: DocumentRef
     const key = digest([config.clientId, assets]);
     const handoff = doc.collection('generationHandoffs').doc(key);
     const selection = selectGenerationReferences(group.photos, config.minimumConfidence);
-    if (!selection || group.photos.some(({ photo }) => !photo.copyUrl)) {
+    if (!selection || (!manual && group.photos.some(({ photo }) => !photo.copyUrl))) {
       const issue = `Generación pendiente: revisa el tipo, las vistas o la calidad de ${group.photos.map(({ photo }) => photo.name).join(', ')}.`;
       await whileLeased(doc, lease, tx => {
         tx.set(handoff, { status: 'needs_attention', photoIds: group.photos.map(({ photo }) => photo.id), issue });
@@ -106,14 +111,20 @@ export async function automateNewPhotos(drive: OrganizerDrive, root: DocumentRef
     const inputImages: AutomationInput[] = [];
     for (const { entry, photo } of selection.references) {
       if (Date.now() > deadline) return;
-      const copy = (await root.collection('manifest').doc(sourceKey(entry)).get()).data();
-      if (!copy?.copiedId) throw new HttpsError('failed-precondition', `No está disponible la copia verificada de ${photo.name}.`);
-      await drive.managed(run.rootId!, copy.parentId, config.sourceIds, digest(['organizer', config.clientId]), config.parentId);
-      await drive.verifyCopy(copy.copiedId, copy.parentId, entry, digest(['organizer', config.clientId]));
-      const storagePath = `garments/drafts/${uid}/organizer-${digest([config.clientId, sourceKey(entry)])}/source/image.jpg`;
+      let sourceId = entry.id;
+      if (manual) await drive.assertSource(entry);
+      else {
+        const copy = (await root.collection('manifest').doc(sourceKey(entry)).get()).data();
+        if (!copy?.copiedId) throw new HttpsError('failed-precondition', `No está disponible la copia verificada de ${photo.name}.`);
+        await drive.managed(run.rootId!, copy.parentId, config.sourceIds, digest(['organizer', config.clientId]), config.parentId);
+        await drive.verifyCopy(copy.copiedId, copy.parentId, entry, digest(['organizer', config.clientId]));
+        sourceId = copy.copiedId;
+      }
+      const storagePath = `garments/drafts/${uid}/organizer-${digest([config.clientId, generationSourceKey(entry)])}/source/image.jpg`;
       const target = admin.storage().bucket().file(storagePath);
       if (!(await target.exists())[0]) {
-        const bytes = await normalizeInputImage(await drive.image(copy.copiedId));
+        const bytes = await normalizeInputImage(await drive.image(sourceId));
+        if (manual) await drive.assertSource(entry);
         await target.save(bytes, { resumable: false, metadata: { contentType: 'image/jpeg' } });
       }
       inputImages.push({ itemId: group.itemId, fileName: photo.name.slice(0, 200), storagePath });
@@ -123,13 +134,15 @@ export async function automateNewPhotos(drive: OrganizerDrive, root: DocumentRef
       skipped = groups.slice(index).reduce((count, item) => count + item.photos.length, 0);
       break;
     }
+    const photos = selection.references.map(({ entry }) => ({ id: entry.id, version: versionOf(entry) }));
+    const commercial = await readOrganizerCommerce(root, photos, organizerGeneration?.sourceColumns);
     const create = () => createAutomation({
       source: 'api', externalId: `organizer-${key}`, clientId: config.clientId, jobType: selection.kind,
       ...(organizerGeneration?.preset !== undefined ? { preset: organizerGeneration.preset } : {}),
       inputImages, allowEstimatedCosts: true, authorizeClassification: true,
       metadata: { organizerRunId: run.id, organizerPhotoCount: group.photos.length,
         organizerPhotoIds: selection.references.map(({ photo }) => photo.id) },
-    }, uid, role);
+    }, uid, role, undefined, { ...commercial, itemId: group.itemId, photos });
     let receipt: Awaited<ReturnType<typeof createAutomation>>;
     try {
       receipt = run.delegated ? await withManglarContext({ caller: { ...run.delegated,

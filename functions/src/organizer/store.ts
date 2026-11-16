@@ -1,5 +1,6 @@
 import { FieldPath, type CollectionReference, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { getSystemConfigDocRef, isOrganizerWatcherEnabled } from '../admin/systemConfig';
 import { getAppFirestore } from '../firebase/appFirestore';
 import type { OrganizerConfig, OrganizerMode, OrganizerPage, OrganizerRun, OrganizerSettings } from '../../../shared/src/types';
 import { digest, type DriveWriteAttempt } from './drive';
@@ -61,6 +62,7 @@ export const publicRun = (run: StoredRun): OrganizerRun => {
   return publicFields;
 };
 export const requiresCopy = (mode: OrganizerMode) => mode === 'classify' || mode === 'sync';
+export const appliesCatalog = (mode: OrganizerMode) => requiresCopy(mode) || mode === 'generate';
 export async function enqueue(clientId: string, mode: OrganizerMode, key: string, actor: string, options: {
   confirmedBudgetUsd?: number; variantId?: string; photoIds?: string[]; delegated?: StoredRun['delegated']; automaticFingerprint?: string;
   planRunId?: string;
@@ -80,6 +82,8 @@ export async function enqueue(clientId: string, mode: OrganizerMode, key: string
     }
     if (options.automaticFingerprint && (!config.enabled || config.activeRunId || config.observedFingerprint !== options.automaticFingerprint))
       return null;
+    if (options.automaticFingerprint && !isOrganizerWatcherEnabled((await tx.get(getSystemConfigDocRef())).data()))
+      return null;
     let generationActor = config.generationActor;
     if (actor === 'watcher' && !generationActor) {
       const history = await tx.get(ref.collection('runs').where('createdBy', '!=', 'watcher'));
@@ -88,6 +92,7 @@ export async function enqueue(clientId: string, mode: OrganizerMode, key: string
       if (last) generationActor = { uid: last.createdBy, delegated: last.delegated || null };
     }
     if (!config.sourceIds.length) throw new HttpsError('failed-precondition', 'Selecciona al menos una carpeta de origen para iniciar el organizador.');
+    if (requiresCopy(mode) && !config.parentId) throw new HttpsError('failed-precondition', 'Configura el destino de las copias antes de clasificar.');
     const plan = options.planRunId ? (await tx.get(runRef(clientId, options.planRunId))).data() as StoredRun | undefined : null;
     if (options.planRunId && (!plan || plan.status !== 'completed' || plan.mode !== 'dry_run' || plan.counts.errors))
       throw new HttpsError('failed-precondition', 'La simulación debe estar completada.');
@@ -97,11 +102,11 @@ export async function enqueue(clientId: string, mode: OrganizerMode, key: string
         throw new HttpsError('failed-precondition', 'Ya hay una ejecución activa. Consulta su estado antes de iniciar otra.');
       tx.update(runRef(clientId, active.id), { supersededBy: id, updatedAt: Date.now() });
     }
-    if (requiresCopy(mode) && !options.automaticFingerprint && options.confirmedBudgetUsd !== config.budgetUsd)
+    if (appliesCatalog(mode) && !options.automaticFingerprint && options.confirmedBudgetUsd !== config.budgetUsd)
       throw new HttpsError('failed-precondition', 'Confirma el presupuesto exacto configurado para iniciar la clasificación.');
     const now = Date.now();
     const run: StoredRun = { id, clientId, mode, status: 'queued', phase: 'inventory', createdAt: now, updatedAt: now,
-      completedAt: null, createdBy: actor, budgetUsd: requiresCopy(mode) ? config.budgetUsd : 0, estimatedUsd: 0, reservedUsd: 0,
+      completedAt: null, createdBy: actor, budgetUsd: appliesCatalog(mode) ? config.budgetUsd : 0, estimatedUsd: 0, reservedUsd: 0,
       uncertainUsd: 0, alerts: [], calls: 0, counts: {}, error: null, reportUrl: null, controlSheetUrl: null, cursor: null,
       lease: null, leaseUntil: 0, fingerprint: options.automaticFingerprint || null, variantId: options.variantId || null,
       photoIds: options.photoIds || [], delegated: options.delegated || (actor === 'watcher' ? generationActor?.delegated : null) || null,

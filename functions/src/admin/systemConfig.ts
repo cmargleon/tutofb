@@ -13,7 +13,11 @@ import { getJobMaxRetries, getJobRetryDelayMs, getBatchMaxJobs, getGeminiImageRe
 const CONFIG_COLLECTION = 'system_config';
 const CONFIG_DOC_ID = 'main';
 
+export const isOrganizerWatcherEnabled = (input?: Partial<SystemConfig>): boolean =>
+  input?.organizerWatcherEnabled !== false;
+
 export const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
+  organizerWatcherEnabled: true,
   organizerAutoGenerationEnabled: DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED,
   automationBudget: DEFAULT_AUTOMATION_BUDGET,
   jobMaxRetries: getJobMaxRetries(),
@@ -60,6 +64,7 @@ const readAutomationRules = (input: SystemConfig['automationRules']) => {
 };
 
 export const sanitizeSystemConfig = (input: Partial<SystemConfig> | null | undefined): SystemConfig => ({
+  organizerWatcherEnabled: isOrganizerWatcherEnabled(input ?? undefined),
   organizerAutoGenerationEnabled: typeof input?.organizerAutoGenerationEnabled === 'boolean'
     ? input.organizerAutoGenerationEnabled : DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED,
   automationBudget: readAutomationBudget(input?.automationBudget),

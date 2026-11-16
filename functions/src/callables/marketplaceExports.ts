@@ -38,15 +38,23 @@ const stringMap = (value: unknown, allowed?: readonly string[]): Record<string, 
   }
   return result;
 };
+const changedFields = (before: Record<string, string>, after: Record<string, string>) =>
+  Object.fromEntries([...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter(key => (before[key] || '') !== (after[key] || '')).map(key => [key, after[key] || '']));
+
 export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async request => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
   const context = await loadExportContext(request.data, request.auth!.uid);
   const product = context.products.find(p => p.id === validId(request.data.productId));
   if (!product) throw new HttpsError('not-found', 'Producto no pertenece a los lotes seleccionados.');
+  if (product.organizer && product.organizer.revision !== request.data.organizerSourceRevision)
+    throw new HttpsError('aborted', 'Los datos de origen cambiaron. Actualiza la ficha antes de guardar.');
   const values = stringMap(request.data.values, PRODUCT_FIELDS);
   if (!Array.isArray(request.data.variants) || !request.data.variants.length || request.data.variants.length > 200) throw new HttpsError('invalid-argument', 'Configura entre 1 y 200 variantes.');
   const variants = request.data.variants.map(v => ({ id: validId(v.id), values: stringMap(v.values, VARIANT_FIELDS), attributes: stringMap(v.attributes || {}) }));
   if (new Set(variants.map(v => v.id)).size !== variants.length) throw new HttpsError('invalid-argument', 'Variantes duplicadas.');
+  if (request.data.confirmOrganizerIdentity === true && (!product.organizer?.source.issue || variants.some(v => !v.values.skc && !v.values.sku)))
+    throw new HttpsError('invalid-argument', 'Confirma la identidad solo si cada variante tiene su SKC o SKU verificado.');
   const marketplaces: StoredMasterProduct['marketplaces'] = {};
   for (const [channel, data] of Object.entries(request.data.marketplaces || {})) {
     if (!isMarketplaceId(channel) || !data) throw new HttpsError('invalid-argument', 'Marketplace no disponible.');
@@ -102,9 +110,42 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
       }
       // If it was enabled after prevalidation, retry with a fresh channel context.
       if (!marketplaces[channel]) throw new HttpsError('aborted', 'Los canales del cliente cambiaron. Actualiza antes de guardar.');
-      merged[channel] = marketplaces[channel];
+      const projected = product.marketplaces[channel];
+      const comparable = (data: typeof projected) => data && ({
+        templateId: data.templateId, categoryId: data.categoryId, rows: data.rows || [], imageUrls: data.imageUrls || {}, requirements: data.requirements || null,
+      });
+      if (!product.organizer || !isDeepStrictEqual(comparable(projected), comparable(marketplaces[channel]))) merged[channel] = marketplaces[channel];
     }
     const data: StoredMasterProduct = { clientId: context.scope.clientId, values, variants, marketplaces: merged, revision: current + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedByUid: request.auth!.uid };
+    if (product.organizer) {
+      const previous = snap.get('organizerOverrides') as StoredMasterProduct['organizerOverrides'];
+      const patches = new Map(previous?.variants.map(variant => [variant.id, variant]));
+      const nextIds = new Set(variants.map(variant => variant.id));
+      const removed = new Set(previous?.removedVariantIds);
+      const added = new Set(previous?.addedVariantIds);
+      for (const original of product.variants) if (!nextIds.has(original.id)) {
+        removed.add(original.id);
+        added.delete(original.id);
+        patches.delete(original.id);
+      }
+      for (const variant of variants) {
+        const original = product.variants.find(row => row.id === variant.id);
+        if (!original || request.data.confirmOrganizerIdentity === true) added.add(variant.id);
+        removed.delete(variant.id);
+        const prior = patches.get(variant.id);
+        patches.set(variant.id, {
+          id: variant.id,
+          values: { ...prior?.values, ...changedFields(original?.values || {}, variant.values) },
+          attributes: { ...prior?.attributes, ...changedFields(original?.attributes || {}, variant.attributes) },
+        });
+      }
+      data.values = { ...snap.get('values'), ...changedFields(product.values, values) };
+      data.variants = [];
+      data.organizerOverrides = {
+        variants: [...patches.values()], removedVariantIds: [...removed], addedVariantIds: [...added],
+        confirmedIdentity: previous?.confirmedIdentity === true || request.data.confirmOrganizerIdentity === true,
+      };
+    }
     tx.set(ref, data); return current + 1;
   }).catch(rethrowTransactionConflict);
   return { success: true, revision };

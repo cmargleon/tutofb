@@ -14,6 +14,8 @@ import { getSystemConfigCached } from '../admin/systemConfig';
 import { AutomationBudgetError } from './budget';
 import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 import { DEFAULT_AUTOMATION_RULES } from '../../../shared/src/automationConfig';
+import { organizerCategory } from './organizerCategory';
+import { organizerReferenceViews } from '../organizer/commerce';
 
 export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Client, config: AutomationPreset) {
   const classificationMinConfidence = job.effectiveRules?.classificationMinConfidence ?? DEFAULT_AUTOMATION_RULES.classificationMinConfidence;
@@ -30,17 +32,20 @@ export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Cli
     tx.update(ref, { items, ...extra, updatedAt: FieldValue.serverTimestamp() });
   });
   for (const [itemId, images] of grouped) {
-    const key = createHash('sha256').update(JSON.stringify([itemId, images.map(i => [i.storagePath, i.normalizedSha256])])).digest('hex');
+    const classificationKey = createHash('sha256').update(JSON.stringify([itemId, images.map(i => [i.storagePath, i.normalizedSha256])])).digest('hex');
+    const commerce = await organizerCategory(job, _client, itemId);
+    const key = commerce?.hasCandidates ? commerce.key(classificationKey) : classificationKey;
     try {
-      const analysis = job.analysisCache?.[key] || await classifyGarmentWithGemini({
+      const input: Parameters<typeof classifyGarmentWithGemini>[0] = {
         automation: { id: job.id, key: `classification:${key}:${job.retryCount}`, kind: 'classification' }, clientId: job.clientId,
         apiKey: GEMINI_API_KEY.value(), model: getGeminiGarmentViewClassificationModel(), userUid: job.createdByUid, categories: [], fallbackCategoryId: null,
         garment: { garmentId: itemId, garmentName: images[0].fileName, photos: images.map((image, index) => ({ id: `${itemId}-${index}`, fileName: image.fileName, storagePath: image.storagePath!, sourceIndex: index })) },
-      });
+      };
+      const analysis = job.analysisCache?.[key] || await (commerce?.classify(input, classificationKey) ?? classifyGarmentWithGemini(input));
       await patch({ [`analysisCache.${key}`]: analysis });
       if (analysis.itemKind !== job.jobType || (analysis.itemKindConfidence ?? 0) < classificationMinConfidence) throw new Error('Confirma el tipo de artículo.');
       const explicit = (job.metadata?.photoArticles as Record<string, any> | undefined)?.[itemId];
-      const referenceViews = explicit?.referenceViews || {};
+      const referenceViews = { ...await organizerReferenceViews(job, itemId), ...explicit?.referenceViews };
       if (analysis.photos.some(p => !['front', 'back', 'side', 'detail'].includes(referenceViews[p.fileName]) && (p.confidence ?? 0) < classificationMinConfidence)) throw new Error('Confirma las vistas de referencia; la clasificación visual no es suficientemente cierta.');
       articles.push({ itemId, productId: typeof explicit?.productId === 'string' ? explicit.productId : itemId, variantId: typeof explicit?.variantId === 'string' ? explicit.variantId : itemId,
         name: images[0].fileName, kind: job.jobType, attributes: mergePhotoAttributes(analysis.photoAttributes, normalizePhotoAttributes(explicit?.attributes, true)),
@@ -55,7 +60,9 @@ export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Cli
   if (selectedModelId && (!selectedModel || selectedModel.clientId !== job.clientId || selectedModel.active === false || selectedModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo explícito/preset no disponible.');
   const bases = job.photoBases ?? (selectedModel?.poses || []).filter(p => p.active !== false && (!config.poseIds || config.poseIds.includes(p.id))).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) }));
   const defaults = createDefaultProductGeneration(await getSystemConfigCached());
-  const plan = job.photoPlan || buildMarketplacePhotoPlan({ clientId: job.clientId, marketplaces: job.photoMarketplaces, articles, bases, provider, ...normalized, objectScenes: config.scenes || defaults.scenes });
+  const plan = job.photoPlan?.tasks.length ? job.photoPlan : buildMarketplacePhotoPlan({
+    clientId: job.clientId, marketplaces: job.photoMarketplaces, articles, bases, provider, ...normalized, objectScenes: config.scenes || defaults.scenes,
+  });
   for (const article of articles) {
     const blocking = plan.issues.filter(i => i.itemId === article.itemId && i.blocking);
     items.push({ itemId: article.itemId, status: blocking.length ? 'needs_attention' : 'processing', scenes: [], ...(blocking.length ? { issue: { code: 'photo-plan-required', message: blocking.map(i => i.message).join(' ') } } : {}) });

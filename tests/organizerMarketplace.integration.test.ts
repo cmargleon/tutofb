@@ -1,0 +1,186 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { readFile, writeFile } from 'node:fs/promises';
+import { cleanupEmulatorDatabase } from './support/cleanupEmulator';
+
+process.env.FIRESTORE_DATABASE_ID = 'test-organizer-marketplace';
+const require = createRequire(new URL('../functions/package.json', import.meta.url));
+const local = ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST']
+  .every(key => /^(127\.0\.0\.1|localhost):\d+$/.test(process.env[key] || ''));
+
+test('Organizer export preserves source identity, edits and the official Vaso workbook (Firebase demo)', { skip: !local }, async t => {
+  const admin = require('firebase-admin');
+  const app = admin.initializeApp({ projectId: 'demo-manglar-automation', storageBucket: 'demo-manglar-automation.appspot.com' });
+  const db = require('./lib/functions/src/firebase/appFirestore.js').getAppFirestore();
+  const { parseTab, productVariant } = require('./lib/functions/src/organizer/catalog.js');
+  const { readOrganizerCommerce, organizerReferenceViews } = require('./lib/functions/src/organizer/commerce.js');
+  const { inspectWorkbookPackage } = require('./lib/functions/src/spreadsheets/ooxmlWorkbook.js');
+  const { analyzeMarketplaceTemplate } = require('./lib/functions/src/spreadsheets/marketplaceTemplates.js');
+  const { parseSpreadsheetTemplateWorkbook } = require('./lib/functions/src/spreadsheets/templateWorkbook.js');
+  const exports = require('./lib/functions/src/callables/marketplaceExports.js');
+  const { publishMarketplaceImages } = require('./lib/functions/src/callables/publishMarketplaceImages.js');
+  const XLSX = require('xlsx');
+  const JSZip = require('jszip');
+  const sharp = require('sharp');
+  t.mock.method(require('@google-cloud/storage').File.prototype, 'getSignedUrl', async () => ['https://local-download.invalid/export']);
+  const clientId = 'drive-catalog-qa';
+  const uid = 'drive-catalog-qa-admin';
+  const auth = { uid, token: {} };
+  const client = db.doc(`clients/${clientId}`);
+  const organizer = db.doc(`organizers/${clientId}`);
+  const bucket = admin.storage().bucket();
+  const publicBucket = admin.storage().bucket('demo-manglar-automation-marketplace-images');
+  const request = (data: any) => ({ auth, data });
+  const scope = { clientId, batchIds: ['object-batch'] };
+  const publishScope = { ...scope, marketplaceId: 'shein', authorizePublicImages: true };
+  const templatePath = `client_spreadsheets/${clientId}/vaso/original.xlsx`;
+  const real = process.env.TUTO_JISHOP_VASO_TEMPLATE;
+  const fixture = XLSX.utils.book_new();
+  const keys = ['supplier_code', 'supplier_sku', 'goods_name', 'main_img', 'detail_img_1', 'stock', 'original_price', 'weight', 'weight_unit'];
+  XLSX.utils.book_append_sheet(fixture, XLSX.utils.aoa_to_sheet([['SHEIN'], keys, keys,
+    ['Requerido', 'opcional', 'Requerido'], [], []]), 'Vaso(1083-3218)');
+  const bytes = real ? await readFile(real) : XLSX.write(fixture, { type: 'buffer', bookType: 'xlsx' });
+  const jpg = async (color: string) => sharp({ create: { width: 900, height: 1200, channels: 3, background: color } }).jpeg().toBuffer();
+  const refs = [{ id: 'object-reference', version: '1' }];
+  const rows = (version: string, stock: number, names = ['Vaso de prueba', 'Vaso de prueba']) => {
+    const grid = [['SKC', 'SKU', 'Nombre', 'Color', 'Talla', 'Stock', 'Precio de venta', 'Peso (g)'],
+      ['QA-VASO', '00001', names[0], 'Transparente', '300ml', String(stock), '149.5', '325'],
+      ['QA-VASO', '00002', names[1], 'Transparente', '450ml', '', '154', '350']];
+    return parseTab({ id: 'drive-qa-source', name: 'Fuente QA.xlsm' }, 'HOGAR', null, grid).rows.map((row: any) => ({ ...row, sourceVersion: version }));
+  };
+  const writeRows = async (data: any[], variantId = 'object-visual') => {
+    const ref = organizer.collection('products').doc(variantId);
+    await ref.set(productVariant(variantId, data));
+    await Promise.all(data.map(row => ref.collection('provenance').doc(String(row.line)).set(row)));
+  };
+  const writeScene = async (id: string, batchId: string, garmentId: string, scene: string, photoTask?: object) => {
+    const path = `generated/${clientId}/${batchId}/${id}/out.jpg`;
+    await bucket.file(path).save(await jpg(scene === 'clean' ? 'slategrey' : 'darkgrey'));
+    await db.doc(`jobs/${id}`).set({ clientId, batchId, garmentId, garmentName: garmentId, status: 'completed',
+      ...(photoTask ? { photoTask } : { productScene: scene }), currentOutput: { id: `${id}-output`, resultImagePath: path,
+        autoReview: { verdict: 'approved', marketplaceData: { title: 'Título sugerido', description: 'Descripción de prueba' } },
+        ...(photoTask ? { photoValidation: { fidelity: true, destinations: [{ channel: 'shein', position: 1, passed: true }] } } : {}) } });
+  };
+  try {
+    await db.doc(`users/${uid}`).set({ uid, role: 'admin', active: true });
+    await client.set({ name: 'JISHOP – datos de prueba', status: 'active', marketplaces: { shein: { enabled: true } } });
+    await bucket.file(templatePath).save(bytes);
+    const parsed = parseSpreadsheetTemplateWorkbook({ buffer: bytes, clientId, clientNameSnapshot: 'QA', storagePath: templatePath, originalFileName: 'Vaso.xlsx', createdByUid: uid });
+    const analyzed = await analyzeMarketplaceTemplate(bytes, 'shein', parsed.template, parsed.categories);
+    assert.equal(analyzed.template.exportConfig.validationStatus, 'needs_configuration');
+    const category = analyzed.categories[0];
+    const mappings = analyzed.template.exportConfig.mappings[category.id];
+    mappings.supplier_code = { source: 'variant.skc', required: true, dataType: 'text' };
+    if (real) {
+      const specification = category.columns.find((column: any) => column.key === 'main_attribute');
+      const dependent = category.columns.find((column: any) => column.key === 'main_attribute_value');
+      const option = specification.dropdownOptions.find((value: string) => /color/i.test(value));
+      const color = dependent.dropdownDependency.optionsByValue[option].find((value: string) => /transpar/i.test(value));
+      assert.ok(option && color);
+      mappings.main_attribute = { source: `literal.${option}`, required: true };
+      mappings.main_attribute_value = { source: 'variant.color', valueMap: { Transparente: color }, required: true };
+      mappings.secondary_attribute_1 = { source: 'literal.Talla(87)' };
+      mappings.attr_1000463 = { source: 'attribute.foodContactMaterial', required: true };
+    }
+    const templateRef = client.collection('spreadsheetTemplates').doc('vaso');
+    const timestamp = admin.firestore.Timestamp.now();
+    await templateRef.set({ ...parsed.template, createdAt: timestamp, updatedAt: timestamp });
+    for (const c of parsed.categories) await templateRef.collection('categories').doc(c.id).set({ ...c, templateId: 'vaso', createdAt: timestamp, updatedAt: timestamp });
+    const activation = await exports.configureMarketplaceTemplate.run(request({ clientId, templateId: 'vaso', marketplaceId: 'shein', operation: 'listing', mappings: { [category.id]: mappings } }));
+    const categoryDecision = { marketplaceId: 'shein', templateId: activation.templateId, categoryId: category.id, version: 1, confidence: 0.99, reason: 'Resultado simulado para el vaso de prueba.' };
+    await organizer.collection('photos').doc(refs[0].id).set({ version: '1', variantId: 'object-visual', method: 'manual', reviewedBy: uid, issue: null });
+    await writeRows(rows('1665', 0));
+    const link = await readOrganizerCommerce(organizer, refs);
+    assert.equal(link.source.variants[0].values.inventory, '0');
+    assert.equal(link.source.variants[1].values.inventory, undefined);
+    await db.doc('automationJobs/object-intake/organizerCommerce/object-item').set({ ...link, itemId: 'object-item', photos: refs, category: categoryDecision });
+    await db.doc('batches/object-batch').set({ clientId, automationJobId: 'object-intake', poseIds: [], productScenes: [{ type: 'clean' }, { type: 'hero' }] });
+    await writeScene('object-front', 'object-batch', 'object-item', 'clean');
+    await writeScene('object-side', 'object-batch', 'object-item', 'hero');
+    const initial = await exports.previewMarketplaceExports.run(request(scope));
+    const product = initial.products[0];
+    assert.equal(product.variants.length, 2);
+    assert.deepEqual(Object.values(product.organizer.source.origins).flat().map((row: any) => [row.fileName, row.version, row.tab, row.row]), [
+      ['Fuente QA.xlsm', '1665', 'HOGAR', 2], ['Fuente QA.xlsm', '1665', 'HOGAR', 3],
+    ]);
+    assert.ok(initial.channels[0].issues.some((issue: any) => issue.code === 'image_publication'));
+    if (real) assert.ok(initial.channels[0].issues.some((issue: any) => issue.field === 'attr_1000463'));
+    const material = real ? category.attributes.find((attr: any) => /1000463/.test(attr.name))?.values.find((value: string) => /vidrio|cristal/i.test(value)) : null;
+    await exports.saveMasterProduct.run(request({ ...scope, productId: product.id, expectedRevision: 0, organizerSourceRevision: product.organizer.revision,
+      values: { ...product.values, description: 'Descripción corregida en Catálogo' }, marketplaces: product.marketplaces,
+      variants: product.variants.map((variant: any) => ({ ...variant, attributes: { ...variant.attributes, ...(real ? { foodContactMaterial: material || 'Vidrio' } : {}) } })),
+    }));
+    const updates = rows('1666', 12);
+    updates[0].cells.find((cell: any) => cell.header === 'Precio de venta').originalValue = 159.5;
+    await writeRows(updates);
+    await assert.rejects(() => exports.saveMasterProduct.run(request({ ...scope, productId: product.id, expectedRevision: 1,
+      organizerSourceRevision: product.organizer.revision, values: product.values, variants: product.variants, marketplaces: product.marketplaces })), { code: 'aborted' });
+    const published = await publishMarketplaceImages.run(request({ ...publishScope, productId: product.id }));
+    assert.equal(published.failures.length, 0, JSON.stringify(published.failures));
+    assert.equal(published.images.length, 2);
+    assert.deepEqual((await publishMarketplaceImages.run(request({ ...publishScope, productId: product.id }))).images.map((i: any) => i.url), published.images.map((i: any) => i.url));
+    for (const photo of published.images) {
+      assert.match(photo.url, /^https:\/\/storage\.googleapis\.com\/demo-manglar-automation-marketplace-images\//);
+      assert.ok((await publicBucket.file(photo.storagePath).exists())[0]);
+    }
+    const ready = await exports.previewMarketplaceExports.run(request(scope));
+    assert.equal(ready.products[0].values.description, 'Descripción corregida en Catálogo');
+    assert.equal(ready.products[0].variants[0].values.inventory, '12');
+    assert.equal(ready.products[0].variants[0].values.price, '159.5');
+    assert.equal(ready.channels[0].ready, true, JSON.stringify(ready.channels[0].issues));
+    const input = { ...scope, marketplaceIds: ['shein'], requestId: 'qa-object-xlsx' };
+    const downloaded = await exports.downloadMarketplaceExports.run(request(input));
+    assert.deepEqual(await exports.downloadMarketplaceExports.run(request(input)), downloaded);
+    assert.equal(downloaded.failures.length, 0);
+    const artifacts = await db.collection('marketplaceExportRequests').get();
+    assert.equal(artifacts.size, 1);
+    const [buffer] = await bucket.file(artifacts.docs[0].get('artifactPath')).download();
+    const sheet = XLSX.read(buffer).Sheets[category.sheetName];
+    const cell = (key: string, offset = 0) => sheet[`${category.columns.find((c: any) => c.key === key).letter}${category.rowStart + offset}`];
+    assert.equal(cell('supplier_code').v, 'QA-VASO');
+    assert.equal(cell('supplier_sku', 1).v, '00002');
+    assert.equal(cell('supplier_sku').t, 's');
+    assert.equal(cell('main_img').v, published.images.find((i: any) => i.jobId === 'object-front').url);
+    assert.equal(cell('detail_img_1').v, published.images.find((i: any) => i.jobId === 'object-side').url);
+    assert.equal(cell(real ? category.columns.find((c: any) => c.key.startsWith('stock[')).key : 'stock').v, 12);
+    const [before, after] = await Promise.all([inspectWorkbookPackage(bytes), inspectWorkbookPackage(buffer)]);
+    assert.deepEqual(after.namedRanges, before.namedRanges);
+    assert.deepEqual(after.sheets.map((s: any) => s.validations), before.sheets.map((s: any) => s.validations));
+    const [originalZip, resultZip] = await Promise.all([JSZip.loadAsync(bytes), JSZip.loadAsync(buffer)]);
+    const writtenSheet = before.sheets.find((s: any) => s.name === category.sheetName).path;
+    assert.deepEqual(Object.keys(resultZip.files), Object.keys(originalZip.files));
+    for (const path of Object.keys(originalZip.files).filter(path => path !== writtenSheet && !originalZip.files[path].dir))
+      assert.deepEqual(await resultZip.file(path).async('nodebuffer'), await originalZip.file(path).async('nodebuffer'));
+    if (process.env.TUTO_DRIVE_CATALOG_ARTIFACT) await writeFile(process.env.TUTO_DRIVE_CATALOG_ARTIFACT, buffer);
+
+    const garmentRefs = [{ id: 'garment-reference', version: '1' }];
+    const garmentRows = rows('2', 4).map((row: any) => ({ ...row, skc: 'QA-PRENDA', name: 'Prenda de prueba', tab: 'ROPA' }));
+    await organizer.set({ minimumConfidence: .75 });
+    await organizer.collection('photos').doc(garmentRefs[0].id).set({ version: '1', variantId: 'garment-visual', method: 'manual', issue: null,
+      name: 'QA-PRENDA.jpg', view: 'front', quality: .95, visualConfidence: .99 });
+    await writeRows(garmentRows, 'garment-visual');
+    const garment = await readOrganizerCommerce(organizer, garmentRefs);
+    await db.doc('automationJobs/garment-intake/organizerCommerce/garment-item').set({ ...garment, itemId: 'garment-item', photos: garmentRefs });
+    assert.deepEqual(await organizerReferenceViews({ id: 'garment-intake', clientId, organizerCommerce: true }, 'garment-item'), { 'QA-PRENDA.jpg': 'front' });
+    await db.doc('batches/garment-batch').set({ clientId, automationJobId: 'garment-intake', poseIds: [] });
+    await writeScene('garment-front', 'garment-batch', 'garment-item', 'front', { id: 'task', itemId: 'garment-item', productId: 'garment-item', variantId: 'garment-item', view: 'front',
+      destinations: [{ channel: 'shein', position: 1, role: 'main', required: true }] });
+    const garmentPreview = await exports.previewMarketplaceExports.run(request({ clientId, batchIds: ['garment-batch'] }));
+    assert.equal(garmentPreview.products[0].variants.length, 2);
+    assert.ok(garmentPreview.products[0].variants.every((v: any) => v.values.skc === 'QA-PRENDA' &&
+      garmentPreview.products[0].photoAssignments.some((a: any) => a.variantId === v.id && a.eligible)));
+    assert.equal(garmentPreview.channels[0].issues[0].code, 'category');
+
+    const ambiguous = rows('1667', 12, ['Vaso de cristal', 'Vaso con popote']);
+    ambiguous[1].sku = ambiguous[0].sku;
+    ambiguous[1].size = ambiguous[0].size;
+    await writeRows(ambiguous);
+    const blocked = await exports.previewMarketplaceExports.run(request(scope));
+    assert.ok(blocked.channels[0].issues.some((issue: any) => issue.code === 'organizer_identity' && /productos distintos/.test(issue.message)));
+    assert.equal((await db.collection('jobs').get()).size, 3);
+  } finally {
+    await cleanupEmulatorDatabase(db);
+    await app.delete();
+  }
+});

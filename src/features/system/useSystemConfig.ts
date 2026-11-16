@@ -27,6 +27,8 @@ export const useSystemConfig = () => {
       if (snap.exists()) {
         const data = snap.data() as Partial<SystemConfig>;
         setConfig({
+          organizerWatcherEnabled: typeof data.organizerWatcherEnabled === 'boolean'
+            ? data.organizerWatcherEnabled : undefined,
           organizerAutoGenerationEnabled: typeof data.organizerAutoGenerationEnabled === 'boolean'
             ? data.organizerAutoGenerationEnabled : undefined,
           automationBudget: data.automationBudget,

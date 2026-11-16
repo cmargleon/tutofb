@@ -8,10 +8,12 @@ import { MARKETPLACES, isMarketplaceId, type MarketplaceId } from '../../../shar
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { validId } from '../manglar/access';
-import { projectMasterProducts } from './masterProducts';
+import { applyStoredMasterProduct, masterProductId, projectMasterProducts } from './masterProducts';
 import { inspectWorkbookPackage, patchWorkbookCells, assertPatchableCells, rangeContains, type SheetPatch, type CellPatch, xmlAttrs, validationAccepts } from './ooxmlWorkbook';
 import { sanitizeSpreadsheetFileName } from './batchSpreadsheetExport';
 import { attachMarketplacePublications } from './marketplaceImages';
+import { applyOrganizerSource, applyOrganizerVariantOverrides, assignOrganizerImages, loadOrganizerProducts } from './organizerProducts';
+import { digest } from '../organizer/drive';
 
 export function normalizeExportScope(input: MarketplaceExportScope): MarketplaceExportScope {
   const clientId = validId(input?.clientId);
@@ -36,12 +38,41 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
     jobs.push(...js.docs.map(d => ({ ...d.data(), id: d.id } as Job)));
     drafts.push(...ds.docs.map(d => ({ ...d.data(), id: d.id } as ProductDraft)));
   }
-  let products = projectMasterProducts(scope.clientId, batches, jobs, drafts);
-  if (products.reduce((sum, product) => sum + product.variants.length, 0) > 2000) throw new HttpsError('resource-exhausted', 'Selecciona hasta 2000 variantes por descarga.');
+  const products = projectMasterProducts(scope.clientId, batches, jobs, drafts);
   if (products.length > 500) throw new HttpsError('resource-exhausted', 'Exporta hasta 500 productos por descarga.');
   const stored: Record<string, StoredMasterProduct> = {};
   if (products.length) for (const d of await db.getAll(...products.map(p => clientRef.collection('products').doc(p.id)))) if (d.exists) stored[d.id] = d.data() as StoredMasterProduct;
-  products = projectMasterProducts(scope.clientId, batches, jobs, drafts, stored);
+  const byBatch = new Map(batches.map(batch => [batch.id!, batch]));
+  const commerce = await loadOrganizerProducts(client, batches, jobs);
+  const jobsByProduct = new Map<string, Job[]>();
+  for (const job of jobs) {
+    const id = job.photoTask
+      ? createHash('sha256').update(`${scope.clientId}\0photo-product\0${job.photoTask.productId}`).digest('hex').slice(0, 40)
+      : masterProductId(byBatch.get(job.batchId)!, job.garmentId);
+    const group = jobsByProduct.get(id) || [];
+    group.push(job);
+    jobsByProduct.set(id, group);
+  }
+  for (const product of products) {
+    const scenes = jobsByProduct.get(product.id) || [];
+    const scene = scenes[0];
+    const automationId = scene && byBatch.get(scene.batchId)?.automationJobId;
+    const link = automationId && commerce.get(`automationJobs/${automationId}/organizerCommerce/${scene.garmentId}`);
+    if (link) {
+      applyOrganizerSource(product, link, scenes);
+      link.revision = digest([link.source, link.category, product.values, product.variants]);
+    }
+    const saved = stored[product.id];
+    if (saved) {
+      applyStoredMasterProduct(product, saved);
+      if (link && saved.organizerOverrides) {
+        product.variants = applyOrganizerVariantOverrides(product.variants, saved.organizerOverrides);
+        link.confirmedIdentity = saved.organizerOverrides.confirmedIdentity === true;
+      }
+    }
+    if (link) assignOrganizerImages(product, scenes, byBatch, client);
+  }
+  if (products.reduce((sum, product) => sum + product.variants.length, 0) > 2000) throw new HttpsError('resource-exhausted', 'Selecciona hasta 2000 variantes por descarga.');
   const ts = await clientRef.collection('spreadsheetTemplates').limit(201).get();
   if (ts.size > 200) throw new HttpsError('resource-exhausted', 'El cliente supera 200 versiones de plantilla; contacta al administrador.');
   const templates = ts.docs.map(d => ({ ...d.data(), id: d.id } as SpreadsheetTemplate));
@@ -70,8 +101,15 @@ export function previewExportContext(context: Context): MarketplaceExportPreview
     const issues = products.flatMap(p => {
       const data = p.marketplaces[id]; const template = templates.find(t => t.id === data?.templateId && templateUsable(t, id, true));
       const category = categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
-      if (!template || !category) return [{ marketplaceId: id, productId: p.id, productName: p.values.name || p.garmentId, code: !available.length ? 'template' : 'category', message: !available.length ? 'Falta plantilla compatible activa.' : 'Selecciona plantilla y categoría para este producto.' }];
-      return MARKETPLACE_ADAPTERS[id].prepare(p, template, category).issues;
+      const issue = (code: string, message: string) => ({ marketplaceId: id, productId: p.id, productName: p.values.name || p.garmentId, code, message });
+      const sourceIssues = p.organizer?.source.issue && !p.organizer.confirmedIdentity ? [issue('organizer_identity', p.organizer.source.issue)] : [];
+      if (!template || !category) {
+        const decision = p.organizer?.category;
+        const reason = decision?.marketplaceId === id && !decision.templateId ? decision.reason : null;
+        return [...sourceIssues, issue(!available.length ? 'template' : 'category', reason ||
+          (!available.length ? 'Falta plantilla compatible activa.' : 'Selecciona plantilla y categoría para este producto.'))];
+      }
+      return [...sourceIssues, ...MARKETPLACE_ADAPTERS[id].prepare(p, template, category).issues];
     });
     if (!products.length) issues.push({ marketplaceId: id, productId: '', productName: '', code: 'products', message: 'El lote no contiene productos recuperables.' });
     if (!available.length && !issues.length) issues.push({ marketplaceId: id, productId: '', productName: '', code: 'template', message: 'Falta plantilla compatible activa.' });

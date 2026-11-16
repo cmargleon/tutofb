@@ -3,6 +3,14 @@ import type { MasterProduct, MasterVariant, MarketplaceExportIssue, ProductMarke
 import { getProductDraftColumnAllowedValues } from '../utils/spreadsheetDraftColumns';
 
 export const normalizeMarketplaceColumnKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+export function suggestedMarketplaceSource(marketplaceId: MarketplaceId, key: string) {
+  const normalized = normalizeMarketplaceColumnKey(key);
+  const aliases = MARKETPLACE_ADAPTERS[marketplaceId].aliases;
+  if (aliases[normalized]) return aliases[normalized];
+  if (marketplaceId !== 'shein') return '';
+  const detail = normalized.match(/^detail_img_(10|[1-9])$/)?.[1];
+  return detail ? `image.${detail}` : aliases[normalized.replace(/\[.*\]$/, '')] || '';
+}
 export interface AdaptedProduct { rows: Array<{ variantId: string; values: Record<string, string> }>; issues: MarketplaceExportIssue[] }
 export interface MarketplaceAdapter {
   id: MarketplaceId;
@@ -66,6 +74,8 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
       if (id === 'tiktok-shop' && new Set(eligible.map(a => a.angle)).size !== eligible.length) issue('gallery_angle', `Ángulo repetido en ${variant.id}.`);
     }
     const mappings = template.exportConfig?.mappings[category.id!] || {};
+    if (product.organizer && !Object.values(mappings).some(mapping => mapping.source === 'image.0'))
+      issue('image_mapping', 'Asocia la portada aprobada a su columna de imagen principal en la plantilla.');
     const publishedUrls = Object.values(product.publishedImages?.[id] || {}).map(image => image.url);
     const nonemptySkus = product.variants.map(v => v.values.sku || product.values.sku || '').filter(Boolean);
     if (new Set(nonemptySkus).size !== nonemptySkus.length) issue('duplicate_sku', 'Las variantes deben tener SKU distintos; corrige los duplicados.');
@@ -83,6 +93,9 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         const value = values[column.key];
         const normalizedKey = normalizeMarketplaceColumnKey(column.key);
         if ((column.required || mapping?.required) && !value.trim()) issue('required', `Falta ${column.label} en variante ${rowIndex + 1}.`, column.key);
+        if (product.organizer && !value && mapping?.source.startsWith('image.') && product.photoAssignments?.some(a =>
+          a.channel === id && a.variantId === variant.id && a.position === Number(mapping.source.slice(6)) + 1 && a.eligible))
+          issue('image_publication', `Prepara la URL pública de ${column.label} para la variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`, column.key);
         const allowed = getProductDraftColumnAllowedValues(category, column, values);
         if (value && allowed.length && !allowed.includes(value)) issue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
         if (value && column.dropdownFormula && !allowed.length) issue('unresolved_list', `${column.label}: lista dependiente sin resolver; requiere un adaptador específico.`, column.key);
@@ -91,6 +104,13 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         if (value && mapping?.dataType === 'number' && (!/^-?\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)))) issue('number', `${column.label}: número inválido.`, column.key);
         if (value && (mapping?.source === 'variant.gtin' || /^(gtin|ean|upc|universal_product_code|codigo_universal)$/.test(normalizedKey)) && !isValidGtin(value)) issue('gtin', `${column.label}: GTIN inválido; no se generará uno automáticamente.`, column.key);
         if (value && (mapping?.source === 'variant.asin' || normalizedKey === 'asin') && !/^[A-Z0-9]{10}$/.test(value)) issue('asin', `${column.label}: ASIN inválido.`, column.key);
+      }
+      if (product.organizer) {
+        const measurement = (key: string) => category.columns.some(c => mappings[c.key]?.source === `variant.${key}` && values[c.key]);
+        if (measurement('weight') && !variant.values.weightUnit && !product.values.weightUnit)
+          issue('weight_unit', `Falta la unidad del peso en variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`);
+        if (['length', 'width', 'height'].some(measurement) && !variant.values.dimensionUnit && !product.values.dimensionUnit)
+          issue('dimension_unit', `Falta la unidad de dimensiones en variante ${variant.values.sku || variant.values.skc || rowIndex + 1}.`);
       }
       if (id === 'mercado-libre' && template.exportConfig?.operation === 'existing_catalog') {
         if (!variant.values.catalogId || !category.columns.some(c => mappings[c.key]?.source === 'variant.catalogId' && values[c.key])) issue('catalog_identifier', 'Vinculación a catálogo: falta el ID de catálogo y su asociación a la plantilla.');
@@ -114,7 +134,12 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
   },
 });
 export const MARKETPLACE_ADAPTERS: Record<MarketplaceId, MarketplaceAdapter> = {
-  shein: createAdapter('shein', { image_type: 'assignment.imageType', image_sort: 'assignment.imageSort', supplier_code: 'variant.spu', skc: 'variant.skc', sku_code: 'variant.sku', goods_name: 'product.name', goods_description: 'product.description', main_attribute_value: 'variant.color', secondary_attribute_1_value: 'variant.size', main_img: 'image.0', detail_img_1: 'image.1' }),
+  shein: createAdapter('shein', { image_type: 'assignment.imageType', image_sort: 'assignment.imageSort', supplier_code: 'variant.spu', skc: 'variant.skc',
+    sku_code: 'variant.sku', supplier_sku: 'variant.sku', goods_name: 'product.name', default_product_name: 'product.name',
+    goods_description: 'product.description', default_product_desc: 'product.description', main_attribute_value: 'variant.color',
+    secondary_attribute_1_value: 'variant.size', main_img: 'image.0', detail_img_1: 'image.1', stock: 'variant.inventory',
+    original_price: 'variant.price', weight: 'variant.weight', weight_unit: 'variant.weightUnit', length: 'variant.length',
+    width: 'variant.width', height: 'variant.height', length_unit: 'variant.dimensionUnit', quantity_number: 'variant.pack' }),
   'mercado-libre': createAdapter('mercado-libre', { sku_del_vendedor: 'variant.sku', codigo_universal: 'variant.gtin', titulo: 'product.name', seller_sku: 'variant.sku', seller_custom_field: 'variant.sku', title: 'product.name', available_quantity: 'variant.inventory', catalog_product_id: 'variant.catalogId', picture: 'image.0' }),
   'tiktok-shop': createAdapter('tiktok-shop', { seller_sku: 'variant.sku', product_name: 'product.name', product_description: 'product.description', retail_price: 'variant.price', quantity: 'variant.inventory', main_image: 'image.0' }),
   amazon: createAdapter('amazon', { item_sku: 'variant.sku', item_name: 'product.name', brand_name: 'product.brand', product_description: 'product.description', standard_price: 'variant.price', quantity: 'variant.inventory', external_product_id: 'variant.gtin', asin: 'variant.asin', parent_sku: 'variant.parentSku', parent_child: 'variant.parentage', relationship_type: 'variant.relationshipType', variation_theme: 'variant.variationTheme', main_image_url: 'image.0' }),

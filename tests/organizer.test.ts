@@ -32,7 +32,7 @@ test('lee Sheets con pestañas heterogéneas, cruza SKU y SKC inequívocos y man
     ['Portada', 0, 0], ['Ropa 2026', 1, 1], ["Control d'exportación", 2, 1], ['Vacía', 3, 0],
   ]);
   const rows = imported.flatMap(item => item.rows);
-  assert.deepEqual(rows[0].cells[1], { column: 'B', value: 'A218-N-CH', originalValue: 'A218-N-CH', field: 'skc' });
+  assert.deepEqual(rows[0].cells[1], { column: 'B', header: 'Código SKC', value: 'A218-N-CH', originalValue: 'A218-N-CH', field: 'skc' });
   assert.equal(rows[0].line, 3);
   assert.equal(rows[0].cells.find(cell => cell.field === 'photo')?.originalValue, '=IF(TRUE,"OK","")');
   assert.equal(rows[1].skc, '');

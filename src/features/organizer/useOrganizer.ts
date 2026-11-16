@@ -133,8 +133,11 @@ export function useOrganizer() {
     if (paid && (!config || !await confirm({ title: 'Iniciar clasificación',
       description: `Se aplicará ${selection ? 'el reanálisis seleccionado' : 'el plan de la simulación revisada'} conservando los originales. Puede usar hasta USD ${config.budgetUsd} de Gemini y crear copias verificadas en Drive. Si la generación después de organizar está activada, las fotos nuevas pasarán a automatización con el presupuesto del cliente.`,
       confirmLabel: 'Iniciar ejecución' }))) return;
+    if (mode === 'generate' && (!config || !await confirm({ title: 'Generar desde las fotos originales',
+      description: `Se leerá Drive y las referencias se guardarán en Tuto. Gemini puede usar hasta USD ${config.budgetUsd}. Las fotos se generarán con el presupuesto de automatización del cliente.`,
+      confirmLabel: 'Generar fotos' }))) return;
     const result = await perform<OrganizerRun>({ action: 'start', mode, clientId, requestId: crypto.randomUUID(),
-      confirmedBudgetUsd: paid ? config?.budgetUsd : undefined, planRunId: paid && !selection ? planRunId : undefined, ...selection }, 'Ejecución en cola');
+      confirmedBudgetUsd: paid || mode === 'generate' ? config?.budgetUsd : undefined, planRunId: paid && !selection ? planRunId : undefined, ...selection }, 'Ejecución en cola');
     if (result) { setRun(result); refresh(); }
   };
   const control = async (action: 'pause' | 'resume' | 'cancel') => {

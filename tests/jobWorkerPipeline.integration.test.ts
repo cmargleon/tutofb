@@ -224,6 +224,14 @@ test('job pipeline characterization: generation, reference reuse, review resume 
       await run('automation: resume review after exhausted retries -> rejected', {},
         { jobId: exhausted, source: 'requeue', review: 'rejected' });
 
+      // Inconsistent "review pending" states: only one of currentOutput / currentOutputId is set.
+      const strayOutput = { provider: 'fal-nano-banana-2', resultImagePath: paths.garment, contentType: 'image/jpeg',
+        remoteUrl: null, requestId: 'old-req', providerResponseSummary: {}, costUsd: 0.08, durationSeconds: 5 };
+      await run('automation: review pending with currentOutput but no currentOutputId',
+        baseJob({ ...automation, automationReviewPending: true, generationAttemptCount: 1, currentOutput: strayOutput }));
+      await run('automation: review pending with currentOutputId but no currentOutput',
+        baseJob({ ...automation, automationReviewPending: true, generationAttemptCount: 1, currentOutputId: 'ghost' }));
+
       const ordered = Object.fromEntries(Object.keys(results).sort().map(k => [k, results[k]]));
       if (process.env.UPDATE_JOB_WORKER_GOLDEN === '1' || !existsSync(goldenPath)) {
         writeFileSync(goldenPath, `${JSON.stringify(ordered, null, 2)}\n`);

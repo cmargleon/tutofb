@@ -3889,6 +3889,620 @@
       }
     ]
   },
+  "automation: review pending with currentOutput but no currentOutputId": {
+    "trace": [
+      "claim",
+      "claimCheck",
+      "review"
+    ],
+    "providerCalls": [],
+    "reviewCalls": [
+      {
+        "apiKey": "test-only",
+        "attemptNumber": 1,
+        "automation": {
+          "generation": {
+            "claimToken": "<claim0>",
+            "id": "<jobId>"
+          },
+          "id": "auto-1",
+          "key": "review:<jobId>:<claim0>",
+          "kind": "review"
+        },
+        "batchId": "batch-1",
+        "clientId": "client-1",
+        "clientNameSnapshot": "Cliente",
+        "exactAutomationPrompt": true,
+        "finalPrompt": "Prompt final",
+        "garmentId": "garment-1",
+        "garmentName": "Camisa",
+        "garmentReference": {
+          "bytes": "<bytes:c73ff63b9f>",
+          "mimeType": "image/jpeg"
+        },
+        "generatedImage": {
+          "bytes": "<bytes:c73ff63b9f>",
+          "mimeType": "image/jpeg"
+        },
+        "generationKind": "garment",
+        "jobId": "<jobId>",
+        "maxAttempts": 3,
+        "model": "",
+        "modelId": "model-1",
+        "modelIdentityTraitsSnapshot": null,
+        "modelNameSnapshot": "Modelo",
+        "poseId": "pose-1",
+        "poseReference": {
+          "bytes": "<bytes:aa080a555f>",
+          "mimeType": "image/jpeg"
+        },
+        "productReferences": [
+          {
+            "bytes": "<bytes:aa080a555f>",
+            "mimeType": "image/jpeg"
+          },
+          {
+            "bytes": "<bytes:c73ff63b9f>",
+            "mimeType": "image/jpeg"
+          },
+          {
+            "bytes": "<bytes:c73ff63b9f>",
+            "mimeType": "image/jpeg"
+          }
+        ],
+        "promptBase": "Prompt base",
+        "requestedPromptBase": "Prompt pedido",
+        "signal": "<signal>",
+        "userUid": "user-1"
+      }
+    ],
+    "job": {
+      "aspectRatio": "3:4",
+      "autoReviewMaxAttempts": 3,
+      "automationJobId": "auto-1",
+      "automationManaged": true,
+      "automationReferencePaths": [
+        "garments/g/front.jpg",
+        "garments/g/back.jpg"
+      ],
+      "automationReviewPending": false,
+      "batchId": "batch-1",
+      "claimExpiresAt": null,
+      "claimToken": null,
+      "claimedBy": null,
+      "clientId": "client-1",
+      "clientNameSnapshot": "Cliente",
+      "completedAt": "<ts>",
+      "completedOutputCount": 1,
+      "createdByUid": "user-1",
+      "currentOutput": {
+        "aspectRatio": "3:4",
+        "autoReview": {
+          "attemptNumber": 1,
+          "criteria": [
+            {
+              "key": "identity",
+              "label": "Identidad",
+              "notes": "n",
+              "passed": true
+            }
+          ],
+          "marketplaceData": {
+            "title": "Titulo"
+          },
+          "model": "gemini-test",
+          "reviewPrompt": "review prompt",
+          "reviewedAt": "<ts>",
+          "revisedPrompt": null,
+          "summary": "Cumple",
+          "verdict": "approved"
+        },
+        "batchId": "batch-1",
+        "clientId": "client-1",
+        "clientNameSnapshot": "Cliente",
+        "contentType": "image/jpeg",
+        "costUsd": 0.08,
+        "createdAt": "<ts>",
+        "durationSeconds": "<n>",
+        "failureInfo": null,
+        "finalPrompt": "Prompt final",
+        "garmentId": "garment-1",
+        "garmentName": "Camisa",
+        "generationAttempt": 1,
+        "id": "<output0>",
+        "imageConfig": {
+          "aspectRatio": "3:4",
+          "provider": "fal-nano-banana-2",
+          "resolution": "1K"
+        },
+        "isCurrent": true,
+        "jobId": "<jobId>",
+        "modelId": "model-1",
+        "modelNameSnapshot": "Modelo",
+        "poseImageId": "pose-1",
+        "promptBase": "Prompt base",
+        "provider": "fal-nano-banana-2",
+        "providerResponseSummary": {},
+        "remoteUrl": null,
+        "requestId": "old-req",
+        "requestedPromptBase": "Prompt pedido",
+        "resultImagePath": "generated/client-1/batch-1/<jobId>/<output0>.jpg",
+        "thumbnailPath": "generated/client-1/batch-1/<jobId>/<output0>_thumb.jpg"
+      },
+      "currentOutputId": "<output0>",
+      "failureInfo": null,
+      "finalPrompt": "Prompt final",
+      "garmentFilePath": "garments/g/front.jpg",
+      "garmentId": "garment-1",
+      "garmentName": "Camisa",
+      "garmentPhotoId": "photo-1",
+      "garmentView": "front",
+      "generationAttemptCount": 1,
+      "generationKind": "garment",
+      "imageConfig": {
+        "aspectRatio": "3:4",
+        "provider": "fal-nano-banana-2",
+        "resolution": "1K"
+      },
+      "lastAttemptStartedAt": "<ts>",
+      "lastError": null,
+      "latestAutoReview": {
+        "attemptNumber": 1,
+        "criteria": [
+          {
+            "key": "identity",
+            "label": "Identidad",
+            "notes": "n",
+            "passed": true
+          }
+        ],
+        "marketplaceData": {
+          "title": "Titulo"
+        },
+        "model": "gemini-test",
+        "reviewPrompt": "review prompt",
+        "reviewedAt": "<ts>",
+        "revisedPrompt": null,
+        "summary": "Cumple",
+        "verdict": "approved"
+      },
+      "latestOutputCreatedAt": "<ts>",
+      "maxRetries": 1,
+      "modelId": "model-1",
+      "modelNameSnapshot": "Modelo",
+      "poseImageId": "pose-1",
+      "poseImagePath": "clients/c/models/m/poses/pose.jpg",
+      "promptBase": "Prompt base",
+      "provider": "fal-nano-banana-2",
+      "providerUsage": {
+        "fal-nano-banana-2": {
+          "completedOutputs": 1,
+          "totalCostUsd": 0.08,
+          "totalDurationSeconds": "<n>"
+        }
+      },
+      "queuePriority": 0,
+      "requestedPromptBase": "Prompt pedido",
+      "retryCount": 0,
+      "retryNotBefore": null,
+      "reviewSignals": {
+        "firstAutoReviewVerdict": "approved",
+        "latestAutoReviewVerdict": "approved"
+      },
+      "startedAt": "<ts>",
+      "status": "completed",
+      "timeoutAt": null,
+      "totalCostUsd": 0.08,
+      "totalDurationSeconds": "<n>",
+      "traceability": {
+        "lastAttemptStartedAt": "<ts>",
+        "lastCompletedAt": "<ts>"
+      },
+      "updatedAt": "<ts>"
+    },
+    "outputs": [
+      {
+        "aspectRatio": "3:4",
+        "autoReview": {
+          "attemptNumber": 1,
+          "criteria": [
+            {
+              "key": "identity",
+              "label": "Identidad",
+              "notes": "n",
+              "passed": true
+            }
+          ],
+          "marketplaceData": {
+            "title": "Titulo"
+          },
+          "model": "gemini-test",
+          "reviewPrompt": "review prompt",
+          "reviewedAt": "<ts>",
+          "revisedPrompt": null,
+          "summary": "Cumple",
+          "verdict": "approved"
+        },
+        "batchId": "batch-1",
+        "clientId": "client-1",
+        "clientNameSnapshot": "Cliente",
+        "contentType": "image/jpeg",
+        "costUsd": 0.08,
+        "createdAt": "<ts>",
+        "durationSeconds": "<n>",
+        "failureInfo": null,
+        "finalPrompt": "Prompt final",
+        "garmentId": "garment-1",
+        "garmentName": "Camisa",
+        "generationAttempt": 1,
+        "id": "<output0>",
+        "imageConfig": {
+          "aspectRatio": "3:4",
+          "provider": "fal-nano-banana-2",
+          "resolution": "1K"
+        },
+        "isCurrent": true,
+        "jobId": "<jobId>",
+        "modelId": "model-1",
+        "modelNameSnapshot": "Modelo",
+        "poseImageId": "pose-1",
+        "promptBase": "Prompt base",
+        "provider": "fal-nano-banana-2",
+        "providerResponseSummary": {},
+        "remoteUrl": null,
+        "requestId": "old-req",
+        "requestedPromptBase": "Prompt pedido",
+        "resultImagePath": "generated/client-1/batch-1/<jobId>/<output0>.jpg",
+        "thumbnailPath": "generated/client-1/batch-1/<jobId>/<output0>_thumb.jpg"
+      }
+    ],
+    "logs": [
+      {
+        "createdAt": "<ts>",
+        "level": "info",
+        "message": "Gemini aprobó la imagen generada.",
+        "outputId": "<output0>",
+        "payload": {
+          "attemptNumber": 1,
+          "criteria": [
+            {
+              "key": "identity",
+              "label": "Identidad",
+              "notes": "n",
+              "passed": true
+            }
+          ],
+          "failureInfo": null,
+          "marketplaceData": {
+            "title": "Titulo"
+          },
+          "model": "gemini-test",
+          "reviewPrompt": "review prompt",
+          "revisedPrompt": null,
+          "summary": "Cumple",
+          "verdict": "approved"
+        },
+        "type": "quality_review"
+      },
+      {
+        "createdAt": "<ts>",
+        "level": "info",
+        "message": "Proveedor completó la generación y el resultado fue guardado.",
+        "outputId": "<output0>",
+        "payload": {
+          "generationAttempt": 1,
+          "provider": "fal-nano-banana-2",
+          "remoteUrl": null,
+          "requestId": "old-req",
+          "summary": {}
+        },
+        "type": "provider_response"
+      },
+      {
+        "createdAt": "<ts>",
+        "level": "info",
+        "message": "Se reanudó la revisión del output existente sin otra generación.",
+        "payload": {
+          "aspectRatio": "3:4",
+          "garmentFilePath": "garments/g/front.jpg",
+          "garmentPhotoFileName": null,
+          "garmentPhotoId": "photo-1",
+          "garmentView": "front",
+          "imageConfig": {
+            "aspectRatio": "3:4",
+            "provider": "fal-nano-banana-2",
+            "resolution": "1K"
+          },
+          "imageConfigSummary": "3:4 · 1K",
+          "poseImagePath": "clients/c/models/m/poses/pose.jpg",
+          "promptBase": "Prompt base",
+          "provider": "fal-nano-banana-2",
+          "requestedPromptBase": "Prompt pedido"
+        },
+        "type": "quality_review"
+      },
+      {
+        "createdAt": "<ts>",
+        "level": "info",
+        "message": "Trabajo completado y aprobado por la autoevaluación.",
+        "outputId": "<output0>",
+        "payload": {
+          "costUsd": 0.08,
+          "destinationPath": "generated/client-1/batch-1/<jobId>/<output0>.jpg",
+          "durationSeconds": "<n>",
+          "generationAttempt": 1
+        },
+        "type": "completed"
+      },
+      {
+        "createdAt": "<ts>",
+        "level": "info",
+        "message": "Trabajo reclamado por el worker.",
+        "payload": {
+          "claimToken": "<claim0>",
+          "source": "create",
+          "workerId": "worker:create:<uuid>"
+        },
+        "type": "claim"
+      }
+    ],
+    "storage": [
+      {
+        "bytes": "<bytes:c5889d482b>",
+        "cacheControl": "private, max-age=31536000",
+        "contentType": "image/jpeg",
+        "name": "generated/client-1/batch-1/<jobId>/<output0>_thumb.jpg"
+      },
+      {
+        "bytes": "<bytes:c73ff63b9f>",
+        "cacheControl": "private, max-age=31536000",
+        "contentType": "image/jpeg",
+        "name": "generated/client-1/batch-1/<jobId>/<output0>.jpg"
+      }
+    ]
+  },
+  "automation: review pending with currentOutputId but no currentOutput": {
+    "trace": [
+      "claim",
+      "reserve:generation:generation:<jobId>:<claim0>",
+      "provider",
+      "settle:op-1:0.08:true",
+      "claimCheck",
+      "review"
+    ],
+    "providerCalls": [
+      {
+        "keys": {
+          "falKey": "test-only"
+        },
+        "provider": "fal-nano-banana-2",
+        "request": {
+          "garmentImageUrl": "https://signed.invalid/garments/g/front.jpg",
+          "imageConfig": {
+            "aspectRatio": "3:4",
+            "provider": "fal-nano-banana-2",
+            "resolution": "1K"
+          },
+          "poseImageUrl": "https://signed.invalid/clients/c/models/m/poses/pose.jpg",
+          "prompt": "Prompt final",
+          "signal": "<signal>"
+        }
+      }
+    ],
+    "reviewCalls": [
+      {
+        "apiKey": "test-only",
+        "attemptNumber": 2,
+        "automation": {
+          "generation": {
+            "claimToken": "<claim0>",
+            "id": "<jobId>"
+          },
+          "id": "auto-1",
+          "key": "review:<jobId>:<claim0>",
+          "kind": "review"
+        },
+        "batchId": "batch-1",
+        "clientId": "client-1",
+        "clientNameSnapshot": "Cliente",
+        "exactAutomationPrompt": true,
+        "finalPrompt": "Prompt final",
+        "garmentId": "garment-1",
+        "garmentName": "Camisa",
+        "garmentReference": {
+          "bytes": "<bytes:c73ff63b9f>",
+          "mimeType": "image/jpeg"
+        },
+        "generatedImage": {
+          "bytes": "<bytes:ae8be448f5>",
+          "mimeType": "image/png"
+        },
+        "generationKind": "garment",
+        "jobId": "<jobId>",
+        "maxAttempts": 3,
+        "model": "",
+        "modelId": "model-1",
+        "modelIdentityTraitsSnapshot": null,
+        "modelNameSnapshot": "Modelo",
+        "poseId": "pose-1",
+        "poseReference": {
+          "bytes": "<bytes:aa080a555f>",
+          "mimeType": "image/jpeg"
+        },
+        "productReferences": [
+          {
+            "bytes": "<bytes:aa080a555f>",
+            "mimeType": "image/jpeg"
+          },
+          {
+            "bytes": "<bytes:c73ff63b9f>",
+            "mimeType": "image/jpeg"
+          },
+          {
+            "bytes": "<bytes:c73ff63b9f>",
+            "mimeType": "image/jpeg"
+          }
+        ],
+        "promptBase": "Prompt base",
+        "requestedPromptBase": "Prompt pedido",
+        "signal": "<signal>",
+        "userUid": "user-1"
+      }
+    ],
+    "job": {
+      "aspectRatio": "3:4",
+      "autoReviewMaxAttempts": 3,
+      "automationJobId": "auto-1",
+      "automationManaged": true,
+      "automationReferencePaths": [
+        "garments/g/front.jpg",
+        "garments/g/back.jpg"
+      ],
+      "automationReviewPending": true,
+      "batchId": "batch-1",
+      "claimExpiresAt": null,
+      "claimToken": null,
+      "claimedBy": null,
+      "clientId": "client-1",
+      "clientNameSnapshot": "Cliente",
+      "createdByUid": "user-1",
+      "currentOutput": null,
+      "currentOutputId": "ghost",
+      "failureInfo": {
+        "attemptNumber": 1,
+        "finishReason": null,
+        "httpStatus": null,
+        "maxAttempts": 1,
+        "outputId": null,
+        "promptFeedback": null,
+        "provider": "fal-nano-banana-2",
+        "providerStatus": null,
+        "raw": {
+          "message": "Cannot read properties of null (reading 'contentType')",
+          "name": "TypeError",
+          "stack": "TypeError: Cannot read properties of null (reading 'contentType')"
+        },
+        "reasonCode": "unknown",
+        "requestId": null,
+        "retryable": true,
+        "source": "provider",
+        "stage": "generation",
+        "technicalMessage": "Cannot read properties of null (reading 'contentType')",
+        "title": "La generación falló",
+        "userMessage": "Ocurrió un error no clasificado durante el procesamiento del job."
+      },
+      "finalPrompt": "Prompt final",
+      "garmentFilePath": "garments/g/front.jpg",
+      "garmentId": "garment-1",
+      "garmentName": "Camisa",
+      "garmentPhotoId": "photo-1",
+      "garmentView": "front",
+      "generationAttemptCount": 1,
+      "generationKind": "garment",
+      "imageConfig": {
+        "aspectRatio": "3:4",
+        "provider": "fal-nano-banana-2"
+      },
+      "lastAttemptStartedAt": "<ts>",
+      "lastError": "La generación falló: Ocurrió un error no clasificado durante el procesamiento del job.",
+      "maxRetries": 1,
+      "modelId": "model-1",
+      "modelNameSnapshot": "Modelo",
+      "poseImageId": "pose-1",
+      "poseImagePath": "clients/c/models/m/poses/pose.jpg",
+      "promptBase": "Prompt base",
+      "provider": "fal-nano-banana-2",
+      "queuePriority": 0,
+      "requestedPromptBase": "Prompt pedido",
+      "retryCount": 1,
+      "retryNotBefore": "<ts>",
+      "startedAt": null,
+      "status": "pending",
+      "timeoutAt": null,
+      "traceability": {
+        "lastAttemptStartedAt": "<ts>",
+        "lastProviderErrorAt": "<ts>",
+        "lastProviderErrorMessage": "La generación falló: Ocurrió un error no clasificado durante el procesamiento del job."
+      },
+      "updatedAt": "<ts>"
+    },
+    "outputs": [],
+    "logs": [
+      {
+        "createdAt": "<ts>",
+        "level": "info",
+        "message": "Se enviaron los insumos al proveedor.",
+        "payload": {
+          "aspectRatio": "3:4",
+          "garmentFilePath": "garments/g/front.jpg",
+          "garmentPhotoFileName": null,
+          "garmentPhotoId": "photo-1",
+          "garmentView": "front",
+          "imageConfig": {
+            "aspectRatio": "3:4",
+            "provider": "fal-nano-banana-2",
+            "resolution": "1K"
+          },
+          "imageConfigSummary": "3:4 · 1K",
+          "poseImagePath": "clients/c/models/m/poses/pose.jpg",
+          "promptBase": "Prompt base",
+          "provider": "fal-nano-banana-2",
+          "requestedPromptBase": "Prompt pedido"
+        },
+        "type": "provider_request"
+      },
+      {
+        "createdAt": "<ts>",
+        "level": "info",
+        "message": "Trabajo reclamado por el worker.",
+        "payload": {
+          "claimToken": "<claim0>",
+          "source": "create",
+          "workerId": "worker:create:<uuid>"
+        },
+        "type": "claim"
+      },
+      {
+        "createdAt": "<ts>",
+        "level": "warn",
+        "message": "La generación falló y quedó reencolada para el intento 1.",
+        "payload": {
+          "error": {
+            "message": "Cannot read properties of null (reading 'contentType')",
+            "name": "TypeError",
+            "stack": "TypeError: Cannot read properties of null (reading 'contentType')"
+          },
+          "failureInfo": {
+            "attemptNumber": 1,
+            "finishReason": null,
+            "httpStatus": null,
+            "maxAttempts": 1,
+            "outputId": null,
+            "promptFeedback": null,
+            "provider": "fal-nano-banana-2",
+            "providerStatus": null,
+            "raw": {
+              "message": "Cannot read properties of null (reading 'contentType')",
+              "name": "TypeError",
+              "stack": "TypeError: Cannot read properties of null (reading 'contentType')"
+            },
+            "reasonCode": "unknown",
+            "requestId": null,
+            "retryable": true,
+            "source": "provider",
+            "stage": "generation",
+            "technicalMessage": "Cannot read properties of null (reading 'contentType')",
+            "title": "La generación falló",
+            "userMessage": "Ocurrió un error no clasificado durante el procesamiento del job."
+          },
+          "maxRetries": 1,
+          "retryCount": 1
+        },
+        "type": "retry_scheduled"
+      }
+    ],
+    "storage": []
+  },
   "garment: claim lost after provider": {
     "trace": [
       "claim",

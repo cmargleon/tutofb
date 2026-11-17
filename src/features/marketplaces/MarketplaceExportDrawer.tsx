@@ -1,11 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, X, CheckCircle2, AlertCircle, ChevronDown, ArrowDownRight, Loader2 } from 'lucide-react';
+import { Download, X, CheckCircle2, AlertCircle, ChevronDown, ArrowDownRight, ImageOff, Loader2 } from 'lucide-react';
 import { MARKETPLACES, type MarketplaceId } from '../../../shared/src/marketplaces';
 import type { MarketplaceExportIssue, MarketplaceExportScope } from '../../../shared/src/types';
 import { Button, LoadingBlock } from '../../components/ui';
+import { useStorageAssetUrl } from '../storage/useStorageAssetUrl';
 import { MarketplaceProductEditor } from './MarketplaceProductEditor';
 import { useMarketplaceExport } from './useMarketplaceExport';
+
+function OriginalProductThumbnail({ storagePath }: { storagePath?: string }) {
+  const { url, loading } = useStorageAssetUrl(storagePath);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  return <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+    {url && url !== failedUrl
+      ? <img src={url} alt="Foto original del producto" className="h-full w-full object-contain" onError={() => setFailedUrl(url)} />
+      : loading && storagePath
+        ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" role="img" aria-label="Cargando foto original" />
+        : <ImageOff className="h-4 w-4 text-slate-400" role="img" aria-label="Foto original no disponible" />}
+  </div>;
+}
 
 export function MarketplaceExportDrawer({ scope, onClose }: { key?: string; scope: MarketplaceExportScope; onClose: () => void }) {
   const state = useMarketplaceExport(scope); const dialog = useRef<HTMLDialogElement>(null); const [editing, setEditing] = useState<string | null>(null);
@@ -79,7 +92,22 @@ export function MarketplaceExportDrawer({ scope, onClose }: { key?: string; scop
             </div>;
           })}</div>
           {preview.channels.filter(c => c.issues.length > 0).map(c => <details key={c.marketplaceId} data-validation-summary={c.marketplaceId} className="rounded-xl border border-amber-200 p-4"><summary className="cursor-pointer text-sm font-medium">{MARKETPLACES.find(m => m.id === c.marketplaceId)?.name} · resumen de validación ({c.issues.length})</summary><ul className="mt-3 space-y-2 text-xs text-slate-600">{c.issues.map((issue, i) => <li key={i}><strong>{issue.productName}</strong> {issue.message} {issue.productId && <button type="button" disabled={state.busy} className="ml-2 text-indigo-700 underline" onClick={() => goToIssue(issue)}>Corregir información</button>}</li>)}</ul></details>)}
-          <fieldset disabled={state.busy} aria-label="Datos de los productos" className="space-y-3"><h3 className="text-sm font-semibold">Datos del producto</h3>{preview.products.map(p => <div key={`${p.id}:${p.revision}`} className="rounded-xl border border-slate-200 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">{p.values.name || p.garmentId}</p><p className="mt-1 text-xs text-slate-500">{p.variants.length} variantes · {p.approvedImages.length} fotos aprobadas{p.legacyDrafts.length ? ' · datos históricos recuperados' : ''}</p></div><Button variant="ghost" size="sm" disabled={state.busy} onClick={() => { setFocusedIssue(null); setEditing(editing === p.id ? null : p.id); }}>{editing === p.id ? 'Cerrar datos' : 'Completar datos'}</Button></div>{editing === p.id && <MarketplaceProductEditor analyzing={state.analyzing} focusedIssue={focusedIssue?.productId === p.id ? focusedIssue : null} product={p} scope={scope} preview={preview} onSaved={async () => { await state.refresh(); setFocusedIssue(null); setEditing(null); }} />}</div>)}</fieldset>
+          <fieldset disabled={state.busy} aria-label="Datos de los productos" className="space-y-3">
+            <h3 className="text-sm font-semibold">Datos del producto</h3>
+            {preview.products.map(p => <div key={`${p.id}:${p.revision}`} className="rounded-xl border border-slate-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
+                <div className="flex min-w-0 items-center gap-3">
+                  <OriginalProductThumbnail storagePath={p.originalImages?.find(image => image.storagePath)?.storagePath} />
+                  <div className="min-w-0 break-words">
+                    <p className="text-sm font-semibold">{p.values.name || p.garmentId}</p>
+                    <p className="mt-1 text-xs text-slate-500">{p.variants.length} variantes · {p.approvedImages.length} fotos aprobadas{p.legacyDrafts.length ? ' · datos históricos recuperados' : ''}</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" disabled={state.busy} onClick={() => { setFocusedIssue(null); setEditing(editing === p.id ? null : p.id); }}>{editing === p.id ? 'Cerrar datos' : 'Completar datos'}</Button>
+              </div>
+              {editing === p.id && <MarketplaceProductEditor analyzing={state.analyzing} focusedIssue={focusedIssue?.productId === p.id ? focusedIssue : null} product={p} scope={scope} preview={preview} onSaved={async () => { await state.refresh(); setFocusedIssue(null); setEditing(null); }} />}
+            </div>)}
+          </fieldset>
         </>}
         {state.result && <div role="status" className="space-y-3 rounded-xl border border-slate-200 p-4 text-sm">{state.result.downloadUrl && <p>Descarga preparada: <a href={state.result.downloadUrl} className="text-indigo-700 underline">{state.result.fileName}</a>. Enlace válido durante 15 minutos.</p>}{state.result.failures.map(f => <p key={f.marketplaceId} className="whitespace-pre-line text-red-700">{f.marketplaceId}: {f.message}</p>)}{state.result.failures.length > 0 && <p className="text-xs text-slate-500">Los destinos que fallaron quedan seleccionados para un reintento explícito. Los archivos válidos ya están disponibles.</p>}</div>}
       </div><footer className="shrink-0 border-t border-slate-200 bg-slate-50 p-5 sm:p-6"><p id="marketplace-download-help" className="mb-3 text-xs text-slate-500">Al pulsar Descargar, autorizas crear enlaces públicos para las fotos aprobadas que necesiten los destinos elegidos. Recibirás un Excel (XLSX) o un ZIP si se generan varios archivos.</p><div className="flex items-center justify-between gap-3"><span className="text-xs font-medium">{state.selected.length} destinos seleccionados</span><Button icon={Download} aria-describedby="marketplace-download-help" loading={state.busy} disabled={state.loading || !canDownload} onClick={() => void state.download()}>{state.busy ? 'Preparando descarga…' : state.result?.failures.length ? 'Descargar / reintentar fallidos' : 'Descargar'}</Button></div></footer>

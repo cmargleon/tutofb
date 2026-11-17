@@ -26,9 +26,9 @@ export const previewMarketplaceExports = onCall<MarketplaceExportPreviewRequest>
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
   return previewMarketplaceExport(request.data, request.auth!.uid, GEMINI_API_KEY.value());
 });
-export const downloadMarketplaceExports = onCall<DownloadMarketplaceExportRequest>(options, async request => {
+export const downloadMarketplaceExports = onCall<DownloadMarketplaceExportRequest>({ ...options, secrets: [GEMINI_API_KEY] }, async request => {
   await assertCallableRoles(request, ['admin', 'operador', 'revisor']);
-  return downloadMarketplaceExport(request.data, request.auth!.uid);
+  return downloadMarketplaceExport(request.data, request.auth!.uid, GEMINI_API_KEY.value());
 });
 const stringMap = (value: unknown, allowed?: readonly string[]): Record<string, string> => {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 500) throw new HttpsError('invalid-argument', 'Valores de producto inválidos.');
@@ -166,7 +166,14 @@ export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateR
   if (!template.storagePath.startsWith(`client_spreadsheets/${clientId}/`)) throw new HttpsError('permission-denied', 'Original fuera del cliente.');
   const [buffer] = await admin.storage().bucket().file(template.storagePath).download();
   const analyzed = await analyzeMarketplaceTemplate(buffer, marketplaceId, template, cs.docs.map(d => ({ ...d.data(), id: d.id })) as import('../../../shared/src/types').SpreadsheetTemplateCategory[], request.data.layouts);
+  if (request.data.reviewOnly === true) {
+    assertTemplateDocumentLimits(analyzed.template, analyzed.categories);
+    return { success: true, templateId, review: {
+      config: analyzed.template.exportConfig, categories: analyzed.categories, unresolvedRequired: analyzed.unresolvedRequired,
+    } };
+  }
   if (analyzed.template.exportConfig.validationStatus === 'incompatible') throw new HttpsError('failed-precondition', analyzed.template.exportConfig.validationMessages.join(' '));
+  if (analyzed.unresolvedRequired.length) throw new HttpsError('failed-precondition', analyzed.unresolvedRequired.join('\n'));
   const mappings: typeof request.data.mappings = {};
   if (!request.data.mappings || typeof request.data.mappings !== 'object') throw new HttpsError('invalid-argument', 'Revisa las asociaciones.');
   for (const category of analyzed.categories) {

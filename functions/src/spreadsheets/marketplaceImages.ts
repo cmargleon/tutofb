@@ -63,7 +63,7 @@ export async function attachMarketplacePublications(products: MasterProduct[], c
   }
 }
 
-const assertCurrentImage = (product: MasterProduct, image: ApprovedImage, channel: MarketplaceId, client: admin.firestore.DocumentSnapshot, snapshot: admin.firestore.DocumentSnapshot) => {
+export const assertCurrentImage = (product: MasterProduct, image: ApprovedImage, channel: MarketplaceId, client: admin.firestore.DocumentSnapshot, snapshot: admin.firestore.DocumentSnapshot) => {
   if (!client.exists || client.get('status') === 'archived' || client.get(`marketplaces.${channel}.enabled`) !== true)
     throw new HttpsError('failed-precondition', 'Cliente o marketplace no disponible.');
   const job = snapshot.exists ? { ...snapshot.data(), id: snapshot.id } as Job : null;

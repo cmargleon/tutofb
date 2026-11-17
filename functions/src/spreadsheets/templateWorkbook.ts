@@ -257,13 +257,21 @@ const buildDropdownValidationsByColumnLetter = (
 const stripTrailingCategoryCode = (value: string): string =>
   value.replace(/\s*\(\d+(?:-\d+)?\)\s*$/, '').trim();
 
-const normalizeCategoryLookupKey = (value: string): string =>
+export const normalizeCategoryLookupKey = (value: string): string =>
   stripTrailingCategoryCode(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+
+export function matchSpreadsheetCategory<T>(sheetName: string, catalogue: Map<string, T>): T | undefined {
+  const key = normalizeCategoryLookupKey(sheetName);
+  const exact = catalogue.get(key);
+  if (exact !== undefined || !key || !/\.{3}|…/.test(sheetName)) return exact;
+  const candidates = [...catalogue].filter(([label]) => label.startsWith(key + ' '));
+  return candidates.length === 1 ? candidates[0][1] : undefined;
+}
 
 const extractTrailingSheetCode = (sheetName: string): string | null => {
   const match = sheetName.match(/-(\d+)\)\s*$/);
@@ -530,8 +538,7 @@ export const parseSpreadsheetTemplateWorkbook = ({
         : column,
     );
 
-    const lookupKey = normalizeCategoryLookupKey(label);
-    const parsedAttributes = attributeMapByCategory.get(lookupKey) || [];
+    const parsedAttributes = matchSpreadsheetCategory(label, attributeMapByCategory) || [];
     const baseAttributes = parsedAttributes.length > 0
       ? parsedAttributes
       : buildAttributesFromTemplateSpecificSheets(workbook, sheetName);

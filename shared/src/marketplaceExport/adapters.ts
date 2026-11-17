@@ -1,6 +1,7 @@
 import type { MarketplaceId } from '../marketplaces';
 import type { MasterProduct, MasterVariant, MarketplaceExportIssue, ProductMarketplaceData, SpreadsheetTemplate, SpreadsheetTemplateCategory, TemplateColumnMapping } from '../types';
 import { getProductDraftColumnAllowedValues } from '../utils/spreadsheetDraftColumns';
+import { sheinDimensionsIssue, sheinMultiValue, sheinValueIssue } from './sheinRules';
 
 export const normalizeMarketplaceColumnKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/[\s-]+/g, '_');
 export function suggestedMarketplaceSource(marketplaceId: MarketplaceId, key: string) {
@@ -46,6 +47,18 @@ const approvedImageOutputId = (product: MasterProduct, channel: MarketplaceId, v
   const assignment = product.photoAssignments.find(a => a.channel === channel && a.variantId === variantId && a.position === index + 1 && a.eligible);
   return product.approvedImages.find(image => image.outputId === assignment?.outputId)?.outputId;
 };
+export const isMarketplaceSquareField = (channel: MarketplaceId, key: string) =>
+  channel === 'shein' && normalizeMarketplaceColumnKey(key) === 'square_img';
+
+export const marketplaceSquareCandidates = (product: MasterProduct, variantId: string) => {
+  if (!product.photoAssignments) return product.approvedImages;
+  const main = approvedImageOutputId(product, 'shein', variantId, 'image.0');
+  if (!main) return [];
+  const eligible = new Set(product.photoAssignments.filter(a => a.channel === 'shein' && a.variantId === variantId && a.eligible).map(a => a.outputId));
+  return product.approvedImages.filter(image => eligible.has(image.outputId))
+    .sort((left, right) => Number(right.outputId === main) - Number(left.outputId === main));
+};
+
 const sourceValue = (source: string, p: MasterProduct, v: MasterVariant, data: ProductMarketplaceData, rowIndex: number, template: SpreadsheetTemplate) => {
   const [kind, ...parts] = source.split('.'); const key = parts.join('.');
   if (kind === 'product') return p.values[key as keyof typeof p.values] ?? '';
@@ -98,6 +111,7 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
       const tentative = new Set<string>();
       const imageOutputs = new Map<string, string>();
       const values: Record<string, string> = Object.fromEntries(category.columns.map(column => {
+        if (isMarketplaceSquareField(id, column.key)) return [column.key, product.marketplaceSquares?.[variant.id]?.url || ''];
         const mapping = mappings[column.key];
         const imageSource = mapping?.source.startsWith('image.');
         const outputId = approvedImageOutputId(product, id, variant.id, mapping?.source);
@@ -119,7 +133,7 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         const parent = column.dropdownDependency && columnsToResolve.find(c => c.key === column.dropdownDependency?.columnKey);
         if (parent) resolveOption(parent);
         const value = values[column.key];
-        if (Object.hasOwn(overrides, column.key) && overrides[column.key].trim()) return;
+        if (isMarketplaceSquareField(id, column.key) || Object.hasOwn(overrides, column.key) && overrides[column.key].trim()) return;
         const allowed = getProductDraftColumnAllowedValues(category, column, values);
         if (Object.hasOwn(autofill, column.key) && allowed.includes(autofill[column.key])) {
           values[column.key] = autofill[column.key];
@@ -138,6 +152,11 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         const value = values[column.key];
         const outputId = imageOutputs.get(column.key);
         const normalizedKey = normalizeMarketplaceColumnKey(column.key);
+        if (isMarketplaceSquareField(id, column.key)) {
+          if ((column.required || mapping?.required) && !marketplaceSquareCandidates(product, variant.id).length)
+            rowIssue('required', `Falta una fotografía aprobada para ${column.label} en variante ${rowIndex + 1}.`, column.key);
+          continue;
+        }
         // A valid low-certainty suggestion completes the field; it is reported only as a warning.
         if (tentative.has(column.key)) issue('verify_suggestion', `${column.label} (variante ${rowIndex + 1}): Gemini sugiere «${value}» con poca certeza.`
           + (autoRow?.reasons?.[column.key] ? ` ${autoRow.reasons[column.key]}` : ''), column.key, variant.id, false);
@@ -149,13 +168,21 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         if ((column.required || mapping?.required) && !value.trim()) rowIssue('required', `Falta ${column.label} en variante ${rowIndex + 1}.${failure ? ` ${failure}` : ''}`, column.key);
         else if (failure) issue('autofill_failed', `${column.label} (variante ${rowIndex + 1}) sigue pendiente. ${failure}`, column.key, variant.id, false);
         const allowed = getProductDraftColumnAllowedValues(category, column, values);
-        if (value && allowed.length && !allowed.includes(value)) rowIssue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
+        const selectedValues = id === 'shein' && sheinMultiValue(column) ? value.split('*') : [value];
+        if (value && allowed.length && !selectedValues.every(option => allowed.includes(option))) rowIssue('enum', `${column.label}: «${value}» no está en los valores permitidos.`, column.key);
+        const officialIssue = id === 'shein' && value ? sheinValueIssue(column, value) : null;
+        if (officialIssue) rowIssue('shein_rule', `${column.label}: ${officialIssue}`, column.key);
         if (value && column.dropdownFormula && !allowed.length) rowIssue('unresolved_list', `${column.label}: lista dependiente sin resolver; requiere un adaptador específico.`, column.key);
         if (value && (isImageField(column.key) || isImageField(column.label) || mapping?.source.startsWith('image.')) && (!safePublicImageUrl(value, publishedUrls) || !product.approvedImages.some(img => data.imageUrls?.[img.outputId] === value))) rowIssue('image_url', `${column.label}: publica la fotografía aprobada o configura su URL pública permanente; las URLs privadas o temporales no son válidas.`, column.key);
         if (value && product.photoAssignments && mapping?.source.startsWith('image.') && value !== (outputId && data.imageUrls?.[outputId])) rowIssue('image_assignment', `${column.label}: imagen fuera de la asignación aprobada de variante/canal/posición.`, column.key);
         if (value && mapping?.dataType === 'number' && (!/^-?\d+(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value)))) rowIssue('number', `${column.label}: número inválido.`, column.key);
         if (value && (mapping?.source === 'variant.gtin' || /^(gtin|ean|upc|universal_product_code|codigo_universal)$/.test(normalizedKey)) && !isValidGtin(value)) rowIssue('gtin', `${column.label}: GTIN inválido; no se generará uno automáticamente.`, column.key);
         if (value && (mapping?.source === 'variant.asin' || normalizedKey === 'asin') && !/^[A-Z0-9]{10}$/.test(value)) rowIssue('asin', `${column.label}: ASIN inválido.`, column.key);
+      }
+      if (id === 'shein') {
+        const dimensions = category.columns.filter(column => ['length', 'width', 'height'].includes(column.key));
+        const dimensionsIssue = sheinDimensionsIssue(dimensions, values);
+        if (dimensionsIssue) rowIssue('shein_dimensions', dimensionsIssue, 'length');
       }
       if (product.organizer) {
         const measurement = (key: string) => category.columns.some(c => mappings[c.key]?.source === `variant.${key}` && values[c.key]);
@@ -189,7 +216,7 @@ export const MARKETPLACE_ADAPTERS: Record<MarketplaceId, MarketplaceAdapter> = {
   shein: createAdapter('shein', { image_type: 'assignment.imageType', image_sort: 'assignment.imageSort', supplier_code: 'variant.spu', skc: 'variant.skc',
     sku_code: 'variant.sku', supplier_sku: 'variant.sku', goods_name: 'product.name', default_product_name: 'product.name',
     goods_description: 'product.description', default_product_desc: 'product.description', main_attribute_value: 'variant.color',
-    secondary_attribute_1_value: 'variant.size', main_img: 'image.0', detail_img_1: 'image.1', stock: 'variant.inventory',
+    secondary_attribute_1_value: 'variant.size', main_img: 'image.0', square_img: 'image.square', detail_img_1: 'image.1', stock: 'variant.inventory',
     original_price: 'variant.price', weight: 'variant.weight', weight_unit: 'variant.weightUnit', length: 'variant.length',
     width: 'variant.width', height: 'variant.height', length_unit: 'variant.dimensionUnit', quantity_number: 'variant.pack',
     attr_1000463: 'attribute.foodContactMaterial', transparencia: 'attribute.transparency' }),

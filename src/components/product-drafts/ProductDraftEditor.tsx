@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { sheinMultiValue } from '../../../shared/src/marketplaceExport/sheinRules';
 import {
   ProductDraft,
   ProductDraftInput,
@@ -33,6 +34,7 @@ interface ProductDraftEditorProps {
   showRowActions?: boolean;
   multilineFields?: readonly string[];
   resolvedValuesByRow?: Record<string, ProductDraftRow['values']>;
+  renderCustomField?: (row: ProductDraftRow, column: SpreadsheetTemplateCategoryColumn) => React.ReactNode;
   renderFieldNote?: (row: ProductDraftRow, column: SpreadsheetTemplateCategoryColumn) => React.ReactNode;
   /** Rendered beside the form field, e.g. a warning icon. */
   renderFieldAdornment?: (row: ProductDraftRow, column: SpreadsheetTemplateCategoryColumn) => React.ReactNode;
@@ -169,6 +171,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
   showRowActions = true,
   multilineFields,
   resolvedValuesByRow,
+  renderCustomField,
   renderFieldNote,
   renderFieldAdornment,
   resolveDropdownChoices,
@@ -254,6 +257,18 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
       );
     };
 
+    if (activeCategory.validationMode === 'template' && sheinMultiValue(column) && dropdownChoices.length) {
+      const selected = resolvedValue.split('*');
+      return <div className="max-h-36 overflow-auto rounded-md border border-slate-200 px-2 py-1" role="group" aria-label={column.label}>
+        {dropdownChoices.map(option => <label key={option.value} className="flex items-center gap-2 text-xs">
+          <input type="checkbox" checked={selected.includes(option.value)} onChange={event => updateValue(
+            event.target.checked ? [...selected.filter(Boolean), option.value].join('*')
+              : selected.filter(value => value !== option.value).join('*'),
+          )} />
+          {option.label}
+        </label>)}
+      </div>;
+    }
     if (isDropdown) {
       return (
         <select
@@ -468,7 +483,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
                         </div>
                         <div className="mt-1 font-mono text-[10px] text-slate-400">{column.key}</div>
                       </div>
-                      <div><div className="flex items-start gap-2"><div className="min-w-0 flex-1">{renderField(row, column, true)}</div>{renderFieldAdornment?.(row, column)}</div>{renderFieldNote?.(row, column)}</div>
+                      <div><div className="flex items-start gap-2"><div className="min-w-0 flex-1">{renderCustomField?.(row, column) ?? renderField(row, column, true)}</div>{renderFieldAdornment?.(row, column)}</div>{renderFieldNote?.(row, column)}</div>
                     </div>
                   ))}
                 </div>

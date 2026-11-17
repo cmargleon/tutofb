@@ -4,16 +4,21 @@ import type { MarketplaceId } from '../../../shared/src/marketplaces';
 import type { MarketplaceTemplateConfig, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../../../shared/src/types';
 import { suggestedMarketplaceSource } from '../../../shared/src/marketplaceExport/adapters';
 import { inspectWorkbookPackage, rangeContains, validationOptions } from './ooxmlWorkbook';
+import { repairSheinWorkbook } from './sheinWorkbook';
+import { parseSpreadsheetTemplateWorkbook } from './templateWorkbook';
 
 export const categoryId = (sheet: string) => sheet.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'category';
 export async function analyzeMarketplaceTemplate(buffer: Buffer, marketplaceId: MarketplaceId, base: Omit<SpreadsheetTemplate, 'createdAt' | 'updatedAt'>, legacyCategories: SpreadsheetTemplateCategory[] = [], layouts: Record<string, { rowStart: number }> = {}) {
-  const inspection = await inspectWorkbookPackage(buffer);
+  const workingBuffer = marketplaceId === 'shein' ? await repairSheinWorkbook(buffer) : buffer;
+  const inspection = await inspectWorkbookPackage(workingBuffer);
   const wb = XLSX.read(buffer, { type: 'buffer', sheetRows: 100 });
+  const sheinCategories = marketplaceId === 'shein' ? parseSpreadsheetTemplateWorkbook({ ...base, buffer: workingBuffer }).categories : [];
   const categories: SpreadsheetTemplateCategory[] = [];
   for (const sheet of inspection.sheets.filter(s => !s.hidden)) {
     const ws = wb.Sheets[sheet.name];
-    const existing = marketplaceId === 'shein' ? legacyCategories.find(c => c.sheetName === sheet.name) : null;
-    if (existing) { categories.push(existing); continue; }
+    const existing = marketplaceId === 'shein' && (sheinCategories.find(c => c.sheetName === sheet.name)
+      || legacyCategories.find(c => c.sheetName === sheet.name));
+    if (existing) { categories.push({ ...existing, createdAt: null, updatedAt: null }); continue; }
     // Recognize headers per adapter; unknown layouts remain explicitly incompatible.
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
     for (let r = 0; r < Math.min(range.e.r + 1, 20); r++) {
@@ -67,14 +72,19 @@ export async function analyzeMarketplaceTemplate(buffer: Buffer, marketplaceId: 
   }
   if (!categories.length) warnings.push('No se reconoce una estructura de captura compatible con este marketplace.');
   if (new Set(categories.map(c => c.id)).size !== categories.length) warnings.push('Hay nombres de categorías ambiguos.');
+  const unresolvedRequired = categories.flatMap(category => category.columns
+    .filter(column => column.required && column.dropdownFormula && !column.dropdownOptions?.length && !column.dropdownDependency)
+    .map(column => `${category.label} · ${column.label}: lista obligatoria sin resolver.`));
   const mappings: MarketplaceTemplateConfig['mappings'] = Object.fromEntries(categories.map(c => [c.id!, Object.fromEntries(c.columns.map(column => {
-    const source = suggestedMarketplaceSource(marketplaceId, column.key);
+    const mainSpec = marketplaceId === 'shein' && column.key === 'main_attribute' && column.dropdownOptions?.length === 1
+      ? `literal.${column.dropdownOptions[0]}` : '';
+    const source = mainSpec || suggestedMarketplaceSource(marketplaceId, column.key) || `legacy.${column.key}`;
     const numeric = /^variant\.(?:price|inventory|weight|length|width|height|pack)$/.test(source);
     return [column.key, { source, required: column.required, dataType: numeric ? 'number' : 'text' }];
   }))]));
-  const config: MarketplaceTemplateConfig = { marketplaceId, version: 0, operation: 'listing', validationStatus: warnings.length ? 'incompatible' : 'needs_configuration', validationMessages: warnings.length ? warnings : ['Revisa la fila inicial, categorías, campos obligatorios y asociaciones antes de activar. Compatibilidad final pendiente de una carga de prueba en el marketplace.'], mappings };
+  const config: MarketplaceTemplateConfig = { marketplaceId, version: 0, operation: 'listing', validationStatus: warnings.length ? 'incompatible' : 'needs_configuration', validationMessages: [...warnings, ...unresolvedRequired, ...(workingBuffer !== buffer ? ['Se recuperaron referencias de listas usando los catálogos del Excel original.'] : []), 'Revisa las reglas de llenado y los requisitos antes de activar.'], mappings };
   return {
-    template: { ...base, templateFingerprint: createHash('sha256').update(buffer).digest('hex'), exportConfig: config, categoryIds: categories.map(c => c.id!), categories: categories.map(c => ({ id: c.id!, sheetName: c.sheetName, label: c.label, columnCount: c.columns.length, attributeCount: c.attributes.length, rowStart: c.rowStart })), defaultCategoryId: categories[0]?.id || null, defaultCategoryLabel: categories[0]?.label || null }, categories,
+    template: { ...base, templateFingerprint: createHash('sha256').update(buffer).digest('hex'), exportConfig: config, categoryIds: categories.map(c => c.id!), categories: categories.map(c => ({ id: c.id!, sheetName: c.sheetName, label: c.label, columnCount: c.columns.length, attributeCount: c.attributes.length, rowStart: c.rowStart })), defaultCategoryId: categories[0]?.id || null, defaultCategoryLabel: categories[0]?.label || null }, categories, unresolvedRequired,
   };
 }
 

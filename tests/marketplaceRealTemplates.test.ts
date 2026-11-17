@@ -4,6 +4,57 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const enabled = Boolean(process.env.TUTO_REAL_TEMPLATE_DIR);
+test('JISHOP SHEIN workbook restores category-specific lists and validates the exported cells', { skip: !process.env.TUTO_JISHOP_MULTI_TEMPLATE }, async () => {
+  const admin = require('../functions/node_modules/firebase-admin');
+  if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-local-template-test', storageBucket: 'demo-local.appspot.com' });
+  const { repairSheinWorkbook } = require('../functions/lib/functions/src/spreadsheets/sheinWorkbook.js');
+  const { analyzeMarketplaceTemplate } = require('../functions/lib/functions/src/spreadsheets/marketplaceTemplates.js');
+  const { MARKETPLACE_ADAPTERS } = require('../functions/lib/shared/src/marketplaceExport/adapters.js');
+  const { inspectWorkbookPackage, patchWorkbookCells, rangeContains, validationAccepts, validationOptions } = require('../functions/lib/functions/src/spreadsheets/ooxmlWorkbook.js');
+  const buffer = readFileSync(process.env.TUTO_JISHOP_MULTI_TEMPLATE!);
+  const base = { clientId: 'qa', clientNameSnapshot: 'JISHOP', storagePath: 'local', originalFileName: 'jishop.xlsx', createdByUid: 'qa' };
+  const analyzed = await analyzeMarketplaceTemplate(buffer, 'shein', base);
+  assert.deepEqual(analyzed.unresolvedRequired, []);
+  assert.deepEqual(analyzed.categories.map((c: any) => c.attributes.length), [11, 14, 19, 21]);
+  const repaired = await repairSheinWorkbook(buffer);
+  const inspection = await inspectWorkbookPackage(repaired);
+  const patches = analyzed.categories.map((category: any, index: number) => {
+    const sheet = inspection.sheets.find((s: any) => s.name === category.sheetName);
+    const color = sheet.validations.find((v: any) => v.ranges.some((range: string) => rangeContains(range, 'AI7')));
+    const origin = sheet.validations.find((v: any) => v.ranges.some((range: string) => rangeContains(range, 'F7')));
+    const spec = { AH: 'Color(27)' };
+    const values = validationOptions(inspection, color, 'AI7', spec);
+    assert.equal(values.length, [62, 60, 61, 62][index]);
+    assert.equal(origin.options.length, 254);
+    assert.ok(validationAccepts(inspection, color, 'AI8', values[0], spec));
+    assert.equal(validationAccepts(inspection, color, 'AI8', 'Color inexistente', spec), false);
+    const requiredValues = Object.fromEntries(category.columns.filter((col: any) => col.required && col.key.startsWith('attr_')).map((col: any) => {
+      const options = col.dropdownOptions?.length ? col.dropdownOptions : category.attributes.find((attr: any) => col.label.startsWith(attr.name + '('))?.values;
+      assert.ok(options?.length, col.label);
+      return [col.key, options[0]];
+    }));
+    const template = { ...analyzed.template, id: 'qa-template' };
+    const overrides = { ...requiredValues, length: '8', width: '8', height: '1', length_unit: 'cm' };
+    const product = {
+      id: 'qa-product', garmentId: 'qa-article', values: { name: 'Artículo de prueba' },
+      variants: [{ id: 'v', values: { sku: 'SKU-TEST-' + index, spu: 'SPU-TEST-' + index, color: values[0] } }],
+      legacyDrafts: [], approvedImages: [{ outputId: 'qa-image' }],
+      marketplaces: { shein: { templateId: template.id, categoryId: category.id, rows: [{ id: 'v', values: overrides }] } },
+    };
+    const validate = () => MARKETPLACE_ADAPTERS.shein.prepare(product, template, category);
+    const adapted = validate();
+    assert.deepEqual(adapted.issues, []);
+    overrides.width = '1';
+    assert.ok(validate().issues.some((issue: any) => issue.code === 'shein_dimensions'));
+    return { sheetName: sheet.name, cells: category.columns.flatMap((col: any) => {
+      const value = adapted.rows[0].values[col.key];
+      return value ? [{ address: col.letter + '7', value }] : [];
+    }) };
+  });
+  const output = await inspectWorkbookPackage(await patchWorkbookCells(repaired, patches));
+  assert.deepEqual(output.namedRanges, inspection.namedRanges);
+  assert.deepEqual(output.sheets.map((sheet: any) => sheet.validations), inspection.sheets.map((sheet: any) => sheet.validations));
+});
 test('real client SHEIN templates preserve every ZIP part, all validations, named ranges, formulas and sheet metadata', { skip: !enabled }, async () => {
   const admin = require('../functions/node_modules/firebase-admin');
   if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-local-template-test', storageBucket: 'demo-local.appspot.com' });

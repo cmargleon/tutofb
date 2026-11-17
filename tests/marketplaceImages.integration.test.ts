@@ -9,6 +9,7 @@ const enabled = ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST', 'FIRE
 
 test('approved photo publication, stable direct URLs, automatic Excel links, isolation and retention (local Firebase)', { skip: !enabled }, async t => {
   process.env.GCLOUD_PROJECT = 'demo-manglar-automation';
+  process.env.GEMINI_API_KEY = 'emulator-only';
   const admin = require('../functions/node_modules/firebase-admin');
   const app = admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT, storageBucket: 'demo-manglar-automation.appspot.com' });
   const db = require('../functions/lib/functions/src/firebase/appFirestore.js').getAppFirestore();
@@ -17,6 +18,10 @@ test('approved photo publication, stable direct URLs, automatic Excel links, iso
   const publishedBucket = admin.storage().bucket(marketplaceImageBucketName());
   const { publishMarketplaceImages } = require('../functions/lib/functions/src/callables/publishMarketplaceImages.js');
   const { previewMarketplaceExports, saveMasterProduct, downloadMarketplaceExports } = require('../functions/lib/functions/src/callables/marketplaceExports.js');
+  const gemini = require('../functions/lib/functions/src/analytics/geminiUsage.js');
+  const segment = t.mock.method(gemini, 'callGeminiGenerateContent', async () => ({
+    payload: { candidates: [{ content: { parts: [{ text: '{"complete":false,"box":[],"outline":[]}' }] } }] },
+  }));
   const { permanentlyDeleteClient } = require('../functions/lib/functions/src/callables/permanentlyDeleteClient.js');
   const sharp = require('../functions/node_modules/sharp');
   const XLSX = require('../functions/node_modules/xlsx');
@@ -65,24 +70,41 @@ test('approved photo publication, stable direct URLs, automatic Excel links, iso
     assert.equal(p.publishedImages.shein.out.url, image.url);
     assert.equal((await clientRef.collection('products').doc(p.id).get()).exists, false);
 
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['sku', 'main_img'], ['', '']]), 'Products');
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['sku', 'main_img', 'square_img'], ['', '', '']]), 'Products');
     const workbook = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     const templatePath = `client_spreadsheets/${clientId}/template/template.xlsx`;
     await bucket.file(templatePath).save(workbook);
     const templateRef = clientRef.collection('spreadsheetTemplates').doc('template');
     await templateRef.set({ clientId, name: 'Publication QA', status: 'active', storagePath: templatePath, categoryIds: ['products'], templateFingerprint: createHash('sha256').update(workbook).digest('hex'), exportConfig: { marketplaceId: 'shein', version: 1, operation: 'listing', validationStatus: 'compatible', mappings: { products: { sku: { source: 'variant.sku' }, main_img: { source: 'image.0', required: true } } } } });
-    await templateRef.collection('categories').doc('products').set({ clientId, templateId: 'template', sheetName: 'Products', rowStart: 2, attributes: [], columns: [{ key: 'sku', label: 'SKU', index: 0, letter: 'A', required: true }, { key: 'main_img', label: 'Main image', index: 1, letter: 'B', required: true }] });
-    const save = (marketplaces: any, revision = p.revision) => saveMasterProduct.run(req({ ...scope, productId: p.id, expectedRevision: revision, authorizePublicImages: true, values: { name: 'Product' }, variants: [{ id: 'v', values: { sku: 'IMG-001' } }], marketplaces }));
+    await templateRef.collection('categories').doc('products').set({ clientId, templateId: 'template', sheetName: 'Products', rowStart: 2, attributes: [], columns: [{ key: 'sku', label: 'SKU', index: 0, letter: 'A', required: true }, { key: 'main_img', label: 'Main image', index: 1, letter: 'B', required: true }, { key: 'square_img', label: 'Square image', index: 2, letter: 'C', required: true }] });
+    const save = (marketplaces: any, revision = p.revision) => saveMasterProduct.run(req({ ...scope, productId: p.id, expectedRevision: revision, authorizePublicImages: true, values: { name: 'Product', description: 'Publication QA' }, variants: [{ id: 'v', values: { sku: 'IMG-001' } }], marketplaces }));
     // Links are resolved automatically even when the operator saves only template/category.
     await save({ shein: { templateId: 'template', categoryId: 'products' } });
     let preview = await previewMarketplaceExports.run(req(scope)); p = preview.products[0];
     assert.equal(p.marketplaces.shein.imageUrls.out, image.url);
     assert.equal(preview.channels.find((channel: any) => channel.marketplaceId === 'shein').ready, true);
-    const exported = await downloadMarketplaceExports.run(req({ ...scope, marketplaceIds: ['shein'], requestId: randomUUID() }));
+    assert.equal(preview.autofillPending, true);
+    const analyzed = await previewMarketplaceExports.run(req({ ...scope, analyzeAutofill: true }));
+    const square = analyzed.products[0].marketplaceSquares.v;
+    assert.equal(square.url, undefined);
+    assert.equal((await bucket.file(square.storagePath).exists())[0], true);
+    assert.equal((await publishedBucket.getFiles({ prefix: marketplaceImageClientPrefix(clientId) }))[0].length, 1);
+    assert.equal(segment.mock.callCount(), 1);
+    const rejectedExport = await downloadMarketplaceExports.run(req({ ...scope, marketplaceIds: ['shein'], requestId: randomUUID() }));
+    assert.match(rejectedExport.failures[0].message, /Autoriza la publicación/);
+    const exported = await downloadMarketplaceExports.run(req({ ...scope, marketplaceIds: ['shein'], requestId: randomUUID(), authorizePublicImages: true }));
     assert.deepEqual(exported.failures, []);
-    const artifact = (await db.collection('marketplaceExportRequests').get()).docs[0].get('artifactPath');
+    assert.equal(segment.mock.callCount(), 1);
+    const requests = (await db.collection('marketplaceExportRequests').get()).docs;
+    const artifact = requests.find((doc: any) => doc.get('artifactPath'))!.get('artifactPath');
     const excel = XLSX.read((await bucket.file(artifact).download())[0], { type: 'buffer' });
     assert.equal(excel.Sheets.Products.B2.v, image.url);
+    const squareUrl = new URL(excel.Sheets.Products.C2.v);
+    assert.notEqual(squareUrl.href, image.url);
+    const squarePath = squareUrl.pathname.slice(publishedBucket.name.length + 2);
+    const squareMetadata = await sharp((await publishedBucket.file(squarePath).download())[0]).metadata();
+    assert.equal(squareMetadata.width, squareMetadata.height);
+    assert.equal((await previewMarketplaceExports.run(req(scope))).products[0].marketplaceSquares.v.url, squareUrl.href);
     const foreignUrl = image.url.replace(publishedBucket.name, 'foreign-marketplace-images');
     await assert.rejects(save({ shein: { templateId: 'template', categoryId: 'products', imageUrls: { out: foreignUrl } } }), { code: 'invalid-argument' });
     await save({ shein: { templateId: 'template', categoryId: 'products', imageUrls: { out: 'https://images.example.com/authorized.jpg' } } });

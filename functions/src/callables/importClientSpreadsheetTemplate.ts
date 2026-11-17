@@ -73,8 +73,12 @@ export const importClientSpreadsheetTemplate = onCall<
     buffer,
   });
 
-  if (request.data.marketplaceId) {
-    const analyzed = await analyzeMarketplaceTemplate(buffer, request.data.marketplaceId, parsed.template, parsed.categories as SpreadsheetTemplateCategory[]);
+  const detectedShein = client.marketplaces?.shein?.enabled && /\.xlsx$/i.test(originalFileName) &&
+    parsed.categories.length > 0 && parsed.categories.every(category =>
+      ['supplier_code', 'default_product_name[es]', 'main_attribute_value'].every(key => category.columns.some(column => column.key === key)));
+  const marketplaceId = request.data.marketplaceId || (detectedShein ? 'shein' : undefined);
+  if (marketplaceId) {
+    const analyzed = await analyzeMarketplaceTemplate(buffer, marketplaceId, parsed.template, parsed.categories as SpreadsheetTemplateCategory[]);
     parsed = analyzed;
     if (request.data.replacesTemplateId) {
       const previous = await clientRef.collection('spreadsheetTemplates').doc(validId(request.data.replacesTemplateId)).get();

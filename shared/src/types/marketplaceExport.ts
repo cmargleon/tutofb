@@ -41,6 +41,7 @@ export interface ProductMarketplaceData {
   imageUrls?: Record<string, string>; // approved output ID -> operator-authorized public URL
 }
 export interface MasterProduct {
+  marketplaceCategorySuggestions?: Partial<Record<MarketplaceId, { templateId: string; categoryId: string; reason: string }>>;
   photoAssignments?: import('./photoPlan').PhotoAssignment[];
   id: string; clientId: string; batchIds: string[]; garmentId: string;
   values: Partial<Record<ProductField, string>>;
@@ -54,6 +55,8 @@ export interface MasterProduct {
   publishedImages?: Partial<Record<MarketplaceId, Record<string, PublishedMarketplaceImage>>>;
   /** Template choices vetted by the server for this export context. */
   marketplaceAutofill?: Partial<Record<MarketplaceId, MarketplaceAutofillRow[]>>;
+  /** Server-managed square derivatives by SHEIN variant ID. */
+  marketplaceSquares?: Record<string, { storagePath: string; url?: string }>;
   pendingImages: number;
   marketplaces: Partial<Record<MarketplaceId, ProductMarketplaceData>>;
   revision: number;
@@ -132,6 +135,12 @@ export interface DownloadMarketplaceExportResponse {
 export interface ConfigureMarketplaceTemplateRequest {
   clientId: string; templateId: string; marketplaceId: MarketplaceId;
   operation: MarketplaceTemplateConfig['operation']; layouts?: Record<string, { rowStart: number }>; mappings: MarketplaceTemplateConfig['mappings'];
+  reviewOnly?: boolean;
+}
+export interface ConfigureMarketplaceTemplateResponse {
+  success: boolean;
+  templateId: string;
+  review?: { config: MarketplaceTemplateConfig; categories: SpreadsheetTemplateCategory[]; unresolvedRequired: string[] };
 }
 /** Marketplaces is a patch: omitted channels are preserved; disabled channels cannot change. */
 export interface SaveMasterProductRequest extends MarketplaceExportScope { productId: string; authorizePublicImages?: boolean; expectedRevision: number; organizerSourceRevision?: string; confirmOrganizerIdentity?: boolean; values: MasterProduct['values']; variants: MasterVariant[]; marketplaces: MasterProduct['marketplaces'] }

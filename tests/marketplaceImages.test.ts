@@ -61,3 +61,48 @@ test('Google Storage URLs require an exact product publication; arbitrary Google
   for (const invalid of [url + '?token=x', url + '#fragment', url.replace('https:', 'http:'), url.replace('images/', '../images/'), url.replace('storage.googleapis.com', 'storage.googleapis.com.attacker.test')])
     assert.equal(safePublicImageUrl(invalid, [url]), false);
 });
+
+test('SHEIN square rejects uncertain or tight crops and preserves all pixels with padding', async () => {
+  const { squareProductCrop, prepareMarketplaceSquare } = require('../functions/lib/functions/src/media/marketplaceSquare.js');
+  const box = [175, 350, 825, 650];
+  const outline = [[350, 175], [650, 175], [540, 825], [460, 825]];
+  assert.deepEqual(squareProductCrop(900, 1200, { complete: true, box, outline }), { left: 0, top: 150, width: 900, height: 900 });
+  assert.equal(squareProductCrop(900, 1200, { complete: false, box, outline }), null);
+  assert.equal(squareProductCrop(900, 1200, { complete: true, box, outline: [...outline, [500, 930]] }), null);
+
+  const source = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200"><rect width="900" height="1200" fill="green"/><rect width="900" height="75" fill="red"/><rect y="1125" width="900" height="75" fill="blue"/></svg>');
+  const cropped = await prepareMarketplaceSquare(source, async () => ({ complete: true, box, outline }));
+  assert.equal(cropped.width, 900);
+  assert.equal(cropped.height, 900);
+  const padded = await prepareMarketplaceSquare(source, null);
+  assert.equal(padded.width, 1200);
+  assert.equal(padded.height, 1200);
+  assert.ok(padded.bytes.length <= MARKETPLACE_IMAGE_MAX_BYTES);
+  const { data, info } = await sharp(padded.bytes).raw().toBuffer({ resolveWithObject: true });
+  const pixel = (x: number, y: number) => [...data.subarray((y * info.width + x) * info.channels, (y * info.width + x) * info.channels + 3)];
+  const center = Math.floor(info.width / 2);
+  assert.ok(pixel(center, 0)[0] > 220);
+  assert.ok(pixel(center, info.height - 1)[2] > 220);
+  assert.ok(pixel(10, center).every(channel => channel > 245));
+  assert.ok(pixel(info.width - 11, center).every(channel => channel > 245));
+});
+
+test('SHEIN export assigns the square derivative separately from the main photo', () => {
+  const { MARKETPLACE_ADAPTERS } = require('../functions/lib/shared/src/marketplaceExport/adapters.js');
+  const main = 'https://example.com/portrait.jpg';
+  const square = 'https://example.com/square.jpg';
+  const product = {
+    id: 'product', garmentId: 'product', values: {}, variants: [{ id: 'variant', values: {} }],
+    approvedImages: [{ outputId: 'photo' }],
+    marketplaces: { shein: { templateId: 'template', categoryId: 'category', imageUrls: { photo: main } } },
+  };
+  const template = { id: 'template', exportConfig: { mappings: { category: { main_img: { source: 'image.0' }, square_img: { source: 'image.0' } } } } };
+  const category = { id: 'category', attributes: [], columns: [{ key: 'main_img', label: 'Imagen principal' }, { key: 'square_img', label: 'Diagrama cuadrado', required: true }] };
+  const adapter = MARKETPLACE_ADAPTERS.shein;
+  const pending = adapter.prepare(product, template, category);
+  assert.deepEqual(pending.issues, []);
+  assert.deepEqual(pending.rows[0].values, { main_img: main, square_img: '' });
+  const ready = adapter.prepare({ ...product, marketplaceSquares: { variant: { url: square } } }, template, category);
+  assert.deepEqual(ready.issues, []);
+  assert.deepEqual(ready.rows[0].values, { main_img: main, square_img: square });
+});

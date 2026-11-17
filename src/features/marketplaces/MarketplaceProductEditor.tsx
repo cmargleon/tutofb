@@ -3,7 +3,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 import type { MasterProduct, MarketplaceExportIssue, MarketplaceExportPreview, MarketplaceExportScope, ProductDraftInput, PublishedMarketplaceImage, SpreadsheetTemplateCategory } from '../../../shared/src/types';
 import { PRODUCT_FIELDS, VARIANT_FIELDS } from '../../../shared/src/types';
 import { MARKETPLACES, type MarketplaceId } from '../../../shared/src/marketplaces';
-import { MARKETPLACE_ADAPTERS } from '../../../shared/src/marketplaceExport/adapters';
+import { isMarketplaceSquareField, marketplaceSquareCandidates, MARKETPLACE_ADAPTERS } from '../../../shared/src/marketplaceExport/adapters';
 import { ProductDraftEditor } from '../../components/product-drafts/ProductDraftEditor';
 import { Button, INPUT_CLASS, ImageThumb } from '../../components/ui';
 import { saveMasterProduct } from './exportFirebase';
@@ -65,6 +65,7 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
   const [publicUrlsAuthorized, setPublicUrlsAuthorized] = useState(false);
   const [confirmIdentity, setConfirmIdentity] = useState(false);
   const editor = useRef<HTMLFieldSetElement>(null);
+  const editedCategories = useRef(new Set<MarketplaceId>());
   const editedCopyFields = useRef(new Set<'name' | 'description'>());
   // A finished Gemini analysis refreshes the suggestions without discarding the operator's unsaved edits.
   useEffect(() => {
@@ -76,7 +77,14 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
           values[field] = suggestion;
         }
       }
-      return { ...current, values, marketplaceAutofill: product.marketplaceAutofill, evidence: { ...current.evidence, ...product.evidence } };
+      const marketplaces = { ...current.marketplaces };
+      for (const channel of Object.keys(product.marketplaceCategorySuggestions || {}) as MarketplaceId[]) {
+        if (!editedCategories.current.has(channel) && !marketplaces[channel]?.categoryId) {
+          marketplaces[channel] = { ...product.marketplaces[channel]!, ...marketplaces[channel],
+            templateId: product.marketplaces[channel]!.templateId, categoryId: product.marketplaces[channel]!.categoryId };
+        }
+      }
+      return { ...current, values, marketplaces, marketplaceAutofill: product.marketplaceAutofill, marketplaceSquares: product.marketplaceSquares, evidence: { ...current.evidence, ...product.evidence } };
     });
   }, [product]);
   useLayoutEffect(() => {
@@ -134,14 +142,28 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
         .map(issue => JSON.stringify([issue.code, issue.variantId, issue.field])));
       const draftRows = value.variants.map(variant => ({ id: variant.id, values: data?.rows?.find(row => row.id === variant.id)?.values || {} }));
       return <details key={id} data-export-channel={id} className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-semibold">{MARKETPLACES.find(m => m.id === id)?.name} · plantilla y datos de salida</summary><div className="mt-4 space-y-4">
-        <label className="block text-xs font-medium">Plantilla<select data-export-template className={INPUT_CLASS} value={data?.templateId || ''} onChange={e => { const c = preview.categories.find(c => c.templateId === e.target.value); patchChannel(id, { templateId: e.target.value, categoryId: c?.id || '', rows: [], imageUrls: { ...Object.fromEntries(Object.values((value.publishedImages?.[id] || {}) as Record<string, PublishedMarketplaceImage>).map(image => [image.outputId, image.url])), ...data?.imageUrls }, ...(id === 'amazon' ? { requirements: { gtinExemptionByVariant: {} } } : {}) }); }}><option value="">Seleccionar plantilla</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name} · v{t.exportConfig!.version}{t.status === 'archived' ? ' · Histórica vinculada' : ''}</option>)}</select></label>
-        {data?.templateId && <label className="block text-xs font-medium">Categoría<select data-export-category className={INPUT_CLASS} value={data.categoryId} onChange={e => patchChannel(id, { categoryId: e.target.value, rows: [], ...(id === 'amazon' ? { requirements: { gtinExemptionByVariant: {} } } : {}) })}><option value="">Seleccionar categoría</option>{categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
+        <label className="block text-xs font-medium">Plantilla<select data-export-template className={INPUT_CLASS} value={data?.templateId || ''} onChange={e => { editedCategories.current.add(id); const suggested = product.marketplaceCategorySuggestions?.[id]; patchChannel(id, { templateId: e.target.value, categoryId: suggested?.templateId === e.target.value ? suggested.categoryId : '', rows: [], imageUrls: { ...Object.fromEntries(Object.values((value.publishedImages?.[id] || {}) as Record<string, PublishedMarketplaceImage>).map(image => [image.outputId, image.url])), ...data?.imageUrls }, ...(id === 'amazon' ? { requirements: { gtinExemptionByVariant: {} } } : {}) }); }}><option value="">Seleccionar plantilla</option>{templates.map(t => <option key={t.id} value={t.id}>{t.name} · v{t.exportConfig!.version}{t.status === 'archived' ? ' · Histórica vinculada' : ''}</option>)}</select></label>
+        {data?.templateId && <label className="block text-xs font-medium">Categoría<select data-export-category className={INPUT_CLASS} value={data.categoryId} onChange={e => { editedCategories.current.add(id); patchChannel(id, { categoryId: e.target.value, rows: [], ...(id === 'amazon' ? { requirements: { gtinExemptionByVariant: {} } } : {}) }); }}><option value="">Seleccionar categoría</option>{categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>}
+        {category && product.marketplaceCategorySuggestions?.[id]?.categoryId === category.id
+          && product.marketplaceCategorySuggestions?.[id]?.templateId === data?.templateId && !editedCategories.current.has(id)
+          && <p className="text-xs text-indigo-800">Categoría sugerida por Gemini. {product.marketplaceCategorySuggestions?.[id]?.reason}</p>}
         {data && category && id === 'amazon' && <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3"><p className="text-xs text-amber-900">Exenciones de GTIN de Amazon. Confirma la aprobación externamente para esta marca/categoría; este requisito no se comparte con otros destinos.</p>{value.variants.map(variant => <label key={variant.id} className="block text-xs">Exención · {variant.values.sku || variant.id}<select data-draft-field="gtinExemption" data-draft-row={variant.id} className={INPUT_CLASS} value={data.requirements ? data.requirements.gtinExemptionByVariant?.[variant.id] || '' : variant.values.gtinExemption || ''} onChange={e => { const next = { ...data.requirements?.gtinExemptionByVariant }; if (e.target.value) next[variant.id] = e.target.value as 'pending' | 'approved'; else delete next[variant.id]; patchChannel(id, { requirements: { gtinExemptionByVariant: next, brandSnapshot: value.values.brand || '', categoryIdSnapshot: data.categoryId } }); }}><option value="">Sin exención confirmada</option><option value="pending">Pendiente de autorización externa</option><option value="approved">Aprobada externamente para Amazon</option></select></label>)}</div>}
         {data && category && <><p className="text-xs text-slate-500">Las opciones de Gemini ya están seleccionadas y se incluirán en el Excel. El icono de advertencia indica poca certeza; un cambio manual tiene prioridad y se aplica solo a este destino.</p>
           {analyzing && <p role="status" className="flex items-center gap-2 text-xs text-indigo-800"><Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />Analizando con Gemini…</p>}
           <ProductDraftEditor categories={[category]} drafts={[draft(category.id!, draftRows)]} resolvedValuesByRow={resolvedValuesByRow}
             layout="form" showDraftTabs={false} showSummaryCard={false} showGeneratedImagesSummary={false} showAddRowButton={false} showRowActions={false}
             onChangeRows={(_, rows) => patchChannel(id, { rows })}
+            renderCustomField={(row, column) => {
+              if (!isMarketplaceSquareField(id, column.key)) return null;
+              const square = sameTemplate ? value.marketplaceSquares?.[row.id] : undefined;
+              return <div data-draft-field={column.key} data-draft-row={row.id} tabIndex={-1} className="space-y-1.5">
+                {square && <div className="h-20 w-20"><ImageThumb storagePath={square.storagePath} alt={column.label} fit="contain" previewOnClick /></div>}
+                {square?.url ? <input aria-label={column.label} className={INPUT_CLASS} readOnly value={square.url} /> :
+                  <p className="text-xs text-slate-500">{square ? 'El enlace se completa al descargar.' :
+                    analyzing ? 'Preparando la foto cuadrada…' :
+                    !marketplaceSquareCandidates(value, row.id).length ? 'Falta una foto aprobada.' : 'Se prepara automáticamente para la descarga.'}</p>}
+              </div>;
+            }}
             renderFieldAdornment={(row, column) => {
               if (!notices.has(JSON.stringify(['verify_suggestion', row.id, column.key]))) return null;
               const reason = autofillRows.find(item => item.id === row.id)?.reasons?.[column.key];

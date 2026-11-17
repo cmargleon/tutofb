@@ -24,9 +24,13 @@ type ProviderStepInput = {
   signal: AbortSignal;
 };
 
-/** Automation job whose output was stored but whose Gemini review never finished: review again, never regenerate. */
+/**
+ * Automation job whose output was stored but whose Gemini review never finished: review again, never regenerate.
+ * Shared by the worker (which downloads currentOutput) and persistence (which rewrites outputs/{currentOutputId}),
+ * so both must be present; otherwise the job generates a new output.
+ */
 export const isReviewResume = (job: Job): boolean =>
-  Boolean(job.automationManaged && job.automationReviewPending && job.currentOutput);
+  Boolean(job.automationManaged && job.automationReviewPending && job.currentOutput && job.currentOutputId);
 
 /** Planned photos with `reference` composition reuse the uploaded garment photo instead of generating one. */
 export const isReferenceReuse = (job: Job): boolean => job.photoTask?.composition === 'reference';
@@ -103,7 +107,6 @@ const reserveGenerationBudget = async (
     hold.holdUsd,
     { id: jobId, claimToken: job.claimToken },
   );
-  if (!operationId) return null;
   return { automationJobId: job.automationJobId, operationId, hold };
 };
 

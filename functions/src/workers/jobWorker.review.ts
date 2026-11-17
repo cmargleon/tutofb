@@ -1,6 +1,7 @@
 import { getSystemConfigCached } from '../admin/systemConfig';
 import { GEMINI_API_KEY } from '../config/runtime';
 import { buildGeminiRejectedFailureInfo, toFailureSummary } from '../errors/jobFailure';
+import { validatePlannedPhotoReview } from '../media/photoPlanFile';
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { Job } from '../../../shared/src/types';
 import { productReferencePaths, ProviderResult } from './jobWorker.generation';
@@ -99,7 +100,8 @@ export const buildReviewRequest = async (
 };
 
 /**
- * Runs the Gemini review. Any error while preparing or running it persists the generated attempt through
+ * Runs the Gemini review and, for planned photos, the final-file validation (which may downgrade the verdict).
+ * Any error in either step persists the generated attempt, image and cost included, through
  * failGeneratedAttemptAfterReviewError and returns null, so the caller must stop.
  */
 export const reviewGeneratedAttempt = async (
@@ -108,7 +110,10 @@ export const reviewGeneratedAttempt = async (
 ): Promise<ReviewResult | null> => {
   try {
     const request = await buildReviewRequest(attempt, signal);
-    return await reviewGeneratedImageWithGemini(request);
+    const review = await reviewGeneratedImageWithGemini(request);
+    const { photoTask } = attempt.claimedJob;
+    if (photoTask) await validatePlannedPhotoReview(attempt.providerResult.imageBytes, photoTask, review);
+    return review;
   } catch (reviewError) {
     await failGeneratedAttemptAfterReviewError({
       claimedJob: attempt.claimedJob,

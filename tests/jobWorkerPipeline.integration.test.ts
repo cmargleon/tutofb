@@ -208,7 +208,7 @@ test('job pipeline characterization: generation, reference reuse, review resume 
         photoTask: photoTask('model', { backgroundCorrection: 'neutral-white-perimeter' }) }));
       await run('photo: model -> rejected with retry left', baseJob({ ...commercial, photoTask: photoTask('model') }),
         { review: 'rejected' });
-      await run('photo: final-file validation throws -> provider-style retry',
+      await run('photo: final-file validation throws -> failed, image and cost kept',
         baseJob({ photoTask: photoTask('model') }));
       await run('automation: generate -> approved', baseJob(automation));
       await run('automation: product generate -> approved', baseJob({ ...automation, generationKind: 'product' }));

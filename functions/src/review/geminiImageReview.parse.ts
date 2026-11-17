@@ -141,6 +141,7 @@ export const parsePhotoValidation = (
   if (!hasCompletePhotoValidation(photoTask, parsed)) {
     throw new GeminiAutoReviewError({
       reasonCode: 'gemini_empty_response',
+      retryable: true,
       message: 'La revisión no devolvió validaciones estructuradas de todos los destinos.',
     });
   }

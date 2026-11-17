@@ -14,7 +14,7 @@ import { inspectWorkbookPackage, patchWorkbookCells, assertPatchableCells, range
 import { sanitizeSpreadsheetFileName } from './batchSpreadsheetExport';
 import { applyMarketplacePublication, attachMarketplacePublications, publishMarketplaceImage } from './marketplaceImages';
 import { applyOrganizerSource, applyOrganizerVariantOverrides, assignOrganizerImages, loadOrganizerProducts } from './organizerProducts';
-import { applyMarketplaceAutofill } from './marketplaceAutofill';
+import { applyMarketplaceAutofill, resolveMarketplaceCopy } from './marketplaceAutofill';
 import { getGeminiGarmentViewClassificationModel } from '../config/runtime';
 import { digest } from '../organizer/drive';
 
@@ -116,9 +116,9 @@ type Context = Awaited<ReturnType<typeof loadExportContext>>;
 export const templateUsable = (t: SpreadsheetTemplate, channel: MarketplaceId, historicallyLinked = false) =>
   (t.status !== 'archived' || (historicallyLinked && !!t.exportConfig?.supersededByTemplateId))
   && t.exportConfig?.marketplaceId === channel && t.exportConfig.validationStatus === 'compatible';
-function resolveMarketplaceAutofill(context: Context, channels: MarketplaceId[], uid: string, apiKey?: string, analyze = false) {
-  const inputs = context.products.flatMap(product => {
-    if (product.organizer?.source.issue && !product.organizer.confirmedIdentity) return [];
+async function resolveMarketplaceAutofill(context: Context, channels: MarketplaceId[], uid: string, apiKey?: string, analyze = false) {
+  const products = context.products.filter(product => !product.organizer?.source.issue || product.organizer.confirmedIdentity);
+  const inputs = products.flatMap(product => {
     return channels.flatMap(channel => {
       const channelData = product.marketplaces[channel];
       const template = context.templates.find(t => t.id === channelData?.templateId && templateUsable(t, channel, true));
@@ -126,7 +126,20 @@ function resolveMarketplaceAutofill(context: Context, channels: MarketplaceId[],
       return template && category ? [{ channel, product, template, category, jobs: context.jobsByProduct.get(product.id) || [], batches: context.batches }] : [];
     });
   });
-  return applyMarketplaceAutofill(inputs, { model: getGeminiGarmentViewClassificationModel(), uid, apiKey, analyze });
+  const options = { model: getGeminiGarmentViewClassificationModel(), uid, apiKey, analyze };
+  const [choices, listing] = await Promise.all([
+    applyMarketplaceAutofill(inputs, options),
+    resolveMarketplaceCopy(channels.length ? products.map(product => ({
+      product, jobs: context.jobsByProduct.get(product.id) || [], batches: context.batches,
+    })) : [], options),
+  ]);
+  for (const { product, copy } of listing.suggestions) {
+    Object.assign(product.values, copy);
+    for (const [field, value] of Object.entries(copy)) {
+      product.evidence[field] = { source: 'ai', original: value, normalized: value, confidence: null };
+    }
+  }
+  return { pending: choices.pending || listing.pending, incomplete: choices.incomplete || listing.incomplete };
 }
 export function previewExportContext(context: Context): MarketplaceExportPreview {
   const { client, products, templates, categories } = context;

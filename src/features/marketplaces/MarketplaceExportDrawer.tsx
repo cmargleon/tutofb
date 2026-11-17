@@ -35,7 +35,7 @@ export function MarketplaceExportDrawer({ scope, onClose }: { key?: string; scop
         {state.error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{state.error}<Button variant="ghost" size="sm" disabled={state.busy} onClick={() => void state.refresh()}>Volver a validar</Button></div>}
         {preview && !state.loading && <>
           {state.analyzing && <p role="status" className="flex items-center gap-2 rounded-xl bg-indigo-50 p-3 text-sm text-indigo-900"><Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />Analizando con Gemini… El formulario se completará al terminar y conservará tus cambios.</p>}
-          {!state.analyzing && (state.analysisError || preview.autofillIncomplete) && <p role="alert" className="text-sm text-amber-800">{state.analysisError ? `Gemini no pudo completar el análisis: ${state.analysisError}` : 'Gemini no pudo elegir algunos campos; el motivo aparece junto a cada uno.'} <Button variant="ghost" size="sm" disabled={state.busy} onClick={() => void state.refresh()}>Volver a validar</Button></p>}
+          {!state.analyzing && (state.analysisError || preview.autofillIncomplete) && <p role="alert" className="text-sm text-amber-800">{state.analysisError ? `Gemini no pudo completar el análisis: ${state.analysisError}` : 'Gemini no pudo completar todas las sugerencias. Revisa el texto de venta y los avisos de los campos.'} <Button variant="ghost" size="sm" disabled={state.busy} onClick={() => void state.refresh()}>Volver a validar</Button></p>}
           {!preview.channels.length && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Este cliente no tiene marketplaces habilitados. <Link className="underline" to={`/clients/${scope.clientId}?tab=marketplaces`}>Configurar marketplaces</Link></p>}
           {preview.channels.length > 0 && <p className="text-sm text-slate-600">Selecciona los destinos y corrige los requisitos pendientes. Los enlaces de las fotos aprobadas se completan al descargar.</p>}
           <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" disabled={state.busy || !available.length} onClick={() => state.select(available)}>Seleccionar todos</Button><Button size="sm" variant="ghost" disabled={state.busy} onClick={() => state.select([])}>Deseleccionar todos</Button></div>
@@ -46,7 +46,7 @@ export function MarketplaceExportDrawer({ scope, onClose }: { key?: string; scop
             const status = !c.compatibleTemplates ? 'Falta plantilla compatible' : state.analyzing && pending.length ? 'Analizando con Gemini…' : pending.length === 1 ? '1 requisito pendiente'
               : pending.length ? `${pending.length} requisitos pendientes`
                 : c.issues.length === 1 ? '1 aviso de Gemini' : `${c.issues.length} avisos de Gemini`;
-            const onlyIssue = pending.length === 1 ? pending[0] : c.issues.length === 1 ? c.issues[0] : null;
+            const directIssue = pending.length <= 1 ? pending[0] || c.issues[0] : undefined;
             return <div key={c.marketplaceId} className={`rounded-xl border p-4 ${c.ready ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-slate-50'}`}>
               <label className="flex cursor-pointer items-center gap-3"><input type="checkbox" disabled={state.busy || !c.compatibleTemplates} checked={state.selected.includes(c.marketplaceId)} onChange={e => state.select(e.target.checked ? [...state.selected, c.marketplaceId] : state.selected.filter(id => id !== c.marketplaceId))} /><span className="font-semibold">{MARKETPLACES.find(m => m.id === c.marketplaceId)?.name}</span></label>
               {c.ready && <p className="mt-3 flex items-center gap-2 text-xs text-emerald-800"><CheckCircle2 className="h-4 w-4" />Listo para exportar</p>}
@@ -56,14 +56,14 @@ export function MarketplaceExportDrawer({ scope, onClose }: { key?: string; scop
                   onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setRequirements(current => current?.marketplaceId === c.marketplaceId ? null : current); }}>
                   <button type="button" className="flex items-center gap-2 rounded text-left text-xs text-amber-800 hover:underline"
                     disabled={state.busy}
-                    aria-expanded={onlyIssue ? undefined : expanded} aria-controls={expanded ? panelId : undefined}
+                    aria-expanded={directIssue ? undefined : expanded} aria-controls={expanded ? panelId : undefined}
                     onPointerEnter={e => { if (e.pointerType === 'mouse') setRequirements(current => current?.marketplaceId === c.marketplaceId ? current : { marketplaceId: c.marketplaceId, pinned: false }); }}
                     onClick={() => {
-                      if (onlyIssue) goToIssue(onlyIssue);
+                      if (directIssue) goToIssue(directIssue);
                       else setRequirements(current => current?.marketplaceId === c.marketplaceId && current.pinned ? null : { marketplaceId: c.marketplaceId, pinned: true });
                     }}>
                     <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />{status}
-                    {onlyIssue ? <ArrowDownRight aria-hidden="true" className="h-3 w-3 shrink-0" /> : <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />}
+                    {directIssue ? <ArrowDownRight aria-hidden="true" className="h-3 w-3 shrink-0" /> : <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />}
                   </button>
                   {expanded && <div id={panelId} className="absolute inset-x-0 top-full z-20 pt-1">
                     <ul tabIndex={0} className="max-h-48 list-disc space-y-1.5 overflow-y-auto rounded-lg border border-amber-200 bg-white py-3 pl-7 pr-3 text-xs leading-relaxed text-slate-700 shadow-lg">

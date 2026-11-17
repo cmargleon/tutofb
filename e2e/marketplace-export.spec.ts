@@ -9,7 +9,7 @@ test('publication requires consent, keeps unsaved fields and fills stable URLs b
     await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
     const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
     await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
-    await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Producto sin perder cambios');
+    await drawer.getByRole('textbox', { name: 'Título de venta', exact: true }).fill('Producto sin perder cambios');
     await drawer.getByText('SHEIN · plantilla y datos de salida', { exact: true }).click();
     const shein = drawer.locator('details').filter({ has: page.getByText('SHEIN · plantilla y datos de salida', { exact: true }) });
     await expect(shein.getByRole('textbox', { name: 'Nombre de salida', exact: true })).toHaveValue('Producto sin perder cambios');
@@ -23,7 +23,7 @@ test('publication requires consent, keeps unsaved fields and fills stable URLs b
     const url = await imageUrl.inputValue();
     await expect(shein.getByRole('link', { name: 'Abrir imagen publicada' })).toHaveAttribute('href', url);
     await expect(shein.getByRole('button', { name: 'Copiar URL' })).toBeVisible();
-    await expect(drawer.getByRole('textbox', { name: 'Nombre', exact: true })).toHaveValue('Producto sin perder cambios');
+    await expect(drawer.getByRole('textbox', { name: 'Título de venta', exact: true })).toHaveValue('Producto sin perder cambios');
     const calls = await page.evaluate(() => (window as any).__localCalls.filter((call: any) => call.name === 'publishMarketplaceImages'));
     expect(calls).toHaveLength(1); expect(calls[0].input.authorizePublicImages).toBe(true); expect(calls[0].input.marketplaceId).toBe('shein');
     await shein.screenshot({ path: '/tmp/tuto-marketplace-images-editor.png' });
@@ -129,20 +129,37 @@ test('the first opening shows the Gemini analysis and fills the form when it end
     await drawer.getByRole('checkbox', { name: 'SHEIN' }).check();
     await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeDisabled();
     await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
-    await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Editado durante el análisis');
+    await drawer.getByRole('textbox', { name: 'Título de venta', exact: true }).fill('Editado durante el análisis');
     await drawer.getByText('SHEIN · plantilla y datos de salida', { exact: true }).click();
     const field = drawer.getByRole('combobox', { name: 'Materiales en contacto con alimentos', exact: true });
     await expect(field).toHaveValue('');
     await page.evaluate(() => (window as any).__finishMarketplaceAnalysis());
     await expect(field).toHaveValue('Vidrio');
     await expect(drawer.getByText('Analizando con Gemini…', { exact: false })).toHaveCount(0);
-    await expect(drawer.getByRole('textbox', { name: 'Nombre', exact: true })).toHaveValue('Editado durante el análisis');
+    await expect(drawer.getByRole('textbox', { name: 'Título de venta', exact: true })).toHaveValue('Editado durante el análisis');
     await expect(drawer.getByRole('button', { name: 'Descargar', exact: true })).toBeEnabled();
     const calls = await page.evaluate(() => (window as any).__localCalls.filter((call: any) => call.name === 'previewMarketplaceExports'));
     expect(calls.some((call: any) => call.input.analyzeAutofill === true)).toBe(true);
     expect(await drawer.getByRole('button', { name: 'Volver a validar', exact: true }).count()).toBe(0);
   } finally { await isolated.close(); }
 });
+test('clicking the Gemini warning count opens and focuses the first warning field', async () => {
+  const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 390, height: 844 } });
+  try {
+    const { page, baseURL } = isolated;
+    await page.goto(`${baseURL}/catalogo?clientId=local-client&batchId=local-batch`);
+    await page.evaluate(() => (window as any).__setMarketplaceFixture('multiple-suggestions'));
+    await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
+    await drawer.getByRole('button', { name: '2 avisos de Gemini', exact: true }).click();
+    const fields = drawer.getByRole('combobox', { name: 'Materiales en contacto con alimentos', exact: true });
+    await expect(fields).toHaveCount(2);
+    await expect(fields.first()).toBeFocused();
+    await expect(fields.first()).toBeInViewport();
+    await expect(drawer.locator('#marketplace-requirements-shein')).toBeHidden();
+  } finally { await isolated.close(); }
+});
+
 test('a low-certainty option is preselected, exportable and explained; a manual change clears its warning', async () => {
   const isolated = await openIsolatedBrowser(chromium);
   try {
@@ -202,7 +219,7 @@ test('catalog edits the shared product and variants without creating an export',
     await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
     const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
     await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
-    await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Nombre corregido');
+    await drawer.getByRole('textbox', { name: 'Título de venta', exact: true }).fill('Nombre corregido');
     await drawer.getByText('Variantes · 1', { exact: true }).click();
     await drawer.getByRole('button', { name: 'Agregar fila', exact: true }).click();
     await expect(drawer.getByRole('textbox', { name: 'SKU interno', exact: true })).toHaveCount(3);
@@ -245,7 +262,7 @@ test('editing master fields sends enabled channels and retains disabled Amazon d
     await page.getByRole('button', { name: 'Exportar a marketplaces', exact: true }).click();
     const drawer = page.getByRole('dialog', { name: 'Exportar a marketplaces' });
     await drawer.getByRole('button', { name: 'Completar datos', exact: true }).click();
-    await drawer.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Nombre con Amazon deshabilitado');
+    await drawer.getByRole('textbox', { name: 'Título de venta', exact: true }).fill('Nombre con Amazon deshabilitado');
     await drawer.getByRole('textbox', { name: 'Marca', exact: true }).fill('Otra marca');
     await drawer.getByRole('button', { name: 'Guardar y volver a validar', exact: true }).click();
     await expect(drawer.getByText('Nombre con Amazon deshabilitado', { exact: true })).toBeVisible();

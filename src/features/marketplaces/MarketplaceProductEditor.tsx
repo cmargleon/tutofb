@@ -8,7 +8,7 @@ import { ProductDraftEditor } from '../../components/product-drafts/ProductDraft
 import { Button, INPUT_CLASS, ImageThumb } from '../../components/ui';
 import { saveMasterProduct } from './exportFirebase';
 import { useMarketplaceImagePublication } from './useMarketplaceImagePublication';
-const labels: Record<string, string> = { name: 'Nombre', description: 'Descripción', brand: 'Marca', category: 'Categoría conceptual', sku: 'SKU interno', material: 'Material', composition: 'Composición', price: 'Precio', currency: 'Moneda (código ISO)', weightUnit: 'Unidad de peso', dimensionUnit: 'Unidad de dimensiones', inventory: 'Inventario', weight: 'Peso', length: 'Largo', width: 'Ancho', height: 'Alto', color: 'Color', size: 'Talla', gtin: 'GTIN / EAN / UPC', asin: 'ASIN', catalogId: 'ID de catálogo', spu: 'SPU', skc: 'SKC', parentSku: 'SKU padre', parentage: 'Relación (parent / child)', relationshipType: 'Tipo de relación', variationTheme: 'Tema de variante', gtinExemption: 'Exención GTIN (pending / approved)' };
+const labels: Record<string, string> = { name: 'Título de venta', description: 'Descripción', brand: 'Marca', category: 'Categoría conceptual', sku: 'SKU interno', material: 'Material', composition: 'Composición', price: 'Precio', currency: 'Moneda (código ISO)', weightUnit: 'Unidad de peso', dimensionUnit: 'Unidad de dimensiones', inventory: 'Inventario', weight: 'Peso', length: 'Largo', width: 'Ancho', height: 'Alto', color: 'Color', size: 'Talla', gtin: 'GTIN / EAN / UPC', asin: 'ASIN', catalogId: 'ID de catálogo', spu: 'SPU', skc: 'SKC', parentSku: 'SKU padre', parentage: 'Relación (parent / child)', relationshipType: 'Tipo de relación', variationTheme: 'Tema de variante', gtinExemption: 'Exención GTIN (pending / approved)' };
 const categoryFor = (id: string, fields: readonly string[]): SpreadsheetTemplateCategory => ({ id, templateId: '', clientId: '', sheetName: id, label: id, rowStart: 1, attributes: [], columns: fields.map((key, index) => ({ key, label: labels[key] || key, index, letter: String(index), required: false, requirementLabel: null, guidance: null, validation: null })), createdAt: null, updatedAt: null });
 const masterCategory = categoryFor('producto-maestro', PRODUCT_FIELDS); const variantCategory = categoryFor('variantes', VARIANT_FIELDS.filter(field => field !== 'gtinExemption'));
 const variantFieldByIssue: Partial<Record<string, string>> = {
@@ -65,10 +65,19 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
   const [publicUrlsAuthorized, setPublicUrlsAuthorized] = useState(false);
   const [confirmIdentity, setConfirmIdentity] = useState(false);
   const editor = useRef<HTMLFieldSetElement>(null);
+  const editedCopyFields = useRef(new Set<'name' | 'description'>());
   // A finished Gemini analysis refreshes the suggestions without discarding the operator's unsaved edits.
   useEffect(() => {
-    setValue(current => current.marketplaceAutofill === product.marketplaceAutofill ? current
-      : { ...current, marketplaceAutofill: product.marketplaceAutofill, evidence: { ...current.evidence, ...product.evidence } });
+    setValue(current => {
+      const values = { ...current.values };
+      for (const field of ['name', 'description'] as const) {
+        const suggestion = product.values[field];
+        if (product.evidence[field]?.source === 'ai' && suggestion && !editedCopyFields.current.has(field)) {
+          values[field] = suggestion;
+        }
+      }
+      return { ...current, values, marketplaceAutofill: product.marketplaceAutofill, evidence: { ...current.evidence, ...product.evidence } };
+    });
   }, [product]);
   useLayoutEffect(() => {
     if (editor.current && focusedIssue) focusRequirement(editor.current, focusedIssue);
@@ -81,6 +90,9 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
   const draft = (categoryId: string, rows: ProductDraftInput['rows']): ProductDraftInput => ({ garmentId: value.id, garmentName: value.values.name || value.garmentId, categoryId, categoryName: categoryId, rows });
   const patchChannel = (id: MarketplaceId, patch: Partial<NonNullable<MasterProduct['marketplaces'][MarketplaceId]>>) => setValue(current => ({ ...current, marketplaces: { ...current.marketplaces, [id]: { ...current.marketplaces[id], ...patch } } }));
   const changeMasterValues = (nextValues: MasterProduct['values']) => {
+    for (const field of ['name', 'description'] as const) {
+      if ((value.values[field] || '') !== (nextValues[field] || '')) editedCopyFields.current.add(field);
+    }
     const current = value.marketplaces.amazon;
     const requirements = current?.requirements;
     const changedBrandOrCategory = nextValues.brand !== value.values.brand || nextValues.category !== value.values.category;
@@ -100,7 +112,11 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
       </label>}
     </div>}
     <p className="text-xs text-slate-500">Los campos desconocidos permanecen vacíos. Indica moneda y unidades explícitamente; las asociaciones de la plantilla deben usar las mismas unidades. Las correcciones se comparten entre destinos.</p>
-    <ProductDraftEditor categories={[masterCategory]} drafts={[draft(masterCategory.id!, [{ id: value.id, values: value.values }])]} layout="form" showDraftTabs={false} showSummaryCard={false} showGeneratedImagesSummary={false} showAddRowButton={false} showRowActions={false} onChangeRows={(_, rows) => changeMasterValues(rows[0].values)} />
+    <ProductDraftEditor categories={[masterCategory]} drafts={[draft(masterCategory.id!, [{ id: value.id, values: value.values }])]} layout="form" multilineFields={['description']} renderFieldNote={(_, column) => {
+      const field = column.key;
+      return (field === 'name' || field === 'description') && value.evidence[field]?.source === 'ai' && !editedCopyFields.current.has(field)
+        ? <p className="mt-1 text-xs text-slate-500">Sugerencia de Gemini</p> : null;
+    }} showDraftTabs={false} showSummaryCard={false} showGeneratedImagesSummary={false} showAddRowButton={false} showRowActions={false} onChangeRows={(_, rows) => changeMasterValues(rows[0].values)} />
     <details data-export-variants><summary className="cursor-pointer text-sm font-semibold">Variantes · {value.variants.length}</summary><ProductDraftEditor categories={[variantCategory]} drafts={[draft(variantCategory.id!, value.variants.map(v => ({ id: v.id, values: v.values })))]} showDraftTabs={false} showSummaryCard={true} showGeneratedImagesSummary={false} onChangeRows={(_, rows) => setValue({ ...value, variants: rows.map(r => ({ id: r.id, values: r.values, attributes: value.variants.find(v => v.id === r.id)?.attributes || {} })), marketplaces: Object.fromEntries(Object.entries(value.marketplaces as MasterProduct['marketplaces']).map(([id, data]) => [id, !preview.channels.some(c => c.marketplaceId === id) ? data : { ...data, rows: data.rows?.filter(r => rows.some(v => v.id === r.id)), ...(data.requirements ? { requirements: { ...data.requirements, gtinExemptionByVariant: Object.fromEntries(Object.entries(data.requirements.gtinExemptionByVariant || {}).filter(([variantId]) => rows.some(row => row.id === variantId))) } } : {}) }])) })} /></details>
     {preview.channels.map(channel => {
       const id = channel.marketplaceId; const data = value.marketplaces[id];

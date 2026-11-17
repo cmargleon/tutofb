@@ -31,6 +31,7 @@ interface ProductDraftEditorProps {
   showGeneratedImagesSummary?: boolean;
   showAddRowButton?: boolean;
   showRowActions?: boolean;
+  multilineFields?: readonly string[];
   resolvedValuesByRow?: Record<string, ProductDraftRow['values']>;
   renderFieldNote?: (row: ProductDraftRow, column: SpreadsheetTemplateCategoryColumn) => React.ReactNode;
   /** Rendered beside the form field, e.g. a warning icon. */
@@ -166,6 +167,7 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
   showGeneratedImagesSummary = true,
   showAddRowButton = true,
   showRowActions = true,
+  multilineFields,
   resolvedValuesByRow,
   renderFieldNote,
   renderFieldAdornment,
@@ -279,6 +281,21 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
     }
 
     const displayValue = forceResolvedValue ? resolvedValue : (row.values[column.key] || '');
+    if (multilineFields?.includes(column.key)) {
+      return (
+        <textarea
+          data-draft-field={column.key}
+          data-draft-row={row.id}
+          aria-label={column.label}
+          aria-required={column.required || undefined}
+          value={displayValue}
+          onChange={(event) => updateValue(event.target.value)}
+          className={INPUT_CLASS}
+          placeholder={placeholder}
+          rows={4}
+        />
+      );
+    }
     const showImagePreview = isImageColumn(column) && looksLikeUrl(displayValue);
     const isMainPhoto = isPrimaryPhotoColumn(column);
 

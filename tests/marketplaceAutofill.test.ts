@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import type { MasterProduct, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../shared/src/types';
 const require = createRequire(import.meta.url);
 const { MARKETPLACE_ADAPTERS } = require('../functions/lib/shared/src/marketplaceExport/adapters.js');
-const { askGeminiForChoices, planMarketplaceChoices, validateMarketplaceChoices } = require('../functions/lib/functions/src/spreadsheets/marketplaceAutofill.js');
+const { askGeminiForChoices, marketplaceCopyFields, parseMarketplaceCopy, planMarketplaceChoices, validateMarketplaceChoices } = require('../functions/lib/functions/src/spreadsheets/marketplaceAutofill.js');
 
 const column = (key: string, label: string, index: number, extra: object) => ({ key, label, index, letter: String.fromCharCode(65 + index),
   required: false, requirementLabel: null, guidance: null, validation: 'list', ...extra });
@@ -90,4 +90,23 @@ test('choices outside the row options or the parent list are rejected; missing e
   ], false);
   assert.deepEqual(valid.map((choice: any) => [choice.key, choice.value]), [['spec', 'Material(9)']]);
   assert.match(valid[0].evidence, /no indicó el motivo/);
+});
+
+test('marketplace copy improves source titles, fills missing descriptions and honors manual edits', () => {
+  const article = product();
+  assert.deepEqual(marketplaceCopyFields(article), ['name', 'description']);
+  article.values.description = 'Descripción de origen';
+  assert.deepEqual(marketplaceCopyFields(article), ['name']);
+  article.evidence.name = { source: 'manual', original: 'Mi título', normalized: 'Mi título', confidence: 1 };
+  article.values.description = '';
+  article.evidence.description = { source: 'manual', original: '', normalized: '', confidence: 1 };
+  assert.deepEqual(marketplaceCopyFields(article), []);
+});
+
+test('marketplace copy enforces title length and preserves description paragraphs', () => {
+  const name = 'Copa desarmable con acabado degradado morado';
+  const description = 'Sirve tus bebidas en una copa con acabado degradado.\n\nSu diseño desarmable facilita guardarla.';
+  assert.deepEqual(parseMarketplaceCopy(JSON.stringify({ name: `  ${name}  `, description }), ['name', 'description']), { name, description });
+  assert.throws(() => parseMarketplaceCopy(JSON.stringify({ name: 'A'.repeat(61) }), ['name']));
+  assert.throws(() => parseMarketplaceCopy(JSON.stringify({ name }), ['name', 'description']));
 });

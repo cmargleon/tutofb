@@ -178,13 +178,16 @@ const marketplacePreview = (input = {}) => {
         message: 'Falta Materiales en contacto con alimentos en variante 1.',
       }] }] };
   }
-  if (marketplaceScenario === 'tentative-suggestion') {
+  if (marketplaceScenario === 'tentative-suggestion' || marketplaceScenario === 'multiple-suggestions') {
+    const secondVariant = { id: 'second-variant', values: {} };
+    const multiple = marketplaceScenario === 'multiple-suggestions';
     const variant = masterFixture.variants[0];
     const field = 'attr_1000463';
     const corrected = Boolean(masterFixture.marketplaces.shein.rows?.find(row => row.id === variant.id)?.values[field]);
     const reason = 'Sugiere acero inoxidable por el acabado metálico; la composición del interior está por verificar.';
-    const product = { ...masterFixture, marketplaceAutofill: {
-      shein: [{ id: variant.id, values: { [field]: 'Acero inoxidable' }, inferredFields: [], tentativeFields: [field], reasons: { [field]: reason } }],
+    const product = { ...masterFixture, variants: multiple ? [...masterFixture.variants, secondVariant] : masterFixture.variants, marketplaceAutofill: {
+      shein: [{ id: variant.id, values: { [field]: 'Acero inoxidable' }, inferredFields: [], tentativeFields: [field], reasons: { [field]: reason } },
+        ...(multiple ? [{ id: secondVariant.id, values: { [field]: 'Vidrio' }, inferredFields: [], tentativeFields: [field] }] : [])],
     } };
     const category = { ...exportCategories[0], validationMode: 'template', columns: [...exportCategories[0].columns, {
       key: field, label: 'Materiales en contacto con alimentos', index: 2, letter: 'C', required: true, dropdownOptions: ['Acero inoxidable', 'Vidrio'],
@@ -193,7 +196,10 @@ const marketplacePreview = (input = {}) => {
       marketplaceId: 'shein', ready: true, compatibleTemplates: 1, issues: corrected ? [] : [{
         marketplaceId: 'shein', productId: product.id, productName: product.values.name, field, blocking: false,
         variantId: variant.id, code: 'verify_suggestion', message: `Materiales en contacto con alimentos (variante 1): Gemini sugiere «Acero inoxidable» con poca certeza. ${reason}`,
-      }],
+      }, ...(multiple ? [{
+        marketplaceId: 'shein', productId: product.id, productName: product.values.name, field, blocking: false,
+        variantId: secondVariant.id, code: 'verify_suggestion', message: 'Materiales en contacto con alimentos (variante 2): Gemini sugiere «Vidrio» con poca certeza.',
+      }] : [])],
     }] };
   }
   if (marketplaceScenario === 'single-requirement') {

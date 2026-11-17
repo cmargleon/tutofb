@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { AutomationBudgetError, pauseAutomationGeneration } from '../automation/budget';
 import { getJobAutoReviewMaxAttempts, getJobTimeoutMs } from '../config/runtime';
 import { withManglarJobBudget } from '../manglar/budget';
-import { validatePlannedPhotoReview } from '../media/photoPlanFile';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { Job, Provider } from '../../../shared/src/types';
 import { toMillis } from '../../../shared/src/utils/dateUtils';
@@ -103,13 +102,10 @@ const processJobCore = async (
       await preparePlannedPhoto(claimedJob, providerResult, imageConfig);
     }
 
-    // 3. Gemini review (a failed review has already been persisted)
+    // 3. Gemini review + planned-photo validation (a failed review has already been persisted)
     const review = await reviewGeneratedAttempt(attempt, controller.signal);
     if (!review) {
       return;
-    }
-    if (claimedJob.photoTask) {
-      await validatePlannedPhotoReview(providerResult.imageBytes, claimedJob.photoTask, review);
     }
 
     // 4. Persistence according to the verdict

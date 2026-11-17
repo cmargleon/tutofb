@@ -17,7 +17,7 @@ import {
 import { reviewGeneratedImageWithGemini } from '../review/geminiImageReview';
 import { buildAutoReviewSignalsPatch } from '../review/reviewSignals';
 import { createLog } from './jobWorker.claims';
-import { countProviderReferences } from './jobWorker.generation';
+import { countProviderReferences, isReviewResume } from './jobWorker.generation';
 import { buildAutomaticRetryPromptPatch, extensionForContentType } from './jobWorker.helpers';
 import { bucket, db } from './jobWorker.resources';
 
@@ -65,12 +65,6 @@ type AttemptImage = {
   chargedCostUsd: number;
 };
 
-/**
- * An automation job whose review is pending updates its current output in place: no new file, output or
- * cost. Note: keyed on currentOutputId, while the worker's resume check uses currentOutput.
- */
-const reusesExistingOutput = (job: Job): boolean =>
-  Boolean(job.automationManaged && job.automationReviewPending && job.currentOutputId);
 
 const generatedImagePath = (job: Job, jobId: string, outputId: string, contentType: string): string =>
   `generated/${job.clientId}/${job.batchId}/${jobId}/${outputId}.${extensionForContentType(contentType)}`;
@@ -352,7 +346,8 @@ export const persistGeneratedAttempt = async (input: PersistAttemptInput): Promi
   const { claimedJob } = input;
   const jobId = claimedJob.id!;
   const jobRef = db.collection('jobs').doc(jobId);
-  const reuseOutput = reusesExistingOutput(claimedJob);
+  // A resumed review updates the current output in place: no new file, output or cost.
+  const reuseOutput = isReviewResume(claimedJob);
   const outputRef = reuseOutput
     ? jobRef.collection('outputs').doc(claimedJob.currentOutputId!)
     : jobRef.collection('outputs').doc();
@@ -399,10 +394,12 @@ export const persistGeneratedAttempt = async (input: PersistAttemptInput): Promi
   return committed;
 };
 
+/** Shared operational retry policy: retryCount counts the retries already used, up to maxRetries. */
+const hasRetryLeft = (job: Job): boolean => (job.retryCount || 0) < (job.maxRetries || 0);
+
 /** Automation jobs retry a failed review (unless the budget ran out); manual jobs fail and keep the image. */
 const statusAfterReviewError = (job: Job, error: unknown): Job['status'] => {
-  const canRetry = (job.retryCount || 0) < job.maxRetries;
-  if (job.automationManaged && !(error instanceof AutomationBudgetError) && canRetry) return 'pending';
+  if (job.automationManaged && !(error instanceof AutomationBudgetError) && hasRetryLeft(job)) return 'pending';
   return 'failed';
 };
 
@@ -457,7 +454,7 @@ export const failGeneratedAttemptAfterReviewError = async ({
 export const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<void> => {
   const jobRef = db.collection('jobs').doc(claimedJob.id!);
   const nextRetryCount = (claimedJob.retryCount || 0) + 1;
-  const shouldRetry = nextRetryCount <= (claimedJob.maxRetries || 0);
+  const shouldRetry = hasRetryLeft(claimedJob);
   const failureInfo = buildJobFailureInfo(error, {
     provider: claimedJob.provider,
     attemptNumber: claimedJob.generationAttemptCount || null,

@@ -80,6 +80,17 @@ export const where = (field, op, value) => ({ field, op, value });
 export const orderBy = (order, direction) => ({ order, direction });
 export const limit = max => ({ max });
 export const startAfter = () => ({});
+// Opt-in catalog editing scenario; other browser journeys keep their fixtures.
+if (window.__photoEditFixture) {
+  const current = records.jobs[0];
+  current.promptBase = 'Prompt original editable';
+  current.finalPrompt = 'Prompt original completo';
+  current.currentOutput = { ...current.currentOutput, jobId: current.id, batchId: current.batchId,
+    clientId: current.clientId, createdAt: stamp, generationAttempt: 2 };
+  records[`jobs/${current.id}/outputs`] = [current.currentOutput, { ...current.currentOutput,
+    id: 'older-output', resultImagePath: 'fixtures/older.svg', generationAttempt: 1,
+    createdAt: { toMillis: () => 1 } }];
+}
 const snapshotDoc = value => ({ id: value?.id, exists: () => !!value, data: () => value });
 function snapshot(reference, fromServer = false) {
   (window.__fixtureReads ||= []).push(reference);
@@ -224,7 +235,22 @@ const marketplacePreview = (input = {}) => {
     : [] })) });
 };
 export const httpsCallable = (_, name) => async input => {
+  if (window.__masterCatalogFixture) {
+    const { catalogFixtureCall } = await import('./catalog-fixtures.mjs');
+    const response = catalogFixtureCall(name, input);
+    if (response) { (window.__localCalls ||= []).push({ name, input }); return response; }
+  }
   (window.__localCalls ||= []).push({ name, input });
+  if (window.__photoEditFixture && ['editJobPhoto', 'selectJobOutput', 'regenerateJob'].includes(name)) {
+    const current = records.jobs[0];
+    if (name === 'editJobPhoto' && window.__photoEditError) throw new Error('Proveedor de edición no disponible');
+    if (name === 'selectJobOutput') {
+      current.userSelectedOutputId = input.outputId;
+      current.userSelectedOutput = records[`jobs/${current.id}/outputs`].find(output => output.id === input.outputId);
+      listeners.forEach(emit => emit());
+    }
+    return { data: { success: true, jobId: input.jobId } };
+  }
   if (productWorkflow && name === 'organizerAction') {
     if (input.action === 'clients') return { data: { items: [{ ...client, configured: true }], next: null } };
     if (input.clientId !== client.id) throw new Error('Cliente fuera de tu alcance.');

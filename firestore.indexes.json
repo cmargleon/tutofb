@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "catalog.status", "order": "ASCENDING" },
+        { "fieldPath": "catalog.searchKeys", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
       "collectionGroup": "automationJobs",
       "queryScope": "COLLECTION",
       "fields": [

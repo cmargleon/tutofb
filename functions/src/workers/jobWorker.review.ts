@@ -67,6 +67,7 @@ export const buildReviewRequest = async (
 
   return {
     ...automationFields,
+    ...(job.imageEdit ? { imageEditInstructions: job.imageEdit.instructions, productReferences: [poseReference] } : {}),
     ...(job.photoTask ? { photoTask: job.photoTask } : {}),
     generationKind: job.generationKind,
     ...productFields,

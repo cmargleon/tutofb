@@ -1,10 +1,10 @@
+import { CatalogPhotoActions } from './CatalogPhotoActions';
 import { JobPhotoReview } from '../evaluation/JobPhotoReview';
-import { ReviewPromptProposal } from '../evaluation/ReviewPromptProposal';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { AlertCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, RefreshCw, X } from 'lucide-react';
-import { Batch, Job, JobOutput, JobReviewCorrection, Provider } from '../../../shared/src/types';
-import { PROVIDER_LABELS, PROVIDER_VALUES, resolveApprovedJobOutput } from '../../../shared/src/domain';
+import { AlertCircle, ChevronLeft, ChevronRight, Copy, Download, Loader2, X } from 'lucide-react';
+import { Batch, Job, JobOutput, JobReviewCorrection } from '../../../shared/src/types';
+import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { toMillisOrZero as toMillis } from '../../../shared/src/utils/dateUtils';
 import { useJobOutputHistory } from '../../features/evaluation/useJobOutputHistory';
 import { getApprovedReviewOutput } from '../../../shared/src/jobReview';
@@ -27,8 +27,10 @@ import FileSaver from 'file-saver';
 
 const HISTORY_LIMIT = 18;
 
-const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string =>
-  output.generationAttempt ? `Intento ${output.generationAttempt}` : `Salida ${fallbackIndex + 1}`;
+const formatOutputLabel = (output: JobOutput, fallbackIndex: number): string => {
+  const base = output.generationAttempt ? `Intento ${output.generationAttempt}` : `Salida ${fallbackIndex + 1}`;
+  return output.imageEdit ? `${base} · ajuste` : base;
+};
 
 interface CatalogLightboxProps {
   job: Job;
@@ -271,14 +273,18 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
     }
   };
 
+  const markNewOutputPending = () => {
+    pendingHistoryBaselineIdsRef.current = new Set(outputsDesc.map((output) => output.id));
+    setShowPendingHistoryPlaceholder(true);
+    setRegenerationInFlight(true);
+    setRegenerationSawRemoteProcessing(false);
+  };
+
   const handleRegenerateClick = async (correction?: JobReviewCorrection) => {
     if (!job.id || (!correction && selectedProviderDisabled)) return false;
     const success = await handleRegenerate(job.id, correction);
     if (success) {
-      pendingHistoryBaselineIdsRef.current = new Set(outputsDesc.map((output) => output.id));
-      setShowPendingHistoryPlaceholder(true);
-      setRegenerationInFlight(true);
-      setRegenerationSawRemoteProcessing(false);
+      markNewOutputPending();
       toast({
         tone: 'success',
         title: 'Regeneración encolada',
@@ -346,6 +352,16 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
               title="Descargar imagen"
             >
               {downloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyImageUrl()}
+              disabled={!displayedImageValue}
+              className="inline-flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/35 text-white shadow-[0_18px_40px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:bg-black/55 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Copiar URL de la imagen"
+              title="Copiar URL de la imagen"
+            >
+              <Copy className="h-5 w-5" />
             </button>
             <button
               type="button"
@@ -609,96 +625,24 @@ export const CatalogLightbox: React.FC<CatalogLightboxProps> = ({
                   </div>
                 ) : null}
 
-                <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                  <label className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">URL</label>
-                  <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-slate-950 px-3 py-2.5 shadow-inner shadow-black/20">
-                    <span className="min-w-0 flex-1 truncate text-xs text-slate-300">
-                      {displayedImageValue || 'Sin URL disponible'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopyImageUrl()}
-                      disabled={!displayedImageValue}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Copiar URL de la imagen"
-                      title="Copiar URL"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                  {job.promptFormat === 'approved-try-on-v1' ? <ReviewPromptProposal
-                    text={(displayedOutput?.autoReview || job.latestAutoReview)?.revisedPrompt}
-                    disabled={controlsDisabled} onEdit={(prompt) => job.id && updateDraft(job.id, { provider: draft.provider, prompt })} /> : null}
-                  <label className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Prompt</label>
-                  <textarea
-                    value={draft.prompt}
-                    onChange={(e) => job.id && updateDraft(job.id, { prompt: e.target.value })}
-                    disabled={controlsDisabled}
-                    rows={8}
-                    className="tuto-field w-full resize-none"
-                    placeholder="Prompt para regenerar esta foto..."
+                {job.id ? (
+                  <CatalogPhotoActions
+                    key={job.id}
+                    job={job as Job & { id: string }}
+                    sourceOutput={displayedOutput}
+                    sourceLabel={displayedOutputLabel}
+                    draft={draft}
+                    onDraftChange={(patch) => job.id && updateDraft(job.id, patch)}
+                    disabledProviders={disabledProviders}
+                    controlsDisabled={controlsDisabled}
+                    isRegenerationActive={isRegenerationActive}
+                    regenerationError={regenerationError}
+                    canRegenerate={role.canRegenerate}
+                    onRegenerate={() => void handleRegenerateClick()}
+                    onEditQueued={markNewOutputPending}
                   />
-                </div>
-
-                <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                  <label className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Modelo IA</label>
-                  <select
-                    value={draft.provider}
-                    onChange={(e) => job.id && updateDraft(job.id, { provider: e.target.value as Provider })}
-                    disabled={controlsDisabled}
-                    className="tuto-field w-full"
-                  >
-                    {PROVIDER_VALUES.map((provider) => (
-                      <option key={provider} value={provider} disabled={disabledProviders?.includes(provider)}>
-                        {PROVIDER_LABELS[provider]}{disabledProviders?.includes(provider) ? ' (deshabilitado)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedProviderDisabled ? (
-                  <div
-                    className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Este modelo IA está deshabilitado en Configuración. Puedes verlo para referencia, pero debes elegir otro para regenerar.
-                  </div>
-                ) : null}
-
-                {regenerationError ? (
-                  <div
-                    className="flex items-start gap-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-3 text-sm text-rose-200"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{regenerationError}</span>
-                  </div>
-                ) : null}
-
-                {!role.canRegenerate ? (
-                  <div
-                    className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Solo admin y operador pueden regenerar fotos desde catálogo.
-                  </div>
                 ) : null}
               </div>
-            </div>
-
-            <div className="px-4 py-4 sm:px-5" onClick={(e) => e.stopPropagation()}>
-              <button
-                type="button"
-                onClick={() => void handleRegenerateClick()}
-                disabled={controlsDisabled || selectedProviderDisabled || !draft.prompt.trim()}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-              >
-                <RefreshCw className={`h-4 w-4 ${isRegenerationActive ? 'animate-spin' : ''}`} />
-                Regenerar foto
-              </button>
             </div>
           </aside>
 

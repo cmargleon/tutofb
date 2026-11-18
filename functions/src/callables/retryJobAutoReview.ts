@@ -89,8 +89,8 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
 
     try {
       const [poseReference, garmentReference, generatedImage] = await Promise.all([
-        downloadStorageImage(job.poseImagePath),
-        downloadStorageImage(job.garmentFilePath),
+        downloadStorageImage(output.imageEdit?.sourceImagePath || job.poseImagePath),
+        downloadStorageImage(output.imageEdit?.sourceImagePath || job.garmentFilePath),
         downloadStorageImage(output.resultImagePath),
       ]);
 
@@ -99,11 +99,14 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
 
       const systemConfig = await getSystemConfigCached();
       const review = await reviewGeneratedImageWithGemini({
-        ...(job.automationManaged ? { exactAutomationPrompt: true,
+        ...(job.automationManaged && !output.imageEdit ? { exactAutomationPrompt: true,
           ...(job.generationKind !== 'product' ? { productReferences: [poseReference, ...await Promise.all((job.automationReferencePaths || [job.garmentFilePath]).map(downloadStorageImage))] } : {}) } : {}),
         ...(job.photoTask ? { photoTask: job.photoTask } : {}),
         generationKind: job.generationKind,
-        ...(job.generationKind === 'product' ? { productReferences: await Promise.all((job.productReferencePaths || [job.poseImagePath]).map(downloadStorageImage)) } : {}),
+        ...(job.generationKind === 'product' && !output.imageEdit ? { productReferences: await Promise.all((job.productReferencePaths || [job.poseImagePath]).map(downloadStorageImage)) } : {}),
+        ...(output.imageEdit ? {
+          imageEditInstructions: output.imageEdit.instructions, productReferences: [poseReference], photoTask: undefined,
+        } : {}),
         apiKey: GEMINI_API_KEY.value(),
         model: systemConfig.geminiImageReviewModel,
         batchId: job.batchId,
@@ -129,7 +132,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
         signal: AbortSignal.timeout(120000),
       });
 
-      if (job.photoTask) await validatePlannedPhotoReview(generatedImage.bytes, job.photoTask, review);
+      if (job.photoTask && !output.imageEdit) await validatePlannedPhotoReview(generatedImage.bytes, job.photoTask, review);
       const storedReview = buildStoredReview(review, attemptNumber);
       const failureInfo = review.verdict === 'approved'
         ? null

@@ -22,6 +22,7 @@ interface ReviewImageAsset {
 }
 
 export interface ReviewRequest {
+  imageEditInstructions?: string;
   photoTask?: import('../../../shared/src/types').PhotoTask;
   automation?: GeminiUsageContext['automation'];
   exactAutomationPrompt?: boolean;

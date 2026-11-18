@@ -108,7 +108,7 @@ test('Organizer export preserves source identity, edits and the official Vaso wo
     const templateRef = client.collection('spreadsheetTemplates').doc('vaso');
     const timestamp = admin.firestore.Timestamp.now();
     await templateRef.set({ ...parsed.template, createdAt: timestamp, updatedAt: timestamp });
-    for (const c of parsed.categories) await templateRef.collection('categories').doc(c.id).set({ ...c, templateId: 'vaso', createdAt: timestamp, updatedAt: timestamp });
+    for (const c of analyzed.categories) await templateRef.collection('categories').doc(c.id).set({ ...c, templateId: 'vaso', createdAt: timestamp, updatedAt: timestamp });
     const activation = await exports.configureMarketplaceTemplate.run(request({ clientId, templateId: 'vaso', marketplaceId: 'shein', operation: 'listing', mappings: { [category.id]: mappings } }));
     const categoryDecision = { marketplaceId: 'shein', templateId: activation.templateId, categoryId: category.id, version: 1, confidence: 0.99, reason: 'Resultado simulado para el vaso de prueba.' };
     await organizer.collection('photos').doc(refs[0].id).set({ version: '1', variantId: 'object-visual', method: 'manual', reviewedBy: uid, issue: null });

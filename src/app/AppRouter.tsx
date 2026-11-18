@@ -22,6 +22,7 @@ const Cola = lazyRoute('cola', () => import('../pages/Cola').then((module) => ({
 const SeguridadRespaldos = lazyRoute('seguridad-respaldos', () => import('../pages/SeguridadRespaldos').then(module => ({ default: module.SeguridadRespaldos })));
 const Configuracion = lazyRoute('configuracion', () => import('../pages/Configuracion').then((module) => ({ default: module.Configuracion })));
 const Catalogo = lazyRoute('catalogo', () => import('../pages/Catalogo').then((module) => ({ default: module.Catalogo })));
+const MasterCatalog = lazyRoute('master-catalog', () => import('../features/catalog/MasterCatalog').then(module => ({ default: module.MasterCatalog })));
 
 const Organizador = lazyRoute('organizador', () => import('../pages/Organizador').then((module) => ({ default: module.Organizador })));
 const Automation = lazyRoute('automation', () => import('../pages/Automation').then((module) => ({ default: module.Automation })));
@@ -88,6 +89,7 @@ export const AppRouter: React.FC = () => {
           <Route path="/automation/connect" element={<PageErrorBoundary><ManglarConnect /></PageErrorBoundary>} />
 
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+            <Route path="catalogo/productos" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><MasterCatalog /></PageErrorBoundary></ProtectedRoute>} />
             <Route index element={<PageErrorBoundary><Dashboard /></PageErrorBoundary>} />
             <Route path="users" element={<ProtectedRoute roles={['admin']}><UsersRedirect /></ProtectedRoute>} />
             <Route path="users/crear" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Users view="create" /></PageErrorBoundary></ProtectedRoute>} />

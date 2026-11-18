@@ -20,6 +20,7 @@ import { applyOrganizerSource, applyOrganizerVariantOverrides, assignOrganizerIm
 import { applyMarketplaceAutofill, resolveMarketplaceCategories, resolveMarketplaceCopy } from './marketplaceAutofill';
 import { getGeminiGarmentViewClassificationModel } from '../config/runtime';
 import { digest } from '../organizer/drive';
+import { catalogDigest } from '../catalog/model';
 import { prepareMarketplaceSquares, type MarketplaceSquareRequest } from './marketplaceSquares';
 
 export function normalizeExportScope(input: MarketplaceExportScope): MarketplaceExportScope {
@@ -72,6 +73,22 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
   if (products.length > 500) throw new HttpsError('resource-exhausted', 'Exporta hasta 500 productos por descarga.');
   const stored: Record<string, StoredMasterProduct> = {};
   if (products.length) for (const d of await db.getAll(...products.map(p => clientRef.collection('products').doc(p.id)))) if (d.exists) stored[d.id] = d.data() as StoredMasterProduct;
+  const aliases = products.length ? await db.getAll(...products.map(p => clientRef.collection('productAliases').doc(p.id))) : [];
+  const targets = [...new Set(aliases.flatMap(alias => alias.get('productId') && alias.get('productId') !== alias.id ? [validId(alias.get('productId'))] : []))];
+  const canonical = new Map<string, StoredMasterProduct>();
+  if (targets.length) for (const target of await db.getAll(...targets.map(id => clientRef.collection('products').doc(id)))) {
+    if (target.exists) canonical.set(target.id, target.data() as StoredMasterProduct);
+  }
+  const variantMaps = new Map<string, Record<string, string>>();
+  const mapRefs = products.flatMap(product => {
+    const targetId = aliases.find(alias => alias.id === product.id)?.get('productId');
+    return targetId && canonical.has(targetId) ? product.batchIds.map(batchId => ({ legacyId: product.id, batchId,
+      ref: clientRef.collection('products').doc(targetId).collection('generationLinks').doc(catalogDigest([batchId, product.id])) })) : [];
+  });
+  if (mapRefs.length) {
+    const snapshots = await db.getAll(...mapRefs.map(entry => entry.ref));
+    snapshots.forEach((snapshot, index) => variantMaps.set(`${mapRefs[index].legacyId}:${mapRefs[index].batchId}`, snapshot.get('variantMap') || {}));
+  }
   const byBatch = new Map(batches.map(batch => [batch.id!, batch]));
   const commerce = await loadOrganizerProducts(client, batches, jobs);
   const jobsByProduct = new Map<string, Job[]>();
@@ -93,10 +110,31 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
     const saved = stored[product.id];
     if (saved) {
       applyStoredMasterProduct(product, saved);
-      if (link && saved.organizerOverrides) {
+      if (link && saved.organizerOverrides && !saved.catalog) {
         product.variants = applyOrganizerVariantOverrides(product.variants, saved.organizerOverrides);
         link.organizer.confirmedIdentity = saved.organizerOverrides.confirmedIdentity === true;
       }
+    }
+    const targetId = aliases.find(alias => alias.id === product.id)?.get('productId');
+    const master = targetId && canonical.get(targetId);
+    if (master) {
+      if (master.clientId !== scope.clientId) throw new HttpsError('permission-denied', 'Ficha fuera del cliente.');
+      // Historical export identity/publications and channel overrides stay on the legacy record.
+      product.canonicalProductId = targetId;
+      product.values = { ...product.values, ...master.values };
+      product.variants = master.variants;
+      product.evidence = { ...product.evidence, ...master.catalog?.evidence };
+      product.revision = master.revision;
+      const mappings = Object.assign({}, ...product.batchIds.map(batchId => variantMaps.get(`${product.id}:${batchId}`) || {})) as Record<string, string>;
+      for (const channel of MARKETPLACES) {
+        const data = product.marketplaces[channel.id];
+        if (data?.rows) product.marketplaces[channel.id] = { ...data, rows: data.rows.map(row => ({ ...row, id: mappings[row.id] || row.id })) };
+      }
+      if (product.photoAssignments) product.photoAssignments = product.photoAssignments.map(assignment => {
+        const job = scenes.find(job => job.id === assignment.jobId);
+        const map = variantMaps.get(`${product.id}:${job?.batchId}`) || mappings;
+        return { ...assignment, variantId: map[assignment.variantId] || assignment.variantId };
+      });
     }
     if (link) assignOrganizerImages(product, scenes, byBatch, client);
   }

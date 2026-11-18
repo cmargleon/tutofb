@@ -137,6 +137,7 @@ const buildOutputDocument = ({
   const existing = reuseOutput ? claimedJob.currentOutput! : null;
   const output: JobOutput = {
     ...(autoReview?.photoValidation ? { photoValidation: autoReview.photoValidation } : {}),
+    ...(claimedJob.imageEdit ? { imageEdit: claimedJob.imageEdit } : {}),
     id: outputId,
     jobId,
     batchId: claimedJob.batchId,
@@ -213,9 +214,11 @@ const buildJobUpdate = ({
   const update: JobUpdate = {
     ...(automationGate !== undefined ? { automationGate } : {}),
     ...buildAutomationReviewState(input),
-    provider: providerResult.provider,
-    aspectRatio: imageConfig.aspectRatio,
-    imageConfig: imageConfig.imageConfig,
+    ...(!claimedJob.imageEdit ? {
+      provider: providerResult.provider,
+      aspectRatio: imageConfig.aspectRatio,
+      imageConfig: imageConfig.imageConfig,
+    } : {}),
     status: nextStatus,
     queuePriority: nextStatus === 'pending' ? 1 : 0,
     claimToken: null,

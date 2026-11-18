@@ -260,6 +260,13 @@ const selectBaseReviewPrompt = (request: ReviewRequest): string => {
 
 /** The full prompt sent to Gemini (and stored as reviewPrompt). */
 export const selectReviewPrompt = (request: ReviewRequest): string => {
+  if (request.imageEditInstructions) return [
+    'Evalúa una edición de fotografía. Recibirás dos imágenes: la foto de partida y el resultado editado.',
+    'Comprueba que se aplicó el cambio solicitado y que se conservó todo lo demás, especialmente identidad, forma, proporciones, colores, textura, logotipos y textos del producto, salvo cambios explícitamente pedidos.',
+    'No exijas referencias originales, fondos, poses ni obligaciones de un plan anterior. Evalúa únicamente el cambio pedido y la conservación del resto.',
+    'Devuelve al menos cinco criterios: cambio solicitado, identidad, detalles del producto, conservación del resto y calidad visual. Usa approved solo si todos se cumplen. Responde con el esquema JSON requerido, resumen en español y marketplaceData basado en la imagen.',
+    `Cambio solicitado: ${request.imageEditInstructions}`,
+  ].join('\n');
   let prompt = selectBaseReviewPrompt(request);
   if (request.photoTask) prompt += buildPhotoTaskScope(request.photoTask);
   if (request.exactAutomationPrompt) prompt += EXACT_AUTOMATION_NOTE;

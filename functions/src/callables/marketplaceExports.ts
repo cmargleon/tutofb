@@ -14,6 +14,7 @@ import { downloadMarketplaceExport, loadExportContext, previewMarketplaceExport,
 import { analyzeMarketplaceTemplate, assertTemplateDocumentLimits } from '../spreadsheets/marketplaceTemplates';
 
 import { isSharedSheinTemplate, prepareSharedSheinRelease, readSharedSheinRelease, sharedSheinTemplateRef } from '../spreadsheets/sharedSheinCatalog';
+import { catalogDigest, catalogMetadata, manualEvidence } from '../catalog/model';
 
 const options = { timeoutSeconds: 540, memory: '1GiB' as const, concurrency: 1 };
 const rethrowTransactionConflict = (error: unknown): never => {
@@ -89,11 +90,13 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
   }
   const db = getAppFirestore();
   const clientRef = db.collection('clients').doc(context.scope.clientId);
-  const ref = clientRef.collection('products').doc(product.id);
+  const ref = clientRef.collection('products').doc(product.canonicalProductId || product.id);
+  const legacyRef = clientRef.collection('products').doc(product.id);
   if (!Number.isInteger(request.data.expectedRevision) || request.data.expectedRevision < 0) throw new HttpsError('invalid-argument', 'Revisión inválida.');
   const revision = await getAppFirestore().runTransaction(async tx => {
-    const [snap, client] = await Promise.all([tx.get(ref), tx.get(clientRef)]);
+    const [snap, client, legacy] = await Promise.all([tx.get(ref), tx.get(clientRef), tx.get(legacyRef)]);
     if (!client.exists || client.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente no disponible.');
+    if (snap.get('catalog.redirectTo')) throw new HttpsError('aborted', 'Cambió la asociación del producto. Actualiza antes de guardar.');
     const current = snap.get('revision') || 0;
     if (current !== request.data.expectedRevision) throw new HttpsError('aborted', 'El producto cambió. Actualiza antes de guardar.');
     const templateSnapshots = await Promise.all(Object.entries(marketplaces).map(async ([channel, data]) => ({
@@ -105,7 +108,7 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
         && (!snapshot.exists || !templateUsable({ ...snapshot.data(), id: snapshot.id } as SpreadsheetTemplate, channel, product.marketplaces[channel]?.templateId === snapshot.id)))
         throw new HttpsError('aborted', 'La plantilla cambió. Actualiza antes de guardar.');
     }
-    const merged: StoredMasterProduct['marketplaces'] = { ...snap.get('marketplaces') };
+    const merged: StoredMasterProduct['marketplaces'] = { ...legacy.get('marketplaces') };
     for (const [channel, incoming] of Object.entries(request.data.marketplaces || {})) {
       if (!isMarketplaceId(channel)) throw new HttpsError('invalid-argument', 'Marketplace no disponible.');
       if (!client.get(`marketplaces.${channel}.enabled`)) {
@@ -121,7 +124,7 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
       if (!product.organizer || !isDeepStrictEqual(comparable(projected), comparable(marketplaces[channel]))) merged[channel] = marketplaces[channel];
     }
     const data: StoredMasterProduct = { clientId: context.scope.clientId, values, variants, marketplaces: merged, revision: current + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedByUid: request.auth!.uid };
-    if (product.organizer) {
+    if (product.organizer && !snap.get('catalog.version') && !product.canonicalProductId) {
       const previous = snap.get('organizerOverrides') as StoredMasterProduct['organizerOverrides'];
       const patches = new Map(previous?.variants.map(variant => [variant.id, variant]));
       const nextIds = new Set(variants.map(variant => variant.id));
@@ -150,7 +153,29 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
         confirmedIdentity: previous?.confirmedIdentity === true || request.data.confirmOrganizerIdentity === true,
       };
     }
-    tx.set(ref, data); return current + 1;
+    // Enrich the same persisted record; never replace canonical metadata or publications.
+    if (snap.get('catalog.version') || !product.organizer) {
+      data.catalog = catalogMetadata({ values: data.values, variants: data.variants, catalog: snap.get('catalog') }, admin.firestore.FieldValue.serverTimestamp());
+      data.catalog.manuallyConfirmed = true;
+      for (const [field, value] of Object.entries(changedFields(product.values, values))) data.catalog.evidence[field] = manualEvidence(value);
+      for (const variant of variants) for (const [field, value] of Object.entries(variant.values)) data.catalog.evidence[`variant.${variant.id}.${field}`] = manualEvidence(value!);
+    }
+    if (product.canonicalProductId) {
+      data.marketplaces = snap.get('marketplaces') || {};
+      tx.set(legacyRef, { clientId: context.scope.clientId, values: legacy.get('values') || {}, variants: legacy.get('variants') || [], revision: legacy.get('revision') || 0,
+        catalog: { redirectTo: product.canonicalProductId }, marketplaces: merged, updatedAt: data.updatedAt, updatedByUid: data.updatedByUid },
+      { mergeFields: ['clientId', 'values', 'variants', 'revision', 'catalog.redirectTo', 'marketplaces', 'updatedAt', 'updatedByUid'] });
+    }
+    if (snap.exists) tx.update(ref, { ...data }); else tx.set(ref, data);
+    if (!product.canonicalProductId) for (const batchId of product.batchIds) {
+      const linkId = catalogDigest([batchId, product.id]);
+      tx.set(ref.collection('generationLinks').doc(linkId), {
+        id: linkId, clientId: context.scope.clientId, batchId, legacyProductId: product.id, garmentId: product.garmentId,
+        draftIds: product.legacyDrafts.filter(draft => draft.batchId === batchId).map(draft => draft.id).filter(Boolean),
+        organizerReferences: [], variantMap: Object.fromEntries(variants.map(variant => [variant.id, variant.id])),
+      }, { merge: true });
+    }
+    return current + 1;
   }).catch(rethrowTransactionConflict);
   return { success: true, revision };
 });

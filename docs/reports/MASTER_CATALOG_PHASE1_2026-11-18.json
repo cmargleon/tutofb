@@ -1,0 +1,166 @@
+{
+  "date": "2026-11-18",
+  "projectId": "tutofb-260320-1003",
+  "baseCommit": "b2a3cfecca9eee3a258ea5e6a757745ee011cb57",
+  "generalTests": {
+    "passed": 373,
+    "skipped": 32,
+    "failed": 0
+  },
+  "emulatorTests": {
+    "passed": 20,
+    "failed": 0
+  },
+  "catalogAndClientE2E": {
+    "passed": 4,
+    "failed": 0
+  },
+  "knownBaselineFailures": [
+    "organizerMarketplace.integration.test.ts:144, official Vaso fixture, 10 simulated calls vs 2; reproduced on HEAD",
+    "product-workflow.spec.ts:19, missing Importar referencias button; reproduced on HEAD"
+  ],
+  "functions": [
+    {
+      "name": "downloadMarketplaceExports",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:56.797482791Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "saveMasterProduct",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:55.087820354Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "syncCatalogDraft",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:52.725022213Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "syncCatalogJob",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:54.236576156Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "previewMarketplaceExports",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:52.379936755Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "getCatalogProduct",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:54.579146520Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "listCatalogProducts",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:44.626989942Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "applyCatalogImport",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:53.575296361Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "saveCatalogProduct",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:56.554463488Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "publishMarketplaceImages",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:55.053590627Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "listCatalogLegacyBatches",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:53.521814045Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "getCatalogGenerationImages",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:55.587730383Z",
+      "runtime": "nodejs22"
+    },
+    {
+      "name": "previewCatalogImport",
+      "state": "ACTIVE",
+      "updatedAt": "2026-11-18T20:03:56.958100630Z",
+      "runtime": "nodejs22"
+    }
+  ],
+  "index": {
+    "name": "projects/tutofb-260320-1003/databases/(default)/collectionGroups/products/indexes/CICAgJjm4YQK",
+    "queryScope": "COLLECTION",
+    "fields": [
+      {
+        "fieldPath": "catalog.status",
+        "order": "ASCENDING"
+      },
+      {
+        "fieldPath": "catalog.searchKeys",
+        "arrayConfig": "CONTAINS"
+      },
+      {
+        "fieldPath": "__name__",
+        "order": "ASCENDING"
+      }
+    ],
+    "state": "READY",
+    "density": "SPARSE_ALL"
+  },
+  "productionReadCheck": {
+    "readOnly": true,
+    "execution": "local release handlers against production read client; no Auth session created",
+    "products": 1,
+    "detail": {
+      "revision": 2,
+      "links": 0,
+      "wireUpdatedAt": "number"
+    },
+    "historyBatches": 1,
+    "preview": {
+      "candidates": 1
+    },
+    "beforeProductCount": 1,
+    "afterProductCount": 1
+  },
+  "massMigrationExecuted": false,
+  "committed": false,
+  "pushed": false,
+  "concurrentPhotoEditExcludedFromDeployment": true,
+  "hosting": {
+    "url": "https://tutofb-260320-1003.web.app/catalogo/productos",
+    "routeHttp": 200,
+    "assetHttp": 200,
+    "assetMatchesIsolatedRelease": true,
+    "catalogRouteInBundle": true,
+    "unauthenticatedChecks": [
+      {
+        "name": "listCatalogProducts",
+        "http": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "getCatalogProduct",
+        "http": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "previewCatalogImport",
+        "http": 401,
+        "error": "UNAUTHENTICATED"
+      }
+    ]
+  }
+}

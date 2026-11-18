@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ban, Download, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { Ban, Pencil, Download, Loader2, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { Job } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { useCatalogPreviewUrl } from '../../features/catalog/useCatalogPreviewUrl';
@@ -9,6 +9,7 @@ interface CatalogThumbnailProps {
   job: Job;
   onClick: (job: Job) => void;
   onRegenerate?: (job: Job) => void;
+  onEdit?: (job: Job) => void;
   onCancel?: (job: Job) => void;
   onDownload?: (job: Job) => void;
   onDelete?: (job: Job) => void;
@@ -20,6 +21,7 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   job,
   onClick,
   onRegenerate,
+  onEdit,
   onCancel,
   onDownload,
   onDelete,
@@ -38,7 +40,7 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
   const showRegenerationOverlay = regenerationPending && Boolean(url);
   const showCancelAction = Boolean(onCancel) && (regenerationPending || isGenerating);
 
-  const actionButtons = (showCancelAction || (!regenerationPending && (onRegenerate || onDownload || onDelete))) ? (
+  const actionButtons = (showCancelAction || (!regenerationPending && (onRegenerate || onEdit || onDownload || onDelete))) ? (
     <div className="absolute bottom-0 inset-x-0 flex justify-center gap-1 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
       {showCancelAction ? (
         <button
@@ -58,6 +60,12 @@ export const CatalogThumbnail: React.FC<CatalogThumbnailProps> = ({
           title="Regenerar"
         >
           <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {!showCancelAction && onEdit && resultPath && !approvedOutput?.storageDeletedAt && (
+        <button type="button" onClick={event => { event.stopPropagation(); onEdit(job); }}
+          className="rounded-full p-1.5 bg-black/35 hover:bg-black/65 text-white transition-colors" title="Ajustar esta foto">
+          <Pencil className="w-3.5 h-3.5" />
         </button>
       )}
       {!showCancelAction && onDownload && resultPath && (

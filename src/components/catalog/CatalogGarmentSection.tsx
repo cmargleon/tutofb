@@ -1,7 +1,8 @@
+import { CatalogPhotoEditor } from './CatalogPhotoEditor';
 import { productPhotoStatus } from '../../../shared/src/productWorkflow';
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Download, Loader2 } from 'lucide-react';
-import { Job } from '../../../shared/src/types';
+import { Job, JobOutput } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { CatalogGarmentGroup } from '../../features/catalog/useCatalogJobs';
 import { CatalogThumbnail } from './CatalogThumbnail';
@@ -32,6 +33,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
   onRegenerationCancelled,
   pendingRegenerationJobIds = {},
 }) => {
+  const [editTarget, setEditTarget] = useState<{ job: Job; source: JobOutput } | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [galleryOpened, setGalleryOpened] = useState(false);
   const galleryRef = useRef<HTMLDivElement>(null);
@@ -243,6 +245,10 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
                 key={job.id}
                 job={job}
                 onClick={onImageClick}
+                onEdit={role.canRegenerate && !isRegenerationPending ? job => {
+                  const source = resolveApprovedJobOutput(job);
+                  if (source) setEditTarget({ job, source });
+                } : undefined}
                 onRegenerate={role.canRegenerate && !isRegenerationPending ? handleRegenerate : undefined}
                 onCancel={canCancelRegeneration ? handleCancelRegeneration : undefined}
                 onDownload={handleDownloadSingle}
@@ -257,6 +263,9 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
           })}
         </div>
       )}
+      {editTarget?.job.id ? <CatalogPhotoEditor key={`${editTarget.job.id}-${editTarget.source.id}`}
+        jobId={editTarget.job.id} source={editTarget.source} onClose={() => setEditTarget(null)}
+        onQueued={() => { onRegenerationQueued?.(editTarget.job); setEditTarget(null); }} /> : null}
     </div>
   );
 };

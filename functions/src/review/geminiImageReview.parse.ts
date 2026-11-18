@@ -160,8 +160,12 @@ export const parsePhotoValidation = (
   };
 };
 
-/** Non-exact product reviews also require every product criterion to be present and passing. */
+/**
+ * Non-exact product reviews also require every product criterion to be present and passing. Photo edits are
+ * reviewed with their own criteria (requested change, preservation, quality), so this rule does not apply.
+ */
 const productCriteriaPass = (request: ReviewRequest, criteria: JobAutoReviewCriterion[]): boolean => {
+  if (request.imageEditInstructions) return true;
   if (request.exactAutomationPrompt === true || request.generationKind !== 'product') return true;
   return REQUIRED_PRODUCT_CRITERIA.every(key => criteria.some(criterion => criterion.key === key && criterion.passed));
 };

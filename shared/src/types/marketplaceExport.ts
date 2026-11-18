@@ -6,7 +6,7 @@ export const PRODUCT_FIELDS = ['name', 'description', 'brand', 'category', 'sku'
 export const VARIANT_FIELDS = ['sku', 'color', 'size', 'pack', 'price', 'inventory', 'weight', 'weightUnit', 'length', 'width', 'height', 'dimensionUnit', 'gtin', 'asin', 'catalogId', 'spu', 'skc', 'parentSku', 'parentage', 'relationshipType', 'variationTheme', 'gtinExemption'] as const;
 export type ProductField = typeof PRODUCT_FIELDS[number];
 export type VariantField = typeof VARIANT_FIELDS[number];
-export interface ProductEvidence { original: string; normalized: string; source: 'manual' | 'legacy' | 'ai' | 'drive'; confidence: number | null }
+export interface ProductEvidence { original: string; normalized: string; source: 'manual' | 'legacy' | 'ai' | 'drive'; confidence: number | null; state?: 'unknown' | 'empty' | 'confirmed' | 'suggested'; verified?: boolean; reference?: string }
 export const ORGANIZER_SOURCE_FIELDS = ['price', 'inventory', 'weight', 'weightUnit', 'length', 'width', 'height', 'dimensionUnit'] as const;
 export type OrganizerSourceField = typeof ORGANIZER_SOURCE_FIELDS[number];
 export type OrganizerSourceColumns = Partial<Record<OrganizerSourceField, string>>;
@@ -25,7 +25,7 @@ export interface OrganizerCategoryDecision {
   confidence: number | null;
   reason: string;
 }
-export interface MasterVariant { id: string; values: Partial<Record<VariantField, string>>; attributes?: Record<string, string> }
+export interface MasterVariant { id: string; values: Partial<Record<VariantField, string>>; attributes?: Record<string, string>; evidence?: Record<string, ProductEvidence> }
 export interface PublishedMarketplaceImage {
   outputId: string; jobId: string; sourceStoragePath: string;
   marketplaceId: MarketplaceId; profileVersion: string;
@@ -41,6 +41,7 @@ export interface ProductMarketplaceData {
   imageUrls?: Record<string, string>; // approved output ID -> operator-authorized public URL
 }
 export interface MasterProduct {
+  canonicalProductId?: string;
   marketplaceCategorySuggestions?: Partial<Record<MarketplaceId, { templateId: string; categoryId: string; reason: string }>>;
   photoAssignments?: import('./photoPlan').PhotoAssignment[];
   id: string; clientId: string; batchIds: string[]; garmentId: string;
@@ -63,6 +64,7 @@ export interface MasterProduct {
   organizer?: { source: OrganizerCommercialSource; category: OrganizerCategoryDecision | null; revision?: string; confirmedIdentity?: boolean };
 }
 export interface StoredMasterProduct {
+  catalog?: import('./catalog').CatalogMetadata;
   clientId: string; values: MasterProduct['values']; variants: MasterVariant[];
   marketplaces: MasterProduct['marketplaces']; revision: number;
   updatedAt: TimestampLike; updatedByUid: string;

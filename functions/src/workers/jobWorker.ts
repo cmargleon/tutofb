@@ -1,3 +1,4 @@
+import { getPhotoEditExecutionJob } from './jobImageEdit';
 import { randomUUID } from 'node:crypto';
 import { AutomationBudgetError, pauseAutomationGeneration } from '../automation/budget';
 import { getJobAutoReviewMaxAttempts, getJobTimeoutMs } from '../config/runtime';
@@ -59,7 +60,8 @@ const processJobCore = async (
 
   // 1. Claim
   const workerId = `worker:${source}:${randomUUID()}`;
-  const claimedJob = await claimJob(jobId, workerId);
+  const storedJob = await claimJob(jobId, workerId);
+  const claimedJob = storedJob ? getPhotoEditExecutionJob(storedJob) : null;
   if (!claimedJob) {
     return;
   }

@@ -22,6 +22,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
   return {
     ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
     ...(job.automationJobId ? { automationManaged: false, automationReviewPending: false, automationGate: null, autoReviewMaxAttempts: 3, maxRetries: manualMaxRetries } : {}),
+    imageEdit: null,
     provider,
     imageConfig,
     aspectRatio,

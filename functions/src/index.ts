@@ -96,3 +96,8 @@ export { cleanupMarketplaceExportsOnSchedule } from './spreadsheets/cleanupMarke
 export { publishMarketplaceImages } from './callables/publishMarketplaceImages';
 
 export { previewMarketplacePhotoPlan, createMarketplacePhotoBatch, verifyMarketplacePhotoBases } from './callables/createMarketplacePhotoBatch';
+
+export * from './callables/editJobPhoto';
+
+export { listCatalogProducts, getCatalogProduct, saveCatalogProduct, listCatalogLegacyBatches, previewCatalogImport, applyCatalogImport, getCatalogGenerationImages } from './callables/catalogProducts';
+export { syncCatalogJob, syncCatalogDraft } from './catalog/triggers';

@@ -140,7 +140,34 @@ export interface JobFailureInfo {
   occurredAt?: TimestampLike | null;
 }
 
+export const MAX_PHOTO_EDIT_INSTRUCTIONS = 4000;
+
+export interface JobImageEdit {
+  sourceOutputId: string;
+  sourceImagePath: string;
+  instructions: string;
+  requestedByUid: string;
+  requestedAt: TimestampLike;
+  provider: Provider;
+  imageConfig: ProviderImageConfig;
+  aspectRatio: AspectRatio;
+}
+
+export interface EditJobPhotoRequest {
+  jobId: string;
+  sourceOutputId: string;
+  instructions: string;
+  /** Image model for the edit; defaults to DEFAULT_IMAGE_PROVIDER. */
+  provider?: Provider;
+}
+
+export interface EditJobPhotoResponse {
+  success: boolean;
+  jobId: string;
+}
+
 export interface JobOutput {
+  imageEdit?: JobImageEdit;
   photoValidation?: { fidelity: boolean; destinations: Array<{ channel: import('../marketplaces').MarketplaceId; position: number; passed: boolean; notes: string }> };
   storedImage?: import('./provider').StoredPhotoMetadata;
   photoProfile?: import('./provider').CommercialPhotoProfile;
@@ -179,6 +206,7 @@ export interface JobOutput {
 }
 
 export interface Job {
+  imageEdit?: JobImageEdit | null;
   photoPlanId?: string;
   photoTask?: import('./photoPlan').PhotoTask;
   photoProfile?: import('./provider').CommercialPhotoProfile;

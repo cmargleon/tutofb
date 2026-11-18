@@ -2,16 +2,13 @@ import { canUseSpreadsheetTemplate, isSpreadsheetTemplateActive } from '../../..
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import type { MasterProduct, MarketplaceExportIssue, MarketplaceExportPreview, MarketplaceExportScope, ProductDraftInput, PublishedMarketplaceImage, SpreadsheetTemplateCategory } from '../../../shared/src/types';
-import { PRODUCT_FIELDS, VARIANT_FIELDS } from '../../../shared/src/types';
 import { MARKETPLACES, type MarketplaceId } from '../../../shared/src/marketplaces';
 import { isMarketplaceSquareField, marketplaceSquareCandidates, MARKETPLACE_ADAPTERS } from '../../../shared/src/marketplaceExport/adapters';
 import { ProductDraftEditor } from '../../components/product-drafts/ProductDraftEditor';
 import { Button, INPUT_CLASS, ImageThumb } from '../../components/ui';
 import { saveMasterProduct } from './exportFirebase';
 import { useMarketplaceImagePublication } from './useMarketplaceImagePublication';
-const labels: Record<string, string> = { name: 'Título de venta', description: 'Descripción', brand: 'Marca', category: 'Categoría conceptual', sku: 'SKU interno', material: 'Material', composition: 'Composición', price: 'Precio', currency: 'Moneda (código ISO)', weightUnit: 'Unidad de peso', dimensionUnit: 'Unidad de dimensiones', inventory: 'Inventario', weight: 'Peso', length: 'Largo', width: 'Ancho', height: 'Alto', color: 'Color', size: 'Talla', gtin: 'GTIN / EAN / UPC', asin: 'ASIN', catalogId: 'ID de catálogo', spu: 'SPU', skc: 'SKC', parentSku: 'SKU padre', parentage: 'Relación (parent / child)', relationshipType: 'Tipo de relación', variationTheme: 'Tema de variante', gtinExemption: 'Exención GTIN (pending / approved)' };
-const categoryFor = (id: string, fields: readonly string[]): SpreadsheetTemplateCategory => ({ id, templateId: '', clientId: '', sheetName: id, label: id, rowStart: 1, attributes: [], columns: fields.map((key, index) => ({ key, label: labels[key] || key, index, letter: String(index), required: false, requirementLabel: null, guidance: null, validation: null })), createdAt: null, updatedAt: null });
-const masterCategory = categoryFor('producto-maestro', PRODUCT_FIELDS); const variantCategory = categoryFor('variantes', VARIANT_FIELDS.filter(field => field !== 'gtinExemption'));
+import { masterCategory, variantCategory } from '../catalog/productFields';
 const variantFieldByIssue: Partial<Record<string, string>> = {
   weight_unit: 'weightUnit', dimension_unit: 'dimensionUnit', duplicate_sku: 'sku', variants: 'sku',
 };

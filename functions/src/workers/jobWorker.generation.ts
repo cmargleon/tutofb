@@ -40,7 +40,7 @@ export const productReferencePaths = (job: Job): string[] => job.productReferenc
 
 /** Number of reference images sent to the provider: product references, or pose + garment. */
 export const countProviderReferences = (job: Job): number =>
-  job.generationKind === 'product' ? productReferencePaths(job).length : 2;
+  job.imageEdit ? 1 : job.generationKind === 'product' ? productReferencePaths(job).length : 2;
 
 /** A resumed review keeps the attempt number of the output it reviews; anything else is a new attempt. */
 export const nextGenerationAttempt = (job: Job): number => {
@@ -142,7 +142,9 @@ const reuseReferencePhoto = async (job: Job): Promise<ProviderResult> => {
 };
 
 const generateWithJobProvider = async ({ job, imageConfig, inputUrls, signal }: ProviderStepInput) => {
-  const productReferences = job.generationKind === 'product'
+  const productReferences = job.imageEdit
+    ? { referenceImageUrls: [inputUrls.poseImageUrl] }
+    : job.generationKind === 'product'
     ? { referenceImageUrls: await Promise.all(productReferencePaths(job).map(getSignedUrl)) }
     : {};
   return generateWithProvider(

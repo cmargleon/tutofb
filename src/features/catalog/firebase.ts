@@ -1,7 +1,11 @@
 import { collection, doc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import type { OrderByDirection, Unsubscribe } from 'firebase/firestore';
-import type { Batch, Job } from '../../../shared/src/types';
-import { db } from '../../firebase';
+import type { Batch, Job, EditJobPhotoRequest, EditJobPhotoResponse } from '../../../shared/src/types';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../firebase';
+
+export const editJobPhoto = async (request: EditJobPhotoRequest): Promise<EditJobPhotoResponse> =>
+  (await httpsCallable<EditJobPhotoRequest, EditJobPhotoResponse>(functions, 'editJobPhoto')(request)).data;
 
 // Ignore callbacks already queued when a selection's listener is disposed.
 const subscribeWhileActive = <T>(

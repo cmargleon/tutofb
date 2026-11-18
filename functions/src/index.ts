@@ -18,6 +18,7 @@ export * from './callables/classifyGarmentViewsWithGemini';
 export * from './callables/importClientSpreadsheetTemplate';
 export * from './callables/importModelBundle';
 export * from './callables/deleteClientSpreadsheetTemplate';
+export * from './callables/setClientSpreadsheetTemplateStatus';
 export * from './callables/updateClientSpreadsheetTemplateCategory';
 export * from './callables/previewProductDrafts';
 export * from './callables/regenerateJob';

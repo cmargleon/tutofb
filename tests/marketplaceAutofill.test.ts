@@ -80,6 +80,23 @@ test('Gemini must pick a valid option per row; one automatic retry covers errors
   await assert.rejects(() => askGeminiForChoices({ product: product() }, fields, [], {}, async () => { throw new Error('caído'); }), /caído/);
 });
 
+test('missing food contact material gets an isolated constrained retry and keeps the low-confidence choice', async () => {
+  const food = { key: 'attr_1000463', label: 'Materiales en contacto con alimentos', options: ['Vidrio', 'Metal'],
+    declared: '', observation: '', visual: false, inferred: false };
+  const other = { ...food, key: 'other' };
+  const requests: string[][] = [];
+  const result = await askGeminiForChoices({ product: product() }, [food, other], [], {},
+    async (_input: unknown, fields: typeof food[], _images: unknown, _options: unknown, _chosen: unknown, constrained: boolean) => {
+      requests.push(fields.map(field => field.key));
+      if (!constrained) return [{ key: food.key, value: 'Acero inoxidable' }];
+      assert.deepEqual(fields, [food]);
+      return [{ key: food.key, value: 'Metal', source: 'estimate', evidence: 'El interior parece metálico.', confidence: 0.4 }];
+    });
+  assert.deepEqual(requests, [[food.key, other.key], [food.key], [other.key]]);
+  assert.deepEqual(result.choices, [{ key: food.key, value: 'Metal', evidence: 'El interior parece metálico.', confidence: 0.4, tentative: true }]);
+  assert.deepEqual(Object.keys(result.failures), [other.key]);
+});
+
 test('choices outside the row options or the parent list are rejected; missing evidence still keeps a valid option', () => {
   const [{ fields }] = planMarketplaceChoices({ ...product(), marketplaceAutofill: undefined }, 'shein', template, category);
   const valid = validateMarketplaceChoices(fields, [

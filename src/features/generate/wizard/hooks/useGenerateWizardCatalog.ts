@@ -1,3 +1,4 @@
+import { isSpreadsheetTemplateActive } from '../../../../../shared/src/types';
 import { useEffect, useMemo, useState } from 'react';
 import { BatchOutputMode, Client, Model, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../../../../../shared/src/types';
 import { isActiveCatalogEntity, isPoseActive } from '../../../../../shared/src/domain';
@@ -101,7 +102,7 @@ export const useGenerateWizardCatalog = ({
     const unsubscribe = subscribeToClientSpreadsheetTemplates(
       selectedClientId,
       (nextTemplates) => {
-        setSpreadsheetTemplates(nextTemplates.filter((template) => template.status !== 'archived' && !template.exportConfig));
+        setSpreadsheetTemplates(nextTemplates.filter((template) => isSpreadsheetTemplateActive(template) && !template.exportConfig));
         setSpreadsheetTemplatesClientId(selectedClientId);
         setLoadingSpreadsheetTemplates(false);
       },

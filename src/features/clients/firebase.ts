@@ -8,6 +8,7 @@ import {
   DeleteClientSpreadsheetTemplateResponse,
   ImportClientSpreadsheetTemplateRequest,
   ImportClientSpreadsheetTemplateResponse,
+  SetClientSpreadsheetTemplateStatusRequest,
   SpreadsheetTemplate,
   SpreadsheetTemplateCategory,
   UpdateClientSpreadsheetTemplateCategoryRequest,
@@ -197,3 +198,8 @@ export const updateClientAutomation = async (data: import('../../../shared/src/t
 
 export const listClients = async (input: import('../../../shared/src/types').ListClientsRequest) =>
   (await httpsCallable<import('../../../shared/src/types').ListClientsRequest, import('../../../shared/src/types').ListClientsResponse>(functions, 'listClients')(input)).data;
+
+export const setClientSpreadsheetTemplateStatus = async (data: SetClientSpreadsheetTemplateStatusRequest) =>
+  (await httpsCallable<SetClientSpreadsheetTemplateStatusRequest, { success: true; status: SetClientSpreadsheetTemplateStatusRequest['status'] }>(
+    functions, 'setClientSpreadsheetTemplateStatus',
+  )(data)).data;

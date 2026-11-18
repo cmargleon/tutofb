@@ -15,7 +15,7 @@ export type GarmentPhotoClassificationSource = 'assumed_single_front' | 'gemini'
 export type GarmentReferenceImageType = 'single_view' | 'multi_angle_composite';
 export type TryOnPromptCaseKey = 'full_outfit' | 'top_only' | 'bottom_only' | 'carry_accessory';
 export type PoseOrientationGroup = 'front' | 'back' | 'side' | 'ambiguous';
-export type SpreadsheetTemplateImportStatus = 'active' | 'archived';
+export type SpreadsheetTemplateImportStatus = 'active' | 'disabled' | 'archived';
 export type ProductDraftSuggestionSource = 'gemini' | 'wizard' | 'system' | 'user' | 'spreadsheet_source';
 export type GarmentAccessoryType =
   | 'backpack'

@@ -7,11 +7,11 @@ import {
   archiveClient,
   restoreClient,
   importClientSpreadsheetTemplate,
-  deleteClientSpreadsheetTemplate,
+  setClientSpreadsheetTemplateStatus,
   updateClientSpreadsheetTemplateCategory,
 } from './firebase';
 import { useConfirm, useToast } from '../feedback/FeedbackProvider';
-import { Client, SpreadsheetTemplate } from '../../../shared/src/types';
+import { Client, SpreadsheetTemplate, SpreadsheetTemplateImportStatus } from '../../../shared/src/types';
 
 export { CLIENTS_PAGE_SIZE } from './clientListState';
 
@@ -31,7 +31,7 @@ export const useClientManagement = (clientId?: string, filters?: import('../../.
   const [createSuccess, setCreateSuccess] = useState(false);
   const [uploadingTemplateClientId, setUploadingTemplateClientId] = useState<string | null>(null);
   const [savingTemplateCategoryId, setSavingTemplateCategoryId] = useState<string | null>(null);
-  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+  const [updatingTemplateStatusId, setUpdatingTemplateStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -154,25 +154,22 @@ export const useClientManagement = (clientId?: string, filters?: import('../../.
     }
   };
 
-  const handleTemplateDelete = async (client: Client, template: SpreadsheetTemplate) => {
+  const handleTemplateStatusChange = async (client: Client, template: SpreadsheetTemplate, status: SpreadsheetTemplateImportStatus) => {
     if (!client.id || !template.id) return;
-    const accepted = await confirm({
-      title: 'Eliminar spreadsheet',
-      description: `Vas a eliminar "${template.name}" del cliente "${client.name}".`,
-      impact: 'Se borrará la plantilla importada y sus categorías. Si algún lote ya la usa, el sistema no permitirá eliminarla.',
-      confirmLabel: 'Sí, eliminar spreadsheet',
-      cancelLabel: 'Mantener plantilla',
-      tone: 'danger',
-    });
-    if (!accepted) return;
-    setDeletingTemplateId(template.id);
+    if (status === 'archived' && !await confirm({
+      title: 'Archivar plantilla',
+      description: `«${template.name}» saldrá de las nuevas selecciones. Los lotes vinculados conservarán la plantilla.`,
+      confirmLabel: 'Archivar',
+    })) return;
+
+    setUpdatingTemplateStatusId(template.id);
     try {
-      await deleteClientSpreadsheetTemplate(client.id, template.id);
-      toast({ tone: 'success', title: 'Spreadsheet eliminado', description: `"${template.name}" ya no está disponible para este cliente.` });
-    } catch (err: any) {
-      toast({ tone: 'error', title: 'No pudimos eliminar el spreadsheet', description: err.message || 'Vuelve a intentarlo en un momento.' });
+      await setClientSpreadsheetTemplateStatus({ clientId: client.id, templateId: template.id, status, expectedStatus: template.status ?? 'active' });
+      toast({ tone: 'success', title: status === 'active' ? 'Plantilla activada' : status === 'archived' ? 'Plantilla archivada' : 'Plantilla desactivada' });
+    } catch (error) {
+      toast({ tone: 'error', title: 'No se pudo cambiar el estado de la plantilla', description: error instanceof Error ? error.message : undefined });
     } finally {
-      setDeletingTemplateId(null);
+      setUpdatingTemplateStatusId(null);
     }
   };
 
@@ -181,12 +178,12 @@ export const useClientManagement = (clientId?: string, filters?: import('../../.
     clients, templates, loading, error, pageInfo,
     newClientName, setNewClientName, newClientPrompt, setNewClientPrompt,
     isCreating, createSuccess,
-    uploadingTemplateClientId, savingTemplateCategoryId, deletingTemplateId,
+    uploadingTemplateClientId, savingTemplateCategoryId, updatingTemplateStatusId,
     // computed
     sortedTemplatesByClientId,
     // handlers
     handleCreate,
     handleArchive, handleRestore,
-    handleTemplateUpload, handleTemplateCategoryChange, handleTemplateDelete,
+    handleTemplateUpload, handleTemplateCategoryChange, handleTemplateStatusChange,
   };
 };

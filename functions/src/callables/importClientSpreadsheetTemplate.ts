@@ -1,3 +1,4 @@
+import { isSpreadsheetTemplateActive } from '../../../shared/src/types';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
@@ -75,14 +76,14 @@ export const importClientSpreadsheetTemplate = onCall<
 
   const detectedShein = client.marketplaces?.shein?.enabled && /\.xlsx$/i.test(originalFileName) &&
     parsed.categories.length > 0 && parsed.categories.every(category =>
-      ['supplier_code', 'default_product_name[es]', 'main_attribute_value'].every(key => category.columns.some(column => column.key === key)));
+      ['supplier_code', 'default_product_name[es]'].every(key => category.columns.some(column => column.key === key)));
   const marketplaceId = request.data.marketplaceId || (detectedShein ? 'shein' : undefined);
   if (marketplaceId) {
     const analyzed = await analyzeMarketplaceTemplate(buffer, marketplaceId, parsed.template, parsed.categories as SpreadsheetTemplateCategory[]);
     parsed = analyzed;
     if (request.data.replacesTemplateId) {
       const previous = await clientRef.collection('spreadsheetTemplates').doc(validId(request.data.replacesTemplateId)).get();
-      if (!previous.exists || previous.get('status') === 'archived' || previous.get('exportConfig.validationStatus') !== 'compatible' || previous.get('exportConfig.marketplaceId') !== request.data.marketplaceId) throw new HttpsError('invalid-argument', 'Versión anterior inválida.');
+      if (!previous.exists || !isSpreadsheetTemplateActive({ status: previous.get('status') }) || previous.get('exportConfig.validationStatus') !== 'compatible' || previous.get('exportConfig.marketplaceId') !== request.data.marketplaceId) throw new HttpsError('invalid-argument', 'Versión anterior inválida.');
       // Pending uploads have no released version; activation assigns it transactionally.
       parsed.template.exportConfig!.version = 0;
       parsed.template.exportConfig!.replacesTemplateId = previous.id;

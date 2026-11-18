@@ -1,3 +1,4 @@
+import { isSpreadsheetTemplateActive } from '../../../shared/src/types';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import {
@@ -91,6 +92,9 @@ export const previewProductDrafts = onCall<PreviewProductDraftsRequest, Promise<
     }
     if (!templateSnapshot.exists) {
       throw new HttpsError('not-found', 'Plantilla no encontrada.');
+    }
+    if (!isSpreadsheetTemplateActive({ status: templateSnapshot.get('status') })) {
+      throw new HttpsError('failed-precondition', 'La plantilla seleccionada no está activa.');
     }
     if (categoriesSnapshot.empty) {
       throw new HttpsError('not-found', 'La plantilla no tiene categorías disponibles.');

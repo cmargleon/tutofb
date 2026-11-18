@@ -29,10 +29,11 @@ export async function repairSheinWorkbook(buffer: Buffer): Promise<Buffer> {
     workbook.Sheets[name].A1?.v === 'Nombre del lugar de origen' &&
     workbook.Sheets[name].B1?.v === 'Código del lugar de origen');
   const changes = new Map<string, string>();
+  const orderedSheets = inspection.sheets.filter(sheet => !sheet.hidden && /\(\d+-\d+\)$/.test(sheet.name)).map(sheet => sheet.name);
   for (const sheet of inspection.sheets.filter(s => !s.hidden && !s.unsupportedReason)) {
     const code = sheet.name.match(/\(\d+-(\d+)\)$/)?.[1];
     if (!code) continue;
-    const catalogue = matchSpreadsheetCategory(sheet.name, byCategory) || [];
+    const catalogue = matchSpreadsheetCategory(sheet.name, byCategory, orderedSheets) || [];
     const allowedNames = ['MAIN_SPEC_ATTR_CAT_', 'MAIN_ATTR_CAT_'].flatMap(prefix => inspection.namedRanges[prefix + code] || []);
     const prefix = 'MAIN_ATTR_VALUE_CAT_' + code + '_';
     if (sheet.validations.some(v => v.type === 'list' && v.formula.includes(prefix))) {

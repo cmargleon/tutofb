@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { Batch, Client, DownloadMarketplaceExportRequest, DownloadMarketplaceExportResponse, Job, MasterProduct, MarketplaceExportIssue, MarketplaceExportPreview, MarketplaceExportPreviewRequest, MarketplaceExportScope, ProductDraft, SpreadsheetTemplate, SpreadsheetTemplateCategory, StoredMasterProduct } from '../../../shared/src/types';
+import { canUseSpreadsheetTemplate } from '../../../shared/src/types';
 import { isMarketplaceSquareField, marketplaceSquareCandidates, MARKETPLACE_ADAPTERS } from '../../../shared/src/marketplaceExport/adapters';
 import { MARKETPLACES, isMarketplaceId, type MarketplaceId } from '../../../shared/src/marketplaces';
 import { assertHumanClientAccess } from '../auth/clientAccess';
@@ -11,6 +12,7 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { validId } from '../manglar/access';
 import { applyStoredMasterProduct, jobMasterProductId, projectMasterProducts } from './masterProducts';
 import { inspectWorkbookPackage, patchWorkbookCells, assertPatchableCells, rangeContains, type SheetPatch, type CellPatch, xmlAttrs, validationAccepts } from './ooxmlWorkbook';
+import { applySharedSheinBrands, isSharedSheinPath, loadSharedSheinTemplates, sheinCategoryCode } from './sharedSheinCatalog';
 import { repairSheinWorkbook } from './sheinWorkbook';
 import { sanitizeSpreadsheetFileName } from './batchSpreadsheetExport';
 import { applyMarketplacePublication, attachMarketplacePublications, publishMarketplaceImage } from './marketplaceImages';
@@ -102,7 +104,11 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
   const ts = await clientRef.collection('spreadsheetTemplates').limit(201).get();
   if (ts.size > 200) throw new HttpsError('resource-exhausted', 'El cliente supera 200 versiones de plantilla; contacta al administrador.');
   const templates = ts.docs.map(d => ({ ...d.data(), id: d.id } as SpreadsheetTemplate));
-  const categories = (await Promise.all(ts.docs.map(d => d.ref.collection('categories').get()))).flatMap(s => s.docs.map(d => ({ ...d.data(), id: d.id } as SpreadsheetTemplateCategory)));
+  const shared = client.marketplaces?.shein?.enabled
+    ? await loadSharedSheinTemplates(products.flatMap(product => product.marketplaces.shein?.templateId || []))
+    : [];
+  templates.push(...shared.map(d => ({ ...d.data(), id: d.id }) as SpreadsheetTemplate));
+  const categories = (await Promise.all([...ts.docs, ...shared].map(d => d.ref.collection('categories').get()))).flatMap(s => s.docs.map(d => ({ ...d.data(), id: d.id } as SpreadsheetTemplateCategory)));
   for (const category of categories) if (templates.some(template => template.id === category.templateId && template.exportConfig)) category.validationMode = 'template';
   // A deterministic projection reuses the old template only after an administrator explicitly associates it.
   for (const p of products) for (const t of [...templates].sort((a, b) => (b.exportConfig?.version || 0) - (a.exportConfig?.version || 0))) {
@@ -114,9 +120,8 @@ export async function loadExportContext(input: MarketplaceExportScope, uid: stri
   return { scope, client, products, templates, categories, jobsByProduct, batches };
 }
 type Context = Awaited<ReturnType<typeof loadExportContext>>;
-// Supersession retires a default, while explicit archival revokes use (including history).
 export const templateUsable = (t: SpreadsheetTemplate, channel: MarketplaceId, historicallyLinked = false) =>
-  (t.status !== 'archived' || (historicallyLinked && !!t.exportConfig?.supersededByTemplateId))
+  canUseSpreadsheetTemplate(t, historicallyLinked)
   && t.exportConfig?.marketplaceId === channel && t.exportConfig.validationStatus === 'compatible';
 function suggestCategories(context: Context, channels: MarketplaceId[], uid: string, analyze = false, apiKey?: string) {
   const inputs = context.products.flatMap(product => {
@@ -126,13 +131,19 @@ function suggestCategories(context: Context, channels: MarketplaceId[], uid: str
       if (assigned?.categoryId) return [];
       const eligible = context.templates.filter(template => templateUsable(template, channel)
         && (!assigned?.templateId || assigned.templateId === template.id));
-      eligible.sort((a, b) => b.categoryIds.length - a.categoryIds.length
+      eligible.sort((a, b) => Number(isSharedSheinPath(b)) - Number(isSharedSheinPath(a)) || b.categoryIds.length - a.categoryIds.length
         || (b.exportConfig?.version || 0) - (a.exportConfig?.version || 0) || a.id!.localeCompare(b.id!));
       const options = eligible.flatMap(template =>
         context.categories.filter(category => category.templateId === template.id
           && template.categoryIds.includes(category.id!) && template.exportConfig?.mappings[category.id!])
-          .map(category => ({ id: `${template.id}/${category.id}`, templateId: template.id!, categoryId: category.id!, label: category.label })));
-      const candidates = options.filter((candidate, index) => options.findIndex(other => other.categoryId === candidate.categoryId) === index);
+          .map(category => ({ id: `${template.id}/${category.id}`, templateId: template.id!, categoryId: category.id!, label: category.label,
+            identity: channel === 'shein' ? sheinCategoryCode(category.sheetName) || category.id : category.id })));
+      const identities = new Set<string | undefined>();
+      const candidates = options.filter(candidate => {
+        if (identities.has(candidate.identity)) return false;
+        identities.add(candidate.identity);
+        return true;
+      }).map(({ identity: _identity, ...candidate }) => candidate);
       if (!candidates.length || candidates.length > 100) return [];
       candidates.sort((a, b) => a.id.localeCompare(b.id));
       return [{ product, channel, candidates, jobs: context.jobsByProduct.get(product.id) || [], batches: context.batches }];
@@ -217,12 +228,16 @@ export async function validateTemplateCoordinates(context: Context, channel: Mar
   }
   const plans: Array<{ template: SpreadsheetTemplate; buffer: Buffer; patches: SheetPatch[] }> = [];
   const seenSkus = new Map<string, string>();
+  const originals = new Map<string, Buffer>();
   for (const [templateId, entries] of groups) {
     const template = context.templates.find(t => t.id === templateId)!;
-    if (!template.storagePath.startsWith(`client_spreadsheets/${context.scope.clientId}/`)) throw new Error('Ruta de plantilla fuera del cliente.');
-    const [original] = await admin.storage().bucket().file(template.storagePath).download();
+    const sharedShein = channel === 'shein' && isSharedSheinPath(template);
+    if (!sharedShein && !template.storagePath.startsWith(`client_spreadsheets/${context.scope.clientId}/`)) throw new Error('Ruta de plantilla fuera del cliente.');
+    const original = originals.get(template.storagePath) || (await admin.storage().bucket().file(template.storagePath).download())[0];
+    originals.set(template.storagePath, original);
     if (createHash('sha256').update(original).digest('hex') !== template.templateFingerprint) throw new Error('El original cambió; importa una nueva versión.');
-    const buffer = channel === 'shein' ? await repairSheinWorkbook(original) : original;
+    let buffer = channel === 'shein' && !sharedShein ? await repairSheinWorkbook(original) : original;
+    if (sharedShein) buffer = await applySharedSheinBrands(buffer, entries.flatMap(entry => entry.rows.map(row => row.values.brand_code)));
     if (plans.reduce((size, plan) => size + plan.buffer.length, 0) + buffer.length > 64 * 1024 * 1024) throw new Error('Las plantillas seleccionadas superan 64 MB; selecciona menos lotes.');
     const inspection = await inspectWorkbookPackage(buffer);
     if (inspection.warnings.length) throw new Error(inspection.warnings.join(' '));

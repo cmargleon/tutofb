@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { ConfigureMarketplaceTemplateRequest, DownloadMarketplaceExportRequest, MarketplaceExportPreviewRequest, SaveMasterProductRequest, SpreadsheetTemplate, StoredMasterProduct } from '../../../shared/src/types';
-import { PRODUCT_FIELDS, VARIANT_FIELDS } from '../../../shared/src/types';
+import { PRODUCT_FIELDS, VARIANT_FIELDS, isSpreadsheetTemplateActive } from '../../../shared/src/types';
 import { isMarketplaceId } from '../../../shared/src/marketplaces';
 import { safePublicImageUrl, normalizeMarketplaceColumnKey } from '../../../shared/src/marketplaceExport/adapters';
 import { assertCallableRoles } from '../auth/roles';
@@ -12,6 +12,8 @@ import { GEMINI_API_KEY } from '../config/runtime';
 import { validId } from '../manglar/access';
 import { downloadMarketplaceExport, loadExportContext, previewMarketplaceExport, templateUsable } from '../spreadsheets/marketplaceExportService';
 import { analyzeMarketplaceTemplate, assertTemplateDocumentLimits } from '../spreadsheets/marketplaceTemplates';
+
+import { isSharedSheinTemplate, prepareSharedSheinRelease, readSharedSheinRelease, sharedSheinTemplateRef } from '../spreadsheets/sharedSheinCatalog';
 
 const options = { timeoutSeconds: 540, memory: '1GiB' as const, concurrency: 1 };
 const rethrowTransactionConflict = (error: unknown): never => {
@@ -95,7 +97,8 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
     const current = snap.get('revision') || 0;
     if (current !== request.data.expectedRevision) throw new HttpsError('aborted', 'El producto cambió. Actualiza antes de guardar.');
     const templateSnapshots = await Promise.all(Object.entries(marketplaces).map(async ([channel, data]) => ({
-      channel, snapshot: await tx.get(clientRef.collection('spreadsheetTemplates').doc(data!.templateId)),
+      channel, snapshot: await tx.get(channel === 'shein' && isSharedSheinTemplate(data!.templateId)
+        ? sharedSheinTemplateRef(data!.templateId) : clientRef.collection('spreadsheetTemplates').doc(data!.templateId)),
     })));
     for (const { channel, snapshot } of templateSnapshots) {
       if (isMarketplaceId(channel) && client.get(`marketplaces.${channel}.enabled`)
@@ -162,6 +165,7 @@ export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateR
   const [client, snapshot, cs] = await Promise.all([clientRef.get(), ref.get(), ref.collection('categories').get()]);
   if (!client.exists || client.get('status') === 'archived' || !snapshot.exists || snapshot.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente o plantilla no disponible.');
   const template = { ...snapshot.data(), id: snapshot.id } as SpreadsheetTemplate;
+  if (!request.data.reviewOnly && !isSpreadsheetTemplateActive(template)) throw new HttpsError('failed-precondition', 'Activa la plantilla antes de configurar sus reglas.');
   if (template.exportConfig && template.exportConfig.marketplaceId !== marketplaceId) throw new HttpsError('invalid-argument', 'El marketplace de una versión no puede cambiar.');
   if (!template.storagePath.startsWith(`client_spreadsheets/${clientId}/`)) throw new HttpsError('permission-denied', 'Original fuera del cliente.');
   const [buffer] = await admin.storage().bucket().file(template.storagePath).download();
@@ -191,6 +195,9 @@ export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateR
     }
   }
   assertTemplateDocumentLimits({ ...analyzed.template, mappings }, analyzed.categories);
+  const sharedRelease = marketplaceId === 'shein'
+    ? await prepareSharedSheinRelease(buffer, analyzed.template as SpreadsheetTemplate, analyzed.categories)
+    : null;
   const pending = !!template.exportConfig && template.exportConfig.validationStatus !== 'compatible';
   // A stable destination serializes even two associations of an unchanged legacy source.
   const next = pending ? ref : !template.exportConfig
@@ -227,6 +234,7 @@ export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateR
     const ancestors = ancestorIds.length ? await tx.getAll(...ancestorIds.map(id => ref.parent.doc(validId(id)))) : [];
     const association = !template.exportConfig ? await tx.get(next) : null;
     const legacyAssociations = !template.exportConfig ? await tx.get(ref.parent.where('exportConfig.legacyTemplateIds', 'array-contains', templateId)) : null;
+    const publishShared = await readSharedSheinRelease(tx, sharedRelease);
     if (!currentClient.exists || currentClient.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente no disponible.');
     if (!source.updateTime?.isEqual(snapshot.updateTime!) || source.get('status') === 'archived'
       || sourceCategories.size !== cs.size || sourceCategories.docs.some(d => { const before = cs.docs.find(c => c.id === d.id); return !before || !d.updateTime.isEqual(before.updateTime); }))
@@ -259,6 +267,7 @@ export const configureMarketplaceTemplate = onCall<ConfigureMarketplaceTemplateR
     }
     if (predecessorRef) tx.update(predecessorRef, { status: 'archived', archivedAt: now, archivedByUid: request.auth!.uid,
       'exportConfig.supersededByTemplateId': next.id, updatedAt: now });
+    publishShared();
   }).catch(rethrowTransactionConflict);
   return { success: true, templateId: next.id };
 });
@@ -271,7 +280,7 @@ export const archiveMarketplaceTemplate = onCall<{ clientId: string; templateId:
     if (!clientSnap.exists || clientSnap.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente archivado.');
     if (!template.exists) throw new HttpsError('not-found', 'Plantilla no disponible.');
     tx.update(ref, { status: 'archived', archivedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(), archivedByUid: request.auth!.uid,
-      ...(template.get('exportConfig') ? { 'exportConfig.supersededByTemplateId': null } : {}) });
+      ...(template.get('exportConfig') ? { 'exportConfig.supersededByTemplateId': null, preserveHistoricalUse: admin.firestore.FieldValue.delete() } : {}) });
   }).catch(rethrowTransactionConflict);
   return { success: true };
 });

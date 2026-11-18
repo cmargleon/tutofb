@@ -28,6 +28,7 @@ export interface SpreadsheetTemplate {
   status?: SpreadsheetTemplateImportStatus;
   archivedAt?: TimestampLike | null;
   archivedByUid?: string | null;
+  preserveHistoricalUse?: boolean;
   parserVersion: number;
   templateFingerprint: string;
   categoryIds: string[];
@@ -39,6 +40,20 @@ export interface SpreadsheetTemplate {
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
   createdByUid: string;
+}
+
+export const isSpreadsheetTemplateActive = (template: Pick<SpreadsheetTemplate, 'status'>) =>
+  template.status === undefined || template.status === 'active';
+
+export const canUseSpreadsheetTemplate = (template: SpreadsheetTemplate, alreadyLinked = false) =>
+  isSpreadsheetTemplateActive(template) || (alreadyLinked && (template.status === 'disabled' ||
+    (template.status === 'archived' && (template.preserveHistoricalUse === true || !!template.exportConfig?.supersededByTemplateId))));
+
+export interface SetClientSpreadsheetTemplateStatusRequest {
+  clientId: string;
+  templateId: string;
+  status: SpreadsheetTemplateImportStatus;
+  expectedStatus: SpreadsheetTemplateImportStatus;
 }
 
 export interface SpreadsheetTemplateCategoryColumn {

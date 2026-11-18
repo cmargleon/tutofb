@@ -1,3 +1,4 @@
+import { isSpreadsheetTemplateActive } from '../../../shared/src/types';
 import React, { useState } from 'react';
 import { MarketplaceTemplates, LegacyMarketplaceTemplates, useMarketplaceTemplates } from './MarketplaceTemplates';
 import type { SpreadsheetTemplate } from '../../../shared/src/types';
@@ -13,7 +14,7 @@ const MarketplaceCard: React.FC<{ client: Client; channel: typeof MARKETPLACES[n
   const state = useClientMarketplace(client, channel.id);
   const [open, setOpen] = useState(false);
   const disabled = state.saving || client.status === 'archived';
-  const activeTemplates = templates.filter(t => t.status !== 'archived').length;
+  const activeTemplates = templates.filter(isSpreadsheetTemplateActive).length;
   return <article className="tuto-marketplace" data-enabled={state.enabled}>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
@@ -47,5 +48,5 @@ const MarketplaceCard: React.FC<{ client: Client; channel: typeof MARKETPLACES[n
 };
 export const ClientMarketplaces = ({ client }: { client: Client }) => {
   const { templates, error } = useMarketplaceTemplates(client.id!);
-  return <div className="space-y-4"><Alert tone="info">Habilita destinos y configura sus plantillas oficiales. Los Excel se generan desde el Catálogo únicamente al descargar; no se publica nada automáticamente.</Alert>{error && <Alert tone="danger">{error}</Alert>}<div className="grid gap-4 xl:grid-cols-2">{MARKETPLACES.map(channel => <MarketplaceCard key={channel.id} client={client} channel={channel} templates={templates.filter(t => t.exportConfig?.marketplaceId === channel.id)} />)}</div><LegacyMarketplaceTemplates client={client} templates={templates.filter(t => !t.exportConfig && t.status !== 'archived')} /></div>;
+  return <div className="space-y-4"><Alert tone="info">Habilita destinos y configura sus plantillas oficiales. Los Excel se generan desde el Catálogo únicamente al descargar; no se publica nada automáticamente.</Alert>{error && <Alert tone="danger">{error}</Alert>}<div className="grid gap-4 xl:grid-cols-2">{MARKETPLACES.map(channel => <MarketplaceCard key={channel.id} client={client} channel={channel} templates={templates.filter(t => t.exportConfig?.marketplaceId === channel.id)} />)}</div><LegacyMarketplaceTemplates client={client} templates={templates.filter(t => !t.exportConfig && isSpreadsheetTemplateActive(t))} /></div>;
 };

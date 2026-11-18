@@ -106,3 +106,44 @@ test('real client SHEIN templates preserve every ZIP part, all validations, name
   }
   writeFileSync('/tmp/tuto-marketplace-real-verification.json', JSON.stringify(reports, null, 2));
 });
+
+test('JISHOP 27-category workbook repairs truncated categories and exports with isolated seller brands', {
+  skip: !process.env.TUTO_JISHOP_SHARED_TEMPLATE,
+}, async () => {
+  const admin = require('../functions/node_modules/firebase-admin');
+  if (!admin.apps.length) admin.initializeApp({ projectId: 'demo-local-template-test', storageBucket: 'demo-local.appspot.com' });
+  const { analyzeMarketplaceTemplate } = require('../functions/lib/functions/src/spreadsheets/marketplaceTemplates.js');
+  const { repairSheinWorkbook } = require('../functions/lib/functions/src/spreadsheets/sheinWorkbook.js');
+  const { sanitizeSharedSheinWorkbook, applySharedSheinBrands, sheinCategoryCode } = require('../functions/lib/functions/src/spreadsheets/sharedSheinCatalog.js');
+  const { inspectWorkbookPackage, patchWorkbookCells, rangeContains, validationAccepts } = require('../functions/lib/functions/src/spreadsheets/ooxmlWorkbook.js');
+  const XLSX = require('../functions/node_modules/xlsx');
+  const buffer = readFileSync(process.env.TUTO_JISHOP_SHARED_TEMPLATE!);
+  const base = { clientId: 'seller-a', clientNameSnapshot: 'QA', storagePath: 'local', originalFileName: 'shein.xlsx', createdByUid: 'qa' };
+  const analyzed = await analyzeMarketplaceTemplate(buffer, 'shein', base);
+  assert.equal(analyzed.categories.length, 27);
+  assert.deepEqual(analyzed.unresolvedRequired, []);
+  assert.equal(new Set(analyzed.categories.map((c: any) => sheinCategoryCode(c.sheetName))).size, 27);
+  assert.ok(analyzed.categories.find((c: any) => sheinCategoryCode(c.sheetName) === '3808')
+    .columns.find((c: any) => c.key === 'secondary_attribute_1_value').dropdownDependency.optionsByValue['Cantidad(1001211)'].length);
+  const category = analyzed.categories.find((c: any) => sheinCategoryCode(c.sheetName) === '1976');
+  const repaired = await repairSheinWorkbook(buffer);
+  const withSellerRow = await patchWorkbookCells(repaired, [{ sheetName: category.sheetName, cells: [{ address: 'A7', value: 'SELLER-A-PRIVATE-SKU' }] }]);
+  const sanitized = await sanitizeSharedSheinWorkbook(withSellerRow, analyzed.categories);
+  const blank = XLSX.read(sanitized, { type: 'buffer' });
+  assert.equal(blank.Sheets[category.sheetName].A7, undefined);
+  assert.equal(blank.Sheets['Lista de marcas válidas'].A2, undefined);
+
+  for (const brand of ['SELLER-B(brand-b)', 'SELLER-C(brand-c)']) {
+    const branded = await applySharedSheinBrands(sanitized, [brand]);
+    const inspection = await inspectWorkbookPackage(branded);
+    const sheet = inspection.sheets.find((s: any) => s.name === category.sheetName);
+    const column = category.columns.find((c: any) => c.key === 'brand_code');
+    const address = column.letter + '7';
+    const list = sheet.validations.find((v: any) => v.ranges.some((r: string) => rangeContains(r, address)));
+    assert.deepEqual(list.options, [brand]);
+    assert.ok(validationAccepts(inspection, list, address, brand, {}));
+    assert.equal(validationAccepts(inspection, list, address, 'FOREIGN(brand-x)', {}), false);
+    const output = await patchWorkbookCells(branded, [{ sheetName: category.sheetName, cells: [{ address, value: brand }] }]);
+    assert.equal(XLSX.read(output, { type: 'buffer' }).Sheets[category.sheetName][address].v, brand);
+  }
+});

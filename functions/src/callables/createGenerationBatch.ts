@@ -1,3 +1,4 @@
+import { isSpreadsheetTemplateActive } from '../../../shared/src/types';
 import { resolveOrganizerBatchOrigin } from '../organizer/productWorkflow';
 import { COMMERCIAL_PHOTO_PROFILE } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
@@ -68,6 +69,9 @@ const prepareGenerationBatch = async (
     }
     if (validated.outputMode === 'spreadsheet' && (!templateSnapshot || !templateSnapshot.exists)) {
       throw new HttpsError('not-found', 'No se encontró la plantilla seleccionada.');
+    }
+    if (validated.outputMode === 'spreadsheet' && !isSpreadsheetTemplateActive({ status: templateSnapshot!.get('status') })) {
+      throw new HttpsError('failed-precondition', 'La plantilla seleccionada no está activa.');
     }
     if (validated.outputMode === 'spreadsheet' && (!categoriesSnapshot || categoriesSnapshot.empty)) {
       throw new HttpsError('not-found', 'La plantilla seleccionada no tiene categorías disponibles.');
@@ -170,7 +174,7 @@ const prepareGenerationBatch = async (
       createdByDisplayName,
     };
 
-    return { modelRef, client, poseIds: validated.poseIds, actualTotalJobs,
+    return { modelRef, templateRef: validated.outputMode === 'spreadsheet' ? templateRef : null, client, poseIds: validated.poseIds, actualTotalJobs,
       write: (writeBatch: FirebaseFirestore.Transaction, automationPolicy?: AutomationPolicy) => {
     const generationJobIds: string[] = [];
     writeBatch.set(batchRef, { ...batchData, ...(automation ? { automationJobId: automation.id, generationKind: 'garment' } : {}) });
@@ -341,6 +345,13 @@ export const createGenerationBatchesCore = async (
       if (!model) throw new HttpsError('not-found', 'No se encontró el modelo seleccionado.');
       assertModelOwnershipAndPoses(groups[index].client, model, groups[index].poseIds);
     });
+    const templateRefs = groups.flatMap(group => group.templateRef ? [group.templateRef] : []);
+    if (templateRefs.length) {
+      const templates = await tx.getAll(...templateRefs);
+      if (templates.some(snapshot => !snapshot.exists || !isSpreadsheetTemplateActive({ status: snapshot.get('status') }))) {
+        throw new HttpsError('failed-precondition', 'La plantilla seleccionada no está activa.');
+      }
+    }
     const results = groups.map(group => group.write(tx, current?.effectivePolicy));
     const batchIds = results.map(result => result.batchId);
     const generationJobIds = results.flatMap(result => result.generationJobIds);

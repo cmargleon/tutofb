@@ -1,23 +1,25 @@
 import React from 'react';
-import { Sheet, Trash2 } from 'lucide-react';
+import { Sheet } from 'lucide-react';
 import { isArchivedCatalogEntity } from '../../../shared/src/domain';
-import { Client, SpreadsheetTemplate } from '../../../shared/src/types';
+import { Button } from '../ui';
+import { MARKETPLACES } from '../../../shared/src/marketplaces';
+import { Client, SpreadsheetTemplate, SpreadsheetTemplateImportStatus } from '../../../shared/src/types';
 
 interface ClientSpreadsheetSectionProps {
   client: Client;
   templates: SpreadsheetTemplate[];
   uploadingTemplateClientId: string | null;
   savingTemplateCategoryId: string | null;
-  deletingTemplateId: string | null;
+  updatingTemplateStatusId: string | null;
   onUpload: (client: Client, file: File | null) => void;
   onCategoryChange: (client: Client, template: SpreadsheetTemplate, categoryId: string | null) => void;
-  onDelete: (client: Client, template: SpreadsheetTemplate) => void;
+  onStatusChange: (client: Client, template: SpreadsheetTemplate, status: SpreadsheetTemplateImportStatus) => void;
 }
 
 export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> = ({
   client, templates,
-  uploadingTemplateClientId, savingTemplateCategoryId, deletingTemplateId,
-  onUpload, onCategoryChange, onDelete,
+  uploadingTemplateClientId, savingTemplateCategoryId, updatingTemplateStatusId,
+  onUpload, onCategoryChange, onStatusChange,
 }) => (
   <div className="tuto-surface overflow-hidden">
     <div className="tuto-card-header">
@@ -26,7 +28,7 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
         <div className="min-w-0">
         <h3>Spreadsheets del cliente</h3>
         <p className="max-w-2xl">
-          Plantillas heredadas del wizard. Administra las nuevas plantillas de salida en Marketplaces; los archivos Excel fuente se cargan por separado durante la generación.
+          Activa, desactiva o archiva las plantillas del cliente. Los lotes vinculados conservan su referencia.
         </p>
         </div>
       </div>
@@ -53,49 +55,53 @@ export const ClientSpreadsheetSection: React.FC<ClientSpreadsheetSectionProps> =
           Este cliente todavía no tiene spreadsheets propios cargados.
         </p>
       ) : (
-        templates.map((template) => (
-          <div key={template.id} className="px-5 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-slate-900">{template.name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {template.categories.length} categoría{template.categories.length === 1 ? '' : 's'} · {template.originalFileName}
-                </p>
+        templates.map((template) => {
+          const status = template.status ?? 'active';
+          const label = template.exportConfig ? MARKETPLACES.find(channel => channel.id === template.exportConfig?.marketplaceId)?.name : 'Wizard';
+          const disabled = !template.id || updatingTemplateStatusId !== null;
+          return (
+            <div key={template.id} className="px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">{template.name}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {label} · {status === 'active' ? 'Activa' : status === 'disabled' ? 'Desactivada' : 'Archivada'} · {template.categories.length} categoría{template.categories.length === 1 ? '' : 's'} · {template.originalFileName}
+                  </p>
+                </div>
+                {!isArchivedCatalogEntity(client) && !template.exportConfig?.supersededByTemplateId && (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button size="sm" variant="secondary" disabled={disabled}
+                      onClick={() => onStatusChange(client, template, status === 'disabled' ? 'active' : 'disabled')}>
+                      {status === 'active' ? 'Desactivar' : status === 'archived' ? 'Restaurar como desactivada' : 'Activar'}
+                    </Button>
+                    {status !== 'archived' && <Button size="sm" variant="ghost" disabled={disabled}
+                      onClick={() => onStatusChange(client, template, 'archived')}>Archivar</Button>}
+                  </div>
+                )}
               </div>
-              {!isArchivedCatalogEntity(client) ? (
-                <button
-                  type="button"
-                  onClick={() => onDelete(client, template)}
-                  disabled={!template.id || deletingTemplateId === template.id}
-                  className="tuto-button tuto-button--ghost tuto-button--sm !text-[var(--color-danger)] hover:!bg-[var(--color-danger-soft)]"
+              {!template.exportConfig && status === 'active' && <div className="mt-3 max-w-md">
+                <label htmlFor={`template-category-${template.id}`} className="mb-1.5 block text-xs font-medium text-slate-600">
+                  Categoría por defecto para el wizard
+                </label>
+                <select
+                  id={`template-category-${template.id}`}
+                  value={template.defaultCategoryId || ''}
+                  disabled={isArchivedCatalogEntity(client) || savingTemplateCategoryId === template.id}
+                  onChange={(event) => onCategoryChange(client, template, event.target.value || null)}
+                  className="tuto-field"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {deletingTemplateId === template.id ? 'Eliminando...' : 'Eliminar'}
-                </button>
-              ) : null}
+                  <option value="">Sin categoría por defecto</option>
+                  {template.categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.label}</option>
+                  ))}
+                </select>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Luego podrás cambiarla en el wizard, pero esta queda precargada para este spreadsheet.
+                </p>
+              </div>}
             </div>
-            <div className="mt-3 max-w-md">
-              <label htmlFor={`template-category-${template.id}`} className="mb-1.5 block text-xs font-medium text-slate-600">
-                Categoría por defecto para el wizard
-              </label>
-              <select
-                id={`template-category-${template.id}`}
-                value={template.defaultCategoryId || ''}
-                disabled={isArchivedCatalogEntity(client) || savingTemplateCategoryId === template.id}
-                onChange={(event) => onCategoryChange(client, template, event.target.value || null)}
-                className="tuto-field"
-              >
-                <option value="">Sin categoría por defecto</option>
-                {template.categories.map((category) => (
-                  <option key={category.id} value={category.id}>{category.label}</option>
-                ))}
-              </select>
-              <p className="mt-2 text-[11px] text-slate-500">
-                Luego podrás cambiarla en el wizard, pero esta queda precargada para este spreadsheet.
-              </p>
-            </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   </div>

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Check, ChevronDown } from 'lucide-react';
 import { sheinMultiValue } from '../../../shared/src/marketplaceExport/sheinRules';
 import {
   ProductDraft,
@@ -258,16 +259,42 @@ export const ProductDraftEditor: React.FC<ProductDraftEditorProps> = ({
     };
 
     if (activeCategory.validationMode === 'template' && sheinMultiValue(column) && dropdownChoices.length) {
-      const selected = resolvedValue.split('*');
-      return <div className="max-h-36 overflow-auto rounded-md border border-slate-200 px-2 py-1" role="group" aria-label={column.label}>
-        {dropdownChoices.map(option => <label key={option.value} className="flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={selected.includes(option.value)} onChange={event => updateValue(
-            event.target.checked ? [...selected.filter(Boolean), option.value].join('*')
-              : selected.filter(value => value !== option.value).join('*'),
-          )} />
-          {option.label}
-        </label>)}
-      </div>;
+      const selected = resolvedValue.split('*').filter(Boolean);
+      const selection = selected.map(value => dropdownChoices.find(choice => choice.value === value)?.label || value).join(', ');
+      return (
+        <details className="group/material-options" onKeyDown={event => {
+          if (event.key !== 'Escape' || !event.currentTarget.open) return;
+          event.stopPropagation();
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector('summary')?.focus();
+        }}>
+          <summary
+            data-draft-field={column.key}
+            data-draft-row={row.id}
+            aria-label={`${column.label}: ${selection || 'Selecciona una opción'}`}
+            className={`${INPUT_CLASS} flex cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden`}
+          >
+            <span>{selection || 'Selecciona una opción'}</span>
+            <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 group-open/material-options:rotate-180" />
+          </summary>
+          <div className="mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white p-1">
+            {dropdownChoices.map(option => {
+              const isSelected = selected.includes(option.value);
+              return (
+                <button key={option.value} type="button" aria-pressed={isSelected}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-slate-100 focus-visible:bg-slate-100 aria-pressed:font-semibold"
+                  onClick={() => updateValue((isSelected
+                    ? selected.filter(value => value !== option.value)
+                    : [...selected, option.value]).join('*'))}
+                >
+                  <Check aria-hidden="true" className={`h-4 w-4 shrink-0 ${isSelected ? 'text-emerald-600' : 'invisible'}`} />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </details>
+      );
     }
     if (isDropdown) {
       return (

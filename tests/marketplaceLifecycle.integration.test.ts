@@ -51,6 +51,10 @@ test('marketplace lifecycle regressions (local Firebase)', { skip: !enabled }, a
     originals.set((await templateRef(clientId, id).get()).get('storagePath'), originals.get(original.get('storagePath'))!);
     return id;
   }
+  async function changeStatus(clientId: string, templateId: string, expectedStatus: string, status: string) {
+    const { setClientSpreadsheetTemplateStatus } = require('../functions/lib/functions/src/callables/setClientSpreadsheetTemplateStatus.js');
+    return setClientSpreadsheetTemplateStatus.run(req({ clientId, templateId, expectedStatus, status }));
+  }
   async function activationRace(clientId: string, ids: string[]) {
     // Force both validations to finish before either transaction commits.
     const original = db.runTransaction.bind(db);
@@ -73,6 +77,26 @@ test('marketplace lifecycle regressions (local Firebase)', { skip: !enabled }, a
     await db.doc('users/lifecycle-operator').set({ role: 'operador', active: true, clientAccess: { mode: 'assigned', clientIds: ['products'] } });
     await db.doc('users/lifecycle-reviewer').set({ role: 'revisor', active: true, clientAccess: { mode: 'assigned', clientIds: ['products'] } });
     await db.doc('users/lifecycle-limited').set({ role: 'operador', active: true, clientAccess: { mode: 'assigned', clientIds: ['other'] } });
+    await t.test('source controls preserve linked templates and reject stale updates', async () => {
+      const { clientId } = await fixture('lifecycle-source-controls');
+      const id = await activate(clientId, await upload(clientId, 'shein'));
+      const ref = templateRef(clientId, id);
+      const before = await ref.get();
+      const { templateUsable } = require('../functions/lib/functions/src/spreadsheets/marketplaceExportService.js');
+      await changeStatus(clientId, id, 'active', 'disabled');
+      assert.equal(templateUsable((await ref.get()).data(), 'shein'), false);
+      assert.equal(templateUsable((await ref.get()).data(), 'shein', true), true);
+      await assert.rejects(changeStatus(clientId, id, 'active', 'archived'), { code: 'aborted' });
+      await changeStatus(clientId, id, 'disabled', 'archived');
+      const archived = await ref.get();
+      assert.equal(templateUsable(archived.data(), 'shein'), false);
+      assert.equal(templateUsable(archived.data(), 'shein', true), true);
+      assert.equal(archived.get('storagePath'), before.get('storagePath'));
+      assert.equal((await ref.collection('categories').get()).size, 1);
+      await changeStatus(clientId, id, 'archived', 'disabled');
+      await changeStatus(clientId, id, 'disabled', 'active');
+      assert.equal(templateUsable((await ref.get()).data(), 'shein'), true);
+    });
     await t.test('repeated replacements, immutable history and simultaneous activation', async () => {
       const scope = await fixture('versions');
       const draftA = await upload(scope.clientId, 'shein');

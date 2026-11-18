@@ -52,7 +52,7 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
           <ClientDriveFolders state={automation} disabled={archived || automation.saving} />
         </CardBody>
       </Card>
-      <ClientSpreadsheetSection client={client} templates={templates.filter(t => !t.exportConfig)} uploadingTemplateClientId={management.uploadingTemplateClientId} savingTemplateCategoryId={management.savingTemplateCategoryId} deletingTemplateId={management.deletingTemplateId} onUpload={management.handleTemplateUpload} onCategoryChange={management.handleTemplateCategoryChange} onDelete={management.handleTemplateDelete} />
+      <ClientSpreadsheetSection client={client} templates={templates} uploadingTemplateClientId={management.uploadingTemplateClientId} savingTemplateCategoryId={management.savingTemplateCategoryId} updatingTemplateStatusId={management.updatingTemplateStatusId} onUpload={management.handleTemplateUpload} onCategoryChange={management.handleTemplateCategoryChange} onStatusChange={management.handleTemplateStatusChange} />
     </section>
 
     <section hidden={active !== 'automatizaciones'} aria-label="Automatizaciones">

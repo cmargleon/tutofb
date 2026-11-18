@@ -265,12 +265,24 @@ export const normalizeCategoryLookupKey = (value: string): string =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-export function matchSpreadsheetCategory<T>(sheetName: string, catalogue: Map<string, T>): T | undefined {
+const isTruncatedSheetName = (name: string) => /\.{3}|…/.test(name);
+
+export function matchSpreadsheetCategory<T>(sheetName: string, catalogue: Map<string, T>, orderedSheets: string[] = []): T | undefined {
   const key = normalizeCategoryLookupKey(sheetName);
-  const exact = catalogue.get(key);
-  if (exact !== undefined || !key || !/\.{3}|…/.test(sheetName)) return exact;
-  const candidates = [...catalogue].filter(([label]) => label.startsWith(key + ' '));
-  return candidates.length === 1 ? candidates[0][1] : undefined;
+  if (!isTruncatedSheetName(sheetName)) return catalogue.get(key);
+  if (!key) return undefined;
+  const candidates = [...catalogue].filter(([label]) => label.startsWith(key));
+  if (candidates.length === 1) return candidates[0][1];
+
+  // SHEIN emits catalogue groups in the same order as its capture sheets.
+  // Use the position only when every group agrees with its corresponding sheet.
+  const entries = [...catalogue];
+  const index = orderedSheets.indexOf(sheetName);
+  if (index >= 0 && orderedSheets.length === entries.length && orderedSheets.every((name, position) => {
+    const label = normalizeCategoryLookupKey(name);
+    return isTruncatedSheetName(name) ? entries[position][0].startsWith(label) : entries[position][0] === label;
+  })) return entries[index][1];
+  return undefined;
 }
 
 const extractTrailingSheetCode = (sheetName: string): string | null => {
@@ -519,6 +531,7 @@ export const parseSpreadsheetTemplateWorkbook = ({
   const attributeMapByCategory = buildAttributeMapByCategory(validAttributesSheet);
   const categories: Array<Omit<SpreadsheetTemplateCategory, 'id' | 'createdAt' | 'updatedAt'>> = [];
 
+  const orderedSheets = workbook.SheetNames.filter(name => /\(\d+-\d+\)$/.test(name));
   workbook.SheetNames.forEach((sheetName) => {
     const worksheet = workbook.Sheets[sheetName];
     const rows = toSheetRows(worksheet);
@@ -538,7 +551,7 @@ export const parseSpreadsheetTemplateWorkbook = ({
         : column,
     );
 
-    const parsedAttributes = matchSpreadsheetCategory(label, attributeMapByCategory) || [];
+    const parsedAttributes = matchSpreadsheetCategory(label, attributeMapByCategory, orderedSheets) || [];
     const baseAttributes = parsedAttributes.length > 0
       ? parsedAttributes
       : buildAttributesFromTemplateSpecificSheets(workbook, sheetName);

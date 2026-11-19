@@ -1,3 +1,4 @@
+import { PHOTO_CHANNELS } from '../../../shared/src/marketplacePhotoPlan';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import type { ClientAutomationConfig, Model, UpdateClientAutomationRequest } from '../../../shared/src/types';
@@ -59,7 +60,8 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
     config.presets = raw.presets || {};
     if (Array.isArray(config.presets) || Object.keys(config.presets).length > 20 || JSON.stringify(config.presets).length > 100000) throw new HttpsError('invalid-argument', 'Presets inválidos.');
     for (const [name, preset] of Object.entries(config.presets)) {
-      if (!/^[\w-]{1,80}$/.test(name) || !preset || typeof preset !== 'object' || Object.keys(preset).some((key) => !['modelId', 'poseIds', 'provider', 'aspectRatio', 'imageConfig', 'prompt', 'scenes'].includes(key))
+      if (!/^[\w-]{1,80}$/.test(name) || !preset || typeof preset !== 'object' || Object.keys(preset).some((key) => !['selectedChannels', 'modelId', 'poseIds', 'provider', 'aspectRatio', 'imageConfig', 'prompt', 'scenes'].includes(key))
+        || (preset.selectedChannels !== undefined && (!Array.isArray(preset.selectedChannels) || !preset.selectedChannels.length || new Set(preset.selectedChannels).size !== preset.selectedChannels.length || preset.selectedChannels.some(channel => !PHOTO_CHANNELS.includes(channel) || snapshot.data()?.marketplaces?.[channel]?.enabled !== true)))
         || (preset.provider !== undefined && !isProvider(preset.provider))
         || (preset.imageConfig !== undefined && (!isProviderImageConfig(preset.imageConfig) || preset.imageConfig.provider !== preset.provider))
         || (preset.prompt !== undefined && (typeof preset.prompt !== 'string' || preset.prompt.length > 30000))

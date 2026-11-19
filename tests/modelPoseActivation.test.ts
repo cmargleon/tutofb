@@ -116,3 +116,11 @@ test('MCP discovers and changes pose activation with idempotency, role and clien
   await assert.rejects(() => executeManglarTool('manglar_models', { ...args, data: { ...args.data, modelId: 'pose-foreign' }, idempotencyKey: 'pose-foreign' }, caller), { code: 'permission-denied' });
   await cleanupEmulatorDatabase(db); await admin.app().delete();
 });
+
+test('marketplace bases rely on explicit verification without a second background classification charge', async t => {
+  const classifier = require('../functions/lib/functions/src/utils/classifyPose.js');
+  const { onModelWrite } = require('../functions/lib/functions/src/triggers/onModelWrite.js');
+  const classify = t.mock.method(classifier, 'classifyPoseWithGemini', async () => { throw new Error('Must use explicit verification'); });
+  await onModelWrite.run({ params: { modelId: 'model' }, data: { after: { exists: true, data: () => ({ poses: [{ id: 'base', marketplaceBaseSpec: { poseRecipeId: 'full-front' } }] }) } } });
+  assert.equal(classify.mock.callCount(), 0);
+});

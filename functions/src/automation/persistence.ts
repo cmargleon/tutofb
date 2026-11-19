@@ -1,3 +1,4 @@
+import { modelPhotoBases, selectedPhotoMarketplaces } from '../../../shared/src/modelPhotoSets';
 import { activePhotoChannels } from '../../../shared/src/marketplacePhotoPlan';
 import { COMMERCIAL_PHOTO_PROFILE } from '../../../shared/src/commercialPhoto';
 import { resolveAutomationPreset } from './presets';
@@ -125,13 +126,16 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     const photoModel = !plan && photoModelId && activePhotoChannels((client.data() as Client).marketplaces).length
       ? (await tx.get(db.doc(`models/${photoModelId}`))).data() as import('../../../shared/src/types').Model | undefined : undefined;
     if (photoModel && (photoModel.clientId !== data.clientId || photoModel.active === false || photoModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo no disponible.');
-    const photoBases = plan?.photoBases ?? (photoModel?.poses || []).filter(p => p.active !== false && (!resolved?.config.poseIds || resolved.config.poseIds.includes(p.id))).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) }));
+    const photoBases = plan?.photoBases ?? modelPhotoBases(photoModel, resolved?.config.poseIds);
+    let selectedMarketplaces: Client['marketplaces'];
+    try { selectedMarketplaces = data.jobType === 'garment' && !plan ? selectedPhotoMarketplaces((client.data() as Client).marketplaces, data.selectedChannels ?? resolved?.config.selectedChannels) : undefined; }
+    catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
     const job: AutomationJob = {
       ...(organizer ? { organizerCommerce: true as const } : {}),
       ...(plan ? (plan.photoProfile ? { photoProfile: plan.photoProfile } : {}) : { photoProfile: COMMERCIAL_PHOTO_PROFILE, resolvedPreset: resolved!.config }),
       ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}),
       ...(data.jobType === 'garment' && (plan?.photoMarketplaces !== undefined || !plan) ? { photoBases, photoModelId } : {}),
-      ...(data.jobType !== 'garment' ? {} : plan?.photoMarketplaces !== undefined ? { photoMarketplaces: plan.photoMarketplaces } : !plan ? { photoMarketplaces: (client.data() as Client).marketplaces || {} } : {}),
+      ...(data.jobType !== 'garment' ? {} : plan?.photoMarketplaces !== undefined ? { photoMarketplaces: plan.photoMarketplaces } : !plan ? { photoMarketplaces: selectedMarketplaces || {} } : {}),
       ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy,
       effectiveRules: plan ? plan.effectiveRules ?? { ...DEFAULT_AUTOMATION_RULES }
         : resolveAutomationRules(sanitizeSystemConfig(system.data()).automationRules, (client.data() as Client).automation?.rules),

@@ -239,7 +239,7 @@ export const ClientModelStep: React.FC<Props> = ({
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Modelos del cliente</h2>
                 <p className="text-sm text-slate-500">
-                  Elige el modelo. Preseleccionaremos las poses compatibles con las fotos que ya analizamos.
+                  Elige la identidad que vestirá las prendas. Revisa las tomas disponibles y las incidencias en el plan de fotografía.
                 </p>
               </div>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">

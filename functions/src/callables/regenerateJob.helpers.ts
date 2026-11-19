@@ -1,3 +1,4 @@
+import { photoPromptConflicts } from '../../../shared/src/modelPhotoSets';
 import { resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
 import { APPROVED_TRY_ON_PROMPT_FORMAT, validateApprovedTryOnPrompt } from '../../../shared/src/approvedTryOnPrompt';
@@ -11,6 +12,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     throw new Error('Proveedor inválido.');
   }
 
+  if (job.photoTask?.baseSpec && (photoPromptConflicts(prompt).length || prompt.length > 2000)) throw new Error('La corrección entra en conflicto con la base aprobada. Conserva pose, encuadre y fondo.');
   const isApprovedPrompt = job.generationKind !== 'product' && job.promptFormat === APPROVED_TRY_ON_PROMPT_FORMAT;
   const trimmedPrompt = isApprovedPrompt ? validateApprovedTryOnPrompt(prompt) : prompt.trim();
   if (!trimmedPrompt) {
@@ -30,7 +32,7 @@ export const buildRegenerateJobPatch = (job: Job, provider: string, prompt: stri
     promptBase: trimmedPrompt,
     promptCaseKey: job.promptCaseKey ?? null,
     promptCaseText: job.promptCaseText ?? null,
-    finalPrompt: job.photoTask ? `${trimmedPrompt}\nObligaciones invariables del plan:\n${job.photoTask.instructions}` : isApprovedPrompt ? trimmedPrompt : job.generationKind === 'product' ? `${PRODUCT_IDENTITY_RULES}\n${trimmedPrompt}` : buildFinalGenerationPrompt(
+    finalPrompt: job.photoTask ? job.photoTask.aspectRatio ? `${job.photoTask.instructions}\nCorrection: ${trimmedPrompt.replace(job.photoTask.instructions, '').trim()}` : `${trimmedPrompt}\nObligaciones invariables del plan:\n${job.photoTask.instructions}` : isApprovedPrompt ? trimmedPrompt : job.generationKind === 'product' ? `${PRODUCT_IDENTITY_RULES}\n${trimmedPrompt}` : buildFinalGenerationPrompt(
       trimmedPrompt,
       job.garmentReferenceImageType || (job.garmentIsMultiAngle ? 'multi_angle_composite' : 'single_view'),
       job.promptCaseText,

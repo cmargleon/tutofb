@@ -60,7 +60,7 @@ export type WizardDraftGarment = Omit<UploadedGarmentDraft, 'files' | 'previewUr
 type PersistedStateFields = Pick<WizardState,
   | 'step' | 'generationKind' | 'selectedClientId' | 'selectedModelId' | 'outputMode' | 'outputModeChosen'
   | 'selectedSpreadsheetTemplateId' | 'selectedSpreadsheetCategoryId' | 'sourceSpreadsheetSummary'
-  | 'selectedPoseIds' | 'poseSuggestions' | 'productDrafts' | 'productDraftPreparation' | 'productScenes'
+  | 'selectedPhotoChannels' | 'selectedPoseIds' | 'poseSuggestions' | 'productDrafts' | 'productDraftPreparation' | 'productScenes'
   | 'provider' | 'providerImageConfigs' | 'prompt' | 'tryOnPromptBlocks'>;
 
 export interface WizardDraft {
@@ -140,6 +140,7 @@ export const serializeWizardDraft = ({ state, draftBatchId, dirty, scope, submit
         : null,
       // Results computed by Gemini are kept only once finished; anything in flight is redone.
       sourceSpreadsheetSummary: state.productDraftPreparation.status === 'ready' ? state.sourceSpreadsheetSummary : null,
+      ...(state.selectedPhotoChannels ? { selectedPhotoChannels: state.selectedPhotoChannels } : {}),
       selectedPoseIds: state.selectedPoseIds,
       poseSuggestions: state.poseSuggestions.status === 'ready' ? state.poseSuggestions : createInitialPoseSuggestionState(),
       productDrafts: state.productDraftPreparation.status === 'ready' ? state.productDrafts : [],
@@ -194,6 +195,7 @@ export const parseWizardDraft = (raw: unknown, { uid, scope, now }: ParseParams)
   if (!isNullableString(state.selectedSpreadsheetTemplateId) || !isNullableString(state.selectedSpreadsheetCategoryId)) return null;
   if (!['photos_only', 'spreadsheet'].includes(state.outputMode as string) || typeof state.outputModeChosen !== 'boolean') return null;
   if (state.generationKind !== null && !['garment', 'product'].includes(state.generationKind as string)) return null;
+  if (state.selectedPhotoChannels !== undefined && (!Array.isArray(state.selectedPhotoChannels) || state.selectedPhotoChannels.some(c => !['amazon', 'mercado-libre', 'tiktok-shop', 'shein'].includes(c)))) return null;
   if (!isStringArray(state.selectedPoseIds) || !isString(state.prompt) || !isRecord(state.tryOnPromptBlocks)) return null;
   if (!isRecord(state.poseSuggestions) || !isRecord(state.productDraftPreparation) || !Array.isArray(state.productDrafts)) return null;
   if (!Array.isArray(state.productScenes) || !isRecord(state.providerImageConfigs)) return null;
@@ -370,6 +372,7 @@ export const restoreWizardDraft = (draft: WizardDraft, catalog: WizardDraftCatal
     generationKind: garments.length ? saved.generationKind : null,
     selectedClientId,
     selectedModelId,
+    ...(saved.selectedPhotoChannels ? { selectedPhotoChannels: saved.selectedPhotoChannels } : {}),
     outputMode,
     outputModeChosen: saved.outputModeChosen,
     selectedSpreadsheetTemplateId,

@@ -18,6 +18,7 @@ import { LocalFileThumb } from './LocalFileThumb';
 import { ModelIdentityTraitsFields } from './ModelIdentityTraitsFields';
 import { ModelPosesViewGrid } from './ModelPosesViewGrid';
 import { ModelPosesEditGrid } from './ModelPosesEditGrid';
+import { ModelPhotoSets } from './ModelPhotoSets';
 
 interface ModelLibraryItemProps {
   model: Model;
@@ -240,6 +241,7 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
           </div>
         ) : null}
 
+        {!isArchived && hasPoses && <ModelPhotoSets model={model} client={clients.find(c => c.id === model.clientId)} />}
         {!isEditing && hasPoses && <ModelPosesViewGrid model={model} />}
       </div>
     </article>

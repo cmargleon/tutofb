@@ -1,3 +1,6 @@
+import { currentModelPhotoBases } from '../models/marketplaceSets';
+import { compatibleBaseApproval } from '../../../shared/src/modelPhotoSets';
+import { getAppFirestore } from '../firebase/appFirestore';
 import { getPhotoEditExecutionJob } from './jobImageEdit';
 import { randomUUID } from 'node:crypto';
 import { AutomationBudgetError, pauseAutomationGeneration } from '../automation/budget';
@@ -71,6 +74,13 @@ const processJobCore = async (
   const timeoutHandle = setTimeout(() => controller.abort(), getJobTimeoutMs());
 
   try {
+    if (claimedJob.photoTask?.baseSpec && claimedJob.photoTask.composition === 'model') {
+      const task = claimedJob.photoTask;
+      const model = (await getAppFirestore().doc(`models/${claimedJob.modelId}`).get()).data() as import('../../../shared/src/types').Model | undefined;
+      if (!model || model.clientId !== claimedJob.clientId || model.active === false || model.status === 'archived') throw new Error('Modelo de la base no disponible.');
+      const base = (await currentModelPhotoBases(model)).find(b => b.id === task.base?.id && b.storagePath === task.base.storagePath);
+      if (!base || task.destinations.some(d => !compatibleBaseApproval(base, { ...task.baseSpec!, channel: d.channel }))) throw new Error('La base aprobada cambió o ya no está disponible. Completa la toma requerida antes de reintentar.');
+    }
     // 2. Provider (or existing output / reused reference)
     const imageConfig = normalizeProviderImageConfig(
       claimedJob.provider as Provider,

@@ -163,8 +163,8 @@ export const saveMasterProduct = onCall<SaveMasterProductRequest>(options, async
     if (product.canonicalProductId) {
       data.marketplaces = snap.get('marketplaces') || {};
       tx.set(legacyRef, { clientId: context.scope.clientId, values: legacy.get('values') || {}, variants: legacy.get('variants') || [], revision: legacy.get('revision') || 0,
-        catalog: { redirectTo: product.canonicalProductId }, marketplaces: merged, updatedAt: data.updatedAt, updatedByUid: data.updatedByUid },
-      { mergeFields: ['clientId', 'values', 'variants', 'revision', 'catalog.redirectTo', 'marketplaces', 'updatedAt', 'updatedByUid'] });
+        catalog: { redirectTo: product.canonicalProductId, listed: false }, marketplaces: merged, updatedAt: data.updatedAt, updatedByUid: data.updatedByUid },
+      { mergeFields: ['clientId', 'values', 'variants', 'revision', 'catalog.redirectTo', 'catalog.listed', 'marketplaces', 'updatedAt', 'updatedByUid'] });
     }
     if (snap.exists) tx.update(ref, { ...data }); else tx.set(ref, data);
     if (!product.canonicalProductId) for (const batchId of product.batchIds) {

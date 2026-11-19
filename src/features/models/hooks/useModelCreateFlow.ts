@@ -92,7 +92,7 @@ export const useModelCreateFlow = (): UseModelCreateFlowResult => {
       setSelectedClientId,
       isCreating,
       createSuccess,
-      inputsDisabled: isCreating || ai.busy || reference.busy,
+      inputsDisabled: isCreating || ai.busy || ai.identityLocked || reference.busy,
       error: error || referenceError,
     },
     upload,

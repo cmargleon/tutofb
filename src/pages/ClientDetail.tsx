@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { Client } from '../../shared/src/types';
 import { History } from 'lucide-react';
@@ -14,9 +14,7 @@ import { ClientEmail } from '../components/clients/ClientEmail';
 import { ClientSettings } from '../components/clients/ClientSettings';
 import { ClientAutomationFields, ClientAutomationSave, ClientDriveFolders } from '../components/clients/ClientAutomationSection';
 
-const ClientCatalog = lazy(() => import('./Catalogo').then(module => ({ default: module.Catalogo })));
-
-const TABS = [['resumen', 'Resumen'], ['contactos', 'Contactos'], ['correos', 'Correos'], ['productos', 'Productos'], ['marketplaces', 'Marketplaces'], ['fuentes', 'Fuentes de datos'], ['automatizaciones', 'Automatizaciones'], ['configuracion', 'Configuración'], ['historial', 'Historial']] as const;
+const TABS = [['resumen', 'Resumen'], ['contactos', 'Contactos'], ['correos', 'Correos'], ['marketplaces', 'Marketplaces'], ['fuentes', 'Fuentes de datos'], ['automatizaciones', 'Automatizaciones'], ['configuracion', 'Configuración'], ['historial', 'Historial']] as const;
 
 const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typeof useClientManagement> }> = ({ client, management }) => {
   const automation = useClientAutomationConfig(client);
@@ -43,11 +41,6 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
     </section>
 
     {active === 'correos' && <section aria-label="Correos"><ClientEmail key={client.id} client={client} /></section>}
-
-    <section hidden={active !== 'productos'} aria-label="Productos">
-      <SectionHeading title="Productos" description="Fotografías generadas y fichas de producto del cliente." actions={<Link className={buttonClasses('secondary', 'sm')} to={`/catalogo?clientId=${encodeURIComponent(client.id!)}`}>Abrir catálogo de {client.name} →</Link>} />
-      {active === 'productos' && <Suspense fallback={<LoadingBlock />}><ClientCatalog client={client} /></Suspense>}
-    </section>
 
     <section hidden={active !== 'marketplaces'} aria-label="Marketplaces">
       <SectionHeading title="Marketplaces" description="Activa canales y gestiona sus plantillas oficiales de exportación." />

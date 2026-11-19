@@ -137,11 +137,13 @@ test('automation plans, Drive, concurrent budgets, independent scenes and manual
       const created = await persistence.createAutomation({ ...base, budgetUsd: 1, externalId: randomUUID() }, uid, 'operador');
       const holds = await Promise.allSettled(Array.from({ length: 8 }, (_, i) => budgets.reserveAutomationOperation(created.jobId, `operation-${i}`, 'generation', 0.3)));
       assert.equal(holds.filter((r: any) => r.status === 'fulfilled').length, 3);
-      let job = (await db.collection('automationJobs').doc(created.jobId).get()).data(); assert.equal(job.budget.reservedUsd, 0.9);
+      // Ledger amounts move with FieldValue.increment (no read lock on the shared document); compare rounded USD.
+      const cents = (value: number) => Math.round(value * 1e6) / 1e6;
+      let job = (await db.collection('automationJobs').doc(created.jobId).get()).data(); assert.equal(cents(job.budget.reservedUsd), 0.9);
       const successfulIndex = holds.findIndex((r: any) => r.status === 'fulfilled');
       const id = (holds[successfulIndex] as PromiseFulfilledResult<string>).value;
       await Promise.all(Array.from({ length: 5 }, () => budgets.settleAutomationOperation(created.jobId, id, 0.1, true)));
-      job = (await db.collection('automationJobs').doc(created.jobId).get()).data(); assert.equal(job.budget.reservedUsd, 0.6); assert.equal(job.budget.spentUsd, 0.1); assert.equal(job.budget.recordedUsd, 0.1);
+      job = (await db.collection('automationJobs').doc(created.jobId).get()).data(); assert.equal(cents(job.budget.reservedUsd), 0.6); assert.equal(cents(job.budget.spentUsd), 0.1); assert.equal(cents(job.budget.recordedUsd), 0.1);
       await assert.rejects(() => budgets.reserveAutomationOperation(created.jobId, `operation-${successfulIndex}`, 'generation', 0.3));
       await assert.rejects(() => persistence.createAutomation({ ...base, clientId: clientB, externalId: randomUUID() }, uid, 'operador'), { code: 'permission-denied' });
       const other = await persistence.createAutomation({ ...base, clientId: clientB, inputImages: [{ itemId: 'b', fileName: 'reference.jpg', storagePath: inputPathB }], budgetUsd: 1, externalId: randomUUID() }, uid, 'operador');

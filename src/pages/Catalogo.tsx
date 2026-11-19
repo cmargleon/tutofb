@@ -160,7 +160,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
           </nav>
           {!masterProductId && <p className="text-sm text-amber-800">El lote tiene varias fichas comerciales para esta variante. La exportación individual no se puede determinar desde este enlace.</p>}
         </section>}
-        {!client && !scoped && <PageHeader title="Catálogo" icon={Images} description="Fotografías aprobadas y fallidas por cliente, lote y prenda. Revisa, regenera o exporta a marketplaces." />}
+        {!client && !scoped && <PageHeader title="Lotes" icon={Images} description="Fotografías aprobadas y fallidas por cliente, lote y prenda. Revisa, regenera o exporta a marketplaces." />}
         {!scoped && <div className="tuto-surface p-4">
           <CatalogFilters
             client={client}

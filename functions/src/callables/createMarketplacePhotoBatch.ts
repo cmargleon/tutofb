@@ -1,3 +1,7 @@
+import { getModelMarketplaceRules, modelMarketplaceRulesRef } from '../models/marketplaceRules';
+import { getManglarContext } from '../manglar/context';
+import { currentModelPhotoBases } from '../models/marketplaceSets';
+import { compatibleBaseApproval, marketplaceDressingCustomization, modelPhotoBases } from '../../../shared/src/modelPhotoSets';
 import { resolveOrganizerBatchOrigin } from '../organizer/productWorkflow';
 import { GEMINI_API_KEY } from '../config/runtime';
 import * as admin from 'firebase-admin';
@@ -15,8 +19,11 @@ import { assertProviderEnabledInSystemConfig, getSystemConfigCached } from '../a
 import { buildJobDraft } from './createGenerationBatch.helpers';
 import { automationScenePatch } from '../automation/recovery';
 
-export async function resolveMarketplacePhotoPlan(data: PhotoPlanInput & { modelId?: string | null }, uid: string, frozen?: Client['marketplaces']): Promise<PhotoPlan> {
+export async function resolveMarketplacePhotoPlan(data: PhotoPlanInput & { modelId?: string | null; prompt?: string }, uid: string, frozen?: Client['marketplaces']): Promise<PhotoPlan> {
   if (!data || typeof data.clientId !== 'string' || !Array.isArray(data.articles) || !data.articles.length || data.articles.length > 100) throw new HttpsError('invalid-argument', 'Artículos inválidos.');
+  if (!/^[\w-]{1,200}$/.test(data.clientId) || data.modelId != null && (typeof data.modelId !== 'string' || !/^[\w-]{1,200}$/.test(data.modelId))) throw new HttpsError('invalid-argument', 'Cliente o modelo inválido.');
+  if (data.selectedChannels !== undefined && (!Array.isArray(data.selectedChannels) || !data.selectedChannels.length || new Set(data.selectedChannels).size !== data.selectedChannels.length)) throw new HttpsError('invalid-argument', 'Selecciona destinos sin duplicados.');
+  if (data.customPrompt !== undefined && (typeof data.customPrompt !== 'string' || data.customPrompt.length > 30000)) throw new HttpsError('invalid-argument', 'Personalización inválida.');
   if (data.articles.some(a => a.kind !== 'garment')) throw new HttpsError('invalid-argument', 'La planificación por marketplace solo admite ropa. Usa la generación de objetos por escenas.');
   const db = getAppFirestore();
   const client = (await db.doc(`clients/${data.clientId}`).get()).data() as Client | undefined;
@@ -32,17 +39,18 @@ export async function resolveMarketplacePhotoPlan(data: PhotoPlanInput & { model
     return { ...a, attributes: normalizePhotoAttributes(a.attributes, true) };
   });
   if (new Set(articles.map(a => a.itemId)).size !== articles.length) throw new HttpsError('invalid-argument', 'Identificadores de artículo duplicados.');
-  return buildMarketplacePhotoPlan({ clientId: data.clientId, articles, ...(data.objectScenes ? { objectScenes: data.objectScenes } : {}), marketplaces: frozen ?? client.marketplaces,
-    bases: (model?.poses || []).filter(p => p.active !== false).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) })),
+  return buildMarketplacePhotoPlan({ modelMarketplaceRules: await getModelMarketplaceRules(), clientId: data.clientId, articles, ...(data.objectScenes ? { objectScenes: data.objectScenes } : {}), marketplaces: frozen ?? client.marketplaces, ...(data.selectedChannels ? { selectedChannels: data.selectedChannels } : {}), customPrompt: data.customPrompt ?? data.prompt ?? '',
+    bases: await currentModelPhotoBases(model),
     provider: data.provider, imageConfig: normalized.imageConfig, aspectRatio: normalized.aspectRatio });
 }
 
 export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePhotoBatchRequest, uid: string, automation?: { id: string; leaseToken: string; plan: PhotoPlan }) {
   if (typeof data.requestId !== 'string' || !/^[\w-]{1,160}$/.test(data.requestId) || typeof data.prompt !== 'string' || data.prompt.length > 30000) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
+  data = { ...data, prompt: marketplaceDressingCustomization(data.prompt), customPrompt: marketplaceDressingCustomization(data.prompt) };
   const db = getAppFirestore();
   const identity = createHash('sha256').update(`${uid}:${data.clientId}:${data.requestId}`).digest('hex');
   const batchRef = db.doc(`batches/photo-${identity}`);
-  const inputHash = createHash('sha256').update(canonicalPhotoJson([data.approvedPlanId, data.prompt, data.articles, data.provider, data.imageConfig, data.aspectRatio, data.modelId || null, ...(data.organizerContext ? [data.organizerContext] : [])])).digest('hex');
+  const inputHash = createHash('sha256').update(canonicalPhotoJson([data.approvedPlanId, data.prompt, data.articles, data.provider, data.imageConfig, data.aspectRatio, data.modelId || null, data.selectedChannels || null, ...(data.organizerContext ? [data.organizerContext] : [])])).digest('hex');
   const previous = await batchRef.get();
   if (previous.exists) {
     if (previous.get('photoInputHash') !== inputHash) throw new HttpsError('already-exists', 'La solicitud ya se usó con otra entrada.');
@@ -70,11 +78,25 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
     if (automation && (current?.leaseToken !== automation.leaseToken || current?.status !== 'importing' || current.batchId)) throw new HttpsError('aborted', 'La reserva de importación ya no está activa.');
     const client = clientSnapshot.data() as Client;
     if (!client || client.status === 'archived' || plan.channels.some(channel => client.marketplaces?.[channel]?.enabled !== true)) throw new HttpsError('failed-precondition', 'Un canal del plan ya no está habilitado. Prepara un nuevo plan.');
-    if (!automation && canonicalPhotoJson(activePhotoChannels(client.marketplaces)) !== canonicalPhotoJson(plan.channels)) throw new HttpsError('failed-precondition', 'Los destinos cambiaron. Revisa el plan.');
+    if (!automation && !data.selectedChannels && canonicalPhotoJson(activePhotoChannels(client.marketplaces)) !== canonicalPhotoJson(plan.channels)) throw new HttpsError('failed-precondition', 'Los destinos cambiaron. Revisa el plan.');
     if (!automation && canonicalPhotoJson(photoRecipeRevisions(plan.channels, client.marketplaces)) !== canonicalPhotoJson(plan.recipeSnapshot?.channels))
       throw new HttpsError('failed-precondition', 'La receta cambió. Revisa el plan antes de generar.');
+    const modelRules = (await tx.get(modelMarketplaceRulesRef())).get('marketplaces');
+    for (const task of plan.tasks.filter(t => t.composition === 'model')) {
+      if (task.destinations.some(d => (modelRules?.[d.channel]?.revision ?? 0) !== (task.baseSpec?.rulesRevision ?? 0)))
+        throw new HttpsError('failed-precondition', 'Las reglas de modelos cambiaron. Revisa el plan antes de generar.');
+    }
+    if (data.modelId) {
+      const currentModel = (await tx.get(db.doc(`models/${data.modelId}`))).data() as Model | undefined;
+      if (!currentModel || currentModel.clientId !== data.clientId || currentModel.active === false || currentModel.status === 'archived') throw new HttpsError('failed-precondition', 'Modelo no disponible.');
+      const currentBases = modelPhotoBases({ ...currentModel, id: data.modelId });
+      for (const task of plan.tasks.filter(t => t.composition === 'model')) {
+        const base = currentBases.find(b => b.id === task.base?.id && b.storagePath === task.base.storagePath);
+        if (!base || !task.baseSpec || task.destinations.some(d => !compatibleBaseApproval(base, { ...task.baseSpec!, channel: d.channel }))) throw new HttpsError('failed-precondition', 'La aprobación de la base cambió. Revisa el plan.');
+      }
+    }
     const now = admin.firestore.FieldValue.serverTimestamp();
-    const batch: Omit<Batch, 'id'> = { ...(organizerOrigin ? { organizerOrigin } : {}), photoPlan: plan, photoProfile: COMMERCIAL_PHOTO_PROFILE, generationKind: data.articles[0].kind,
+    const batch: Omit<Batch, 'id'> = { ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}), ...(organizerOrigin ? { organizerOrigin } : {}), photoPlan: plan, photoProfile: COMMERCIAL_PHOTO_PROFILE, generationKind: data.articles[0].kind,
       ...(automation ? { automationJobId: automation.id } : {}),
       clientId: data.clientId, clientNameSnapshot: client.name, clientSnapshot: { id: data.clientId, name: client.name }, modelId: data.modelId || '', modelNameSnapshot: 'Plan de fotografías', outputMode: 'photos_only',
       provider: plan.effectiveConfig.provider, aspectRatio: plan.effectiveConfig.aspectRatio, imageConfig: plan.effectiveConfig.imageConfig, promptBase: data.prompt,
@@ -85,16 +107,16 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
     for (const task of plan.tasks) {
       const jobRef = db.doc(`jobs/photo-${identity}-${task.id}`); ids.push(jobRef.id);
       const article = plan.articles.find(a => a.itemId === task.itemId)!;
-      const prompt = `${data.prompt}\n\nPlan aprobado ${plan.id}; tarea ${task.id}. Las siguientes obligaciones se conservan en todos los intentos:\n${task.instructions}`;
-      const references = [...(task.base || task.identityBase ? [(task.base || task.identityBase)!.storagePath] : []), ...task.referencePaths];
+      const prompt = `${task.instructions}${data.prompt.trim() ? `\nCompatible customization: ${data.prompt.trim()}` : ''}`;
+      const references = [...(task.base ? [task.base.storagePath] : []), ...task.referencePaths];
       const draft = buildJobDraft({ garmentIsMultiAngle: task.referencePaths.length > 1, garmentReferenceImageType: 'single_view', promptCaseKey: null, promptCaseText: null }, plan.effectiveConfig.provider, prompt, null, current?.effectivePolicy?.maxReviewAttempts || 3, prompt);
-      const job: Omit<Job, 'id'> = { ...draft, ...automationScenePatch(current?.effectivePolicy), photoPlanId: plan.id, photoTask: task, photoProfile: COMMERCIAL_PHOTO_PROFILE,
+      const job: Omit<Job, 'id'> = { ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}), ...draft, ...automationScenePatch(current?.effectivePolicy), photoPlanId: plan.id, photoTask: task, photoProfile: COMMERCIAL_PHOTO_PROFILE,
         ...(automation ? { automationJobId: automation.id } : {}),
         // Reference editing accepts both a verified model base and model-free product inputs.
         generationKind: 'product', productScene: task.id, productReferencePaths: references,
         batchId: batchRef.id, clientId: data.clientId, clientNameSnapshot: client.name, modelId: data.modelId || '', modelNameSnapshot: 'Plan de fotografías',
         poseImageId: task.id, poseImagePath: references[0], garmentId: task.itemId, garmentName: article.name, garmentFilePath: task.referencePaths[0], garmentIsMultiAngle: task.referencePaths.length > 1,
-        aspectRatio: plan.effectiveConfig.aspectRatio, imageConfig: plan.effectiveConfig.imageConfig,
+        aspectRatio: task.aspectRatio || plan.effectiveConfig.aspectRatio, imageConfig: task.imageConfig || plan.effectiveConfig.imageConfig,
         maxRetries: current?.effectivePolicy?.maxOperationalRetries ?? system.jobMaxRetries,
         completedAt: null, latestOutputCreatedAt: null, currentOutputId: null, currentOutput: null, completedOutputCount: 0, totalCostUsd: 0, totalDurationSeconds: 0, providerUsage: {}, manualRegenerationCount: 0,
         createdAt: now, updatedAt: now, createdByUid: uid, lastError: null, failureInfo: null };

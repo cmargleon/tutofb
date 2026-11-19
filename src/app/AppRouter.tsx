@@ -13,6 +13,7 @@ const Users = lazyRoute('users', () => import('../pages/Users').then((module) =>
 const Clients = lazyRoute('clients', () => import('../pages/Clients').then((module) => ({ default: module.Clients })));
 const ClientDetail = lazyRoute('client-detail', () => import('../pages/ClientDetail').then(module => ({ default: module.ClientDetail })));
 const Models = lazyRoute('models', () => import('../pages/Models').then((module) => ({ default: module.Models })));
+const ModelMarketplaceRules = lazyRoute('model-marketplace-rules', () => import('../pages/ModelMarketplaceRules').then(module => ({ default: module.ModelMarketplaceRules })));
 const ModelsGenerate = lazyRoute('models-generate', () => import('../pages/ModelsGenerate').then((module) => ({ default: module.ModelsGenerate })));
 const ModelsCatalog = lazyRoute('models-catalog', () => import('../pages/ModelsCatalog').then((module) => ({ default: module.ModelsCatalog })));
 const Wizard = lazyRoute('wizard', () => import('../pages/Wizard').then((module) => ({ default: module.Wizard })));
@@ -22,6 +23,7 @@ const Cola = lazyRoute('cola', () => import('../pages/Cola').then((module) => ({
 const SeguridadRespaldos = lazyRoute('seguridad-respaldos', () => import('../pages/SeguridadRespaldos').then(module => ({ default: module.SeguridadRespaldos })));
 const Configuracion = lazyRoute('configuracion', () => import('../pages/Configuracion').then((module) => ({ default: module.Configuracion })));
 const Catalogo = lazyRoute('catalogo', () => import('../pages/Catalogo').then((module) => ({ default: module.Catalogo })));
+const CatalogoProductos = lazyRoute('catalogo-productos', () => import('../pages/CatalogoProductos').then((module) => ({ default: module.CatalogoProductos })));
 
 const Organizador = lazyRoute('organizador', () => import('../pages/Organizador').then((module) => ({ default: module.Organizador })));
 const Automation = lazyRoute('automation', () => import('../pages/Automation').then((module) => ({ default: module.Automation })));
@@ -103,6 +105,7 @@ export const AppRouter: React.FC = () => {
             <Route path="clients/lista" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Clients view="list" /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="clients/:clientId" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ClientDetail /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Models /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="models/reglas-marketplace" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelMarketplaceRules /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/generar" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsGenerate /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="models/catalogo/:modelId?" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><ModelsCatalog /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="organizador" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Organizador /></PageErrorBoundary></ProtectedRoute>} />
@@ -115,6 +118,7 @@ export const AppRouter: React.FC = () => {
             <Route path="seguridad-respaldos" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><SeguridadRespaldos /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="configuracion" element={<ProtectedRoute roles={['admin']}><PageErrorBoundary><Configuracion /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="catalogo" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><Catalogo /></PageErrorBoundary></ProtectedRoute>} />
+            <Route path="catalogo/productos" element={<ProtectedRoute roles={['admin', 'operador', 'revisor']}><PageErrorBoundary><CatalogoProductos /></PageErrorBoundary></ProtectedRoute>} />
             <Route path="lotes" element={<LotesRedirect />} />
           </Route>
         </Routes>

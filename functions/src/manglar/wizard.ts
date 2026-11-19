@@ -1,3 +1,4 @@
+import { activePhotoChannels } from '../../../shared/src/marketplacePhotoPlan';
 import { createCommercialProviderImageConfig, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -83,6 +84,7 @@ export const previewGarmentGeneration = async (input: CreateGenerationBatchReque
     const [client, model] = await db.getAll(db.collection('clients').doc(data.clientId), db.collection('models').doc(data.modelId));
     if (!client.exists || !model.exists)
         throw new HttpsError('not-found', 'Cliente o modelo no disponible.');
+    if (activePhotoChannels(client.data()?.marketplaces).length) throw new HttpsError('failed-precondition', 'Usa wizard.previewMarketplacePlan y wizard.createMarketplaceBatch para seleccionar exclusivamente bases aprobadas.');
     const selected = model.data() as Model;
     assertModelOwnershipAndPoses({ ...client.data(), id: client.id } as any, selected, data.poseIds);
     const combinations = getCompatibleGarmentPoseCombinations(data.garments, selected.poses.filter(pose => data.poseIds.includes(pose.id)));

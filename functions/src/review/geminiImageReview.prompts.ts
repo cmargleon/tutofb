@@ -1,3 +1,4 @@
+import { PHOTO_RULES } from '../../../shared/src/marketplacePhotoPlan';
 import { applyGlobalTryOnPromptGuards, DEFAULT_TRY_ON_PROMPT } from '../../../shared/src/domain';
 import { APPROVED_TRY_ON_PROMPT_FORMAT } from '../../../shared/src/approvedTryOnPrompt';
 import { ModelIdentityTraits } from '../../../shared/src/types';
@@ -257,6 +258,7 @@ export const usesApprovedReviewPrompt = (request: ReviewRequest): boolean => {
 
 const selectBaseReviewPrompt = (request: ReviewRequest): string => {
   const isProduct = request.generationKind === 'product';
+  if (request.photoTask && (request.photoTask.baseSpec || request.photoTask.aspectRatio)) return buildApprovedTryOnReviewPrompt(request.finalPrompt, request.photoTask.composition === 'model' ? 'First image: approved model base. Middle images: garment evidence. Last image: result. Garment reference orientation does not dictate the model output pose.' : PRODUCT_IMAGE_ORDER);
   if (usesApprovedReviewPrompt(request)) {
     return buildApprovedTryOnReviewPrompt(request.finalPrompt, isProduct ? PRODUCT_IMAGE_ORDER : GARMENT_IMAGE_ORDER);
   }
@@ -274,7 +276,15 @@ export const selectReviewPrompt = (request: ReviewRequest): string => {
     `Cambio solicitado: ${request.imageEditInstructions}`,
   ].join('\n');
   let prompt = selectBaseReviewPrompt(request);
-  if (request.photoTask) prompt += buildPhotoTaskScope(request.photoTask);
+  const configuredModel = request.photoTask?.composition === 'model' && request.photoTask.baseSpec?.rulesRevision !== undefined;
+  const overriddenCompositionRules = ['amazon-main', 'ml-main', 'tiktok-main', 'tiktok-set-square', 'shein-context'];
+  if (request.photoTask) {
+    prompt += buildPhotoTaskScope(request.photoTask);
+    if (request.photoTask.baseSpec || request.photoTask.aspectRatio) prompt += '\n' +
+      `Reglas de validación aplicables, con nivel explícito: ${JSON.stringify(PHOTO_RULES.filter(r => request.photoTask!.destinations.some(d => d.ruleIds.includes(r.id)) && (!configuredModel || !overriddenCompositionRules.includes(r.id))))}. ` +
+      'Comprueba identidad, edad, proporciones, pose, mirada, cámara, fondo, iluminación y encuadre exactos de la base. outputPose distingue frontal real, tres cuartos frontal natural y espalda comercial. En espalda, el rostro visible debe mirar a cámara por encima del hombro. Si el rostro está fuera de cuadro, la mirada no aplica. No debe haber ocultaciones de la prenda por brazos, cabello o giro. Una referencia lateral es evidencia de la prenda; nunca exige perfil rígido del modelo. La proporción se valida técnicamente en servidor.';
+  }
+  if (configuredModel) prompt += '\nPara esta base se aplican las reglas de composición configuradas por el administrador y congeladas en baseSpec: fondo, proporción, encuadre, rostro, lookingAtCamera, standingFront y validation. Prevalecen sobre los valores de composición predeterminados del marketplace y las instrucciones generales anteriores. No exijas mirar a cámara si lookingAtCamera=false. No rechaces por accesorios u ocultaciones de la base si su comprobación está desactivada; sí comprueba siempre fidelidad de la prenda vendida e identidad. Conserva la composición de la base aprobada.';
   if (request.exactAutomationPrompt) prompt += EXACT_AUTOMATION_NOTE;
   return prompt;
 };

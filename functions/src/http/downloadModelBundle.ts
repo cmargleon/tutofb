@@ -146,12 +146,17 @@ export const buildModelBundleDownload = async (modelId: string) => {
           contentType: asset.contentType,
           width: pose.width ?? null,
           height: pose.height ?? null,
+          ...(pose.photoObservation ? { photoObservation: pose.photoObservation } : {}),
+          ...(pose.marketplaceBaseSpec ? { marketplaceBaseSpec: pose.marketplaceBaseSpec } : {}),
           aiClassification: pose.aiClassification ?? null,
           createdAt: pose.createdAt,
         });
       }
 
       const manifest: ModelBundleManifest = {
+        ...(model.approvedIdentity ? { approvedIdentity: model.approvedIdentity } : {}),
+        ...(model.importedIdentity ? { importedIdentity: model.importedIdentity } : {}),
+        ...(model.marketplaceBaseApprovals ? { marketplaceBaseApprovals: model.marketplaceBaseApprovals } : {}),
         schemaVersion: 1,
         exportedAt: new Date().toISOString(),
         sourceModelId: model.id!,

@@ -2,7 +2,7 @@ import type { MarketplaceId } from './marketplaces';
 import type { PhotoArticleAttributes, PhotoPlanInput, PhotoRecipe, PhotoRecipeCategory, PhotoRecipePreferences, PhotoRecipeSource, PhotoRecipeView } from './types/photoPlan';
 
 export const PHOTO_RECIPE_VERSION = 'marketplace-photo-recipe-v1' as const;
-export const PHOTO_RECIPE_VIEWS = ['back', 'side', 'detail'] as const satisfies readonly PhotoRecipeView[];
+export const PHOTO_RECIPE_VIEWS = ['side', 'back', 'detail'] as const satisfies readonly PhotoRecipeView[];
 export const PHOTO_RECIPE_CATEGORIES = ['ordinary', 'bodysuit', 'fitted_child', 'underwear', 'swimwear', 'accessory'] as const satisfies readonly PhotoRecipeCategory[];
 
 export const PHOTO_RECIPE_OPTIONS = {

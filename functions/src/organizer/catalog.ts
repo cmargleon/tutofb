@@ -1,6 +1,7 @@
 import * as xlsx from 'xlsx';
 import { type OrganizerDocumentStatus, type OrganizerProductRow, type OrganizerTab, type OrganizerVariant } from '../../../shared/src/types';
 import { digest, SHEET, type DriveFile, type OrganizerDrive } from './drive';
+import { VIEW_TOKENS } from './viewHints';
 
 export const ALGORITHM_VERSION = '5';
 export const normalize = (value: string) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toUpperCase();
@@ -222,34 +223,52 @@ export function productVariant(id: string, rows: OrganizerProductRow[], previous
 }
 
 const container = /^(ROPA|COCINA|FOTOS|FOTOGRAFIAS|SUBIR A SHEIN|IMAGENES|ORIGINALES|PRODUCTOS|CATALOGO|CATEGORIAS|OK|VARIOS)$/;
-export const candidatesIn = (label: string, index: Map<string, Set<string>>) => {
+/** Code → variant ids. `colors` (variant id → normalized color words + visual suffix) breaks same-SPU ties. */
+export type AssociationIndex = Map<string, Set<string>> & { colors?: Map<string, string[]> };
+// "SR 06", "sr_06" → "SR-06": a letter prefix and a number separated by blanks is one code.
+const joinSpacedCode = (value: string) => value.replace(/(^|[^A-Z0-9])([A-Z]{1,8})[ _]+(\d{1,5})(?=$|[^A-Z0-9])/g, '$1$2-$3');
+const colorTieBreak = (ids: string[], words: string[], index: AssociationIndex) => {
+  if (ids.length < 2 || !words.length || !index.colors) return ids;
+  const matching = ids.filter(id => (index.colors!.get(id) || []).some(color =>
+    words.some(word => word === color || (color.length >= 3 && word.length > color.length && word.startsWith(color)))));
+  return matching.length === 1 ? matching : ids;
+};
+export const candidatesIn = (label: string, index: AssociationIndex) => {
   let name = code(label.replace(/\.[^.]{2,5}$/i, ''));
   if (index.has(name)) return [...index.get(name)!];
   // A trailing photographic sequence or a pasted extension is not a new catalog identity.
-  name = name.replace(/(?:PNG|JPE?G|WEBP)$/i, '');
+  name = joinSpacedCode(name.replace(/(?:PNG|JPE?G|WEBP)$/i, ''));
   const tokens = name.match(/[A-Z0-9]+(?:[-_][A-Z0-9]+)*/g) || [];
-  return distinct(tokens.flatMap(token => {
-    const exact = index.get(token);
-    if (exact) return [...exact];
-    const sequence = token.match(/^(.*)-\d+$/)?.[1];
-    if (sequence && index.has(sequence)) return [...index.get(sequence)!];
-    const base = token.split('-')[0];
-    return index.has(base) ? [...index.get(base)!] : [];
+  const free: string[] = [];
+  const found = distinct(tokens.flatMap(token => {
+    // View words (FRENTE, DETRAS...) are never part of the code; the longest known prefix is the identity:
+    // SR-09-AZU-M-DETRAS → SR-09-AZU-M, A021-4 → A021, AT-R01-TER-DETRAS → AT-R01-TER.
+    const segments = token.split(/[-_]/).filter(segment => !VIEW_TOKENS.has(segment));
+    for (let size = segments.length; size > 0; size--) {
+      const hit = index.get(segments.slice(0, size).join('-'));
+      if (hit) return [...hit];
+    }
+    if (segments.length === 1 && /^[A-Z]{3,}$/.test(segments[0])) free.push(segments[0]);
+    return [];
   }));
+  return colorTieBreak(found, free, index);
 };
-export function associationIndex(variants: OrganizerVariant[]) {
-  const index = new Map<string, Set<string>>();
+export function associationIndex(variants: OrganizerVariant[]): AssociationIndex {
+  const index: AssociationIndex = new Map<string, Set<string>>();
+  index.colors = new Map();
   for (const variant of variants) {
     for (const token of distinct([variant.visual, variant.base, ...variant.skcs, ...variant.skus])) {
       const key = code(token);
       if (!index.has(key)) index.set(key, new Set());
       index.get(key)!.add(variant.id);
     }
+    const suffix = code(variant.visual || '').split('-').at(-1) || '';
+    index.colors.set(variant.id, distinct([...normalize(variant.color || '').split(/[^A-Z0-9]+/), ...(/^[A-Z]{3,}$/.test(suffix) ? [suffix] : [])]).filter(word => word.length >= 3));
   }
   return index;
 }
 type PhotoCandidate = { id: string; name: string; path: string[]; parents?: string[]; sha256Checksum?: string; md5Checksum?: string; size?: string };
-export function associatePhotos(files: PhotoCandidate[], index: Map<string, Set<string>>, manual: Map<string, string | null>) {
+export function associatePhotos(files: PhotoCandidate[], index: AssociationIndex, manual: Map<string, string | null>) {
   const own = new Map(files.map(file => [file.id, candidatesIn(file.name, index)]));
   const siblings = new Map<string, string[]>();
   for (const file of files) {

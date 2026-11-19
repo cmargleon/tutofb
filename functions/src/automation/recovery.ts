@@ -28,7 +28,7 @@ export const resumeAutomation = async (input: ResumeAutomationRequest, uid: stri
     let policy;
     try { policy = resolveAutomationPolicy(system.data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET, client.data()?.automation, { ...job.effectivePolicy, budgetUsd: input.budgetUsd ?? job.budget.limitUsd }); }
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
-    if (policy.budgetUsd < job.budget.spentUsd + job.budget.reservedUsd) throw new HttpsError('failed-precondition', 'El presupuesto no puede ser menor que el gasto comprometido.');
+    if (policy.budgetUsd + 0.0000001 < job.budget.spentUsd + job.budget.reservedUsd) throw new HttpsError('failed-precondition', 'El presupuesto no puede ser menor que el gasto comprometido.');
     if (!job.batchId) {
       if (!job.spendingPaused || !['failed', 'needs_attention'].includes(job.status)) throw new HttpsError('failed-precondition', 'La entrada no está detenida por presupuesto.');
       tx.update(ref, { ...(getManglarContext()?.caller ? { manglarAuthorization: delegatedStamp(getManglarContext()!.caller!) } : {}), effectivePolicy: policy, spendingPaused: false, 'budget.limitUsd': policy.budgetUsd, status: 'pending', error: null, leaseToken: null, leaseExpiresAt: null, updatedAt: FieldValue.serverTimestamp() });

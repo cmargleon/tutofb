@@ -22,6 +22,8 @@ export const useAutomation = (resumeJobId?: string, selectedJobId?: string) => {
   const [models, setModels] = useState<Model[]>([]);
   const [jobs, setJobs] = useState<AutomationJob[]>([]);
   const [clientId, setClientId] = useState('');
+  const [selectedChannels, setSelectedChannels] = useState<import('../../../shared/src/marketplaces').MarketplaceId[]>();
+  useEffect(() => setSelectedChannels(undefined), [clientId]);
   const [jobType, setJobType] = useState<AutomationJobType>('garment');
   const [modelId, setModelId] = useState('');
   const [preset, setPreset] = useState('');
@@ -47,7 +49,7 @@ export const useAutomation = (resumeJobId?: string, selectedJobId?: string) => {
     if (!user) return;
     return subscribeToAutomationJobs(user.uid, appUser?.role === 'admin', setJobs, (error) => setError(error.message));
   }, [user?.uid, appUser?.role]);
-  useEffect(() => setPreparedPlan(null), [clientId, jobType, modelId, preset, provider, files, budgetUsd, allowEstimatedCosts, authorizeClassification, inputSource, driveRows, sameItem]);
+  useEffect(() => setPreparedPlan(null), [clientId, jobType, modelId, preset, provider, selectedChannels, files, budgetUsd, allowEstimatedCosts, authorizeClassification, inputSource, driveRows, sameItem]);
   useEffect(() => {
     setSelectedJob(null);
     if (!selectedJobId) return;
@@ -97,7 +99,7 @@ export const useAutomation = (resumeJobId?: string, selectedJobId?: string) => {
         const receipt = await retryAutomation({ jobId: resumeJobId, ...(modelId ? { modelId } : {}), ...(preset ? { preset } : {}), ...(provider ? { provider } : {}), inputImages });
         toast({ tone: 'success', title: 'Entrada reencolada', description: receipt.jobId }); navigate(`/automation?job=${receipt.jobId}`);
       } else {
-        const request = { source: 'manual' as const, externalId: submission.externalId, clientId, jobType,
+        const request = { ...(jobType === 'garment' && selectedChannels ? { selectedChannels } : {}), source: 'manual' as const, externalId: submission.externalId, clientId, jobType,
           ...(modelId && jobType === 'garment' ? { modelId } : {}), ...(preset ? { preset } : {}), ...(provider ? { provider } : {}), inputImages,
           ...(budgetUsd ? { budgetUsd: Number(budgetUsd) } : {}), allowEstimatedCosts, authorizeClassification };
         const signature = JSON.stringify(request);
@@ -137,7 +139,7 @@ export const useAutomation = (resumeJobId?: string, selectedJobId?: string) => {
     catch (error) { toast({ tone: 'error', title: 'No se pudo descargar', description: (error as Error).message }); }
     finally { setBusy(false); }
   };
-  return { clients, models, jobs, clientId, setClientId, jobType, setJobType, modelId, setModelId,
+  return { selectedChannels, setSelectedChannels, clients, models, jobs, clientId, setClientId, jobType, setJobType, modelId, setModelId,
     selectedJob, selectedPlan, preparedPlan, budgetUsd, setBudgetUsd, allowEstimatedCosts, setAllowEstimatedCosts, authorizeClassification, setAuthorizeClassification, inputSource, setInputSource, driveRows, setDriveRows, execute, resume, download, resumeBudgetUsd, setResumeBudgetUsd,
     preset, setPreset, provider, setProvider, files, changeFiles, sameItem, setSameItem, busy, error, submit, retry,
     disabledProviders: config.disabledProviders, canCreate: role.canCreateBatches };

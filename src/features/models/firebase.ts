@@ -27,6 +27,21 @@ import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
+export const previewModelPhotoSets = async (data: import('../../../shared/src/types').ModelPhotoSetsRequest) =>
+  (await httpsCallable<import('../../../shared/src/types').ModelPhotoSetsRequest, import('../../../shared/src/types').ModelPhotoSetsPreview>(functions, 'previewModelPhotoSets')(data)).data;
+export const approveModelIdentity = async (modelId: string, poseId: string, performer: 'real' | 'synthetic') =>
+  (await httpsCallable<{ modelId: string; poseId: string; performer: 'real' | 'synthetic' }, import('../../../shared/src/types').ApprovedModelIdentity>(functions, 'approveModelIdentity')({ modelId, poseId, performer })).data;
+export const approveGeneratedModelIdentity = async (modelId: string, storagePath: string) => {
+  const model = (await getDoc(doc(db, 'models', modelId))).data() as Model;
+  const pose = model?.poses.find(p => p.storagePath === storagePath);
+  if (!pose) throw new Error('La identidad elegida no está guardada en el modelo.');
+  return approveModelIdentity(modelId, pose.id, 'synthetic');
+};
+export const verifyModelMarketplaceBase = async (data: import('../../../shared/src/types').VerifyModelBaseRequest) =>
+  (await httpsCallable<import('../../../shared/src/types').VerifyModelBaseRequest, import('../../../shared/src/types').VerifyModelBaseResponse>(functions, 'verifyModelMarketplaceBase', { timeout: 300000 })(data)).data;
+export const generateModelMarketplaceBase = async (data: import('../../../shared/src/types').GenerateModelBaseRequest) =>
+  (await httpsCallable<import('../../../shared/src/types').GenerateModelBaseRequest, import('../../../shared/src/types').VerifyModelBaseResponse>(functions, 'generateModelMarketplaceBase', { timeout: 540000 })(data)).data;
+
 interface UpdateModelInput {
   name: string;
   clientId: string;

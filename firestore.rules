@@ -146,7 +146,8 @@ service cloud.firestore {
 
     match /models/{modelId} {
       allow read: if canAccessClient(resource.data.get('clientId', ''));
-      allow create, update: if isAdmin();
+      allow create: if isAdmin() && !request.resource.data.keys().hasAny(['approvedIdentity', 'marketplaceBaseApprovals']);
+      allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvedIdentity', 'marketplaceBaseApprovals']);
       allow delete: if false;
     }
 

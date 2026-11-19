@@ -1,3 +1,4 @@
+import { MODEL_SET_SHOT_LABELS } from '../../../shared/src/modelPhotoSets';
 import type { PhotoPlan, PhotoRecipePreferences } from '../../../shared/src/types';
 import { MARKETPLACES } from '../../../shared/src/marketplaces';
 
@@ -7,7 +8,7 @@ export const PHOTO_LABELS: Record<string, string> = {
   full_body: 'Completa', footwear: 'Calzado', head_accessory: 'Accesorio de cabeza', carry_accessory: 'Bolso / mochila',
   male: 'Masculino', female: 'Femenino', unisex: 'Unisex', unit: 'Unidad', set: 'Conjunto', multipack: 'Multipack',
   model: 'Con modelo', flat_lay: 'Prenda en plano', product: 'Objeto', reference: 'Detalle real',
-  front: 'Frente', back: 'Espalda', side: 'Lateral', detail: 'Detalle',
+  front: 'Frente', back: 'Espalda', side: 'Referencia lateral → tres cuartos frontal', detail: 'Detalle',
   white: 'Blanco puro', neutral: 'Neutro / contexto discreto', context: 'Contexto', original: 'Referencia original',
   omit: 'Omitir la vista', review: 'Solicitar revisión del artículo',
   default: 'Predeterminado', client: 'Receta del cliente', category: 'Excepción de categoría', constraint: 'Restricción del canal, categoría o referencia',
@@ -48,7 +49,7 @@ export function MarketplacePhotoPlanPreview({ plan, showInstructions = false }: 
     </div>}
     {plan.tasks.map(task => <details className="rounded-lg bg-slate-50 p-3" key={task.id}>
       <summary className="cursor-pointer">
-        {plan.articles.find(a => a.itemId === task.itemId)?.name} · {task.sceneId || PHOTO_LABELS[task.view]} · {PHOTO_LABELS[task.composition]} · {PHOTO_LABELS[task.background]} → {task.destinations.map(destination => `${channelName(destination.channel)} ${destination.role === 'main' ? 'portada' : destination.position}`).join(', ')}
+        {plan.articles.find(a => a.itemId === task.itemId)?.name} · {task.outputPose ? MODEL_SET_SHOT_LABELS[task.outputPose] : task.sceneId || PHOTO_LABELS[task.view]} · {task.aspectRatio || plan.effectiveConfig.aspectRatio} · {PHOTO_LABELS[task.composition]} · {PHOTO_LABELS[task.background]} → {task.destinations.map(destination => `${channelName(destination.channel)} ${destination.role === 'main' ? 'portada' : destination.position}`).join(', ')}
       </summary>
       <ul className="mt-2 space-y-1 text-xs text-slate-700">{task.destinations.map(destination => <li key={destination.channel}>
         <strong>{channelName(destination.channel)} · {destination.required ? 'Portada obligatoria' : `Posición ${destination.position}`}</strong>
@@ -56,7 +57,7 @@ export function MarketplacePhotoPlanPreview({ plan, showInstructions = false }: 
         {' · Composición: '}{PHOTO_LABELS[destination.recipeSources?.composition || 'default']}
       </li>)}</ul>
       {showInstructions && <>
-        <p className="mt-2">{task.base ? `Base verificada: ${task.base.id}` : task.identityBase ? 'Se preservará la identidad del modelo y se adaptarán fondo y encuadre.' : task.composition === 'model' ? 'Sin base verificada compatible: se creará una persona sintética.' : 'Sin modelo humano.'}</p>
+        <p className="mt-2">{task.base ? `Base verificada: ${task.base.id}` : task.composition === 'model' ? 'Falta una base aprobada compatible; esta tarea no se puede generar.' : 'Sin modelo humano.'}</p>
         <p className="mt-2 whitespace-pre-wrap">{task.instructions}</p>
       </>}
     </details>)}

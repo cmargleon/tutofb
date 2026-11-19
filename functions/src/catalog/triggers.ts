@@ -5,6 +5,46 @@ import { getAppFirestore, APP_FIRESTORE_DATABASE_ID } from '../firebase/appFires
 import { jobMasterProductId, projectMasterProducts } from '../spreadsheets/masterProducts';
 import { catalogClientRef, incorporateCatalogSource, sourceFingerprint } from './service';
 import { mapVariantsByCode } from './organizerBinding';
+import { catalogDigest } from './model';
+import { attributeCatalogVariant, catalogPhotoFromJob } from '../../../shared/src/clientCatalog/browse';
+import type { CatalogPhoto, MasterVariant } from '../../../shared/src/types';
+
+const MAX_CATALOG_PHOTOS = 300;
+const photoKey = (job: FirebaseFirestore.DocumentData | undefined, id: string) =>
+  job ? JSON.stringify(catalogPhotoFromJob({ ...job, id } as Job & { id: string })) : 'null';
+
+/**
+ * Projects the job's current output onto its canonical product (`catalog.photos`), attributed to the product
+ * variant (SKC) it was generated for. Only the projection field is written: revision and edits are untouched.
+ */
+export async function projectCatalogPhoto(jobId: string) {
+  const db = getAppFirestore();
+  const snap = await db.collection('jobs').doc(jobId).get();
+  if (!snap.exists) return;
+  const job = { ...snap.data(), id: snap.id } as Job & { id: string };
+  if (!job.clientId || !job.batchId || !job.garmentId) return;
+  const batchSnap = await db.collection('batches').doc(job.batchId).get();
+  if (!batchSnap.exists || batchSnap.get('clientId') !== job.clientId) return;
+  const legacyId = jobMasterProductId({ ...batchSnap.data(), id: batchSnap.id } as Batch, job);
+  const clientRef = catalogClientRef(job.clientId);
+  const alias = await clientRef.collection('productAliases').doc(legacyId).get();
+  const productRef = clientRef.collection('products').doc(alias.get('productId') || legacyId);
+  const link = await productRef.collection('generationLinks').doc(catalogDigest([job.batchId, legacyId])).get();
+  const entry = catalogPhotoFromJob(job);
+  await db.runTransaction(async tx => {
+    const product = await tx.get(productRef);
+    if (!product.exists || product.get('catalog.version') !== 1 || product.get('catalog.redirectTo')) return;
+    const current = (product.get('catalog.photos') || []) as CatalogPhoto[];
+    const photos = current.filter(photo => photo.jobId !== jobId);
+    if (entry) {
+      const { sourceVariantId, ...photo } = entry;
+      photos.push({ ...photo, variantId: attributeCatalogVariant(sourceVariantId, (product.get('variants') || []) as MasterVariant[], link.get('variantMap') || {}) });
+    }
+    const next = photos.slice(-MAX_CATALOG_PHOTOS);
+    if (JSON.stringify(next) === JSON.stringify(current)) return;
+    tx.update(productRef, { 'catalog.photos': next });
+  });
+}
 
 /** Only future source events are incorporated. Deployment never walks or backfills production. */
 export async function syncCatalogSource(kind: 'job' | 'draft', id: string, batchId?: string) {
@@ -34,7 +74,7 @@ export async function syncCatalogSource(kind: 'job' | 'draft', id: string, batch
   const alias = await clientRef.collection('productAliases').doc(legacyId).get();
   const productId = alias.get('productId') || legacyId;
   const current = await clientRef.collection('products').doc(productId).get();
-  const linkId = (await import('./model')).catalogDigest([item.batchId, legacyId]);
+  const linkId = catalogDigest([item.batchId, legacyId]);
   const link = await current.ref.collection('generationLinks').doc(linkId).get();
   const data = current.data() as StoredMasterProduct | undefined;
   // Generations routed by an organizer base-code binding map variants by exact SKU/SKC and add the rest.
@@ -59,9 +99,12 @@ export const syncCatalogJob = onDocumentWritten({ document: 'jobs/{jobId}', data
   const pick = (value: FirebaseFirestore.DocumentSnapshot) => {
     const d = value.data(); return d && [d.clientId, d.batchId, d.garmentId, d.garmentName, d.garmentFilePath, d.photoTask?.productId, d.photoTask?.variantId];
   };
-  // Output/review changes remain in jobs; the catalog resolves them live when opening a generation.
-  if (JSON.stringify(pick(event.data.before)) === JSON.stringify(pick(event.data.after))) return;
-  await syncCatalogSource('job', event.params.jobId);
+  const identityChanged = JSON.stringify(pick(event.data.before)) !== JSON.stringify(pick(event.data.after));
+  if (identityChanged) await syncCatalogSource('job', event.params.jobId);
+  // Output/review changes only refresh the photo projection of the product list.
+  if (identityChanged || photoKey(event.data.before.data(), event.params.jobId) !== photoKey(event.data.after.data(), event.params.jobId)) {
+    await projectCatalogPhoto(event.params.jobId);
+  }
 });
 export const syncCatalogDraft = onDocumentWritten({ document: 'batches/{batchId}/productDrafts/{draftId}', database: APP_FIRESTORE_DATABASE_ID, retry: true }, async event => {
   if (!event.data?.after.exists) return;

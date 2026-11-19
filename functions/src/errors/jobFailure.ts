@@ -62,6 +62,13 @@ const distinctMessage = (primary: string | null | undefined, fallback: string | 
   return normalizedPrimary;
 };
 
+/** gRPC ABORTED (10): Firestore lock contention. Checked before isAbortError, whose /abort/ would match it. */
+const isFirestoreContention = (error: unknown, message: string | null): boolean => {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 10 || code === 'aborted' || code === 'ABORTED'
+    || Boolean(message && /^10 ABORTED|cross-transaction contention|too much contention/i.test(message));
+};
+
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && (error.name === 'AbortError' || /abort|timeout|timed out/i.test(error.message));
 
@@ -548,6 +555,22 @@ export const buildJobFailureInfo = (error: unknown, context: FailureContext = {}
 
   const serialized = serializeError(error);
   const message = normalizeMessage(typeof serialized.message === 'string' ? serialized.message : null);
+
+  if (isFirestoreContention(error, message)) {
+    return buildBaseFailureInfo(
+      {
+        source: 'system',
+        stage: 'system',
+        reasonCode: 'firestore_contention',
+        title: 'Contención de base de datos',
+        userMessage: 'Muchos trabajos actualizaron el mismo registro a la vez; el trabajo se puede reintentar sin costo adicional.',
+        technicalMessage: message,
+        retryable: true,
+        raw: isRecord(serialized) ? serialized : null,
+      },
+      context,
+    );
+  }
 
   if (isAbortError(error)) {
     return buildBaseFailureInfo(

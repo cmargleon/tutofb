@@ -1,3 +1,4 @@
+import { verifyWhiteBackground } from './verifyWhiteBackground';
 import sharp from 'sharp';
 import type { PhotoTask } from '../../../shared/src/types';
 export const SYNTHETIC_PERFORMER_SUBJECT = 'contains-synthetic-performer';
@@ -16,15 +17,11 @@ export async function inspectPlannedPhoto(bytes: Buffer, task: PhotoTask) {
   const metadata = await sharp(bytes, { failOn: 'warning' }).metadata();
   if (!metadata.width || !metadata.height || metadata.format !== 'jpeg' || bytes.length > 2_800_000) throw new Error('Archivo final fuera del perfil fotográfico.');
   const ratio = metadata.width / metadata.height;
+  const expectedRatio = task.aspectRatio?.split(':').map(Number);
+  const plannedRatio = !expectedRatio || Math.abs(ratio - expectedRatio[0] / expectedRatio[1]) < .002;
   const tiktokRatio = Math.abs(ratio - .75) < .002 || Math.abs(ratio - 4 / 3) < .002;
-  let whiteCorners = true;
-  if (task.background === 'white') {
-    for (const [left, top] of [[0, 0], [metadata.width - 8, 0], [0, metadata.height - 8], [metadata.width - 8, metadata.height - 8]]) {
-      const pixels = await sharp(bytes).extract({ left, top, width: 8, height: 8 }).removeAlpha().raw().toBuffer();
-      if ([...pixels].some(value => value !== 255)) whiteCorners = false;
-    }
-  }
-  return { tiktokRatio, whiteCorners, xmp: hasSyntheticPerformerXmp(bytes) };
+  const whiteCorners = task.background !== 'white' || await verifyWhiteBackground(bytes);
+  return { plannedRatio, tiktokRatio, whiteCorners, xmp: hasSyntheticPerformerXmp(bytes) };
 }
 
 export async function validatePlannedPhotoReview(bytes: Buffer, task: PhotoTask, review: import('../review/geminiImageReview').GeneratedImageReviewResult) {
@@ -34,11 +31,11 @@ export async function validatePlannedPhotoReview(bytes: Buffer, task: PhotoTask,
   for (const dest of review.photoValidation.destinations) {
     const minSide = dest.channel === 'shein' ? 900 : dest.channel === 'tiktok-shop' ? 600 : 500;
     const requiredXmp = dest.channel === 'amazon' && task.syntheticPerformer;
-    const whiteRequired = task.background === 'white' && dest.position === 1 && ['amazon', 'tiktok-shop'].includes(dest.channel);
+    const whiteRequired = task.baseSpec?.validation?.pureWhite !== false && task.background === 'white' && dest.position === 1 && ['amazon', 'tiktok-shop'].includes(dest.channel);
     const failures = [
-      dest.channel === 'tiktok-shop' && !technical.tiktokRatio ? 'proporción 3:4 o 4:3' : '',
+      task.aspectRatio ? !technical.plannedRatio ? `proporción planificada ${task.aspectRatio}` : '' : dest.channel === 'tiktok-shop' && !technical.tiktokRatio ? 'proporción 3:4 o 4:3' : '',
       requiredXmp && !technical.xmp ? 'metadato XMP de intérprete sintético' : '',
-      whiteRequired && !technical.whiteCorners ? 'esquinas en blanco puro RGB 255' : '',
+      whiteRequired && !technical.whiteCorners ? 'fondo/perímetro en blanco puro RGB 255' : '',
       Math.min(metadata.width!, metadata.height!) < minSide ? `lado menor de al menos ${minSide} px` : '',
     ].filter(Boolean);
     if (failures.length) {

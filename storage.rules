@@ -49,7 +49,8 @@ service firebase.storage {
 
     match /models/{clientId}/{modelId}/poses/{fileName} {
       allow read: if canAccessClient(firestore.get(/databases/(default)/documents/models/$(modelId)).data.clientId);
-      allow write: if isAdmin() && isImageUpload();
+      allow create: if isAdmin() && isImageUpload();
+      allow update: if false;
       allow delete: if isAdmin();
     }
 

@@ -128,8 +128,8 @@ export const replaceModelPoseService = async (input: ManglarPoseReplaceRequest, 
         const current = (await tx.get(ref)).data() as Model;
         if (!current.poses.some((pose) => pose.id === input.poseId))
             throw new HttpsError('aborted', 'La pose cambió.');
-        const poses = current.poses.map((pose) => pose.id === input.poseId ? { ...pose, storagePath: newPath, previewStoragePath: null, aiClassification: input.aiClassification || pose.aiClassification || null } : pose);
-        tx.update(ref, { poses, coverPosePath: current.coverPoseId === input.poseId ? newPath : current.coverPosePath || poses[0].storagePath,
+        const poses = current.poses.map((pose) => pose.id === input.poseId ? { ...pose, storagePath: newPath, photoObservation: null, marketplaceBaseSpec: pose.marketplaceBaseSpec || null, previewStoragePath: null, aiClassification: input.aiClassification || pose.aiClassification || null } : pose);
+        tx.update(ref, { poses, marketplaceBaseApprovals: (current.marketplaceBaseApprovals || []).filter(a => a.poseId !== input.poseId), ...(current.approvedIdentity?.poseId === input.poseId ? { approvedIdentity: FieldValue.delete() } : {}), coverPosePath: current.coverPoseId === input.poseId ? newPath : current.coverPosePath || poses[0].storagePath,
             generatedPhotoCount: FieldValue.increment(1), generatedPhotoCostUsd: FieldValue.increment(Math.max(0, input.estimatedCostUsd || 0)), updatedAt: FieldValue.serverTimestamp() });
     });
     await Promise.allSettled([original.storagePath, original.previewStoragePath, input.storagePath].filter((path): path is string => Boolean(path)).map((path) => admin.storage().bucket().file(path).delete()));

@@ -1,3 +1,6 @@
+import { activePhotoChannels } from '../../shared/src/marketplacePhotoPlan';
+import { MARKETPLACES } from '../../shared/src/marketplaces';
+import { resolveAutomationPresetName } from '../../shared/src/automationConfig';
 import { MarketplaceExportAction } from '../features/marketplaces/MarketplaceExportDrawer';
 import { remainingAutomationBudget } from '../../shared/src/automationPolicy';
 import React from 'react';
@@ -22,6 +25,8 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
   const state = useAutomation(resume, search.get('job') || undefined);
   const selected = state.selectedJob || state.jobs.find((job) => job.id === search.get('job'));
   const client = state.clients.find((entry) => entry.id === state.clientId);
+  const activeChannels = activePhotoChannels(client?.marketplaces);
+  const effectiveChannels = state.selectedChannels ?? client?.automation?.presets?.[resolveAutomationPresetName({ jobType: state.jobType, preset: state.preset || undefined }, client?.automation)]?.selectedChannels ?? activeChannels;
   const driveFolderIds = client?.automation?.driveFolderIds ?? [];
   const statusCount = (statuses: string[]) => state.jobs.filter((job) => statuses.includes(job.status)).length;
   return <div className="tuto-page">
@@ -51,6 +56,7 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         <option value="">Usar preset del cliente o {PROVIDER_LABELS[DEFAULT_IMAGE_PROVIDER]}</option>
         {PROVIDER_VALUES.map((provider) => <option key={provider} value={provider} disabled={state.disabledProviders.includes(provider)}>{PROVIDER_LABELS[provider]}{state.disabledProviders.includes(provider) ? ' (deshabilitado)' : ''}</option>)}
       </select></label>
+      {state.jobType === 'garment' && activeChannels.length > 0 && <fieldset className="flex flex-wrap gap-4 rounded-xl border p-3" disabled={state.busy || Boolean(resume)}><legend className="px-2 text-sm font-medium">Marketplaces de esta ejecución</legend>{activeChannels.map(channel => <label key={channel} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={effectiveChannels.includes(channel)} onChange={e => state.setSelectedChannels(e.target.checked ? [...effectiveChannels, channel] : effectiveChannels.filter(c => c !== channel))} />{MARKETPLACES.find(m => m.id === channel)?.name}</label>)}<p className="w-full text-xs text-slate-500">Solo se usarán bases aprobadas para estos destinos. Las bases faltantes requieren atención; no se generan automáticamente.</p></fieldset>}
       <label className={labelClass}>Origen de fotografías<select className={inputClass} value={state.inputSource} disabled={state.busy} onChange={(e) => state.setInputSource(e.target.value as 'uploads' | 'drive')}><option value="uploads">Subir fotografías</option><option value="drive">Google Drive autorizado</option></select></label>
       {state.inputSource === 'uploads' && <><label className={labelClass}>Imágenes<input className={inputClass} required={!resume} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={state.busy} onChange={(event) => state.changeFiles(Array.from(event.target.files || []))} /></label>
       <label className="flex gap-2 text-sm text-slate-600"><input type="checkbox" checked={state.sameItem} disabled={state.busy} onChange={(event) => { state.setSameItem(event.target.checked); state.changeFiles(state.files); }} />Todas las fotos muestran el mismo artículo (hasta 4 vistas)</label>

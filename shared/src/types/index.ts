@@ -25,3 +25,6 @@ export * from './catalog';
 
 export * from './photoPlan';
 export * from './email';
+export * from './modelPhotoSet';
+
+export * from './modelMarketplaceRules';

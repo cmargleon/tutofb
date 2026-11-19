@@ -1,3 +1,4 @@
+import { PHOTO_CHANNELS } from '../../../shared/src/marketplacePhotoPlan';
 import { isProvider } from '../../../shared/src/domain';
 import { createHash } from 'node:crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -25,6 +26,10 @@ export const validateAutomationInput = (value: unknown, uid: string, maxImages =
     source: data.source, jobType: data.jobType, externalId: id(data.externalId, 'externalId'),
     clientId: id(data.clientId, 'clientId'),
   };
+  if (data.selectedChannels !== undefined) {
+    if (!Array.isArray(data.selectedChannels) || !data.selectedChannels.length || new Set(data.selectedChannels).size !== data.selectedChannels.length || data.selectedChannels.some(channel => !PHOTO_CHANNELS.includes(channel))) throw new HttpsError('invalid-argument', 'Destinos inválidos.');
+    result.selectedChannels = data.selectedChannels;
+  }
   if (data.gmailMessageId !== undefined) result.gmailMessageId = id(data.gmailMessageId, 'gmailMessageId');
   if (data.modelId != null) result.modelId = id(data.modelId, 'modelId');
   if (data.preset != null) result.preset = id(data.preset, 'preset');

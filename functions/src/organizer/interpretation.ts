@@ -114,7 +114,8 @@ export function visualAssociation(photo: OrganizerPhoto, variants: OrganizerVari
   const margin = first ? first.score - (ranked[1]?.score || 0) : 0;
   const corroborated = Boolean(product && visualWords.length >= 2 && !attributeConflict && margin >= 25 && observation.kind !== 'unknown');
   return { ranked, variantId: corroborated ? product!.id : null,
-    baseId: ranked.length && distinct(ranked.filter(candidate => candidate.score >= first.score - 25).map(candidate => variants.find(variant => variant.id === candidate.id)!.base)).length === 1 ? product!.base : null };
+    // Without a filename/folder code, a base suggestion needs matching attributes too (no color/pack conflict).
+    baseId: ranked.length && (!attributeConflict || Boolean(photo.candidates?.length)) && distinct(ranked.filter(candidate => candidate.score >= first.score - 25).map(candidate => variants.find(variant => variant.id === candidate.id)!.base)).length === 1 ? product!.base : null };
 }
 
 export async function matchObservation(root: DocumentReference, run: DocumentReference, lease: string, model: string,

@@ -18,6 +18,25 @@ export interface CatalogMetadata {
   manuallyConfirmed?: boolean;
   thumbnailPath?: string;
   selectedImages?: Array<{ linkId: string; jobId: string; outputId: string }>;
+  /** Browse projection (Catálogo → Productos). False on redirected/merged records. */
+  listed?: boolean;
+  /** Universal product type from the client template lists (`clientCatalog/families.ts`), null when unclassified. */
+  typeId?: string | null;
+  familyId?: string | null;
+  group?: CatalogProductGroup | null;
+  /** Server projection: one entry per generation job with its current output, attributed to a product variant. */
+  photos?: CatalogPhoto[];
+}
+export type CatalogProductGroup = 'ropa' | 'objetos';
+export interface CatalogPhoto {
+  jobId: string; batchId: string; outputId: string;
+  storagePath: string; thumbnailPath: string | null;
+  /** Canonical variant of the product; null when the job cannot be attributed to one variant. */
+  variantId: string | null;
+  approved: boolean;
+  role: 'main' | 'alternative' | null;
+  position: number | null;
+  view: string | null;
 }
 export interface CatalogGenerationLink {
   id: string; clientId: string; batchId: string; legacyProductId: string; garmentId: string;

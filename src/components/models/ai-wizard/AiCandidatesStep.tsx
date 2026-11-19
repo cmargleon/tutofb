@@ -36,7 +36,7 @@ export const AiCandidatesStep: React.FC<AiCandidatesStepProps> = ({ ai }) => (
         type="button"
         variant="ghost"
         size="md"
-        disabled={ai.busy}
+        disabled={ai.busy || ai.identityLocked}
         onClick={() => void ai.handleStepSelect(1)}
       >
         Reiniciar
@@ -46,9 +46,9 @@ export const AiCandidatesStep: React.FC<AiCandidatesStepProps> = ({ ai }) => (
         variant="primary"
         size="md"
         disabled={!ai.selectedCandidate || ai.busy}
-        onClick={ai.handleContinueToPoseStep}
+        onClick={() => void ai.handleCreateFromAI()}
       >
-        Continuar
+        Continuar a Poses
       </Button>
     </div>
   </div>

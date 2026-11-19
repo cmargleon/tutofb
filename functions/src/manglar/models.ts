@@ -13,8 +13,10 @@ export const classifyModelPoses = async (input: ManglarPoseClassifyRequest, call
     if (!selected.length || selected.length > 50)
         throw new HttpsError('invalid-argument', 'Selecciona entre 1 y 50 poses.');
     const classifications = new Map();
+    const observations = new Map();
     for (const pose of selected) {
         const result = await classifyPoseWithGemini({ apiKey: GEMINI_API_KEY.value(), model: getGeminiPoseClassificationModel(), pose, clientId: model.clientId, modelId: input.modelId, userUid: caller.uid });
+        if (result.photoObservation) observations.set(pose.id, result.photoObservation);
         classifications.set(pose.id, buildPoseAiClassification({ ...result, taggedAt: Timestamp.now() }));
     }
     const db = getAppFirestore();
@@ -23,7 +25,7 @@ export const classifyModelPoses = async (input: ManglarPoseClassifyRequest, call
         const current = (await tx.get(ref)).data() as Model;
         if (!current || current.clientId !== model.clientId || selected.some(pose => current.poses.find(p => p.id === pose.id)?.storagePath !== pose.storagePath))
             throw new HttpsError('aborted', 'Las poses cambiaron durante la clasificación.');
-        tx.update(ref, { poses: current.poses.map(pose => classifications.has(pose.id) ? { ...pose, aiClassification: classifications.get(pose.id) } : pose), updatedAt: FieldValue.serverTimestamp() });
+        tx.update(ref, { poses: current.poses.map(pose => classifications.has(pose.id) ? { ...pose, ...(observations.has(pose.id) ? { photoObservation: observations.get(pose.id) } : {}), aiClassification: classifications.get(pose.id) } : pose), updatedAt: FieldValue.serverTimestamp() });
     });
     return { modelId: input.modelId, classifiedPoseIds: [...classifications.keys()] };
 };

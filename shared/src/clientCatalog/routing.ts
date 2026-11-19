@@ -89,7 +89,8 @@ const TYPE_WORDS: Array<[RegExp, string]> = [
   [/sarten|olla/, 'Sartén u olla'], [/bateria de cocina/, 'Batería de cocina'], [/cuchill/, 'Cuchillos'], [/tabla/, 'Tabla para picar'],
   [/cafetera/, 'Cafetera manual'], [/utensilio|cucharon|espatula/, 'Utensilio de cocina'], [/plato|vajilla/, 'Plato o vajilla'],
   [/contenedor|tupper|recipiente/, 'Contenedor de alimentos'], [/dispensador/, 'Dispensador'],
-  [/polo/, 'Playera polo'], [/camiseta|playera/, 'Playera'], [/blusa/, 'Blusa'], [/camisa/, 'Camisa'], [/sudadera/, 'Sudadera'],
+  [/polo/, 'Playera polo'], [/camiseta|playera/, 'Playera'], [/blusa/, 'Blusa'], [/camisa/, 'Camisa'], [/sudadera|\bbuzos?\b|hoodie/, 'Sudadera'],
+  [/\btops?\b/, 'Top'],
   [/jersei|jersey|sueter/, 'Suéter'], [/cardigan/, 'Cárdigan'], [/chaleco/, 'Chaleco'], [/chamarra|chaqueta/, 'Chamarra'],
   [/abrigo/, 'Abrigo'], [/vestido/, 'Vestido'], [/falda/, 'Falda'], [/jeans|vaquero/, 'Jeans'], [/legging/, 'Leggings'],
   [/short|pantalones cortos|bermuda/, 'Short'], [/pantalon/, 'Pantalón'], [/conjunto/, 'Conjunto'], [/pijama/, 'Pijama'],
@@ -99,7 +100,7 @@ const TYPE_WORDS: Array<[RegExp, string]> = [
   [/mochila/, 'Mochila'], [/cartera/, 'Cartera'], [/cinturon/, 'Cinturón'], [/gafas|lentes/, 'Lentes'],
   [/collar|arete|pulsera|joyeria/, 'Joyería'], [/reloj/, 'Reloj'], [/estante|organizador/, 'Organizador o estante'],
   [/carpa|campana/, 'Casa de campaña'], [/estufa/, 'Estufa de campamento'], [/jardin/, 'Mueble de jardín'],
-  [/plegable/, 'Mesa o silla plegable'], [/pesa|mancuerna/, 'Pesas o mancuernas'], [/abdominal|fitness|yoga/, 'Accesorio fitness'],
+  [/plegable|mesa y silla/, 'Mesa o silla plegable'], [/pesa|mancuerna/, 'Pesas o mancuernas'], [/abdominal|fitness|yoga/, 'Accesorio fitness'],
   [/juguete/, 'Juguete'], [/peluche/, 'Peluche'], [/mascota|perro|gato/, 'Mascotas'],
 ];
 

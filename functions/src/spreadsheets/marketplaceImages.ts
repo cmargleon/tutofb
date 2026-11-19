@@ -30,7 +30,7 @@ export function isMatchingMarketplacePublication(record: PublishedMarketplaceIma
     && record.bucket === marketplaceImageBucketName() && record.storagePath.startsWith(prefix)
     && /^[a-f0-9]{64}\.jpg$/.test(record.storagePath.slice(prefix.length))
     && record.url === `https://storage.googleapis.com/${record.bucket}/${record.storagePath}`
-    && record.contentType === 'image/jpeg' && (channel !== 'tiktok-shop' || Math.abs(record.width / record.height - .75) < .002 || Math.abs(record.width / record.height - 4 / 3) < .002) && record.bytes > 0 && record.bytes <= MARKETPLACE_IMAGE_MAX_BYTES;
+    && record.contentType === 'image/jpeg' && (channel !== 'tiktok-shop' || Math.abs(record.width / record.height - 1) < .002 || Math.abs(record.width / record.height - .75) < .002 || Math.abs(record.width / record.height - 4 / 3) < .002) && record.bytes > 0 && record.bytes <= MARKETPLACE_IMAGE_MAX_BYTES;
 }
 
 export function applyMarketplacePublication(product: MasterProduct, record: PublishedMarketplaceImage) {

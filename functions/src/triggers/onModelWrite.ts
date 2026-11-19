@@ -30,7 +30,9 @@ export const onModelWrite = onDocumentWritten(
 
     if (!Array.isArray(model.poses) || model.poses.length === 0) return;
 
-    const unclassifiedPoses = model.poses.filter((p) => !p.aiClassification);
+    // Marketplace bases are classified by their explicit identity/recipe verification.
+    // Do not charge a second analysis or race that verification with this trigger.
+    const unclassifiedPoses = model.poses.filter((p) => !p.aiClassification && !p.marketplaceBaseSpec);
     if (unclassifiedPoses.length === 0) return;
 
     console.log(

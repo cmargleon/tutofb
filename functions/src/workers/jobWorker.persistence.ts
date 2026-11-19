@@ -478,8 +478,10 @@ export const retryOrFailJob = async (claimedJob: Job, error: unknown): Promise<v
     }
 
     const systemConfig = await getSystemConfigCached();
+    // Contention failures arrive together; jitter spreads their retries so they don't collide again.
+    const jitterMs = failureInfo.reasonCode === 'firestore_contention' ? Math.round(Math.random() * 30_000) : 0;
     const retryNotBefore = shouldRetry
-      ? Timestamp.fromMillis(Date.now() + systemConfig.jobRetryDelayMs)
+      ? Timestamp.fromMillis(Date.now() + systemConfig.jobRetryDelayMs + jitterMs)
       : null;
 
     transaction.update(jobRef, {

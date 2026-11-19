@@ -15,6 +15,17 @@ async function shot(page: any, name: string) {
 test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   const isolated = await openIsolatedBrowser(chromium, { viewport: { width: 1440, height: 900 } });
   const { page, baseURL: BASE_URL } = isolated;
+  await page.addInitScript(() => { (window as any).__modelSetsFixture = true; (window as any).__modelSetFailOnce = true; });
+  await page.route('**/src/features/models/marketplaceRules/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `
+    import { defaultModelMarketplaceRule } from '/shared/src/modelMarketplaceRules.ts';
+    const rules = {
+      amazon: { ...defaultModelMarketplaceRule('amazon'), revision: 1, allowedPoseRecipeIds: ['full-front', 'full-front-diagonal'] },
+      'tiktok-shop': { ...defaultModelMarketplaceRule('tiktok-shop'), revision: 1, allowedPoseRecipeIds: ['full-front-diagonal', 'full-three-quarter'] }
+    };
+    export const subscribeModelMarketplaceRules = next => { const timer = setTimeout(() => next(rules), 100); return () => clearTimeout(timer); };
+    export const saveModelMarketplaceRule = async () => { throw new Error('Unexpected write'); };
+  ` }));
+
   try {
 
   // Capturar errores de consola
@@ -72,7 +83,7 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
     }
   };
   await pickRandom('Sexo');
-  await pickRandom('Edad');
+  await page.locator('label:has-text("Edad")').locator('..').locator('select').selectOption('25-35');
   await pickRandom('Tono de piel');
   await pickRandom('Color de pelo');
   await pickRandom('Complexión');
@@ -100,63 +111,50 @@ test('Flujo Generar con IA — fal.ai GPT Image 2 provider', async () => {
   await shot(page, '06-candidate-selected');
   console.log('✅ Candidato seleccionado');
 
-  // ── 10. Continuar a poses ─────────────────────────────────────────────────
-  const continuarBtn = page.getByRole('button', { name: /^continuar$/i });
-  await expect(continuarBtn).toBeEnabled({ timeout: 5000 });
-  await continuarBtn.click();
-  await page.waitForTimeout(100);
-  await shot(page, '07-poses-step');
-  console.log('✅ Paso de poses abierto');
-
-  // ── 11. Seleccionar todas las poses ──────────────────────────────────────
-  const selectAll = page.getByRole('button', { name: /seleccionar todas/i }).first();
-  if (await selectAll.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await selectAll.click();
-    await page.waitForTimeout(100);
-  }
-  await shot(page, '08-poses-selected');
-  console.log('✅ Poses seleccionadas');
-
-  // ── 12. Generar poses ────────────────────────────────────────────────────
-  const generatePosesBtn = page.getByRole('button', { name: /generar poses/i });
-  await expect(generatePosesBtn).toBeEnabled({ timeout: 5000 });
-  await generatePosesBtn.click();
-  console.log('⏳ Generando poses con fal.ai GPT Image 2 (fixture local)...');
-  await page.waitForTimeout(100);
-  await shot(page, '09-generating-poses');
-
-  // Esperar "Guardar modelo con estas poses"
-  const saveBtn = page.getByRole('button', { name: /guardar modelo con estas poses/i });
-  await saveBtn.waitFor({ timeout: 300000 });
-  await page.waitForTimeout(100);
-  await shot(page, '10-poses-ready');
-  console.log('✅ Poses generadas con fal.ai GPT Image 2');
-
-  // ── 13. Aceptar todas ────────────────────────────────────────────────────
-  const acceptAll = page.getByRole('button', { name: /seleccionar todas/i }).last();
-  if (await acceptAll.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await acceptAll.click();
-    await page.waitForTimeout(100);
-  }
-  await shot(page, '11-poses-accepted');
-
-  // ── 14. Guardar modelo ────────────────────────────────────────────────────
-  await expect(saveBtn).toBeEnabled({ timeout: 5000 });
-  await saveBtn.click();
-  console.log('⏳ Guardando modelo...');
-
-  await page.getByRole('button', { name: /subir fotos/i }).click();
-  await page.locator('text=Modelo creado con éxito').waitFor({ timeout: 30000 });
-  await shot(page, '12-model-saved');
-  console.log('✅ ¡Modelo guardado!');
-
-  await page.waitForTimeout(100);
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await page.waitForTimeout(100);
-  await page.goto(`${BASE_URL}/models/catalogo`);
-  await page.getByRole('heading', { name: modelName, exact: true }).waitFor();
-  await shot(page, '13-library-final');
-
-  console.log('\n🎉 ¡Flujo completo exitoso con fal.ai GPT Image 2!');
+  await expect(page.getByRole('button', { name: 'Aprobar identidad y preparar sets', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Continuar a Poses', exact: true }).click();
+  await expect(page).toHaveURL(/\/models\/generar$/);
+  await expect(page.getByText('Identidad elegida · ' + modelName)).toBeVisible();
+  for (const pose of ['Frente completa', 'Diagonal de frente', '3/4 frente']) await expect(page.getByRole('button', { name: pose, exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByLabel('TikTok Shop', { exact: true }).uncheck();
+  await expect(page.getByRole('button', { name: '3/4 frente', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByLabel('TikTok Shop', { exact: true }).check();
+  await expect(page.getByRole('button', { name: '3/4 frente', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Frente completa', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Frente completa', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'Frente completa', exact: true }).click();
+  await expect(page.getByText(/3 poses × 2 destinos · 6 fotografías compatibles/)).toBeVisible();
+  await page.getByRole('button', { name: 'Retrato perfil izquierdo', exact: true }).click();
+  await expect(page.getByText('Combinaciones incompatibles · no se cobrarán')).toBeVisible();
+  await expect(page.getByText(/6 fotografías compatibles/)).toBeVisible();
+  await page.getByRole('button', { name: 'Retrato perfil izquierdo', exact: true }).click();
+  await page.getByRole('button', { name: 'Completar seleccionados', exact: true }).click();
+  await expect(page.getByText(/Estimación USD 0.480/)).toBeVisible();
+  let calls = await page.evaluate(() => (window as any).__localCalls || []);
+  expect(calls.some((call: any) => call.name === 'generateModelMarketplaceBase')).toBe(false);
+  await page.getByRole('button', { name: 'Generar estas bases', exact: true }).click();
+  await expect(page.getByText(/5 \/ 6 tomas aprobadas/)).toBeVisible();
+  await expect(page.getByText(/La pose concreta no coincide/)).toBeVisible();
+  await expect(page).toHaveURL(/\/models\/generar$/);
+  await page.getByRole('button', { name: 'Completar seleccionados', exact: true }).click();
+  await expect(page.getByText(/Estimación USD 0.080/)).toBeVisible();
+  await page.getByRole('button', { name: 'Generar estas bases', exact: true }).click();
+  await expect(page.getByText(/6 \/ 6 tomas aprobadas/)).toBeVisible();
+  calls = await page.evaluate(() => (window as any).__localCalls || []);
+  expect(calls.filter((call: any) => call.name === 'approveModelIdentity')).toHaveLength(1);
+  expect(calls.filter((call: any) => call.name === 'generateModelPose').every((call: any) => call.input.provider === 'fal-gpt-image-2')).toBe(true);
+  const generated = calls.filter((call: any) => call.name === 'generateModelMarketplaceBase');
+  expect(generated).toHaveLength(7);
+  expect(generated[6].input.poseRecipeId).toBe('full-front-diagonal');
+  expect(generated[6].input.channel).toBe('tiktok-shop');
+  await shot(page, '07-poses-and-marketplaces-results');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await shot(page, '08-poses-mobile');
+  await page.getByRole('button', { name: 'Crear otro modelo', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Crear otro modelo', exact: true }).click();
+  await expect(page.locator('input#model-name')).toHaveValue('');
+  const persisted = await page.evaluate(() => JSON.parse(sessionStorage.getItem('tuto-local-models') || '[]'));
+  expect(persisted).toHaveLength(1); expect(persisted[0].poses).toHaveLength(8);
   } finally { await isolated.close(); }
 });

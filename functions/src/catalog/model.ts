@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { CatalogIssue, CatalogMetadata, MasterProduct, ProductEvidence, StoredMasterProduct } from '../../../shared/src/types';
+import { catalogBrowseProjection } from '../../../shared/src/clientCatalog/browse';
 
 const stable = (value: any): any => {
   if (Array.isArray(value)) return value.map(stable);
@@ -28,7 +29,8 @@ export function catalogSearchKeys(values: MasterProduct['values'], variants: Mas
 export const manualEvidence = (value: string): ProductEvidence => ({ original: value, normalized: value, source: 'manual', confidence: 1, state: value === '' ? 'empty' : 'confirmed' });
 export function catalogMetadata(product: Pick<StoredMasterProduct, 'values' | 'variants' | 'catalog'>, createdAt: CatalogMetadata['createdAt']): CatalogMetadata {
   return { version: 1, status: 'draft', createdAt, evidence: {}, attributes: {}, issues: [], ...product.catalog,
-    searchKeys: catalogSearchKeys(product.values, product.variants) };
+    searchKeys: catalogSearchKeys(product.values, product.variants), ...catalogBrowseProjection(product.values),
+    ...(product.catalog?.redirectTo ? { listed: false } : {}) };
 }
 const priority = (e?: ProductEvidence) => e?.source === 'manual' ? 4 : e?.verified ? 3 : e?.source === 'ai' ? 1 : 2;
 /** Existing overrides predate field provenance: conservatively treat every stored value as manual. */
@@ -82,6 +84,6 @@ export function mergeCatalogSource(current: StoredMasterProduct | undefined, sou
     });
   }
   const rows = [...variants.values()];
-  return { values, variants: rows, catalog: { ...metadata, evidence, issues: [...issues.values()].slice(-200), searchKeys: catalogSearchKeys(values, rows) } };
+  return { values, variants: rows, catalog: { ...metadata, evidence, issues: [...issues.values()].slice(-200), searchKeys: catalogSearchKeys(values, rows), ...catalogBrowseProjection(values) } };
 }
 export const duplicateIssue = (productId: string, sku: string): CatalogIssue => ({ id: catalogDigest(['duplicate', productId, sku]), kind: 'possible_duplicate', field: 'sku', current: sku, incoming: sku, reference: productId });

@@ -1,11 +1,12 @@
 import { CatalogPhotoEditor } from './CatalogPhotoEditor';
 import { productPhotoStatus } from '../../../shared/src/productWorkflow';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { Job, JobOutput } from '../../../shared/src/types';
 import { resolveApprovedJobOutput } from '../../../shared/src/domain';
 import { CatalogGarmentGroup } from '../../features/catalog/useCatalogJobs';
 import { CatalogThumbnail } from './CatalogThumbnail';
+import { groupJobsByMarketplace } from '../../features/catalog/catalogMarketplaces';
 import FileSaver from 'file-saver';
 import { resolveStorageAssetUrl } from '../../features/storage/assets';
 import { cancelJobGeneration, deleteJob, regenerateJob } from '../../features/evaluation/firebase';
@@ -44,6 +45,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
   const toast = useToast();
   const confirm = useConfirm();
   const downloadableJobs = group.jobs.filter((job) => Boolean(resolveApprovedJobOutput(job)?.resultImagePath));
+  const marketplaceSections = useMemo(() => groupJobsByMarketplace(group.jobs), [group.jobs]);
   const showGallery = !deferGallery || galleryOpened || typeof IntersectionObserver === 'undefined';
 
   useEffect(() => {
@@ -189,6 +191,50 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
     }
   };
 
+  const gridClassName = 'grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3';
+
+  const renderJob = (job: Job, key: string, caption: React.ReactNode = null) => {
+    const statusLine = showProductPhotoStatus
+      ? <p className="mt-1 text-xs font-medium text-slate-700">{photoStatusLabels[productPhotoStatus(job)]}</p>
+      : null;
+    // Reserve the same responsive grid space before thumbnails mount.
+    if (!showGallery) {
+      const placeholder = <div className="aspect-[3/4] rounded-lg bg-gray-100" aria-hidden="true" />;
+      return caption || statusLine ? (
+        <div key={key} aria-hidden="true">
+          {placeholder}
+          {caption && <div className="mt-1 h-4" />}
+          {statusLine && <div className="mt-1 h-4" />}
+        </div>
+      ) : <React.Fragment key={key}>{placeholder}</React.Fragment>;
+    }
+    const isRegenerationPending = Boolean(
+      job.id && (queueingJobIds[job.id] || pendingRegenerationJobIds[job.id]),
+    );
+    const isCancelling = Boolean(job.id && cancellingJobIds[job.id]);
+    const canCancelRegeneration = role.canRegenerate && (isRegenerationPending || job.status === 'pending' || job.status === 'processing');
+
+    const thumbnail = <CatalogThumbnail
+        job={job}
+        onClick={onImageClick}
+        onEdit={role.canRegenerate && !isRegenerationPending ? job => {
+          const source = resolveApprovedJobOutput(job);
+          if (source) setEditTarget({ job, source });
+        } : undefined}
+        onRegenerate={role.canRegenerate && !isRegenerationPending ? handleRegenerate : undefined}
+        onCancel={canCancelRegeneration ? handleCancelRegeneration : undefined}
+        onDownload={handleDownloadSingle}
+        onDelete={role.canRegenerate ? handleDelete : undefined}
+        regenerationPending={isRegenerationPending}
+        cancellationPending={isCancelling}
+      />;
+    return caption || statusLine ? <div key={key}>
+      {thumbnail}
+      {caption}
+      {statusLine}
+    </div> : <React.Fragment key={key}>{thumbnail}</React.Fragment>;
+  };
+
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <div onFocus={() => setGalleryOpened(true)} className="flex items-center justify-between bg-gray-50 px-4 py-3">
@@ -223,44 +269,35 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
       </div>
 
       {expanded && (
-        <div ref={galleryRef} className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-          {group.jobs.map((job) => {
-            // Reserve the same responsive grid space before thumbnails mount.
-            if (!showGallery) {
-              const placeholder = <div key={job.id} className="aspect-[3/4] rounded-lg bg-gray-100" aria-hidden="true" />;
-              return showProductPhotoStatus ? (
-                <div key={job.id} aria-hidden="true">
-                  {placeholder}
-                  <div className="mt-1 h-4" />
-                </div>
-              ) : placeholder;
-            }
-            const isRegenerationPending = Boolean(
-              job.id && (queueingJobIds[job.id] || pendingRegenerationJobIds[job.id]),
-            );
-            const isCancelling = Boolean(job.id && cancellingJobIds[job.id]);
-            const canCancelRegeneration = role.canRegenerate && (isRegenerationPending || job.status === 'pending' || job.status === 'processing');
-
-            const thumbnail = <CatalogThumbnail
-                key={job.id}
-                job={job}
-                onClick={onImageClick}
-                onEdit={role.canRegenerate && !isRegenerationPending ? job => {
-                  const source = resolveApprovedJobOutput(job);
-                  if (source) setEditTarget({ job, source });
-                } : undefined}
-                onRegenerate={role.canRegenerate && !isRegenerationPending ? handleRegenerate : undefined}
-                onCancel={canCancelRegeneration ? handleCancelRegeneration : undefined}
-                onDownload={handleDownloadSingle}
-                onDelete={role.canRegenerate ? handleDelete : undefined}
-                regenerationPending={isRegenerationPending}
-                cancellationPending={isCancelling}
-              />;
-            return showProductPhotoStatus ? <div key={job.id}>
-              {thumbnail}
-              <p className="mt-1 text-xs font-medium text-slate-700">{photoStatusLabels[productPhotoStatus(job)]}</p>
-            </div> : thumbnail;
-          })}
+        <div ref={galleryRef} className="p-4">
+          {marketplaceSections ? (
+            <div className="space-y-5">
+              {marketplaceSections.map((section) => (
+                <section key={section.channel ?? 'none'} aria-label={`Fotos para ${section.label}`}>
+                  <h3 className="mb-2 flex items-baseline gap-2 text-sm font-semibold text-gray-800">
+                    {section.label}
+                    <span className="text-xs font-normal text-gray-500">
+                      {section.slots.length} {section.slots.length === 1 ? 'foto' : 'fotos'}
+                    </span>
+                  </h3>
+                  <div className={gridClassName}>
+                    {section.slots.map((slot) => renderJob(slot.job, `${section.channel ?? 'none'}:${slot.position}:${slot.job.id}`, section.channel ? (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-slate-700" title={slot.notes || undefined}>
+                        <span className="font-medium">Foto {slot.position}</span>
+                        {slot.role === 'main' && <span className="text-slate-500">· Principal</span>}
+                        {slot.passed === true && <span className="text-emerald-700">· Cumple</span>}
+                        {slot.passed === false && <span className="text-red-700">· No cumple</span>}
+                      </p>
+                    ) : null))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className={gridClassName}>
+              {group.jobs.map((job) => renderJob(job, job.id ?? ''))}
+            </div>
+          )}
         </div>
       )}
       {editTarget?.job.id ? <CatalogPhotoEditor key={`${editTarget.job.id}-${editTarget.source.id}`}

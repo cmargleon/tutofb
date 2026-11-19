@@ -1,0 +1,200 @@
+{
+  "date": "2026-11-20",
+  "timezone": "Europe/Madrid",
+  "completedAt": "2026-11-20T00:05:24.438087+01:00",
+  "projectId": "tutofb-260320-1003",
+  "status": "deployed",
+  "sourceBase": {
+    "report": "docs/reports/2026-11-19-model-marketplace-sets-release.json",
+    "sourceHead": "345f796450360ec304a8099640143a0dd16aa406",
+    "isolatedReleaseDirectory": "/var/folders/dm/_c5glb3d2gb5vkvkc56knfth0000gn/T/tuto-model-wizard-release-i01o3urj"
+  },
+  "deploymentIsolation": "Previous deployed source snapshot plus only this task delta. No commit, push, reset, resource deletion, dependency changes or secret edits. Existing sessions and dev servers were left running.",
+  "concurrentChangesExcluded": [
+    "shared/src/marketplacePhotoPlan.ts",
+    "src/components/catalog/CatalogGarmentSection.tsx",
+    "src/features/catalog/catalogMarketplaces.ts",
+    "tests/catalogMarketplaces.test.ts",
+    "tests/marketplacePhotoPlan.integration.test.ts",
+    "tests/marketplacePhotoPlan.test.ts"
+  ],
+  "flow": {
+    "route": "/models/generar",
+    "steps": [
+      "identity",
+      "candidates",
+      "mandatory poses"
+    ],
+    "candidatePersistsAsApprovedIdentity": true,
+    "automaticCatalogueRedirect": false,
+    "initialPoseSelection": [],
+    "quantity": "One photograph per selected compatible concrete pose × active client marketplace; 3 × 4 = 12.",
+    "concretePoseField": "marketplaceBaseSpec.poseRecipeId and approval.spec.poseRecipeId",
+    "incompatibleCombinations": "Shown with destination, pose and reason before payment; excluded from quoted count and cost.",
+    "retry": "Approved results retained; pending/failed combinations only; request replay, immutable request payload and transactional combination lock prevent duplicate requests.",
+    "verification": "Concrete pose match and evidence plus observed orientation, framing, identity, age/proportions, background, native ratio and technical checks. Explicit verification owns the classification; no second background analysis.",
+    "defaultProvider": "fal-gpt-image-2.5-flare; explicit provider/config and client preset respected",
+    "ratios": "TikTok native 1:1 as a Tuto preference; other destinations general 3:4 or compatible explicit/client overrides.",
+    "laterGarmentMatching": "Existing shared planner and server-owned approvals; front → front, front+side evidence → commercial front three-quarter, real back evidence → commercial back. No paid base generation side effect.",
+    "restart": "Create another model resets the wizard while preserving the saved model, chosen identity, generated base candidates/results and approvals in catalogue."
+  },
+  "validation": {
+    "frontendTypecheck": "passed",
+    "frontendBuild": "passed",
+    "functionsTypecheck": "passed",
+    "functionsBuild": "passed",
+    "fullSuiteSharedWorkspace": {
+      "passed": 444,
+      "failed": 0,
+      "skipped": 36,
+      "node": "22.22.0",
+      "note": "Executed before the latest concurrent Claude edits; those edits are excluded from this release."
+    },
+    "fullSuiteIsolatedRelease": {
+      "passed": 438,
+      "failed": 0,
+      "skipped": 35,
+      "node": "22.22.0"
+    },
+    "emulatorIntegration": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "externalNetworkBlocked": true,
+      "specs": [
+        "modelMarketplaceSets.integration.test.ts",
+        "marketplacePhotoPlan.integration.test.ts",
+        "manglarModelPersistence.test.ts"
+      ],
+      "coverage": [
+        "12-combination matrix and same-orientation concrete pose identity",
+        "incompatible/unknown/duplicate pose selections before provider use",
+        "concurrent duplicate and already-approved request protection",
+        "concrete-pose verification failure, replay, stale-preview rejection and targeted retry",
+        "approved results and failed candidates retained",
+        "concrete pose metadata in ZIP export and import requiring re-verification",
+        "real server approval lookup and garment matching ignoring forged browser bases",
+        "native destination ratios, preset behavior, stale Storage generations and client ownership",
+        "automation planning parity and authorization rules"
+      ]
+    },
+    "browser": {
+      "passed": 2,
+      "failed": 0,
+      "viewports": [
+        "1440x900",
+        "390x844"
+      ],
+      "specs": [
+        "e2e/models-flow.spec.ts",
+        "e2e/model-marketplace-sets.spec.ts"
+      ],
+      "providers": "isolated local doubles",
+      "coverage": [
+        "mandatory Poses without leaving wizard",
+        "quantity and cost before generation",
+        "incompatibilities before charging",
+        "only failed combination retried",
+        "restart retains saved model and all eight fixture assets",
+        "mobile overflow check"
+      ]
+    },
+    "manglarSchemas": "targeted regeneration and --check passed",
+    "diffWhitespaceCheck": "passed",
+    "buildNotes": "Existing Rollup warnings about unrelated default-export compatibility imports remain; builds succeed."
+  },
+  "deployment": {
+    "hosting": "https://tutofb-260320-1003.web.app",
+    "functions": [
+      "approveModelIdentity",
+      "previewModelPhotoSets",
+      "generateModelMarketplaceBase",
+      "verifyModelMarketplaceBase",
+      "verifyMarketplacePhotoBases",
+      "onModelWrite",
+      "manglarMcp"
+    ],
+    "firestoreRules": "not redeployed",
+    "storageRules": "not redeployed",
+    "indexes": "not redeployed",
+    "resourcesDeleted": []
+  },
+  "postDeployment": {
+    "checkedAt": "2026-11-19T23:04:09.266985+00:00",
+    "hostingStatus": 200,
+    "hostingMatchesIsolatedBuild": true,
+    "indexSha256": "3e804deac4a8f402c112d6b650b5d2514fde71331958b4ef54229d8599943a13",
+    "wizardBundleStatus": 200,
+    "wizardBundleMatchesBuild": true,
+    "wizardContainsRequiredPoseStep": true,
+    "wizardOmitsOldEarlyFinish": true,
+    "authorizationProbes": [
+      {
+        "name": "approveModelIdentity",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "previewModelPhotoSets",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "generateModelMarketplaceBase",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "verifyModelMarketplaceBase",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      }
+    ]
+  },
+  "productionOperations": {
+    "paidImageRequestsInitiated": 0,
+    "realPhotoGeneration": false,
+    "catalogueMigrations": 0,
+    "bulkRegenerations": 0
+  },
+  "limitations": [
+    "Portrait and footwear close-up poses are visibly blocked because current dressing recipes require complete garment-area framing; their poses/crops are never silently replaced.",
+    "No real paid generation was necessary. Provider and visual-verifier behavior was simulated; no claim of improved real-photo visual quality.",
+    "Unrelated concurrent changes remain in the workspace and were not deployed by this task."
+  ],
+  "sourceFileSha256": {
+    "docs/MODEL_MARKETPLACE_SETS.md": "601256e708dc3cb23227ba47ee8403e17ed5003cb979a9e3e0c6a1a4af3f70af",
+    "docs/PHOTO_GENERATION.md": "8c3d84f5898b228589a691c42b27d0ee2a49fc3788fcd23a0956d17ebfac4f80",
+    "e2e/model-marketplace-sets.spec.ts": "c84ec39da9688f05332471eacd02c88f8c186af486c7eb598c7e4d4cde852346",
+    "e2e/models-flow.spec.ts": "f5a6b038921341ddef729fd94adf7e6b27839f830afd2d732d7012ac987c709e",
+    "e2e/support/local-fixtures.mjs": "99cddf31607d3536d71cb1131ef0f9e37ca303589bad27de21153378c529d47e",
+    "functions/src/manglar/contracts.json": "585a4bf0af0f04892f81a6aa74b2fd826df97bd2ce69026535d657c045963e8c",
+    "functions/src/models/marketplaceSets.ts": "e68411bfac812cbe9721c1b432caad85bc74740fb97418fd1db8140ea0cb70da",
+    "functions/src/triggers/onModelWrite.ts": "76e01275b59bdd6921180367510103a923f5f6a430958d5baa4888c15596cd51",
+    "functions/src/utils/classifyPose.ts": "462ee65e47ccb4706c9afe0bb7548739c03da8002e372eb2ef4d906fe885395c",
+    "shared/src/modelPhotoSets.ts": "846a9a5c7f7272e8fe46a20e00ce345ec1acdd199250f504aaacb3c599a4778c",
+    "shared/src/modelPoseRecipes.ts": "e64234ebb39757a34bec955161013166c41910050983042d1e09c946fab1f02f",
+    "shared/src/types/modelPhotoSet.ts": "caa5220037753444e86e1ac15111010b3a576f087c2b9f3e85bbf41e18bd236c",
+    "shared/src/types/photoPlan.ts": "d2818efccec9e4038777152dd05f4e7e2108ffb0108bf81d692ba514b3ce469c",
+    "src/components/models/ModelPhotoSets.tsx": "40ce459d7f2ca53cbbba5e60bb2f302689d6a0015b9ac012d380be3acdf62fa5",
+    "src/components/models/ai-wizard/AiCandidatesStep.tsx": "6abd3ca9c2c605f5e82cca2abb44127ad4191bf689f21f8d2b8e3ce4eaf3b4fe",
+    "src/components/models/ai-wizard/AiPosesStep.tsx": "4187633139241cb06976696f69d8e64666dbe5eb2cd57486aadc10f741036ea1",
+    "src/features/models/constants.ts": "25efaa00d6741b695fc78bbb6f877b1bd2fd15729b10d56a651d2d54545b6ba7",
+    "src/features/models/hooks/useAiIdentityForm.ts": "75d276a4626d4ac81f3e75503ed5c794c782e9f38d1f1f53c792e6bb2ad6e7db",
+    "src/features/models/hooks/useAiWizard.ts": "1d7aae8733319a932ee6eb02043d282b4ac90e8010463ccb828004d3d490bc69",
+    "src/features/models/hooks/useModelCreateFlow.ts": "a36dcaed2a33572bb5c9449e60e8a0236da891b020e51f59488453b74a26da96",
+    "src/features/models/hooks/useModelPhotoSets.ts": "17fdb5357826ba1b16004152d1e12a252e39b68c6e7d9afd0efddcd80b13e31c",
+    "src/features/models/types.ts": "d53a28fa9c8cf3d1cbf10fc4b1af26301f88b041855f4519fdf3e616018d198f",
+    "tests/modelMarketplaceSets.integration.test.ts": "5f5debd0ad2bacd83d6cfe8d3b17fd497810796776b045697199bc8764bdd756",
+    "tests/modelMarketplaceSets.test.ts": "c459765d9cfb22d03e4327aba0961b66b7375c4730448ed4fe63bb94fdb5c79b",
+    "tests/modelPoseActivation.test.ts": "ffda5078130cd830c79336c7d3318a87a8244f38fe8eaebed4914f10bfe46963"
+  },
+  "evidenceLogs": {
+    "workspaceSuite": "/tmp/tuto-model-wizard-workspace-tests.log",
+    "isolatedSuite": "/tmp/tuto-model-wizard-release-tests.log",
+    "emulators": "/tmp/tuto-model-wizard-integration-release.log",
+    "browser": "/tmp/tuto-model-wizard-e2e-verified.log",
+    "functionsDeploy": "/tmp/tuto-model-wizard-functions-deploy.log",
+    "hostingDeploy": "/tmp/tuto-model-wizard-hosting-deploy.log"
+  }
+}

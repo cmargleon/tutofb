@@ -1,4 +1,6 @@
+import { MODEL_POSE_RECIPES_BY_ID } from '../../../shared/src/modelPoseRecipes';
 import sharp from 'sharp';
+import { verifyWhiteBackground } from '../media/verifyWhiteBackground';
 import * as admin from 'firebase-admin';
 import { Pose, PoseFraming, PoseOrientationDetail } from '../../../shared/src/types';
 import {
@@ -30,13 +32,17 @@ const POSE_CLASSIFICATION_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
     photoObservation: { type: 'object', properties: {
+      concretePoseMatches: { type: 'boolean' }, concretePoseEvidence: { type: 'string' },
+      pose: { type: 'string', enum: ['front', 'front_three_quarter', 'commercial_back', 'profile', 'unknown'] },
+      lookingAtCamera: { type: 'boolean' }, mainPoseCompliant: { type: 'boolean' },
+      identityCoherent: { type: 'boolean' }, identityEvidence: { type: 'string' },
       audience: { type: 'string', enum: ['baby', 'child', 'adult'] },
       orientation: { type: 'string', enum: ['front', 'back', 'side'] },
       posture: { type: 'string', enum: ['standing', 'other'] },
       framing: { type: 'string', enum: ['upper_body', 'lower_body', 'full_body'] },
       background: { type: 'string', enum: ['white', 'neutral', 'context'] },
       garmentVisible: { type: 'boolean' }, accessories: { type: 'boolean' }, evidence: { type: 'string' },
-    }, required: ['audience', 'orientation', 'posture', 'framing', 'background', 'garmentVisible', 'accessories', 'evidence'] },
+    }, required: ['concretePoseMatches', 'concretePoseEvidence', 'pose', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'identityEvidence', 'audience', 'orientation', 'posture', 'framing', 'background', 'garmentVisible', 'accessories', 'evidence'] },
     orientationDetail: {
       type: 'string',
       enum: [
@@ -117,6 +123,8 @@ export const classifyPoseWithGemini = async ({
   modelId,
   modelName,
   userUid,
+  identityStoragePath,
+  performer,
 }: {
   apiKey: string;
   model: string;
@@ -126,13 +134,22 @@ export const classifyPoseWithGemini = async ({
   modelId?: string | null;
   modelName?: string | null;
   userUid?: string | null;
+  identityStoragePath?: string;
+  performer?: 'real' | 'synthetic';
 }): Promise<PoseClassificationResult> => {
   const image = await downloadStorageImage(pose.storagePath);
+  const identity = identityStoragePath ? await downloadStorageImage(identityStoragePath) : null;
 
   const prompt = [
     'Clasifica una imagen de pose de modelo para un sistema de catalogo de moda.',
     'Analiza orientación, postura, encuadre, fondo observado (white solo si visualmente puro), visibilidad de la prenda base, accesorios ajenos y público del modelo. Registra evidencia visible por photoObservation. La receta o el nombre del archivo no acreditan cumplimiento.',
-    'NO analices la prenda. NO inventes detalles fuera de la imagen.',
+    'No inventes detalles fuera de la imagen. Comprueba que la zona donde se sustituirá la prenda esté completa y libre de brazos, cabello o accesorios que oculten detalles.',
+    'La ÚLTIMA imagen es la pose evaluada. Si hay una primera imagen de identidad, compara misma persona, edad y proporciones. identityCoherent solo true si existe esa referencia y coincide; explica identityEvidence.',
+    'photoObservation.pose: front exige frontal real; front_three_quarter es giro comercial natural con frente y lateral visibles; profile es perfil rígido a 90 grados y NO sirve como tres cuartos; commercial_back exige espalda protagonista y rostro mirando a cámara por encima del hombro únicamente si el rostro aparece. El giro no debe ocultar la espalda.',
+    'lookingAtCamera solo evalúa mirada cuando se ve el rostro. mainPoseCompliant exige de pie, frontal, ojos abiertos, boca cerrada y brazos a los lados cuando sean visibles. El nombre de la toma no es evidencia.',
+    'photoObservation.framing: upper_body desde muslos hasta encima de cabeza; lower_body desde pecho o cintura hasta debajo de pies, sin rostro, cintura y bajos completos; full_body cabeza a pies completa.',
+    ...(pose.marketplaceBaseSpec?.poseRecipeId ? [`Pose concreta solicitada: ${JSON.stringify(MODEL_POSE_RECIPES_BY_ID.get(pose.marketplaceBaseSpec.poseRecipeId))}. Evalúa sus detalles visibles y modificadores (por ejemplo caminando, contrapposto, diagonal). concretePoseMatches solo true si coincide también esta pose concreta, no basta compartir orientación. Explica concretePoseEvidence.`] : ['Sin pose concreta solicitada: concretePoseMatches=false.']),
+    ...(pose.marketplaceBaseSpec?.rulesRevision !== undefined ? [`Configuración editable de Reglas Marketplace: ${JSON.stringify(pose.marketplaceBaseSpec)}. concretePoseMatches evalúa la postura, orientación y gesto de la pose concreta. Para encuadre y mirada prevalece esta configuración sobre el texto genérico del catálogo de poses. Registra lo observado; no des por cumplida la configuración solicitada.`] : []),
     'Reglas:',
     '- front: cuerpo mayormente de frente',
     '- front_three_quarter: cuerpo de frente con giro parcial visible',
@@ -172,6 +189,7 @@ export const classifyPoseWithGemini = async ({
           role: 'user',
           parts: [
             { text: prompt },
+            ...(identity ? [{ inline_data: { mime_type: identity.mimeType, data: identity.bytes.toString('base64') } }] : []),
             {
               inline_data: {
                 mime_type: image.mimeType,
@@ -189,17 +207,13 @@ export const classifyPoseWithGemini = async ({
   });
 
   const parsed = JSON.parse(extractResponseText(payload)) as GeminiPoseClassificationPayload;
-  let whiteRgbVerified = false;
-  if (parsed.photoObservation?.background === 'white') {
-    const { data, info } = await sharp(image.bytes).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true });
-    whiteRgbVerified = [[0, 0], [info.width - 8, 0], [0, info.height - 8], [info.width - 8, info.height - 8]].every(([x, y]) => {
-      for (let row = y; row < y + 8; row++) for (let col = x; col < x + 8; col++) for (let c = 0; c < 3; c++) if (data[(row * info.width + col) * info.channels + c] !== 255) return false;
-      return true;
-    });
-  }
+  const whiteRgbVerified = parsed.photoObservation?.background === 'white' && await verifyWhiteBackground(image.bytes);
+  const metadata = await sharp(image.bytes).metadata();
+  const rotated = [5, 6, 7, 8].includes(metadata.orientation || 1);
+  const width = rotated ? metadata.height : metadata.width, height = rotated ? metadata.width : metadata.height;
 
   return {
-    ...(parsed.photoObservation ? { photoObservation: { ...parsed.photoObservation, whiteRgbVerified, verified: (clampConfidence(parsed.confidence) || 0) >= .8, performer: pose.storagePath.startsWith('model_generations/') ? 'synthetic' as const : pose.photoObservation?.performer || 'unknown' as const } } : {}),
+    ...(parsed.photoObservation ? { photoObservation: { ...parsed.photoObservation, width, height, faceVisible: parsed.faceVisible === true, identityCoherent: Boolean(identity && parsed.photoObservation.identityCoherent === true), whiteRgbVerified, verified: (clampConfidence(parsed.confidence) || 0) >= .8, performer: performer || (pose.storagePath.startsWith('model_generations/') ? 'synthetic' as const : pose.photoObservation?.performer || 'unknown' as const) } } : {}),
     orientationDetail: isPoseOrientationDetail(parsed.orientationDetail)
       ? parsed.orientationDetail
       : 'ambiguous',

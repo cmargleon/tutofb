@@ -38,7 +38,8 @@ export interface ModelIdentityTraits {
 }
 
 export interface Pose {
-  photoObservation?: import('./photoPlan').PhotoBaseObservation;
+  marketplaceBaseSpec?: import('./modelPhotoSet').ModelBaseSpec | null;
+  photoObservation?: import('./photoPlan').PhotoBaseObservation | null;
   id: string;
   active?: boolean;
   storagePath: string;
@@ -68,6 +69,9 @@ export interface SetModelPoseActiveResponse extends SetModelPoseActiveRequest {
 }
 
 export interface Model {
+  importedIdentity?: import('./modelPhotoSet').ApprovedModelIdentity;
+  approvedIdentity?: import('./modelPhotoSet').ApprovedModelIdentity;
+  marketplaceBaseApprovals?: import('./modelPhotoSet').ModelBaseApproval[];
   manglarBudgetId?: string;
   id?: string;
   clientId: string;
@@ -91,6 +95,8 @@ export interface Model {
 }
 
 export interface ModelBundlePoseManifestEntry {
+  photoObservation?: import('./photoPlan').PhotoBaseObservation;
+  marketplaceBaseSpec?: import('./modelPhotoSet').ModelBaseSpec;
   id: string;
   active?: boolean;
   archivePath: string;
@@ -103,6 +109,9 @@ export interface ModelBundlePoseManifestEntry {
 }
 
 export interface ModelBundleManifest {
+  importedIdentity?: import('./modelPhotoSet').ApprovedModelIdentity;
+  approvedIdentity?: import('./modelPhotoSet').ApprovedModelIdentity;
+  marketplaceBaseApprovals?: import('./modelPhotoSet').ModelBaseApproval[];
   schemaVersion: 1;
   exportedAt: string;
   sourceModelId: string;

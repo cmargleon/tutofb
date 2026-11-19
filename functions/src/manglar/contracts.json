@@ -3586,6 +3586,19 @@
             "type": "boolean"
           }
         ]
+      },
+      "selectedChannels": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "enum": [
+            "amazon",
+            "shein",
+            "tiktok-shop",
+            "mercado-libre"
+          ]
+        }
       }
     },
     "required": [
@@ -4384,6 +4397,19 @@
                     ],
                     "additionalProperties": false,
                     "maxProperties": 100
+                  }
+                },
+                "selectedChannels": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "amazon",
+                      "shein",
+                      "tiktok-shop",
+                      "mercado-libre"
+                    ]
                   }
                 }
               },
@@ -8626,6 +8652,5894 @@
       "uid",
       "clientAccess",
       "expected"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "ModelPhotoSetsRequest": {
+    "type": "object",
+    "properties": {
+      "modelId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "poseRecipeIds": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "maxLength": 30000
+        }
+      },
+      "channels": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "enum": [
+            "amazon",
+            "shein",
+            "tiktok-shop",
+            "mercado-libre"
+          ]
+        }
+      },
+      "category": {
+        "type": "string",
+        "enum": [
+          "ordinary",
+          "bodysuit",
+          "fitted_child",
+          "underwear",
+          "swimwear",
+          "accessory"
+        ]
+      },
+      "bodyArea": {
+        "type": "string",
+        "enum": [
+          "upper_body",
+          "lower_body",
+          "footwear",
+          "head_accessory",
+          "full_body",
+          "carry_accessory"
+        ]
+      },
+      "aspectRatio": {
+        "type": "string",
+        "enum": [
+          "9:16",
+          "3:4",
+          "2:3",
+          "1:1",
+          "4:3",
+          "3:2",
+          "16:9"
+        ]
+      },
+      "provider": {
+        "type": "string",
+        "enum": [
+          "fal-seedream-v4.5",
+          "fal-banana-pro",
+          "openai-dalle",
+          "fal-nano-banana-2",
+          "fal-seedream-5",
+          "fal-gpt-image-2",
+          "fal-gpt-image-2.5-sunburst",
+          "fal-gpt-image-2.5-flare",
+          "fal-seedream-5-pro",
+          "fal-seedream-5-flash",
+          "fal-flux-2-edit"
+        ]
+      },
+      "imageConfig": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-seedream",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_4K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-banana-pro",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "21:9",
+                  "5:4",
+                  "4:5"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "openai-gpt-image-1.5",
+                "type": "string"
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "1024x1024",
+                  "1024x1536",
+                  "1536x1024"
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "size",
+              "quality"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-nano-banana-2",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "auto",
+                  "21:9",
+                  "5:4",
+                  "4:5",
+                  "4:1",
+                  "1:4",
+                  "8:1",
+                  "1:8"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K",
+                  "0.5K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "const": "fal-seedream-5",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_3K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-gpt-image-2",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-gpt-image-2.5-sunburst",
+                  "fal-gpt-image-2.5-flare"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-seedream-5-pro",
+                  "fal-seedream-5-flash"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_1K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-flux-2-edit",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          }
+        ]
+      }
+    },
+    "required": [
+      "modelId",
+      "category",
+      "bodyArea"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "ApproveModelIdentityRequest": {
+    "type": "object",
+    "properties": {
+      "modelId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "poseId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "performer": {
+        "type": "string",
+        "enum": [
+          "synthetic",
+          "real"
+        ]
+      }
+    },
+    "required": [
+      "modelId",
+      "poseId",
+      "performer"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "VerifyModelBaseRequest": {
+    "type": "object",
+    "properties": {
+      "poseRecipeId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "shot": {
+        "type": "string",
+        "enum": [
+          "front",
+          "front_three_quarter",
+          "commercial_back"
+        ]
+      },
+      "channel": {
+        "type": "string",
+        "enum": [
+          "amazon",
+          "shein",
+          "tiktok-shop",
+          "mercado-libre"
+        ]
+      },
+      "poseId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "modelId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "poseRecipeIds": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "maxLength": 30000
+        }
+      },
+      "channels": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "enum": [
+            "amazon",
+            "shein",
+            "tiktok-shop",
+            "mercado-libre"
+          ]
+        }
+      },
+      "category": {
+        "type": "string",
+        "enum": [
+          "ordinary",
+          "bodysuit",
+          "fitted_child",
+          "underwear",
+          "swimwear",
+          "accessory"
+        ]
+      },
+      "bodyArea": {
+        "type": "string",
+        "enum": [
+          "upper_body",
+          "lower_body",
+          "footwear",
+          "head_accessory",
+          "full_body",
+          "carry_accessory"
+        ]
+      },
+      "aspectRatio": {
+        "type": "string",
+        "enum": [
+          "9:16",
+          "3:4",
+          "2:3",
+          "1:1",
+          "4:3",
+          "3:2",
+          "16:9"
+        ]
+      },
+      "provider": {
+        "type": "string",
+        "enum": [
+          "fal-seedream-v4.5",
+          "fal-banana-pro",
+          "openai-dalle",
+          "fal-nano-banana-2",
+          "fal-seedream-5",
+          "fal-gpt-image-2",
+          "fal-gpt-image-2.5-sunburst",
+          "fal-gpt-image-2.5-flare",
+          "fal-seedream-5-pro",
+          "fal-seedream-5-flash",
+          "fal-flux-2-edit"
+        ]
+      },
+      "imageConfig": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-seedream",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_4K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-banana-pro",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "21:9",
+                  "5:4",
+                  "4:5"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "openai-gpt-image-1.5",
+                "type": "string"
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "1024x1024",
+                  "1024x1536",
+                  "1536x1024"
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "size",
+              "quality"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-nano-banana-2",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "auto",
+                  "21:9",
+                  "5:4",
+                  "4:5",
+                  "4:1",
+                  "1:4",
+                  "8:1",
+                  "1:8"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K",
+                  "0.5K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "const": "fal-seedream-5",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_3K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-gpt-image-2",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-gpt-image-2.5-sunburst",
+                  "fal-gpt-image-2.5-flare"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-seedream-5-pro",
+                  "fal-seedream-5-flash"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_1K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-flux-2-edit",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          }
+        ]
+      }
+    },
+    "required": [
+      "shot",
+      "channel",
+      "poseId",
+      "modelId",
+      "category",
+      "bodyArea"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "GenerateModelBaseRequest": {
+    "type": "object",
+    "properties": {
+      "poseRecipeId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "shot": {
+        "type": "string",
+        "enum": [
+          "front",
+          "front_three_quarter",
+          "commercial_back"
+        ]
+      },
+      "channel": {
+        "type": "string",
+        "enum": [
+          "amazon",
+          "shein",
+          "tiktok-shop",
+          "mercado-libre"
+        ]
+      },
+      "requestId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "approvedPreviewId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "modelId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "poseRecipeIds": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "maxLength": 30000
+        }
+      },
+      "channels": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "enum": [
+            "amazon",
+            "shein",
+            "tiktok-shop",
+            "mercado-libre"
+          ]
+        }
+      },
+      "category": {
+        "type": "string",
+        "enum": [
+          "ordinary",
+          "bodysuit",
+          "fitted_child",
+          "underwear",
+          "swimwear",
+          "accessory"
+        ]
+      },
+      "bodyArea": {
+        "type": "string",
+        "enum": [
+          "upper_body",
+          "lower_body",
+          "footwear",
+          "head_accessory",
+          "full_body",
+          "carry_accessory"
+        ]
+      },
+      "aspectRatio": {
+        "type": "string",
+        "enum": [
+          "9:16",
+          "3:4",
+          "2:3",
+          "1:1",
+          "4:3",
+          "3:2",
+          "16:9"
+        ]
+      },
+      "provider": {
+        "type": "string",
+        "enum": [
+          "fal-seedream-v4.5",
+          "fal-banana-pro",
+          "openai-dalle",
+          "fal-nano-banana-2",
+          "fal-seedream-5",
+          "fal-gpt-image-2",
+          "fal-gpt-image-2.5-sunburst",
+          "fal-gpt-image-2.5-flare",
+          "fal-seedream-5-pro",
+          "fal-seedream-5-flash",
+          "fal-flux-2-edit"
+        ]
+      },
+      "imageConfig": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-seedream",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_4K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-banana-pro",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "21:9",
+                  "5:4",
+                  "4:5"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "openai-gpt-image-1.5",
+                "type": "string"
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "1024x1024",
+                  "1024x1536",
+                  "1536x1024"
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "size",
+              "quality"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-nano-banana-2",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "auto",
+                  "21:9",
+                  "5:4",
+                  "4:5",
+                  "4:1",
+                  "1:4",
+                  "8:1",
+                  "1:8"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K",
+                  "0.5K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "const": "fal-seedream-5",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_3K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-gpt-image-2",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-gpt-image-2.5-sunburst",
+                  "fal-gpt-image-2.5-flare"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-seedream-5-pro",
+                  "fal-seedream-5-flash"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_1K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-flux-2-edit",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          }
+        ]
+      }
+    },
+    "required": [
+      "shot",
+      "channel",
+      "requestId",
+      "approvedPreviewId",
+      "modelId",
+      "category",
+      "bodyArea"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "CreateMarketplacePhotoBatchRequest": {
+    "type": "object",
+    "properties": {
+      "organizerContext": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "baseProductId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "variantId": {
+            "type": "string",
+            "maxLength": 30000
+          }
+        },
+        "required": [
+          "clientId",
+          "baseProductId",
+          "variantId"
+        ],
+        "additionalProperties": false,
+        "maxProperties": 100
+      },
+      "requestId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "approvedPlanId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "prompt": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "modelId": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string",
+            "maxLength": 30000
+          }
+        ]
+      },
+      "selectedChannels": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "enum": [
+            "amazon",
+            "shein",
+            "tiktok-shop",
+            "mercado-libre"
+          ]
+        }
+      },
+      "customPrompt": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "clientId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "marketplaces": {
+        "type": "object",
+        "properties": {
+          "amazon": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shein": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tiktok-shop": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mercado-libre": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "maxProperties": 100
+      },
+      "objectScenes": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "clean",
+                "lifestyle_1",
+                "lifestyle_2",
+                "hero",
+                "human_use_1",
+                "human_use_2"
+              ]
+            },
+            "prompt": {
+              "type": "string",
+              "maxLength": 30000
+            }
+          },
+          "required": [
+            "type",
+            "prompt"
+          ],
+          "additionalProperties": false,
+          "maxProperties": 100
+        }
+      },
+      "articles": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "productId": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "variantId": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "garment",
+                "product"
+              ]
+            },
+            "attributes": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "object",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ordinary",
+                          "type": "string"
+                        },
+                        {
+                          "const": "bodysuit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "fitted_child",
+                          "type": "string"
+                        },
+                        {
+                          "const": "underwear",
+                          "type": "string"
+                        },
+                        {
+                          "const": "swimwear",
+                          "type": "string"
+                        },
+                        {
+                          "const": "accessory",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "audience": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "baby",
+                          "type": "string"
+                        },
+                        {
+                          "const": "child",
+                          "type": "string"
+                        },
+                        {
+                          "const": "adult",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "bodyArea": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "upper_body",
+                          "type": "string"
+                        },
+                        {
+                          "const": "lower_body",
+                          "type": "string"
+                        },
+                        {
+                          "const": "footwear",
+                          "type": "string"
+                        },
+                        {
+                          "const": "head_accessory",
+                          "type": "string"
+                        },
+                        {
+                          "const": "full_body",
+                          "type": "string"
+                        },
+                        {
+                          "const": "carry_accessory",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "gender": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "male",
+                          "type": "string"
+                        },
+                        {
+                          "const": "female",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unisex",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "packaging": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "unit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "set",
+                          "type": "string"
+                        },
+                        {
+                          "const": "multipack",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "transparency": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "components": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string",
+                          "maxLength": 30000
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "color": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string",
+                          "maxLength": 30000
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                }
+              },
+              "required": [],
+              "additionalProperties": false,
+              "maxProperties": 100
+            },
+            "references": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "storagePath": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "view": {
+                    "type": "string",
+                    "enum": [
+                      "back",
+                      "side",
+                      "detail",
+                      "front"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "maxLength": 30000
+                  }
+                },
+                "required": [
+                  "id",
+                  "storagePath",
+                  "view"
+                ],
+                "additionalProperties": false,
+                "maxProperties": 100
+              }
+            }
+          },
+          "required": [
+            "itemId",
+            "productId",
+            "variantId",
+            "name",
+            "kind",
+            "attributes",
+            "references"
+          ],
+          "additionalProperties": false,
+          "maxProperties": 100
+        }
+      },
+      "bases": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "storagePath": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "pose": {
+                  "type": "string",
+                  "enum": [
+                    "front",
+                    "front_three_quarter",
+                    "unknown",
+                    "commercial_back",
+                    "profile"
+                  ]
+                },
+                "faceVisible": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "lookingAtCamera": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "identityCoherent": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "identityEvidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "mainPoseCompliant": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "whiteRgbVerified": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "audience": {
+                  "type": "string",
+                  "enum": [
+                    "baby",
+                    "child",
+                    "adult"
+                  ]
+                },
+                "orientation": {
+                  "type": "string",
+                  "enum": [
+                    "back",
+                    "side",
+                    "front"
+                  ]
+                },
+                "posture": {
+                  "type": "string",
+                  "enum": [
+                    "other",
+                    "standing"
+                  ]
+                },
+                "framing": {
+                  "type": "string",
+                  "enum": [
+                    "upper_body",
+                    "lower_body",
+                    "full_body"
+                  ]
+                },
+                "background": {
+                  "type": "string",
+                  "enum": [
+                    "white",
+                    "neutral",
+                    "context"
+                  ]
+                },
+                "garmentVisible": {
+                  "type": "boolean"
+                },
+                "accessories": {
+                  "type": "boolean"
+                },
+                "performer": {
+                  "type": "string",
+                  "enum": [
+                    "unknown",
+                    "synthetic",
+                    "real"
+                  ]
+                },
+                "verified": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                }
+              },
+              "required": [
+                "orientation",
+                "posture",
+                "framing",
+                "background",
+                "garmentVisible",
+                "accessories",
+                "performer",
+                "verified",
+                "evidence"
+              ],
+              "additionalProperties": false,
+              "maxProperties": 100
+            },
+            "approvals": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "modelId": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "recipeRevision": {
+                    "type": "number"
+                  },
+                  "verifierModel": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "spec": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "const": "model-marketplace-set-v1",
+                        "type": "string"
+                      },
+                      "channel": {
+                        "type": "string",
+                        "enum": [
+                          "amazon",
+                          "shein",
+                          "tiktok-shop",
+                          "mercado-libre"
+                        ]
+                      },
+                      "category": {
+                        "type": "string",
+                        "enum": [
+                          "ordinary",
+                          "bodysuit",
+                          "fitted_child",
+                          "underwear",
+                          "swimwear",
+                          "accessory"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "baby",
+                          "child",
+                          "adult"
+                        ]
+                      },
+                      "bodyArea": {
+                        "type": "string",
+                        "enum": [
+                          "upper_body",
+                          "lower_body",
+                          "footwear",
+                          "head_accessory",
+                          "full_body",
+                          "carry_accessory"
+                        ]
+                      },
+                      "shot": {
+                        "type": "string",
+                        "enum": [
+                          "front",
+                          "front_three_quarter",
+                          "commercial_back"
+                        ]
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "main",
+                          "alternative"
+                        ]
+                      },
+                      "background": {
+                        "type": "string",
+                        "enum": [
+                          "white",
+                          "neutral"
+                        ]
+                      },
+                      "aspectRatio": {
+                        "type": "string",
+                        "enum": [
+                          "9:16",
+                          "3:4",
+                          "2:3",
+                          "1:1",
+                          "4:3",
+                          "3:2",
+                          "16:9"
+                        ]
+                      },
+                      "framing": {
+                        "type": "string",
+                        "enum": [
+                          "upper_body",
+                          "lower_body",
+                          "full_body"
+                        ]
+                      },
+                      "faceVisible": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "channel",
+                      "category",
+                      "audience",
+                      "bodyArea",
+                      "shot",
+                      "role",
+                      "background",
+                      "aspectRatio",
+                      "framing",
+                      "faceVisible"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  "poseId": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "storagePath": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "storageGeneration": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "identitySha256": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "observation": {
+                    "type": "object",
+                    "properties": {
+                      "pose": {
+                        "type": "string",
+                        "enum": [
+                          "front",
+                          "front_three_quarter",
+                          "unknown",
+                          "commercial_back",
+                          "profile"
+                        ]
+                      },
+                      "faceVisible": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "lookingAtCamera": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "identityCoherent": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "identityEvidence": {
+                        "type": "string",
+                        "maxLength": 30000
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      },
+                      "mainPoseCompliant": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "whiteRgbVerified": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "baby",
+                          "child",
+                          "adult"
+                        ]
+                      },
+                      "orientation": {
+                        "type": "string",
+                        "enum": [
+                          "back",
+                          "side",
+                          "front"
+                        ]
+                      },
+                      "posture": {
+                        "type": "string",
+                        "enum": [
+                          "other",
+                          "standing"
+                        ]
+                      },
+                      "framing": {
+                        "type": "string",
+                        "enum": [
+                          "upper_body",
+                          "lower_body",
+                          "full_body"
+                        ]
+                      },
+                      "background": {
+                        "type": "string",
+                        "enum": [
+                          "white",
+                          "neutral",
+                          "context"
+                        ]
+                      },
+                      "garmentVisible": {
+                        "type": "boolean"
+                      },
+                      "accessories": {
+                        "type": "boolean"
+                      },
+                      "performer": {
+                        "type": "string",
+                        "enum": [
+                          "unknown",
+                          "synthetic",
+                          "real"
+                        ]
+                      },
+                      "verified": {
+                        "type": "boolean"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "maxLength": 30000
+                      }
+                    },
+                    "required": [
+                      "orientation",
+                      "posture",
+                      "framing",
+                      "background",
+                      "garmentVisible",
+                      "accessories",
+                      "performer",
+                      "verified",
+                      "evidence"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  "verifiedAt": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "verifiedByUid": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "verifierVersion": {
+                    "const": "model-base-verifier-v1",
+                    "type": "string"
+                  },
+                  "requiresReverification": {
+                    "anyOf": [
+                      {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      {
+                        "const": true,
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "modelId",
+                  "recipeRevision",
+                  "spec",
+                  "poseId",
+                  "storagePath",
+                  "sha256",
+                  "storageGeneration",
+                  "identitySha256",
+                  "observation",
+                  "verifiedAt",
+                  "verifiedByUid",
+                  "verifierVersion"
+                ],
+                "additionalProperties": false,
+                "maxProperties": 100
+              }
+            }
+          },
+          "required": [
+            "id",
+            "storagePath"
+          ],
+          "additionalProperties": false,
+          "maxProperties": 100
+        }
+      },
+      "provider": {
+        "type": "string",
+        "enum": [
+          "fal-banana-pro",
+          "fal-nano-banana-2",
+          "fal-seedream-5",
+          "fal-gpt-image-2",
+          "fal-gpt-image-2.5-sunburst",
+          "fal-gpt-image-2.5-flare",
+          "fal-seedream-5-pro",
+          "fal-seedream-5-flash",
+          "fal-flux-2-edit",
+          "fal-seedream",
+          "openai-gpt-image-1.5"
+        ]
+      },
+      "imageConfig": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-seedream",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_4K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-banana-pro",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "21:9",
+                  "5:4",
+                  "4:5"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "openai-gpt-image-1.5",
+                "type": "string"
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "1024x1024",
+                  "1024x1536",
+                  "1536x1024"
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "size",
+              "quality"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-nano-banana-2",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "auto",
+                  "21:9",
+                  "5:4",
+                  "4:5",
+                  "4:1",
+                  "1:4",
+                  "8:1",
+                  "1:8"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K",
+                  "0.5K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "const": "fal-seedream-5",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_3K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-gpt-image-2",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-gpt-image-2.5-sunburst",
+                  "fal-gpt-image-2.5-flare"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-seedream-5-pro",
+                  "fal-seedream-5-flash"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_1K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-flux-2-edit",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          }
+        ]
+      },
+      "aspectRatio": {
+        "type": "string",
+        "enum": [
+          "9:16",
+          "3:4",
+          "2:3",
+          "1:1",
+          "4:3",
+          "3:2",
+          "16:9"
+        ]
+      }
+    },
+    "required": [
+      "requestId",
+      "approvedPlanId",
+      "prompt",
+      "clientId",
+      "articles",
+      "provider",
+      "imageConfig",
+      "aspectRatio"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "PreviewMarketplacePhotoPlanRequest": {
+    "type": "object",
+    "properties": {
+      "modelId": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string",
+            "maxLength": 30000
+          }
+        ]
+      },
+      "selectedChannels": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "enum": [
+            "amazon",
+            "shein",
+            "tiktok-shop",
+            "mercado-libre"
+          ]
+        }
+      },
+      "customPrompt": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "clientId": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "marketplaces": {
+        "type": "object",
+        "properties": {
+          "amazon": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shein": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tiktok-shop": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mercado-libre": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "maxProperties": 100
+      },
+      "objectScenes": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "clean",
+                "lifestyle_1",
+                "lifestyle_2",
+                "hero",
+                "human_use_1",
+                "human_use_2"
+              ]
+            },
+            "prompt": {
+              "type": "string",
+              "maxLength": 30000
+            }
+          },
+          "required": [
+            "type",
+            "prompt"
+          ],
+          "additionalProperties": false,
+          "maxProperties": 100
+        }
+      },
+      "articles": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "productId": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "variantId": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "garment",
+                "product"
+              ]
+            },
+            "attributes": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "object",
+                          "type": "string"
+                        },
+                        {
+                          "const": "ordinary",
+                          "type": "string"
+                        },
+                        {
+                          "const": "bodysuit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "fitted_child",
+                          "type": "string"
+                        },
+                        {
+                          "const": "underwear",
+                          "type": "string"
+                        },
+                        {
+                          "const": "swimwear",
+                          "type": "string"
+                        },
+                        {
+                          "const": "accessory",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "audience": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "baby",
+                          "type": "string"
+                        },
+                        {
+                          "const": "child",
+                          "type": "string"
+                        },
+                        {
+                          "const": "adult",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "bodyArea": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "upper_body",
+                          "type": "string"
+                        },
+                        {
+                          "const": "lower_body",
+                          "type": "string"
+                        },
+                        {
+                          "const": "footwear",
+                          "type": "string"
+                        },
+                        {
+                          "const": "head_accessory",
+                          "type": "string"
+                        },
+                        {
+                          "const": "full_body",
+                          "type": "string"
+                        },
+                        {
+                          "const": "carry_accessory",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "gender": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "male",
+                          "type": "string"
+                        },
+                        {
+                          "const": "female",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unisex",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "packaging": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": "unit",
+                          "type": "string"
+                        },
+                        {
+                          "const": "set",
+                          "type": "string"
+                        },
+                        {
+                          "const": "multipack",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "transparency": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        {
+                          "const": true,
+                          "type": "boolean"
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "components": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string",
+                          "maxLength": 30000
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                },
+                "color": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "string",
+                          "maxLength": 30000
+                        }
+                      ]
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "evidence": {
+                      "type": "string",
+                      "maxLength": 30000
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "commercial",
+                        "manual",
+                        "gemini"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "confidence",
+                    "evidence",
+                    "source"
+                  ],
+                  "additionalProperties": false,
+                  "maxProperties": 100
+                }
+              },
+              "required": [],
+              "additionalProperties": false,
+              "maxProperties": 100
+            },
+            "references": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "storagePath": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "view": {
+                    "type": "string",
+                    "enum": [
+                      "back",
+                      "side",
+                      "detail",
+                      "front"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "maxLength": 30000
+                  }
+                },
+                "required": [
+                  "id",
+                  "storagePath",
+                  "view"
+                ],
+                "additionalProperties": false,
+                "maxProperties": 100
+              }
+            }
+          },
+          "required": [
+            "itemId",
+            "productId",
+            "variantId",
+            "name",
+            "kind",
+            "attributes",
+            "references"
+          ],
+          "additionalProperties": false,
+          "maxProperties": 100
+        }
+      },
+      "bases": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "storagePath": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "pose": {
+                  "type": "string",
+                  "enum": [
+                    "front",
+                    "front_three_quarter",
+                    "unknown",
+                    "commercial_back",
+                    "profile"
+                  ]
+                },
+                "faceVisible": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "lookingAtCamera": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "identityCoherent": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "identityEvidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "mainPoseCompliant": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "whiteRgbVerified": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "audience": {
+                  "type": "string",
+                  "enum": [
+                    "baby",
+                    "child",
+                    "adult"
+                  ]
+                },
+                "orientation": {
+                  "type": "string",
+                  "enum": [
+                    "back",
+                    "side",
+                    "front"
+                  ]
+                },
+                "posture": {
+                  "type": "string",
+                  "enum": [
+                    "other",
+                    "standing"
+                  ]
+                },
+                "framing": {
+                  "type": "string",
+                  "enum": [
+                    "upper_body",
+                    "lower_body",
+                    "full_body"
+                  ]
+                },
+                "background": {
+                  "type": "string",
+                  "enum": [
+                    "white",
+                    "neutral",
+                    "context"
+                  ]
+                },
+                "garmentVisible": {
+                  "type": "boolean"
+                },
+                "accessories": {
+                  "type": "boolean"
+                },
+                "performer": {
+                  "type": "string",
+                  "enum": [
+                    "unknown",
+                    "synthetic",
+                    "real"
+                  ]
+                },
+                "verified": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                }
+              },
+              "required": [
+                "orientation",
+                "posture",
+                "framing",
+                "background",
+                "garmentVisible",
+                "accessories",
+                "performer",
+                "verified",
+                "evidence"
+              ],
+              "additionalProperties": false,
+              "maxProperties": 100
+            },
+            "approvals": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "modelId": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "recipeRevision": {
+                    "type": "number"
+                  },
+                  "verifierModel": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "spec": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "const": "model-marketplace-set-v1",
+                        "type": "string"
+                      },
+                      "channel": {
+                        "type": "string",
+                        "enum": [
+                          "amazon",
+                          "shein",
+                          "tiktok-shop",
+                          "mercado-libre"
+                        ]
+                      },
+                      "category": {
+                        "type": "string",
+                        "enum": [
+                          "ordinary",
+                          "bodysuit",
+                          "fitted_child",
+                          "underwear",
+                          "swimwear",
+                          "accessory"
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "baby",
+                          "child",
+                          "adult"
+                        ]
+                      },
+                      "bodyArea": {
+                        "type": "string",
+                        "enum": [
+                          "upper_body",
+                          "lower_body",
+                          "footwear",
+                          "head_accessory",
+                          "full_body",
+                          "carry_accessory"
+                        ]
+                      },
+                      "shot": {
+                        "type": "string",
+                        "enum": [
+                          "front",
+                          "front_three_quarter",
+                          "commercial_back"
+                        ]
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "main",
+                          "alternative"
+                        ]
+                      },
+                      "background": {
+                        "type": "string",
+                        "enum": [
+                          "white",
+                          "neutral"
+                        ]
+                      },
+                      "aspectRatio": {
+                        "type": "string",
+                        "enum": [
+                          "9:16",
+                          "3:4",
+                          "2:3",
+                          "1:1",
+                          "4:3",
+                          "3:2",
+                          "16:9"
+                        ]
+                      },
+                      "framing": {
+                        "type": "string",
+                        "enum": [
+                          "upper_body",
+                          "lower_body",
+                          "full_body"
+                        ]
+                      },
+                      "faceVisible": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "channel",
+                      "category",
+                      "audience",
+                      "bodyArea",
+                      "shot",
+                      "role",
+                      "background",
+                      "aspectRatio",
+                      "framing",
+                      "faceVisible"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  "poseId": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "storagePath": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "storageGeneration": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "identitySha256": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "observation": {
+                    "type": "object",
+                    "properties": {
+                      "pose": {
+                        "type": "string",
+                        "enum": [
+                          "front",
+                          "front_three_quarter",
+                          "unknown",
+                          "commercial_back",
+                          "profile"
+                        ]
+                      },
+                      "faceVisible": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "lookingAtCamera": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "identityCoherent": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "identityEvidence": {
+                        "type": "string",
+                        "maxLength": 30000
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      },
+                      "mainPoseCompliant": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "whiteRgbVerified": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "audience": {
+                        "type": "string",
+                        "enum": [
+                          "baby",
+                          "child",
+                          "adult"
+                        ]
+                      },
+                      "orientation": {
+                        "type": "string",
+                        "enum": [
+                          "back",
+                          "side",
+                          "front"
+                        ]
+                      },
+                      "posture": {
+                        "type": "string",
+                        "enum": [
+                          "other",
+                          "standing"
+                        ]
+                      },
+                      "framing": {
+                        "type": "string",
+                        "enum": [
+                          "upper_body",
+                          "lower_body",
+                          "full_body"
+                        ]
+                      },
+                      "background": {
+                        "type": "string",
+                        "enum": [
+                          "white",
+                          "neutral",
+                          "context"
+                        ]
+                      },
+                      "garmentVisible": {
+                        "type": "boolean"
+                      },
+                      "accessories": {
+                        "type": "boolean"
+                      },
+                      "performer": {
+                        "type": "string",
+                        "enum": [
+                          "unknown",
+                          "synthetic",
+                          "real"
+                        ]
+                      },
+                      "verified": {
+                        "type": "boolean"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "maxLength": 30000
+                      }
+                    },
+                    "required": [
+                      "orientation",
+                      "posture",
+                      "framing",
+                      "background",
+                      "garmentVisible",
+                      "accessories",
+                      "performer",
+                      "verified",
+                      "evidence"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  "verifiedAt": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "verifiedByUid": {
+                    "type": "string",
+                    "maxLength": 30000
+                  },
+                  "verifierVersion": {
+                    "const": "model-base-verifier-v1",
+                    "type": "string"
+                  },
+                  "requiresReverification": {
+                    "anyOf": [
+                      {
+                        "const": false,
+                        "type": "boolean"
+                      },
+                      {
+                        "const": true,
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "modelId",
+                  "recipeRevision",
+                  "spec",
+                  "poseId",
+                  "storagePath",
+                  "sha256",
+                  "storageGeneration",
+                  "identitySha256",
+                  "observation",
+                  "verifiedAt",
+                  "verifiedByUid",
+                  "verifierVersion"
+                ],
+                "additionalProperties": false,
+                "maxProperties": 100
+              }
+            }
+          },
+          "required": [
+            "id",
+            "storagePath"
+          ],
+          "additionalProperties": false,
+          "maxProperties": 100
+        }
+      },
+      "provider": {
+        "type": "string",
+        "enum": [
+          "fal-banana-pro",
+          "fal-nano-banana-2",
+          "fal-seedream-5",
+          "fal-gpt-image-2",
+          "fal-gpt-image-2.5-sunburst",
+          "fal-gpt-image-2.5-flare",
+          "fal-seedream-5-pro",
+          "fal-seedream-5-flash",
+          "fal-flux-2-edit",
+          "fal-seedream",
+          "openai-gpt-image-1.5"
+        ]
+      },
+      "imageConfig": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-seedream",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_4K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-banana-pro",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "21:9",
+                  "5:4",
+                  "4:5"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "openai-gpt-image-1.5",
+                "type": "string"
+              },
+              "size": {
+                "type": "string",
+                "enum": [
+                  "1024x1024",
+                  "1024x1536",
+                  "1536x1024"
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "size",
+              "quality"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-nano-banana-2",
+                "type": "string"
+              },
+              "aspectRatio": {
+                "type": "string",
+                "enum": [
+                  "9:16",
+                  "3:4",
+                  "2:3",
+                  "1:1",
+                  "4:3",
+                  "3:2",
+                  "16:9",
+                  "auto",
+                  "21:9",
+                  "5:4",
+                  "4:5",
+                  "4:1",
+                  "1:4",
+                  "8:1",
+                  "1:8"
+                ]
+              },
+              "resolution": {
+                "type": "string",
+                "enum": [
+                  "1K",
+                  "2K",
+                  "4K",
+                  "0.5K"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "aspectRatio",
+              "resolution"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "const": "fal-seedream-5",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_3K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "const": "fal-gpt-image-2",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-gpt-image-2.5-sunburst",
+                  "fal-gpt-image-2.5-flare"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize",
+              "quality",
+              "outputFormat"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "fal-seedream-5-pro",
+                  "fal-seedream-5-flash"
+                ]
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_2K",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  },
+                  {
+                    "const": "auto_1K",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          },
+          {
+            "type": "object",
+            "properties": {
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  "jpeg",
+                  "png",
+                  "webp"
+                ]
+              },
+              "provider": {
+                "const": "fal-flux-2-edit",
+                "type": "string"
+              },
+              "imageSize": {
+                "anyOf": [
+                  {
+                    "const": "square_hd",
+                    "type": "string"
+                  },
+                  {
+                    "const": "square",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "portrait_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_4_3",
+                    "type": "string"
+                  },
+                  {
+                    "const": "landscape_16_9",
+                    "type": "string"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number"
+                      },
+                      "height": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false,
+                    "maxProperties": 100
+                  }
+                ]
+              }
+            },
+            "required": [
+              "provider",
+              "imageSize"
+            ],
+            "additionalProperties": false,
+            "maxProperties": 100
+          }
+        ]
+      },
+      "aspectRatio": {
+        "type": "string",
+        "enum": [
+          "9:16",
+          "3:4",
+          "2:3",
+          "1:1",
+          "4:3",
+          "3:2",
+          "16:9"
+        ]
+      }
+    },
+    "required": [
+      "clientId",
+      "articles",
+      "provider",
+      "imageConfig",
+      "aspectRatio"
     ],
     "additionalProperties": false,
     "maxProperties": 100

@@ -1,3 +1,4 @@
+import { useModelMarketplaceRules } from '../../../models/marketplaceRules/useModelMarketplaceRules';
 import { activePhotoChannels, buildMarketplacePhotoPlan } from '../../../../../shared/src/marketplacePhotoPlan';
 import { wizardPhotoPlanInput } from '../marketplacePlan';
 import { seedTryOnPrompt } from '../../../../../shared/src/approvedTryOnPrompt';
@@ -313,8 +314,9 @@ export const useGenerateWizard = ({ draftScope = '' }: { draftScope?: string } =
     [selectedModel],
   );
 
+  const { rules: modelMarketplaceRules } = useModelMarketplaceRules();
   const marketplacePlan = useMemo(() => selectedClient && state.generationKind === 'garment' && activePhotoChannels(selectedClient.marketplaces).length
-    ? buildMarketplacePhotoPlan(wizardPhotoPlanInput(state, selectedClient, selectedModel)) : undefined, [selectedClient, selectedModel, state]);
+    ? buildMarketplacePhotoPlan({ ...wizardPhotoPlanInput(state, selectedClient, selectedModel), modelMarketplaceRules }) : undefined, [selectedClient, selectedModel, state, modelMarketplaceRules]);
   useEffect(() => {
     if (state.marketplacePhotoPlan?.id !== marketplacePlan?.id) setState(current => ({ ...current, marketplacePhotoPlan: marketplacePlan }));
   }, [marketplacePlan, state.marketplacePhotoPlan?.id]);
@@ -595,6 +597,7 @@ export const useGenerateWizard = ({ draftScope = '' }: { draftScope?: string } =
       ...current,
       selectedClientId: clientId,
       selectedModelId: null,
+      selectedPhotoChannels: undefined,
       outputModeChosen: true,
       selectedSpreadsheetTemplateId: null,
       selectedSpreadsheetCategoryId: null,
@@ -830,6 +833,7 @@ export const useGenerateWizard = ({ draftScope = '' }: { draftScope?: string } =
     goToStep,
     handleStepSelect,
     canSelectStep,
+    handlePhotoChannelsChange: (selectedPhotoChannels: import('../../../../../shared/src/marketplaces').MarketplaceId[]) => setState(current => ({ ...current, selectedPhotoChannels })),
     handlePhotoIdentityChange: (itemId: string, productId: string, variantId: string) => setState(current => ({ ...current, garments: current.garments.map(g => g.id === itemId ? { ...g, photoProductId: productId, photoVariantId: variantId } : g) })),
     handlePhotoAttributesChange: (itemId: string, attributes: import('../../../../../shared/src/types').PhotoArticle['attributes']) => setState(current => ({ ...current, garments: current.garments.map(g => g.id === itemId ? { ...g, photoAttributes: attributes } : g) })),
     handleFiles: product.handleFiles,

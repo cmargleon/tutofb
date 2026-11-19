@@ -347,7 +347,7 @@ const ProviderImageConfigControls: React.FC<ProviderImageConfigSelectionProps> =
 
         {renderCompactOptions({
           label: 'Formato solicitado al proveedor',
-          values: GPT_IMAGE_2_OUTPUT_FORMAT_VALUES,
+          values: GPT_IMAGE_2_OUTPUT_FORMAT_VALUES.filter((format) => format !== 'webp'),
           selected: value.outputFormat,
           onSelect: (outputFormat) => onChange({ ...value, outputFormat: outputFormat as typeof value.outputFormat }),
           labels: OUTPUT_FORMAT_LABELS,

@@ -2,9 +2,15 @@ import type { PhotoArticleAttributes, PhotoPlan } from '../../../shared/src/type
 import { PHOTO_ATTRIBUTE_VALUES } from '../../../shared/src/photoAttributes';
 import { manualPhotoAttribute } from '../../../shared/src/marketplacePhotoPlan';
 import { MarketplacePhotoPlanPreview, PHOTO_LABELS as LABELS } from './MarketplacePhotoPlanPreview';
-export function MarketplacePhotoPlanPanel({ plan, onAttributesChange, onIdentityChange, disabled }: { plan: PhotoPlan; disabled: boolean; onIdentityChange: (itemId: string, productId: string, variantId: string) => void; onAttributesChange: (itemId: string, attributes: Partial<PhotoArticleAttributes>) => void }) {
+import { marketplaceDressingCustomization } from '../../../shared/src/modelPhotoSets';
+export function MarketplacePhotoPlanPanel({ plan, prompt, onPromptChange, onAttributesChange, onIdentityChange, disabled }: { plan: PhotoPlan; prompt: string; onPromptChange: (prompt: string) => void; disabled: boolean; onIdentityChange: (itemId: string, productId: string, variantId: string) => void; onAttributesChange: (itemId: string, attributes: Partial<PhotoArticleAttributes>) => void }) {
   return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
     <h2 className="text-lg font-semibold">Fotografías para {plan.channels.join(', ')}</h2>
+    <details className="rounded-xl border p-3" open={plan.issues.some(i => i.code.startsWith('prompt-'))}>
+      <summary className="cursor-pointer text-sm font-medium">Personalización compatible de vestido</summary>
+      <label className="mt-2 block text-sm">Instrucciones adicionales<textarea className="tuto-field mt-1 w-full" rows={4} disabled={disabled} value={marketplaceDressingCustomization(prompt)} onChange={e => onPromptChange(e.target.value)} /></label>
+      <p className="mt-2 text-xs text-slate-600">Opcional. La base fija persona, pose, cámara, iluminación, fondo y encuadre. Conserva aquí tus indicaciones de fidelidad; las reglas de cada destino se aplican desde la receta.</p>
+    </details>
     {plan.articles.filter(a => a.kind === 'garment').map(a => <fieldset key={a.itemId} disabled={disabled} className="rounded-xl border p-3">
       <legend className="px-2 font-medium">{a.name}</legend>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -17,7 +23,7 @@ export function MarketplacePhotoPlanPanel({ plan, onAttributesChange, onIdentity
           </select><span className="text-xs text-slate-500">{attribute?.source || 'Sin evidencia'} · {attribute?.confidence == null ? '?' : Math.round(attribute.confidence * 100) + '%'}</span>
         </label>;
       })}
-        <label className="text-sm">Transparencia<select className="tuto-field mt-1 w-full" value={a.attributes.transparency?.value == null ? '' : String(a.attributes.transparency.value)} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, transparency: manualPhotoAttribute(e.target.value === 'true') })}><option value="">Por confirmar</option><option value="false">No</option><option value="true">Sí</option></select></label>
+        <label className="text-sm">Transparencia<select className="tuto-field mt-1 w-full" value={a.attributes.transparency?.value == null ? '' : String(a.attributes.transparency.value)} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, transparency: manualPhotoAttribute<boolean>(e.target.value === '' ? null : e.target.value === 'true') })}><option value="">Por confirmar</option><option value="false">No</option><option value="true">Sí</option></select></label>
         {(['components', 'color'] as const).map(key => <label className="text-sm" key={key}>{key === 'components' ? 'Componentes y cantidades vendidos' : 'Color / variante'}<input className="tuto-field mt-1 w-full" value={a.attributes[key]?.value || ''} onChange={e => onAttributesChange(a.itemId, { ...a.attributes, [key]: manualPhotoAttribute(e.target.value) })} /></label>)}
       </div>
     </fieldset>)}

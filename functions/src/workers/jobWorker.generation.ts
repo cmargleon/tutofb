@@ -50,7 +50,7 @@ export const nextGenerationAttempt = (job: Job): number => {
 
 export const signInputImages = async (job: Job): Promise<InputImageUrls> => {
   const [poseImageUrl, garmentImageUrl] = await Promise.all([
-    getSignedUrl(job.poseImagePath),
+    getSignedUrl(job.poseImagePath, job.photoTask?.base?.approvals?.[0]?.storageGeneration),
     getSignedUrl(job.garmentFilePath),
   ]);
   return { poseImageUrl, garmentImageUrl };
@@ -145,7 +145,7 @@ const generateWithJobProvider = async ({ job, imageConfig, inputUrls, signal }: 
   const productReferences = job.imageEdit
     ? { referenceImageUrls: [inputUrls.poseImageUrl] }
     : job.generationKind === 'product'
-    ? { referenceImageUrls: await Promise.all(productReferencePaths(job).map(getSignedUrl)) }
+    ? { referenceImageUrls: await Promise.all(productReferencePaths(job).map(path => getSignedUrl(path, path === job.photoTask?.base?.storagePath ? job.photoTask.base.approvals?.[0]?.storageGeneration : undefined))) }
     : {};
   return generateWithProvider(
     job.provider as Provider,

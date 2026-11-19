@@ -85,7 +85,7 @@ export async function incorporateCatalogSource(uid: string, input: ApplyCatalogI
     // merge keeps routing metadata (e.g. an organizer base-code binding) across later source events.
     tx.set(aliasRef, { clientId: input.clientId, productId, legacyProductId: legacyId }, { merge: true });
     tx.set(linkRef, { ...generation, sourceFingerprints: { ...fingerprints, [sourceKey]: input.fingerprint }, updatedAt: now });
-    if (productId !== legacyId && legacy.exists) tx.set(legacy.ref, { catalog: { redirectTo: productId } }, { merge: true });
+    if (productId !== legacyId && legacy.exists) tx.set(legacy.ref, { catalog: { redirectTo: productId, listed: false } }, { merge: true });
     return { productId, revision: data.revision };
   });
 }

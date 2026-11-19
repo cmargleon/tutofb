@@ -116,6 +116,7 @@ export type JobFailureReasonCode =
   | 'gemini_rejected_output'
   | 'manual_cancellation'
   | 'job_timeout'
+  | 'firestore_contention'
   | 'legacy_error'
   | 'unknown';
 

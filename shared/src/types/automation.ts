@@ -18,6 +18,7 @@ export interface AutomationInput {
   driveFile?: { folderId: string; fileId: string; revisionId?: string; version?: string };
 }
 export interface AutomationPreset {
+  selectedChannels?: import('../marketplaces').MarketplaceId[];
   photoProfile?: import('./provider').CommercialPhotoProfile;
   modelId?: string;
   poseIds?: string[];
@@ -28,6 +29,7 @@ export interface AutomationPreset {
   scenes?: ProductSceneInput[];
 }
 export interface CreateAutomationJobRequest {
+  selectedChannels?: import('../marketplaces').MarketplaceId[];
   source: 'gmail' | 'manual' | 'api';
   externalId: string;
   gmailMessageId?: string;
@@ -126,6 +128,8 @@ export interface AutomationPolicy {
 export interface AutomationBudgetState {
   limitUsd: number;
   reservedUsd: number;
+  /** Holds admitted but not yet verified against limitUsd (transient, milliseconds). */
+  pendingUsd?: number;
   spentUsd: number;
   recordedUsd: number;
   providerConfirmedUsd: number | null;

@@ -1,3 +1,4 @@
+import { approvedBasesForInput, modelFromBases } from './support/modelSetFixtures';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -17,23 +18,41 @@ test('photo plan: authoritative creation, replay, frozen channels, automation pa
   const { manualPhotoAttribute: a } = require('../functions/lib/shared/src/marketplacePhotoPlan.js');
   const attributes = { category: a('ordinary'), audience: a('adult'), bodyArea: a('upper_body'), packaging: a('unit'), transparency: a(false), color: a('blue'), components: a('1 shirt') };
   const marketplaces = { amazon: { enabled: true }, shein: { enabled: true }, 'tiktok-shop': { enabled: true }, 'mercado-libre': { enabled: true } };
-  await db.doc(`clients/${clientId}`).set({ name: 'Test', marketplaces, automation: { enabled: true } });
+  await db.doc(`clients/${clientId}`).set({ name: 'Test', marketplaces, automation: { enabled: true, defaultModelId: 'model' } });
   await db.doc(`users/${uid}`).set({ role: 'operador', active: true, clientAccess: { mode: 'global' } });
   await db.doc('system_config/main').set({ batchMaxJobs: 100, jobMaxRetries: 0 });
   require('../functions/lib/functions/src/admin/systemConfig.js').invalidateSystemConfigCache();
   const { createCommercialProviderImageConfig } = require('../functions/lib/shared/src/commercialPhoto.js');
-  const input = { clientId, articles: [{ itemId: 'shirt', productId: 'shirt', variantId: 'shirt', name: 'front.jpg', kind: 'garment', attributes, references: [{ id: 'shirt-0', storagePath: path, view: 'front' }] }], provider: 'fal-gpt-image-2.5-flare', imageConfig: createCommercialProviderImageConfig('fal-gpt-image-2.5-flare'), aspectRatio: '3:4' };
+  const input = { clientId, modelId: 'model', customPrompt: 'Commercial photograph', articles: [{ itemId: 'shirt', productId: 'shirt', variantId: 'shirt', name: 'front.jpg', kind: 'garment', attributes, references: [{ id: 'shirt-0', storagePath: path, view: 'front' }] }], provider: 'fal-gpt-image-2.5-flare', imageConfig: createCommercialProviderImageConfig('fal-gpt-image-2.5-flare'), aspectRatio: '3:4' };
+  const fixtureModel = modelFromBases(approvedBasesForInput({ ...input, marketplaces } as any));
+  fixtureModel.clientId = clientId; fixtureModel.identityTraits = { sex: 'female', age: '30', skin: null, build: null, hairColor: null, hairLength: null };
+  fixtureModel.approvedIdentity!.traitsSnapshot = fixtureModel.identityTraits;
+  const { createHash } = await import('node:crypto');
+  for (const pose of fixtureModel.poses) {
+    const observation = pose.photoObservation!;
+    const baseBytes = await sharp({ create: { width: observation.width!, height: observation.height!, channels: 3, background: observation.background === 'white' ? 'white' : '#eeeeee' } }).png().toBuffer();
+    await bucket.file(pose.storagePath).save(baseBytes, { metadata: { contentType: 'image/png' } });
+    const generation = String((await bucket.file(pose.storagePath).getMetadata())[0].generation);
+    const sha = createHash('sha256').update(baseBytes).digest('hex');
+    for (const approval of fixtureModel.marketplaceBaseApprovals!.filter(a => a.poseId === pose.id)) Object.assign(approval, { sha256: sha, storageGeneration: generation });
+    if (fixtureModel.approvedIdentity!.poseId === pose.id) Object.assign(fixtureModel.approvedIdentity!, { sha256: sha, storageGeneration: generation });
+  }
+  fixtureModel.marketplaceBaseApprovals!.forEach(a => a.identitySha256 = fixtureModel.approvedIdentity!.sha256);
+  await db.doc('models/model').set(fixtureModel);
   const service = require('../functions/lib/functions/src/callables/createMarketplacePhotoBatch.js');
   const provider = require('../functions/lib/functions/src/providers/index.js'); const review = require('../functions/lib/functions/src/review/geminiImageReview.js');
   const { File } = require('../functions/node_modules/@google-cloud/storage'); t.mock.method(File.prototype, 'getSignedUrl', async () => ['https://fixtures.invalid/reference']);
   let generations = 0; const reviewed: Buffer[] = [];
-  t.mock.method(provider, 'generateWithProvider', async () => { generations++; return { provider: input.provider, imageBytes: bytes, contentType: 'image/png', remoteUrl: null, requestId: 'simulated', responseSummary: {} }; });
+  t.mock.method(provider, 'generateWithProvider', async (_provider: any, request: any) => { generations++; const config = request.imageConfig; const square = typeof config.imageSize === 'object' && config.imageSize.width === config.imageSize.height; const output = square ? await sharp(bytes).resize(1200, 1200).png().toBuffer() : bytes; return { provider: input.provider, imageBytes: output, contentType: 'image/png', remoteUrl: null, requestId: 'simulated', responseSummary: {} }; });
   t.mock.method(review, 'reviewGeneratedImageWithGemini', async ({ photoTask, generatedImage }: any) => {
     assert.equal((await sharp(generatedImage.bytes).metadata()).format, 'jpeg'); reviewed.push(generatedImage.bytes);
     return { model: 'test', verdict: 'approved', summary: 'test', reviewPrompt: 'test', revisedPrompt: null, criteria: [], marketplaceData: {}, photoValidation: { fidelity: true, destinations: photoTask.destinations.map((d: any) => ({ channel: d.channel, position: d.position, passed: true, notes: 'verified' })) } };
   });
   try {
-    const plan = await service.resolveMarketplacePhotoPlan(input, uid); assert.equal(plan.tasks.length, 2);
+    const forged = await service.resolveMarketplacePhotoPlan({ ...input, modelId: null, bases: approvedBasesForInput({ ...input, marketplaces } as any) }, uid);
+    assert.equal(forged.tasks.length, 0); assert.ok(forged.issues.some((i: any) => i.code.startsWith('base-')));
+    const plan = await service.resolveMarketplacePhotoPlan(input, uid); assert.equal(plan.tasks.length, 4); // one photo per active marketplace
+    assert.ok(plan.tasks.every((task: any) => task.destinations.length === 1));
     const request = { ...input, requestId: 'manual', approvedPlanId: plan.id, prompt: 'Commercial photograph' };
     await assert.rejects(service.createMarketplacePhotoBatchCore({ ...request, approvedPlanId: 'forged' }, uid));
     const created = await service.createMarketplacePhotoBatchCore(request, uid);
@@ -42,7 +61,7 @@ test('photo plan: authoritative creation, replay, frozen channels, automation pa
     const jobs: import('../functions/node_modules/firebase-admin/lib/firestore/index').QueryDocumentSnapshot[] = (await db.collection('jobs').where('batchId', '==', created.batchId).get()).docs;
     const worker = require('../functions/lib/functions/src/workers/jobWorker.js');
     for (const j of jobs) await worker.processJob(j.id, 'create', { skipBacklogSweep: true });
-    assert.equal(generations, 2);
+    assert.equal(generations, 4);
     const completed = await Promise.all(jobs.map(j => j.ref.get()));
     for (const [index, j] of completed.entries()) {
       assert.equal(j.get('status'), 'completed', j.get('lastError'));
@@ -126,7 +145,7 @@ test('photo plan: authoritative creation, replay, frozen channels, automation pa
       inputImages: multiInputs.map(image => ({ ...image, itemId: 'shirt' })),
       metadata: { photoArticles: { shirt: { referenceViews: { 'front.jpg': 'front', 'back.jpg': 'back', 'side.jpg': 'side' } } } },
       budgetUsd: 10, maxReviewAttempts: 1, maxOperationalRetries: 0, allowEstimatedCosts: true, authorizeClassification: true }, uid, 'operador');
-    assert.ok(recipeAuthorization.items[0].sceneIds.includes('side-white-model'));
+    assert.ok(recipeAuthorization.items[0].sceneIds.some((id: string) => id.endsWith(':side-white-model')));
     await saveClientMarketplace({ ...recipeTarget, expectedPhotoRecipeRevision: 1, photoRecipe: null }, db);
     await assert.rejects(service.createMarketplacePhotoBatchCore({ ...recipeRequest, requestId: 'stale-recipe' }, uid), /plan cambió/);
     assert.deepEqual(await service.createMarketplacePhotoBatchCore(recipeRequest, uid), recipeBatch);

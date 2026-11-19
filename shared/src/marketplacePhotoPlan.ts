@@ -1,4 +1,6 @@
+import { effectiveModelMarketplaceRule } from './modelMarketplaceRules';
 import type { PhotoArticle, PhotoAttribute, PhotoPlan, PhotoPlanInput, PhotoRequirement, PhotoTask } from './types/photoPlan';
+import { compatibleBaseApproval, modelBaseSpec, photoTaskConfig, photoPromptConflicts, marketplaceDressingCustomization } from './modelPhotoSets';
 import type { MarketplaceId } from './marketplaces';
 import { getProviderCostUsd } from './constants/providerCosts';
 import { effectivePhotoRecipe, photoRecipeAllowsAppearance, photoRecipeRevisions, PHOTO_RECIPE_VERSION } from './marketplacePhotoRecipe';
@@ -15,9 +17,9 @@ export function photoIdentity(value: unknown): string {
   return `${(a >>> 0).toString(16).padStart(8, '0')}${(b >>> 0).toString(16).padStart(8, '0')}`;
 }
 export const knownPhotoAttribute = <T>(attribute?: PhotoAttribute<T>): T | null => attribute && (attribute.source !== 'gemini' || (attribute.confidence ?? 0) >= .8) ? attribute.value : null;
-export const manualPhotoAttribute = <T>(value: T, evidence = 'Corrección del operador'): PhotoAttribute<T> => ({ value, confidence: 1, evidence, source: 'manual' });
+export const manualPhotoAttribute = <T>(value: T | null, evidence = 'Corrección del operador'): PhotoAttribute<T> => ({ value, confidence: 1, evidence, source: 'manual' });
 export const COMMON_PHOTO_INSTRUCTIONS = 'Representa fielmente la variante, color real, corte, textura, estampados, logos exteriores, cantidades y componentes vendidos. No inventes materiales, detalles ocultos ni colores sin referencias. No añadas productos que confundan, textos, logos añadidos, promociones, precios, contactos, QR, bordes ni marcas de agua. Conserva los logos reales del producto. Respeta derechos y restricciones de contenido. Color, sin blanco y negro exclusivo. Cobertura apropiada, sin exposición íntima, sexualización ni barras gráficas; conserva transparencias fieles.';
-const rule = (id: string, channel: PhotoRequirement['channel'], category: string, imageType: PhotoRequirement['imageType'], level: PhotoRequirement['level'], text: string): PhotoRequirement => ({ id, channel, category, imageType, level, text, verified: true });
+const rule = (id: string, channel: PhotoRequirement['channel'], category: string, imageType: PhotoRequirement['imageType'], level: PhotoRequirement['level'], text: string): PhotoRequirement => ({ id, channel, category, imageType, level, text, verified: level !== 'preference', source: level === 'preference' ? 'tuto-product-decision' : 'supplied-marketplace-guide' });
 export const PHOTO_RULES: PhotoRequirement[] = [
   rule('fidelity', 'common', 'all', 'all', 'obligation', COMMON_PHOTO_INSTRUCTIONS),
   rule('amazon-main', 'amazon', 'adult-ordinary-clothing', 'main', 'obligation', 'Modelo adulto de pie, frontal, prenda completa sobre RGB 255,255,255, aproximadamente 85% según guía aplicable. Ojos abiertos, boca cerrada, brazos a los lados. No sentado, arrodillado, inclinado, recostado, maniquí visible, perchas, prendas dobladas, selfie, collage ni colores adicionales salvo pack real.'),
@@ -29,7 +31,8 @@ export const PHOTO_RULES: PhotoRequirement[] = [
   rule('ml-pack', 'mercado-libre', 'packs', 'main', 'obligation', 'Fondo digitalizado blanco, gris claro o crema, sin textura ni degradado. Disposición ordenada y contenido exacto.'),
   rule('ml-baby', 'mercado-libre', 'baby', 'main', 'recommendation', 'Favorecer prenda sola completa sin doblar ni colgar.'),
   rule('ml-sensitive', 'mercado-libre', 'underwear-swimwear-unisex', 'all', 'recommendation', 'Modelo o maniquí invisible, prenda completa sin sexualización. Maniquí invisible unisex sin silueta marcadamente de un género.'),
-  rule('tiktok-main', 'tiktok-shop', 'all', 'main', 'obligation', 'Portada frontal sobre blanco puro. Proporción 3:4 o 4:3, predeterminada 3:4; no convertir a cuadrado.'),
+  rule('tiktok-main', 'tiktok-shop', 'all', 'main', 'obligation', 'Portada frontal sobre blanco puro.'),
+  rule('tiktok-set-square', 'tiktok-shop', 'all', 'all', 'preference', 'Preferencia de producto Tuto para este flujo: composición nativa 1:1, sin recortar la prenda. No es una obligación universal de TikTok.'),
   rule('tiktok-child', 'tiktok-shop', 'all-child-clothing', 'all', 'obligation', 'Toda ropa bebé/infantil: flat lay blanco, sin personas ni maniquíes en ninguna imagen.'),
   rule('tiktok-underwear', 'tiktok-shop', 'adult-underwear', 'all', 'obligation', 'Modelo de catálogo neutro, maniquí o flat lay sin exposición íntima ni poses sexualizadas.'),
   rule('shein-schema', 'shein', 'configured-skc-schema', 'main', 'obligation', 'Principal SKC por color: image_type=1, image_sort=1. No repetir portada como detalle SKC. Otros tipos solo con esquema configurado.'),
@@ -37,12 +40,16 @@ export const PHOTO_RULES: PhotoRequirement[] = [
 ];
 
 export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
-  const channels = input.articles.some(a => a.kind === 'garment') ? activePhotoChannels(input.marketplaces) : [];
+  const active = activePhotoChannels(input.marketplaces);
+  const channels = input.articles.some(a => a.kind === 'garment') ? active.filter(channel => !input.selectedChannels || input.selectedChannels.includes(channel)) : [];
   const plan: PhotoPlan = { version: PHOTO_PLAN_VERSION, id: '', clientId: input.clientId, channels, articles: input.articles,
     rules: channels.length ? PHOTO_RULES.filter(r => r.channel === 'common' || channels.includes(r.channel as MarketplaceId)) : [], tasks: [], issues: [],
     effectiveConfig: { provider: input.provider, imageConfig: input.imageConfig, aspectRatio: input.aspectRatio },
     estimate: { uniqueImages: 0, generations: 0, reviews: 0, estimatedCostUsd: 0 } };
   const issue = (itemId: string, code: string, message: string, blocking = true) => plan.issues.push({ itemId, code, message, blocking });
+  if (input.selectedChannels && (!input.selectedChannels.length || input.selectedChannels.some(c => !active.includes(c)))) issue('', 'destinations', 'Selecciona al menos un marketplace activo del cliente.');
+  if (marketplaceDressingCustomization(input.customPrompt).length > 2000) issue('', 'prompt-length', 'Reduce la personalización a instrucciones breves de vestido (máximo 2000 caracteres). Las reglas de composición ya están en la receta.');
+  for (const conflict of photoPromptConflicts(marketplaceDressingCustomization(input.customPrompt))) issue('', 'prompt-conflict', `Personalización incompatible: ${conflict}. Corrige el prompt para conservar la base aprobada.`);
   const recipeSnapshot: NonNullable<PhotoPlan['recipeSnapshot']> = {
     version: PHOTO_RECIPE_VERSION, channels: photoRecipeRevisions(channels, input.marketplaces), articles: [],
   };
@@ -61,7 +68,6 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
       for (const [key, value] of Object.entries({ category, audience, packaging, bodyArea: area, transparency: knownPhotoAttribute(a.transparency), color: knownPhotoAttribute(a.color), components: knownPhotoAttribute(a.components) }))
         if (value === null || value === '') issue(article.itemId, `attribute-${key}`, `Confirma ${key}: atributo indispensable desconocido; se conservan las referencias.`);
     }
-    if (channels.includes('tiktok-shop') && !['3:4', '4:3'].includes(input.aspectRatio)) issue(article.itemId, 'tiktok-ratio', 'TikTok requiere 3:4 o 4:3 en este proyecto; corrige el encuadre explícitamente.');
     if (plan.issues.length > startingIssues) continue;
     const child = audience === 'child' || audience === 'baby';
     const pack = packaging === 'multipack' || packaging === 'set';
@@ -82,12 +88,24 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
       const composition: PhotoTask['composition'] = view === 'detail' ? 'reference' : article.kind === 'product' ? 'product' : flat ? 'flat_lay' : 'model';
       const refs = article.references.filter(r => r.view === view).map(r => r.storagePath).sort();
       if (!refs.length) return;
-      const base = composition === 'model' ? (input.bases || []).find(b => b.observation?.verified && b.observation.orientation === view
-        && (background !== 'white' || b.observation.whiteRgbVerified === true) && b.observation.audience === audience && b.observation.framing === (area === 'upper_body' ? 'upper_body' : area === 'lower_body' ? 'lower_body' : 'full_body') && b.observation.background === background && b.observation.garmentVisible && !b.observation.accessories
-        && (channel !== 'amazon' || !main || b.observation.posture === 'standing')) || null : null;
-      const identityBase = composition === 'model' ? base || (input.bases || []).find(b => b.observation?.verified && b.observation.audience === audience && b.observation.orientation === view) || (input.bases || []).find(b => b.observation?.verified && b.observation.audience === audience) || null : null;
-      const syntheticPerformer = (composition === 'model' && (!identityBase || identityBase.observation?.performer === 'synthetic')) || Boolean(scene?.type.startsWith('human_use'));
-      if (identityBase?.observation?.performer === 'unknown' && channel === 'amazon') { issue(article.itemId, 'base-provenance', 'Confirma procedencia sintética/real de la base antes de preparar Amazon.'); return; }
+      const outputPose = view === 'back' ? 'commercial_back' as const : view === 'side' ? 'front_three_quarter' as const : 'front' as const;
+      const taskConfig = photoTaskConfig(input, channel, composition === 'model' ? input.modelMarketplaceRules : undefined);
+      const spec = composition === 'model' ? modelBaseSpec(channel, recipeCategory!, audience!, area!, outputPose, input.marketplaces, input.aspectRatio, input.modelMarketplaceRules) : null;
+      if (spec) {
+        if (!effectiveModelMarketplaceRule(channel, input.modelMarketplaceRules).shots.includes(outputPose)) return;
+        background = spec.background;
+      }
+      // A lateral garment reference is evidence, never a command to turn the person 90 degrees.
+      if (view === 'side' && composition === 'model') refs.push(...article.references.filter(r => r.view === 'front').map(r => r.storagePath).filter(path => !refs.includes(path)));
+      const candidate = spec ? (input.bases || []).find(b => compatibleBaseApproval(b, spec)) || null : null;
+      const approval = candidate && compatibleBaseApproval(candidate, spec!);
+      const base = candidate && approval ? { id: candidate.id, storagePath: candidate.storagePath, observation: approval.observation, approvals: [approval] } : null;
+      if (spec && !base) {
+        issue(article.itemId, `base-${channel}-${view}`, `${channel}: falta base aprobada ${outputPose}, categoría ${recipeCategory}, ${audience}, zona ${area}, fondo ${background}, ${taskConfig.aspectRatio}. Completa o verifica esta toma en el catálogo del modelo.`);
+        return;
+      }
+      const identityBase = null;
+      const syntheticPerformer = base ? compatibleBaseApproval(base, spec!)!.observation.performer === 'synthetic' : false;
       const ruleIds = ['fidelity'];
       if (channel === 'amazon' && article.kind === 'garment' && main) {
         if (pack) ruleIds.push('amazon-pack');
@@ -96,20 +114,24 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
         else if (audience === 'adult' && ['underwear', 'swimwear'].includes(category!)) ruleIds.push('amazon-sensitive');
       }
       if (channel === 'amazon' && syntheticPerformer) ruleIds.push('amazon-xmp');
-      if (channel === 'tiktok-shop') { if (main) ruleIds.push('tiktok-main'); if (child && article.kind === 'garment') ruleIds.push('tiktok-child'); if (category === 'underwear' && !child) ruleIds.push('tiktok-underwear'); }
+      if (channel === 'tiktok-shop') { if (main) ruleIds.push('tiktok-main'); ruleIds.push('tiktok-set-square'); if (child && article.kind === 'garment') ruleIds.push('tiktok-child'); if (category === 'underwear' && !child) ruleIds.push('tiktok-underwear'); }
       if (channel === 'mercado-libre' && article.kind === 'garment') ruleIds.push(pack ? 'ml-pack' : audience === 'baby' ? 'ml-baby' : 'ml-main');
       if (channel === 'shein') ruleIds.push(...(main ? ['shein-schema', 'shein-context'] : []));
       const position = (positions.get(channel) || 0) + 1; positions.set(channel, position);
-      // Deduplicate only identical reference evidence, variant and requested composition. Destinations merge afterwards.
-      const key = { itemId: article.itemId, productId: article.productId, variantId: article.variantId, refs: article.references.filter(r => refs.includes(r.storagePath)), view, attributes: article.attributes, background, composition, area, base, identityBase, scene: scene || null, config: plan.effectiveConfig };
+      // One photo per marketplace: each destination is generated and validated against its own channel rules only.
+      // Within a channel, identical evidence, variant and composition still collapse into one task.
+      const key = { channel, outputPose, taskConfig, itemId: article.itemId, productId: article.productId, variantId: article.variantId, refs: article.references.filter(r => refs.includes(r.storagePath)), view, attributes: article.attributes, background, composition, area, base: base ? { id: base.id, storagePath: base.storagePath, sha256: compatibleBaseApproval(base, spec!)!.sha256 } : null, scene: scene || null, config: taskConfig };
       const id = photoIdentity(key);
       let task = plan.tasks.find(t => t.id === id);
       if (!task) {
-        const framing = composition !== 'model' ? 'Producto completo, centrado, con márgenes libres, sin encuadre de cuerpo humano.' : area === 'upper_body' ? 'Encuadre desde muslos hasta encima de cabeza, prenda completa.' : area === 'lower_body' ? 'Encuadre desde pecho hasta debajo de pies, prenda completa.' : 'Prenda completa según su longitud, sin cortar ni tocar bordes.';
-        const instructions = `${composition === 'flat_lay' ? 'Create a NEW flat lay photograph of ONLY the sold garments. REMOVE the person entirely: no human body, skin, face, hands, mannequin, hanger or folded garment. The person in the reference is only a source for the garment design; do NOT preserve that person, pose or camera framing. Arrange the exact quantities/components described below on a flat surface.' : ''}\n${scene?.prompt || ''}\nAtributos comerciales/evidencia de esta variante: ${canonicalPhotoJson(article.attributes)}\n${COMMON_PHOTO_INSTRUCTIONS}\n${view === 'back' ? 'BACK VIEW REQUIRED: show the rear of the garment and, for model photos, turn the entire body away from the camera. Do not substitute a front view.' : view === 'side' ? 'SIDE VIEW REQUIRED: strict lateral profile of the garment; for model photos turn the body 90 degrees. Do not substitute a front view.' : 'FRONT VIEW REQUIRED: straight frontal view of the garment.'}\nVista ${view}. ${framing} ${composition === 'flat_lay' ? 'Flat lay sobre superficie plana, sin persona, modelo ni maniquí; contenido completo y ordenado sin doblar.' : composition === 'model' ? `${audience === 'adult' ? 'Modelo adulto' : 'Modelo infantil apropiado a la talla de la prenda'}, una sola persona. De pie, frontal si vista front; ojos abiertos, boca cerrada, brazos a los lados; sin accesorios ajenos. ${base ? 'Cambia solo la prenda: preserva persona, pose, cámara, iluminación y fondo de la base verificada.' : identityBase ? 'Preserva la identidad exacta de la persona de referencia. Adapta fondo y encuadre a esta tarea; un fondo visualmente blanco de referencia no acredita RGB 255.' : 'Crea una persona fotorrealista enteramente sintética apropiada para el artículo.'}` : composition === 'reference' ? 'Usa exclusivamente el detalle real de la referencia, sin inventar ni ampliar contenido oculto.' : 'Producto protagonista; conserva sus componentes exactos.'}\n${background === 'white' ? 'Fondo blanco puro RGB 255,255,255; verifica el resultado, el prompt no acredita cumplimiento. Para prendas opacas de color oscuro identificado, se puede neutralizar únicamente el fondo casi blanco conectado al perímetro, conservando bordes y píxeles del producto; la imagen final debe revisarse después.' : background === 'original' ? 'Conserva fondo y píxeles de la referencia real.' : 'Fondo real neutro claro con contexto discreto y sombras naturales.'} ${channel === 'amazon' && main && audience === 'adult' && category === 'ordinary' && !pack ? 'Prenda aproximadamente 85% del encuadre según guía aplicable.' : ''}`;
-        task = { ...(background === 'white' && knownPhotoAttribute(article.attributes.transparency) === false && /^(gris|gray|grey|azul|blue|negro|black|rojo|red|verde|green|marrón|brown)$/i.test(knownPhotoAttribute(article.attributes.color) || '') ? { backgroundCorrection: 'neutral-white-perimeter' as const } : {}), ...(scene ? { sceneId: scene.type } : {}), id, itemId: article.itemId, productId: article.productId, variantId: article.variantId, referencePaths: refs, view, composition, background, bodyArea: area, base, identityBase, syntheticPerformer, instructions, destinations: [] };
+        const instructions = composition === 'model'
+          ? `Dress the person in the FIRST image using only the supplied garment references. Preserve the exact person, age, proportions, pose, gaze, camera, lighting, background and framing of the approved base. Match the real color, cut, texture, logos and visible details; no invented hidden details or added accessories. ${knownPhotoAttribute(article.attributes.transparency) ? 'Preserve transparency faithfully with appropriate coverage and no intimate exposure.' : ''} The garment reference view is evidence only; never change the base pose to match it.`
+          : composition === 'reference' ? 'Use only the real detail reference. Do not invent, extend or reinterpret hidden texture, color or details.'
+          : `Create a flat lay of ONLY the exact sold garments/components on a ${background === 'white' ? 'pure white RGB 255,255,255' : 'quiet neutral'} surface. No person, body parts, mannequin or hanger. Preserve real quantities, color, cut, texture and logos from the references; do not invent hidden details. Show the complete garment with free margins. View: ${view}.`;
+        task = { ...(background === 'white' && knownPhotoAttribute(article.attributes.transparency) === false && /^(gris|gray|grey|azul|blue|negro|black|rojo|red|verde|green|marrón|brown)$/i.test(knownPhotoAttribute(article.attributes.color) || '') ? { backgroundCorrection: 'neutral-white-perimeter' as const } : {}), ...(scene ? { sceneId: scene.type } : {}), ...(spec ? { baseSpec: spec, outputPose } : {}), ...taskConfig, id, itemId: article.itemId, productId: article.productId, variantId: article.variantId, referencePaths: refs, view, composition, background, bodyArea: area, base, identityBase, syntheticPerformer, instructions, destinations: [] };
         plan.tasks.push(task);
       }
+      if (base && task.base && !task.base.approvals?.some(a => a.spec.channel === channel)) task.base.approvals?.push(...base.approvals);
       task.destinations.push({ channel, productId: article.productId, variantId: article.variantId, position, role: main ? 'main' : 'alternative', required: main, ruleIds,
         ...(recipeSources ? { recipeSources } : {}),
         ...(channel === 'shein' && main ? { imageType: 1, imageSort: 1 } : {}) });
@@ -130,7 +152,7 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
         } : undefined);
       };
       addView('front', channel === 'tiktok-shop' || channel === 'amazon' || pack ? 'white' : 'neutral');
-      for (const view of preferences.views) {
+      for (const view of (sources.views === 'default' ? ['side', 'back', 'detail'] as const : preferences.views)) {
         if (hasReference(view)) {
           if (view === 'detail' && restrictedDetail(channel)) issue(article.itemId, 'tiktok-child-detail', 'TikTok infantil: el detalle real no se asigna sin evidencia de flat lay sin personas. Las otras vistas planas se conservan.', false);
           else addView(view, restrictedDetail(channel) ? 'white' : view === 'detail' ? 'original' : 'neutral');
@@ -140,19 +162,17 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
       }
       if (!hasReference('back') && sources.views === 'default' && sources.missingReference === 'default')
         issue(article.itemId, `optional-back-${channel}`, `${channel}: sin referencia de espalda; no se inventará esa vista.`, false);
+      if (!hasReference('side') && sources.views === 'default' && sources.missingReference === 'default')
+        issue(article.itemId, `optional-side-${channel}`, `${channel}: sin evidencia lateral suficiente; se omite tres cuartos para no inventar detalles.`, false);
     }
-  }
-  // All merged destinations carry the strictest compatible obligations in the approved task prompt.
-  for (const task of plan.tasks) {
-    const requirements = plan.rules.filter(r => r.verified && r.level === 'obligation' && task.destinations.some(d => d.ruleIds.includes(r.id)));
-    task.instructions += '\n' + [...new Set(requirements.map(r => r.text))].join('\n');
+    if (plan.issues.some(i => i.itemId === article.itemId && i.blocking)) plan.tasks = plan.tasks.filter(t => t.itemId !== article.itemId);
   }
   plan.estimate.uniqueImages = plan.tasks.length;
   plan.estimate.generations = plan.tasks.filter(t => t.composition !== 'reference').length;
   plan.estimate.reviews = plan.tasks.length;
-  plan.estimate.estimatedCostUsd = Number(plan.tasks.reduce((sum, t) => sum + (t.composition === 'reference' ? 0 : getProviderCostUsd(input.provider, input.imageConfig, t.referencePaths.length + (t.base || t.identityBase ? 1 : 0))) + .01, 0).toFixed(6));
-  // Preserve approvals issued by the legacy wizard for clients using the unchanged defaults.
-  plan.id = photoIdentity(hasRecipes ? { ...plan, recipeSnapshot } : plan);
+  plan.estimate.estimatedCostUsd = Number(plan.tasks.reduce((sum, t) => sum + (t.composition === 'reference' ? 0 : getProviderCostUsd(input.provider, t.imageConfig || input.imageConfig, t.referencePaths.length + (t.base || t.identityBase ? 1 : 0))) + .01, 0).toFixed(6));
+  // Recipe/approval versions and per-task configuration invalidate stale approvals.
+  plan.id = photoIdentity({ ...plan, recipeSnapshot, customPrompt: marketplaceDressingCustomization(input.customPrompt) });
   plan.recipeSnapshot = recipeSnapshot;
   return plan;
 }

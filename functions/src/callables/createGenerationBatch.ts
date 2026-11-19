@@ -1,3 +1,4 @@
+import { activePhotoChannels } from '../../../shared/src/marketplacePhotoPlan';
 import { isSpreadsheetTemplateActive } from '../../../shared/src/types';
 import { resolveOrganizerBatchOrigin } from '../organizer/productWorkflow';
 import { COMMERCIAL_PHOTO_PROFILE } from '../../../shared/src/commercialPhoto';
@@ -78,6 +79,7 @@ const prepareGenerationBatch = async (
     }
 
     const client = { id: clientSnapshot.id, ...clientSnapshot.data() } as Client;
+    if (!automation && activePhotoChannels(client.marketplaces).length) throw new HttpsError('failed-precondition', 'Este cliente utiliza sets por marketplace. Prepara el plan con previewMarketplacePhotoPlan y crea el lote con createMarketplacePhotoBatch.');
     const model = { id: modelSnapshot.id, ...modelSnapshot.data() } as Model;
     const template =
       templateSnapshot && templateSnapshot.exists

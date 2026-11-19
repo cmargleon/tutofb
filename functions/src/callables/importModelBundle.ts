@@ -124,6 +124,8 @@ const buildImportedPose = async (
       fileName,
       width: typeof entry.width === 'number' ? entry.width : null,
       height: typeof entry.height === 'number' ? entry.height : null,
+      ...(entry.photoObservation ? { photoObservation: entry.photoObservation } : {}),
+      ...(entry.marketplaceBaseSpec ? { marketplaceBaseSpec: entry.marketplaceBaseSpec } : {}),
       aiClassification: entry.aiClassification || null,
       createdAt: entry.createdAt || new Date().toISOString(),
     },
@@ -172,16 +174,24 @@ export const importModelBundle = onCall<
     const modelId = newModelRef.id;
     const storageRootPath = `models/${clientId}/${modelId}`;
     const poses: Pose[] = [];
+    const importedPoseMap = new Map<string, Pose>();
 
     for (const entry of manifest.poses) {
       const imported = await buildImportedPose(zip, storageRootPath, entry);
       uploadedStoragePaths.push(imported.storagePath);
       poses.push(imported.pose);
+      importedPoseMap.set(entry.id, imported.pose);
     }
 
     const coverPose = poses[0] || null;
     const now = admin.firestore.FieldValue.serverTimestamp();
+    if (manifest.marketplaceBaseApprovals && (!Array.isArray(manifest.marketplaceBaseApprovals) || JSON.stringify(manifest.marketplaceBaseApprovals).length > 300000)) throw new HttpsError('invalid-argument', 'Metadatos de sets inválidos.');
     const modelData: Omit<Model, 'id'> = {
+      ...(manifest.approvedIdentity || manifest.importedIdentity ? { importedIdentity: (manifest.approvedIdentity || manifest.importedIdentity)! } : {}),
+      ...(manifest.marketplaceBaseApprovals ? { marketplaceBaseApprovals: manifest.marketplaceBaseApprovals.map(approval => {
+        const pose = importedPoseMap.get(approval.poseId);
+        return { ...approval, ...(pose ? { poseId: pose.id, storagePath: pose.storagePath } : {}), requiresReverification: true };
+      }) } : {}),
       ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
       clientId,
       clientNameSnapshot: client.name,

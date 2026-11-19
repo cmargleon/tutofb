@@ -1,4 +1,6 @@
+import { MODEL_POSE_RECIPES_BY_ID } from '../../shared/src/modelPoseRecipes.ts';
 // Browser-only, in-memory Firebase doubles. No SDK or network access.
+import { modelBaseSpec, concreteModelBaseSpec, sameBaseSpec, MODEL_SET_SHOTS } from '../../shared/src/modelPhotoSets.ts';
 const now = new Date();
 const stamp = { toDate: () => now, toMillis: () => now.getTime() };
 export const fixtureImage = '/__tuto_fixture.svg';
@@ -8,6 +10,7 @@ export const db = {};
 export const storage = {};
 export const functions = {};
 const client = { id: 'local-client', name: 'Cliente local', status: 'active', active: true };
+if (window.__modelSetsFixture) client.marketplaces = { amazon: { enabled: true }, 'tiktok-shop': { enabled: true } };
 const batch = { id: 'local-batch', clientId: client.id, clientNameSnapshot: client.name, status: 'completed',
   totalJobs: 1, completedJobs: 1, pendingJobs: 0, processingJobs: 0, failedJobs: 0,
   createdAt: stamp, updatedAt: stamp, poseIds: ['local-pose'], spreadsheetTemplateId: 'local-template' };
@@ -313,11 +316,47 @@ export const httpsCallable = (_, name) => async input => {
   } };
   if (name === 'saveModel') {
     const model = { id: input.id || 'local-model', clientId: input.clientId, name: input.name, status: 'active', active: true,
+      identityTraits: input.identityTraits || null,
       poses: input.posesToAdd.map((pose, i) => ({ ...pose, id: `pose-${i}` })) };
     records.models.push(model);
     sessionStorage.setItem('tuto-local-models', JSON.stringify(records.models));
     listeners.forEach(emit => emit());
     return { data: { id: model.id } };
+  }
+  if (name === 'approveModelIdentity') {
+    const model = records.models.find(model => model.id === input.modelId);
+    const pose = model?.poses.find(pose => pose.id === input.poseId);
+    if (!pose) return unexpected();
+    const identity = { ...input, traitsSnapshot: model.identityTraits, storagePath: pose.storagePath, sha256: 'fixture-identity', storageGeneration: '1', approvedAt: new Date().toISOString(), approvedByUid: user.uid };
+    model.approvedIdentity = identity;
+    sessionStorage.setItem('tuto-local-models', JSON.stringify(records.models));
+    listeners.forEach(emit => emit());
+    return { data: identity };
+  }
+  if (name === 'previewModelPhotoSets') {
+    const model = records.models.find(model => model.id === input.modelId);
+    const incompatible = [];
+    const specs = (input.channels || []).flatMap(channel => input.poseRecipeIds ? input.poseRecipeIds.flatMap(poseRecipeId => {
+      const result = concreteModelBaseSpec(MODEL_POSE_RECIPES_BY_ID.get(poseRecipeId), channel, input.category, 'adult', client.marketplaces, input.aspectRatio || '3:4');
+      if (!result.spec) { incompatible.push({ channel, poseRecipeId, reason: result.reason }); return []; }
+      return [result.spec];
+    }) : MODEL_SET_SHOTS.map(shot => modelBaseSpec(channel, input.category, 'adult', input.bodyArea, shot, client.marketplaces, input.aspectRatio || '3:4')));
+    const shots = specs.map(spec => {
+      const candidates = (model?.poses || []).filter(pose => pose.marketplaceBaseSpec && sameBaseSpec(pose.marketplaceBaseSpec, spec));
+      return { spec, poseId: candidates.find(pose => pose.fixtureApproved)?.id || null, candidatePoseIds: candidates.map(pose => pose.id), estimatedCostUsd: .08 };
+    });
+    return { data: { id: 'fixture-preview', provider: input.provider || 'fal-gpt-image-2.5-flare', identitySha256: 'fixture-identity', shots, incompatible, missing: shots.filter(shot => !shot.poseId).length, estimatedCostUsd: shots.filter(shot => !shot.poseId).length * .08, issues: input.poseRecipeIds?.length === 0 ? ['Selecciona al menos una pose.'] : [] } };
+  }
+  if (name === 'generateModelMarketplaceBase') {
+    const model = records.models.find(model => model.id === input.modelId);
+    const spec = input.poseRecipeId ? concreteModelBaseSpec(MODEL_POSE_RECIPES_BY_ID.get(input.poseRecipeId), input.channel, input.category, 'adult', client.marketplaces, input.aspectRatio || '3:4').spec : modelBaseSpec(input.channel, input.category, 'adult', input.bodyArea, input.shot, client.marketplaces, input.aspectRatio || '3:4');
+    const fail = window.__modelSetFailOnce && input.channel === 'tiktok-shop' && input.poseRecipeId === 'full-front-diagonal';
+    if (fail) window.__modelSetFailOnce = false;
+    const poseId = 'generated-base-' + model.poses.length;
+    model.poses.push({ id: poseId, storagePath: 'fixtures/' + poseId + '.svg', fileName: poseId, marketplaceBaseSpec: spec, fixtureApproved: !fail });
+    sessionStorage.setItem('tuto-local-models', JSON.stringify(records.models));
+    listeners.forEach(emit => emit());
+    return { data: { approved: !fail, poseId, issues: fail ? ['La pose concreta no coincide; candidata conservada.'] : [] } };
   }
   if (name === 'getSystemHealth') return { data: { overallStatus: 'healthy', summary: 'Fixture local', providers: [], alerts: [] } };
   return unexpected();

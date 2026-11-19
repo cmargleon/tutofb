@@ -56,6 +56,8 @@ Aquí «contrato público» significa frontera usada por web, HTTP, MCP u otra c
 - **Prueba mínima:** [modelPoseActivation.test.ts](tests/modelPoseActivation.test.ts) (permisos, activación y conservación de assets); [deletePlans.test.ts](tests/deletePlans.test.ts) para alcance de borrado; [clients-redesign.spec.ts](e2e/clients-redesign.spec.ts) para ficha y navegación.
 
 <a id="marketplaces-administrativos"></a>
+La preparación de bases por destino añade `approvedIdentity` y `marketplaceBaseApprovals` de servidor en los modelos. El catálogo usa `ModelPhotoSets` y los callables de `functions/src/callables/modelMarketplaceSets.ts`; `shared/src/modelPhotoSets.ts` centraliza compatibilidad y recetas versionadas. Wizard/Automation comparten el planificador y seleccionan únicamente bases aprobadas. [Contratos, importación y verificación](docs/MODEL_MARKETPLACE_SETS.md).
+
 ### Marketplaces administrativos
 
 - **Entrada web/servidor:** `/clients/:clientId?tab=marketplaces` → [ClientMarketplaces](src/features/marketplaces/ClientMarketplaces.tsx) → [useClientMarketplace](src/features/marketplaces/useClientMarketplace.ts) → wrapper tipado `updateClientMarketplace` en [marketplaces/firebase.ts](src/features/marketplaces/firebase.ts) → [callable del mismo nombre](functions/src/callables/updateClientMarketplace.ts), solo admin.

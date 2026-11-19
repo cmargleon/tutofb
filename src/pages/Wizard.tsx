@@ -1,3 +1,5 @@
+import { activePhotoChannels } from '../../shared/src/marketplacePhotoPlan';
+import { MARKETPLACES } from '../../shared/src/marketplaces';
 import { MarketplacePhotoPlanPanel } from '../features/generate/MarketplacePhotoPlanPanel';
 import { ProductScenesStep } from '../components/wizard/ProductScenesStep';
 import React, { useEffect, useRef, useState } from 'react';
@@ -66,6 +68,7 @@ const GenerationWizard = ({ organizerVariant, organizerClient, baseProductId, ba
     handleFiles,
     handleRetryAnalysis,
     handlePhotoAttributesChange,
+    handlePhotoChannelsChange,
     handlePhotoIdentityChange,
     removeGarment,
     handleSubmit,
@@ -227,14 +230,15 @@ const GenerationWizard = ({ organizerVariant, organizerClient, baseProductId, ba
         />}
       </div>}
 
-      {state.marketplacePhotoPlan && <MarketplacePhotoPlanPanel plan={state.marketplacePhotoPlan} disabled={isWizardBusy} onAttributesChange={handlePhotoAttributesChange} onIdentityChange={handlePhotoIdentityChange} />}
+      {selectedClient && state.generationKind === 'garment' && activePhotoChannels(selectedClient.marketplaces).length > 0 && <fieldset disabled={isWizardBusy} className="flex flex-wrap items-center gap-4 rounded-xl border bg-white p-4"><legend className="px-2 text-sm font-semibold">Marketplaces de este pedido</legend>{activePhotoChannels(selectedClient.marketplaces).map(channel => <label className="flex items-center gap-2 text-sm" key={channel}><input type="checkbox" checked={(state.selectedPhotoChannels || activePhotoChannels(selectedClient.marketplaces)).includes(channel)} onChange={e => { const current = state.selectedPhotoChannels || activePhotoChannels(selectedClient.marketplaces); handlePhotoChannelsChange(e.target.checked ? [...current, channel] : current.filter(c => c !== channel)); }} />{MARKETPLACES.find(m => m.id === channel)?.name}</label>)}</fieldset>}
+      {state.marketplacePhotoPlan && <MarketplacePhotoPlanPanel plan={state.marketplacePhotoPlan} prompt={state.prompt} onPromptChange={handlePromptChange} disabled={isWizardBusy} onAttributesChange={handlePhotoAttributesChange} onIdentityChange={handlePhotoIdentityChange} />}
 
       {state.step === 2 && state.generationKind === 'product' && <ProductScenesStep
         scenes={state.productScenes} defaultScenes={product.defaultScenes} disabled={isWizardBusy} onToggle={product.toggleScene} onPromptChange={product.changeScenePrompt} />}
 
       {state.step === 2 && state.generationKind === 'garment' && <div className="space-y-6">
-        {state.marketplacePhotoPlan && <p className="text-sm text-slate-600">El modelo es opcional. El plan usa sus bases verificadas cuando son compatibles; las tomas planas no requieren personas. Las fotos y sus destinos se proponen en el plan.</p>}
-        {(!state.marketplacePhotoPlan || state.marketplacePhotoPlan.tasks.some(t => t.composition === 'model')) && contextSection('model')}
+        {state.marketplacePhotoPlan && <p className="text-sm text-slate-600">Las tomas con modelo requieren sus bases aprobadas para cada destino. Las tomas planas no requieren personas. Si falta una base, completa esa toma en el catálogo del modelo o cambia los destinos del pedido.</p>}
+        {(!state.marketplacePhotoPlan || state.marketplacePhotoPlan.tasks.some(t => t.composition === 'model') || state.marketplacePhotoPlan.issues.some(i => i.code.startsWith('base-'))) && contextSection('model')}
         {!state.marketplacePhotoPlan && <PoseSelectionStep
           selectedModel={selectedModel}
           garments={state.garments}

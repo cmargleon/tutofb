@@ -1,3 +1,4 @@
+import { modelPhotoBases, selectedPhotoMarketplaces } from '../../../shared/src/modelPhotoSets';
 import { activePhotoChannels } from '../../../shared/src/marketplacePhotoPlan';
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { automationPolling } from './polling';
@@ -48,7 +49,10 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   };
   let sceneIds: string[];
   let modelOptions: AutomationModelOption[] | undefined;
-  const photoChannels = data.jobType === 'garment' ? activePhotoChannels(client.marketplaces) : [];
+  let selectedMarketplaces: Client['marketplaces'];
+  try { selectedMarketplaces = data.jobType === 'garment' ? selectedPhotoMarketplaces(client.marketplaces, data.selectedChannels ?? preset.selectedChannels) : {}; }
+  catch (error) { throw new HttpsError('invalid-argument', (error as Error).message); }
+  const photoChannels = data.jobType === 'garment' ? activePhotoChannels(selectedMarketplaces) : [];
   if (photoChannels.length) {
     // Until the references are classified, include every appearance the saved recipes could add.
     const whiteAlternatives = photoChannels.some(channel => {
@@ -58,6 +62,7 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
     sceneIds = ['front-white-model', 'front-white-flat', 'front-neutral-model', 'front-neutral-flat',
       'back-neutral-model', 'back-neutral-flat', 'back-white-flat', 'side-neutral-model', 'side-neutral-flat', 'side-white-flat', 'real-detail'];
     if (whiteAlternatives) sceneIds.push('back-white-model', 'side-white-model');
+    sceneIds = photoChannels.flatMap(channel => sceneIds.map(scene => `${channel}:${scene}`));
   } else if (data.jobType === 'garment') {
     try { modelOptions = await loadAutomationModelOptions(data.clientId, client, data.modelId || resolved.config.modelId, preset.poseIds); }
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
@@ -67,7 +72,7 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
   const modelId = modelOptions?.length === 1 ? modelOptions[0].modelId : photoChannels.length ? resolved.modelId : null;
   const photoModel = modelId && photoChannels.length ? (await db.doc(`models/${modelId}`).get()).data() as import('../../../shared/src/types').Model | undefined : undefined;
   if (modelId && photoChannels.length && (!photoModel || photoModel.clientId !== data.clientId || photoModel.active === false || photoModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo del plan no disponible.');
-  const photoBases = (photoModel?.poses || []).filter(p => p.active !== false && (!preset.poseIds || preset.poseIds.includes(p.id))).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) }));
+  const photoBases = modelPhotoBases(photoModel, preset.poseIds);
   const inputs: NonNullable<CreateAutomationJobRequest['inputImages']> = [];
   for (const image of data.inputImages) {
     if (image.driveFile) {
@@ -86,7 +91,7 @@ export const prepareAutomationPlan = async (input: unknown, uid: string, role: s
     return { itemId, imageCount: count, sceneIds,
       estimatedCostUsd: usd(sceneIds.length * (generation.holdUsd + GEMINI_OPERATION_HOLD_USD) * (policy.maxReviewAttempts + policy.maxOperationalRetries) + (data.jobType === 'garment' || photoChannels.length ? GEMINI_OPERATION_HOLD_USD * (policy.maxOperationalRetries + 1) : 0)) };
   });
-  const plan: AutomationPlan = { ...(data.jobType === 'garment' ? { photoBases, photoModelId: modelId, photoMarketplaces: client.marketplaces || {} } : {}), photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
+  const plan: AutomationPlan = { ...(data.jobType === 'garment' ? { photoBases, photoModelId: modelId, photoMarketplaces: selectedMarketplaces || {} } : {}), photoProfile: COMMERCIAL_PHOTO_PROFILE, id: ref.id, createdByUid: uid, clientId: data.clientId, clientName: client.name,
     request: { ...data, inputImages: inputs, preset: resolved.name },
     presetName: resolved.name, preset, policy, effectiveRules: resolveAutomationRules(system.automationRules, client.automation?.rules), modelId, ...(modelOptions ? { modelOptions } : {}), items, classificationRequired: data.jobType === 'garment' || photoChannels.length > 0,
     estimatedCostUsd: usd(items.reduce((sum, item) => sum + item.estimatedCostUsd, 0)),

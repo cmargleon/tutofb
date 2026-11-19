@@ -19,7 +19,7 @@ export async function prepareMarketplaceImage(bytes: Buffer, marketplaceId: Mark
   const minSide = marketplaceId === 'shein' ? 900 : marketplaceId === 'tiktok-shop' ? 600 : 500;
   if (Math.min(width, height) < minSide) throw new Error(`La imagen debe tener al menos ${minSide} px en su lado más corto para este destino.`);
   const maxSide = marketplaceId === 'mercado-libre' ? 1920 : 2200;
-  if (marketplaceId === 'tiktok-shop' && Math.abs(width / height - 3 / 4) > .002 && Math.abs(width / height - 4 / 3) > .002) throw new Error('TikTok requiere 3:4 o 4:3; no se convierte a cuadrado.');
+  if (marketplaceId === 'tiktok-shop' && Math.abs(width / height - 1) > .002 && Math.abs(width / height - 3 / 4) > .002 && Math.abs(width / height - 4 / 3) > .002) throw new Error('TikTok admite en este flujo 1:1, 3:4 o 4:3; se conserva la composición de origen.');
   const square = marketplaceId !== 'tiktok-shop' && (Math.min(width, height) * Math.min(1, maxSide / Math.max(width, height)) < minSide);
   const squareSide = Math.min(maxSide, Math.max(width, height));
   // A reviewed, compliant final JPEG is copied byte-for-byte. Metadata remains part of its hash and weight.

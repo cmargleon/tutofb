@@ -155,6 +155,7 @@ export interface UploadSummary {
 }
 
 export interface WizardState {
+  selectedPhotoChannels?: import('../../../shared/src/marketplaces').MarketplaceId[];
   marketplacePhotoPlan?: import('../../../shared/src/types').PhotoPlan;
   step: GenerateWizardStepId;
   generationKind: NonNullable<Batch['generationKind']> | null;

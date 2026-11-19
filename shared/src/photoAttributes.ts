@@ -23,7 +23,10 @@ export function mergePhotoAttributes(inferred: Partial<PhotoArticleAttributes> =
 
 /** Declared model age is commercial identity data; visual appearance cannot make a declared minor adult. */
 export function withDeclaredModelAge(observation: import('./types').PhotoBaseObservation, traits?: import('./types').ModelIdentityTraits | null): import('./types').PhotoBaseObservation {
-  const match = traits?.age?.match(/^\s*(\d{1,2})(?:\s*(?:años|years?))?\s*$/i);
+  const label = traits?.age || '';
+  if (/baby|toddler|beb[eé]/i.test(label)) return { ...observation, audience: 'baby' };
+  if (/child|teen|niñ|adolescente/i.test(label)) return { ...observation, audience: 'child' };
+  const match = traits?.age?.match(/^\s*(\d{1,2})(?:\s*[-–]\s*\d{1,2}|\+)?(?:\s*(?:años|years?))?\s*$/i);
   if (!match) return observation;
   const age = Number(match[1]);
   return { ...observation, audience: age < 2 ? 'baby' : age < 18 ? 'child' : 'adult', evidence: `${observation.evidence} Edad declarada del modelo: ${age}; prevalece sobre la inferencia visual de público.` };

@@ -169,7 +169,7 @@ const getOrientationPromptRules = (
       ];
     case 'back':
       return [
-        'The body must read as a true back view with no ambiguous twist back toward the camera.',
+        'Keep the rear of the garment as protagonist and fully readable. When the face is in frame, look at camera over the shoulder without arms or hair hiding garment details.',
         category === 'portrait'
           ? 'Keep the back-of-head and shoulder line readable as a rear portrait.'
           : 'Keep shoulders and hips aligned so the back of the look reads clearly.',

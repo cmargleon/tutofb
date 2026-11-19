@@ -3,8 +3,10 @@ import {
   DollarSign,
   FolderKanban,
   Images,
+  Layers,
   LayoutDashboard,
   ListOrdered,
+  Package,
   Settings,
   Shield,
   SlidersHorizontal,
@@ -46,6 +48,8 @@ interface NavigationBase {
 export interface NavigationItem extends NavigationBase {
   type: 'item';
   path: string;
+  /** Active only on this exact path (a sibling lives under it, e.g. /catalogo vs /catalogo/productos). */
+  exact?: boolean;
 }
 
 export interface NavigationGroup extends NavigationBase {
@@ -56,7 +60,8 @@ export interface NavigationGroup extends NavigationBase {
 
 export type NavigationEntry = NavigationItem | NavigationGroup;
 
-const isPathActive = (pathname: string, path: string) => {
+const isPathActive = (pathname: string, path: string, exact = false) => {
+  if (exact) return pathname === path;
   if (path === '/') {
     return pathname === '/';
   }
@@ -71,7 +76,18 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
     { type: 'item', name: 'Automatización', path: '/automation', icon: Workflow, visible: role.canCreateBatches, section: 'production' },
     { type: 'item', name: 'Organizador inteligente', path: '/organizador', icon: FolderKanban, visible: role.canEvaluate, section: 'production' },
     { type: 'item', name: 'Cola', path: '/cola', icon: ListOrdered, visible: role.canEvaluate, section: 'production' },
-    { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate, section: 'catalog' },
+    {
+      type: 'group',
+      name: 'Catálogo',
+      icon: Images,
+      defaultPath: '/catalogo',
+      visible: role.canEvaluate,
+      section: 'catalog',
+      children: [
+        { type: 'item', name: 'Lotes', path: '/catalogo', exact: true, icon: Layers, visible: role.canEvaluate },
+        { type: 'item', name: 'Productos', path: '/catalogo/productos', icon: Package, visible: role.canEvaluate },
+      ],
+    },
     {
       type: 'group',
       name: 'Modelos',
@@ -82,6 +98,7 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
       children: [
         { type: 'item', name: 'Generar', path: '/models/generar', icon: Wand2, visible: role.canManageModels },
         { type: 'item', name: 'Catálogo', path: '/models/catalogo', icon: Images, visible: role.canManageModels },
+        { type: 'item', name: 'Reglas Marketplace', path: '/models/reglas-marketplace', icon: SlidersHorizontal, visible: role.canManageModels },
       ],
     },
     {
@@ -147,16 +164,16 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
 export const isNavigationEntryActive = (pathname: string, entry: NavigationEntry) => {
   if (entry.type === 'group') {
     if (entry.name === 'Clientes' && isPathActive(pathname, '/clients')) return true;
-    return entry.children.some((child) => isPathActive(pathname, child.path));
+    return entry.children.some((child) => isPathActive(pathname, child.path, child.exact));
   }
 
-  return isPathActive(pathname, entry.path);
+  return isPathActive(pathname, entry.path, entry.exact);
 };
 
 export const getCurrentPageTitle = (pathname: string, entries: NavigationEntry[]) => {
   for (const entry of entries) {
     if (entry.type === 'group') {
-      const activeChild = entry.children.find((child) => isPathActive(pathname, child.path));
+      const activeChild = entry.children.find((child) => isPathActive(pathname, child.path, child.exact));
       if (activeChild) {
         return `${entry.name} / ${activeChild.name}`;
       }
@@ -164,7 +181,7 @@ export const getCurrentPageTitle = (pathname: string, entries: NavigationEntry[]
       continue;
     }
 
-    if (isPathActive(pathname, entry.path)) {
+    if (isPathActive(pathname, entry.path, entry.exact)) {
       return entry.name;
     }
   }

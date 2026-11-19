@@ -1,0 +1,227 @@
+{
+  "date": "2026-11-19",
+  "timezone": "Europe/Madrid",
+  "projectId": "tutofb-260320-1003",
+  "status": "deployed",
+  "sourceHead": "345f796450360ec304a8099640143a0dd16aa406",
+  "deploymentIsolation": "Snapshot of HEAD plus scoped feature files; unrelated pending runtime changes were excluded. No commit or push.",
+  "recipe": {
+    "version": "model-marketplace-set-v1",
+    "defaultShotsPerMarketplaceAndBodyArea": [
+      "front",
+      "front_three_quarter",
+      "commercial_back"
+    ],
+    "initialCount": 3,
+    "rationale": "Three distinct informative angles; optional details require actual reference evidence, gallery maxima are not quotas.",
+    "tiktokRatio": "1:1 native (Tuto preference)",
+    "otherRatio": "3:4 default; compatible explicit/preset overrides preserved"
+  },
+  "validation": {
+    "frontendTypecheck": "passed",
+    "frontendBuild": "passed",
+    "functionsTypecheck": "passed",
+    "functionsBuild": "passed",
+    "fullSuiteIsolatedDeployment": {
+      "passed": 435,
+      "failed": 0,
+      "skipped": 35,
+      "node": "22.22.0"
+    },
+    "fullSuiteSharedWorkspace": {
+      "passed": 441,
+      "failed": 0,
+      "skipped": 36,
+      "note": "Includes unrelated tests present in the shared workspace; final preset change also covered by isolated suite and emulator regression."
+    },
+    "firebaseEmulatorIntegration": {
+      "passed": 13,
+      "failed": 0,
+      "suites": [
+        "modelMarketplaceSets.integration.test.ts",
+        "marketplacePhotoPlan.integration.test.ts",
+        "manglarModelPersistence.test.ts"
+      ],
+      "externalNetworkBlocked": true
+    },
+    "presetRegressionEmulatorRerun": "passed",
+    "browser": {
+      "passed": 2,
+      "failed": 0,
+      "specs": [
+        "e2e/model-marketplace-sets.spec.ts",
+        "e2e/models-flow.spec.ts"
+      ],
+      "paidProviders": "local doubles",
+      "viewports": [
+        "390x844",
+        "1440x1000"
+      ]
+    },
+    "manglarSchemas": "Targeted schema regeneration check passed",
+    "storageIamAndCorsPreflight": "passed",
+    "diffWhitespaceCheck": "passed"
+  },
+  "deployment": {
+    "hosting": "https://tutofb-260320-1003.web.app",
+    "firestoreRules": "released",
+    "storageRules": "released",
+    "functions": [
+      "approveModelIdentity",
+      "previewModelPhotoSets",
+      "generateModelMarketplaceBase",
+      "verifyModelMarketplaceBase",
+      "previewMarketplacePhotoPlan",
+      "createMarketplacePhotoBatch",
+      "verifyMarketplacePhotoBases",
+      "createGenerationBatch",
+      "importModelBundle",
+      "downloadModelBundle",
+      "replaceModelPose",
+      "onModelWrite",
+      "processJobOnCreate",
+      "processJobOnRequeue",
+      "processJobOnActivation",
+      "retryJobAutoReview",
+      "regenerateJob",
+      "regenerateJobsBulk",
+      "regenerateFailedBatchJobs",
+      "createAutomationJob",
+      "retryAutomationJob",
+      "createAutomationPlan",
+      "getAutomationPlan",
+      "executeAutomationPlanCallable",
+      "resumeAutomationJob",
+      "automationApi",
+      "automationIntakeWorker",
+      "automationGenerationProgress",
+      "recoverAutomationImports",
+      "updateClientAutomation",
+      "manglarMcp",
+      "organizerAction",
+      "organizerContinuation",
+      "organizerManualRun",
+      "organizerRunContinuation",
+      "organizerScheduler",
+      "previewMarketplaceExports",
+      "downloadMarketplaceExports",
+      "publishMarketplaceImages",
+      "marketplacePrecomputeOnAutomation",
+      "marketplacePrecomputeWorker",
+      "syncCatalogJob",
+      "syncCatalogDraft"
+    ],
+    "finalPresetPatchFunctions": [
+      "approveModelIdentity",
+      "previewModelPhotoSets",
+      "generateModelMarketplaceBase",
+      "verifyModelMarketplaceBase",
+      "manglarMcp"
+    ],
+    "initialCliIssue": "CLI initially reported an HTTPS/event-trigger conversion for marketplacePrecomputeOnAutomation. Direct remote inspection confirmed ACTIVE Firestore updated trigger; retry succeeded with identical targets and no resource deletion."
+  },
+  "postDeployment": {
+    "checkedAt": "2026-11-19T19:33:01.343Z",
+    "hostingStatus": 200,
+    "hostingMatchesBuild": true,
+    "indexSha256": "89c19d8f66832c86157d9e3cfec233b59fb2b11f86dcfb668d4dfbabf23c5657",
+    "authorizationProbes": [
+      {
+        "name": "previewModelPhotoSets",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "verifyModelMarketplaceBase",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      },
+      {
+        "name": "createMarketplacePhotoBatch",
+        "status": 401,
+        "error": "UNAUTHENTICATED"
+      }
+    ]
+  },
+  "productionOperations": {
+    "paidImageRequestsInitiated": 0,
+    "catalogueBackfills": 0,
+    "bulkRegenerations": 0,
+    "newDriveIntake": false
+  },
+  "limitations": [
+    "No real paid photo generation was needed; visual quality improvement has not been validated with real generations.",
+    "Existing and imported bases require explicit identity approval and recipe verification before production use.",
+    "Pure-white technical checks cover the continuous opaque perimeter and minimum white pixel area, complemented by visual review; they are not perfect semantic background segmentation."
+  ],
+  "sourceFileSha256": {
+    "ARCHITECTURE.md": "a8244d619bc5e588cfefe9a2906a241edc89301e3a060ce5e5d09c6fe8b3a2fc",
+    "docs/PHOTO_GENERATION.md": "5311b37e26c40df9a4f5de95ab3f4f44cbde69b51db586b32d5eadbfe4c083b3",
+    "docs/MODEL_MARKETPLACE_SETS.md": "30572a4384fc45114ad3a428f44ef4825dd48eeda19f8fda05315647e281b155",
+    "firestore.rules": "c143561e8b1c036ab09d450433e1b0c26fd4bbf81bda890ba32700b181051a38",
+    "storage.rules": "6334c3cb0ad69f4c70068dee62a01607bd3a142b196fd436808e8523e685f2f6",
+    "functions/src/automation/clientConfig.ts": "895a862c6fe49c655e5a934095a9bc2038f3a99f7c60ac24dd816ae78c6cf02c",
+    "functions/src/automation/domain.ts": "728343dde96f3710871fa244ae475eb0969afcd5bae30981784ed0e8eeed52df",
+    "functions/src/automation/marketplacePhotos.ts": "c35ae6097046576154ee58bc2b627ba43040205e96e7c0ac7411104137258a35",
+    "functions/src/automation/persistence.ts": "747831f3db2ce453357502adab830af0b683d3da43e064f73094ec362295828d",
+    "functions/src/automation/plans.ts": "62d6de2017a9506ab6a1b9482f80c85ee22b0ed92dbd8d996f87a877a4f9ac85",
+    "functions/src/callables/createGenerationBatch.ts": "5dd04c38a9e95056dcf9093c9e4863fb15f760a8a0ed66e5f0f7c33ddc8d82d7",
+    "functions/src/callables/createMarketplacePhotoBatch.ts": "d7d07aaaefea0beee278979c4b1dbe9c8f701536faf2153fdb10b486d0e2fe53",
+    "functions/src/callables/importModelBundle.ts": "f3fa1564129447241afdde51de680a330b99b1ec725ba4e69b8a1efa7e10ed7b",
+    "functions/src/callables/modelMarketplaceSets.ts": "f692063e4cf4407e9ea9fa7b3dfc68d98fc62e85f14385b756b6e3e586b9972e",
+    "functions/src/callables/regenerateJob.helpers.ts": "1bb768bb092d71a27ecf74416540b90739f6b532ad752fc811effea7ff250ae3",
+    "functions/src/http/downloadModelBundle.ts": "e00068b3700a5366f84cecedeb37d4fbe9d875d6bd7bf7000225b5496c2c70a1",
+    "functions/src/index.ts": "1e960585c0f1246c8d4c752af7ec6f44c7d82a2cc7cf9a014c1b495d0f514506",
+    "functions/src/manglar/catalogService.ts": "5a6a7ba39289a9ccc6d588770ee90f3ed6641a246fb791868067f8be870047d3",
+    "functions/src/manglar/contracts.json": "a373f27a84986302d80e64aaaa8e16cd0c785f43d177c8e1495f68929bf92c19",
+    "functions/src/manglar/models.ts": "a7e1f9d5c865bb5a5d7c4dd20842e4d6cb0b85c29b1347b843caf656bbaf808e",
+    "functions/src/manglar/registry.ts": "fa46786d747d96810cc8dceaedccc562dfb85e666f3ff10dd9df63b78070e6c0",
+    "functions/src/manglar/wizard.ts": "dd2b81438648cc7c75d2c9f070d1108e56a247e6c4c0d514b7292747a52a580a",
+    "functions/src/media/photoPlanFile.ts": "93184dfcfa508f9a1e8b7660da24e504282fd6e4e610b576e9056c7c9dcc8173",
+    "functions/src/media/prepareMarketplaceImage.ts": "e3ef37b9d77ce3c4abb200c59f9d215f632c1d98c9693f6d5cd7b1d0d61950c0",
+    "functions/src/media/verifyWhiteBackground.ts": "d8272c3ae3c510a00fd936e70ee262af01bc8fcaf8424b628e1166acd93f2619",
+    "functions/src/models/marketplaceSets.ts": "fae423718a7077fe3ae064c530982edf177709dab260aef43148e965fb7d3d93",
+    "functions/src/review/geminiImageReview.prompts.ts": "2f4d461e3574ac8d2ac5b1cfd70355520bd24e4e13b8ee09c27ee544dd42c69c",
+    "functions/src/spreadsheets/marketplaceImages.ts": "06fde1608cb94b0ef558833bd9278702054d4898147ca71e75d0551c1371a760",
+    "functions/src/utils/classifyPose.ts": "fd333d0f97d16ee660bc850e9156bcec916fc729b320de1f5bc13833fa7a9221",
+    "functions/src/workers/jobWorker.generation.ts": "e95bf0efb79112e43f8d822ec3311196a5cb80f6cd5cd0d521eaf491c417d0fe",
+    "functions/src/workers/jobWorker.helpers.ts": "5edd10767f498905f94e022411bd5cb68cd54f4e9c114f9730f5902903822a69",
+    "functions/src/workers/jobWorker.resources.ts": "b7a6b1a91ae90323100a58008e15ca7693b95dc8f1f028dbb119103bd5d5ef1e",
+    "functions/src/workers/jobWorker.ts": "245c7d3ab81e822997643159c87dd6964e7d47666ab542053a21d4288d6ad123",
+    "shared/src/marketplacePhotoPlan.ts": "cbe5f23db4949e7f575c77052f031717d8bf9346a647fcf6bbaf67fc7241d7e4",
+    "shared/src/marketplacePhotoRecipe.ts": "13d76dfb17dab682df9e149ec3fa0c15e64b64391aa07b0c037ed2d955d46660",
+    "shared/src/modelPhotoSets.ts": "a88b346276b047357187eeee911772cddcba0c07dfaa8985c69f60a7b99e2613",
+    "shared/src/photoAttributes.ts": "76e18547a56b41f76207647dd2dcbf5bdd4f33102803dae9c574845b8ba107a7",
+    "shared/src/types/automation.ts": "639bb5514bb37fa520d2f138b92f826b3d8faa7adfc2c80ac6c360a59cb986a2",
+    "shared/src/types/index.ts": "86e1b2c9a0c01b9c4ecc74c001df3c33655cbbb04d5265cafcc35b89f20b3a73",
+    "shared/src/types/model.ts": "c9a4831a978283a56dae7786f0489a185d368e71dcb92ae02dd6569071acde6f",
+    "shared/src/types/modelPhotoSet.ts": "d78c42097a65cd2f279e733cfb2dc1500cc8c302a96d6a7c2b948ddb5a686217",
+    "shared/src/types/photoPlan.ts": "84cb4fa340a5ab4b3550d51ec639a7b94e2fa46574d3df10dccfc0ec455972fa",
+    "src/components/models/ModelLibraryItem.tsx": "fc8ff7a444cfe8588367b90402eca0a21a452d4437c4875312f2cf2fe375a75b",
+    "src/components/models/ModelPhotoSets.tsx": "d5dac29eba93bb60cda61ab6f64118fd6838fa7b0e7b0eb4203d2d5ad7aeba15",
+    "src/components/models/ai-wizard/AiCandidatesStep.tsx": "8db14064b53cd8f13ed2cc2c87986425b219e306b2e88b2ad494f8bdc2cbd718",
+    "src/features/automation/useAutomation.ts": "e251bef1e563ad6a1c9950f05a4228a3f913a22ae58c25d286855ce8f63d0e09",
+    "src/features/generate/MarketplacePhotoPlanPreview.tsx": "51719073d48c8911c2b635a2240d6be50fac40b26781770d7d93051301959a82",
+    "src/features/generate/types.ts": "84a68ca6dea439158bb76e579f39f2154821cb4f446a296102818ff9a6fa811c",
+    "src/features/generate/wizard/draft.ts": "abb82b4688d455dd4f489c36f076034d3ed3b6b52c81b337af8141bedc3400fe",
+    "src/features/generate/wizard/hooks/useGenerateWizard.ts": "a93b6fee33710698ab1cb5d0ed143ab4c9c435ac733686e7b0186c913739991f",
+    "src/features/generate/wizard/marketplacePlan.ts": "8179614fd2c0ebe07835e257a836b7c991b4108c05aea1162dd1be0498575695",
+    "src/features/models/constants.ts": "4ada859fa965e7df054fa5031c5e22e076c4d9524f08d652e73f1dd5a6c38ef6",
+    "src/features/models/firebase.ts": "337c8516267371467630055348edf6d13992f26f7c33aff8b2185f52ae81d911",
+    "src/features/models/hooks/useAiWizard.ts": "c48bb80ac318c3b8ee492be29431b6ce75eacc58f979563b563164b4d292ca34",
+    "src/features/models/hooks/useModelPhotoSets.ts": "032d5fef879a5d6e8f1009edb44e1909c5b0c1d27892ceb84e0bcdd0d89d592a",
+    "src/features/models/prompts.ts": "45e9f53ba98fd26b306845bb9043653f6f93800be9ce2502a0aee9f829584017",
+    "src/pages/Automation.tsx": "80b91cc56e59d2ec38a8c8050e60b7ab258cc473119c157324c264589e5f8f55",
+    "src/pages/Wizard.tsx": "e47acf136c54479a1a825db3f909464fe2b5adc48cda1e0547f104e321b4ca19",
+    "tests/marketplacePhotoPlan.integration.test.ts": "f85440d920819a54694d107612278d36ab5f63404f7543a26af961b1ac1a2ab1",
+    "tests/marketplacePhotoPlan.test.ts": "86e36e7833c813aa7eb17736f28c27865b69d1111c6c1daa65c466f917d1d74c",
+    "tests/modelMarketplaceSets.integration.test.ts": "595af6c5944703741825ad916a34a8efd847052f24c81831a924765fd56b93ce",
+    "tests/modelMarketplaceSets.test.ts": "c023e98350fdcb58fa9a6bd6984c2dcb56f9baaa24a76669f22fe5986ca2079b",
+    "tests/support/modelSetFixtures.ts": "e1128930079db2ef1c73302e5dde38361162f4de62e80b9d92c675e82e0a4610",
+    "e2e/model-marketplace-sets.spec.ts": "8d4c138ddb0503b97e344b2e1669af50fbd26e990a118803189f53c3ae9b8a90",
+    "src/features/generate/MarketplacePhotoPlanPanel.tsx": "79256ddb415fe545ad783e460df4c9f04171413092fac8cd06c52776c3125889",
+    "src/components/wizard/ClientModelStep.tsx": "cffd976287891199125dc3f0b5d9e80fe627ed31ad39b4b4758a8a5213d58243",
+    "e2e/models-flow.spec.ts": "8e95b53c7de946fe6ceb9bb4463709858db4e3618cfb610ef1dab368617e1c29",
+    "e2e/support/local-fixtures.mjs": "9ea81dac74d0af97c59be472162c8c20a39cbd282b6df10892577bdd02d5bdc3"
+  }
+}

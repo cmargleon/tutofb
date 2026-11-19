@@ -1,3 +1,6 @@
+import { getModelMarketplaceRules } from '../models/marketplaceRules';
+import { currentModelPhotoBases } from '../models/marketplaceSets';
+import { marketplaceDressingCustomization } from '../../../shared/src/modelPhotoSets';
 import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -58,18 +61,20 @@ export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Cli
   const selectedModelId = job.photoModelId || job.modelId || config.modelId || _client.automation?.defaultModelId || null;
   const selectedModel = selectedModelId ? (await db.doc(`models/${selectedModelId}`).get()).data() as Model | undefined : undefined;
   if (selectedModelId && (!selectedModel || selectedModel.clientId !== job.clientId || selectedModel.active === false || selectedModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo explícito/preset no disponible.');
-  const bases = job.photoBases ?? (selectedModel?.poses || []).filter(p => p.active !== false && (!config.poseIds || config.poseIds.includes(p.id))).map(p => ({ id: p.id, storagePath: p.storagePath, ...(p.photoObservation ? { observation: p.photoObservation } : {}) }));
+  const bases = await currentModelPhotoBases(selectedModel, config.poseIds);
   const defaults = createDefaultProductGeneration(await getSystemConfigCached());
-  const plan = job.photoPlan?.tasks.length ? job.photoPlan : buildMarketplacePhotoPlan({
-    clientId: job.clientId, marketplaces: job.photoMarketplaces, articles, bases, provider, ...normalized, objectScenes: config.scenes || defaults.scenes,
+  const plan = buildMarketplacePhotoPlan({
+    modelMarketplaceRules: await getModelMarketplaceRules(),
+    clientId: job.clientId, marketplaces: job.photoMarketplaces, customPrompt: marketplaceDressingCustomization(config.prompt), articles, bases, provider, ...normalized, objectScenes: config.scenes || defaults.scenes,
   });
+  if (plan.issues.some(i => !i.itemId && i.blocking)) { plan.tasks = []; }
   for (const article of articles) {
-    const blocking = plan.issues.filter(i => i.itemId === article.itemId && i.blocking);
+    const blocking = plan.issues.filter(i => (!i.itemId || i.itemId === article.itemId) && i.blocking);
     items.push({ itemId: article.itemId, status: blocking.length ? 'needs_attention' : 'processing', scenes: [], ...(blocking.length ? { issue: { code: 'photo-plan-required', message: blocking.map(i => i.message).join(' ') } } : {}) });
   }
   await patch({ photoPlan: plan, ...(!plan.tasks.length ? { status: 'needs_attention', error: { code: 'photo-plan-required', message: 'Revisa las incidencias por artículo; referencias conservadas.' }, leaseToken: null, leaseExpiresAt: null } : {}) });
   if (!plan.tasks.length) return;
   await createMarketplacePhotoBatchCore({ clientId: job.clientId, marketplaces: job.photoMarketplaces, articles: plan.articles, provider, ...normalized,
-    modelId: selectedModelId, requestId: job.id, approvedPlanId: plan.id, prompt: config.prompt || '',
+    modelId: selectedModelId, requestId: job.id, approvedPlanId: plan.id, prompt: marketplaceDressingCustomization(config.prompt),
   }, job.createdByUid, { id: job.id, leaseToken: job.leaseToken!, plan });
 }

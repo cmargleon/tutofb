@@ -47,14 +47,25 @@ export interface PhotoArticle {
   references: Array<{ id: string; storagePath: string; view: GarmentView | 'detail'; sha256?: string }>;
 }
 export interface PhotoBaseObservation {
+  concretePoseMatches?: boolean;
+  concretePoseEvidence?: string;
+  pose?: import('./modelPhotoSet').ModelSetShot | 'profile' | 'unknown';
+  faceVisible?: boolean;
+  lookingAtCamera?: boolean;
+  identityCoherent?: boolean;
+  identityEvidence?: string;
+  width?: number;
+  height?: number;
+  mainPoseCompliant?: boolean;
   whiteRgbVerified?: boolean;
   audience?: 'baby' | 'child' | 'adult';
   orientation: GarmentView; posture: 'standing' | 'other'; framing: 'upper_body' | 'lower_body' | 'full_body';
   background: 'white' | 'neutral' | 'context'; garmentVisible: boolean; accessories: boolean;
   performer: 'synthetic' | 'real' | 'unknown'; verified: boolean; evidence: string;
 }
-export interface PhotoBase { id: string; storagePath: string; observation?: PhotoBaseObservation }
+export interface PhotoBase { id: string; storagePath: string; observation?: PhotoBaseObservation; approvals?: import('./modelPhotoSet').ModelBaseApproval[] }
 export interface PhotoRequirement {
+  source?: 'supplied-marketplace-guide' | 'tuto-product-decision';
   id: string; channel: MarketplaceId | 'common'; category: string; imageType: 'all' | 'main' | 'alternative';
   level: 'obligation' | 'recommendation' | 'preference'; verified: boolean; text: string;
 }
@@ -64,6 +75,10 @@ export interface PhotoDestination {
   recipeSources?: { background: PhotoRecipeSource | 'constraint'; composition: PhotoRecipeSource | 'constraint' };
 }
 export interface PhotoTask {
+  outputPose?: import('./modelPhotoSet').ModelSetShot;
+  baseSpec?: import('./modelPhotoSet').ModelBaseSpec;
+  aspectRatio?: AspectRatio;
+  imageConfig?: ProviderImageConfig;
   id: string; itemId: string; productId: string; variantId: string; referencePaths: string[];
   backgroundCorrection?: 'neutral-white-perimeter';
   sceneId?: string;
@@ -73,6 +88,9 @@ export interface PhotoTask {
   base: PhotoBase | null; syntheticPerformer: boolean; instructions: string; destinations: PhotoDestination[];
 }
 export interface PhotoPlanInput {
+  modelMarketplaceRules?: import('./modelMarketplaceRules').ModelMarketplaceRules;
+  selectedChannels?: MarketplaceId[];
+  customPrompt?: string;
   clientId: string; marketplaces?: Partial<Record<MarketplaceId, ClientMarketplaceConfig>>;
   objectScenes?: import('./productGeneration').ProductSceneInput[];
   articles: PhotoArticle[]; bases?: PhotoBase[]; provider: Provider; imageConfig: ProviderImageConfig; aspectRatio: AspectRatio;
@@ -89,4 +107,5 @@ export interface CreateMarketplacePhotoBatchRequest extends PhotoPlanInput {
   organizerContext?: import('./organizer').OrganizerProductContext;
   requestId: string; approvedPlanId: string; prompt: string; modelId?: string | null;
 }
+export interface PreviewMarketplacePhotoPlanRequest extends PhotoPlanInput { modelId?: string | null }
 export interface PhotoAssignment extends PhotoDestination { taskId: string; angle: string; outputId: string | null; jobId: string; eligible: boolean }

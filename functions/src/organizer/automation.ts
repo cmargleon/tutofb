@@ -12,6 +12,7 @@ import { assertDelegatedStamp } from '../manglar/access';
 import { withManglarContext } from '../manglar/context';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { digest, isImage, versionOf, type DriveEntry, type OrganizerDrive } from './drive';
+import { viewFromFileName, viewlessStem } from './viewHints';
 import { documents, whileLeased, type StoredConfig, type StoredRun } from './store';
 import { readOrganizerCommerce } from './commerce';
 import { identityModeOf } from './baseCodeVision';
@@ -23,6 +24,9 @@ export type GenerationPhoto = OrganizerPhoto & { kind?: string; visualConfidence
 export type GenerationSource = { entry: DriveEntry; photo: GenerationPhoto };
 // Catalog identity is useful context, never a prerequisite for production.
 // Visual groups are scoped to their source folder and already include color/pack/kind.
+// Photos without a variant whose names only differ by a view word (FRENTE/ESPALDA...) are one article: Gemini's
+// visual group often splits a front from its back. After that, a back-only group joins the single front group of its
+// folder with the same kind and color, and consecutive camera names (IMG_5102/IMG_5103) of the same kind and color merge.
 export function groupGenerationSources(sources: GenerationSource[]) {
   const groups = new Map<string, GenerationSource[]>();
   for (const source of sources) {
@@ -31,7 +35,63 @@ export function groupGenerationSources(sources: GenerationSource[]) {
       ? `visual:${source.entry.sourceId}:${source.entry.parents?.[0]}:${photo.visualHint.groupId}` : `photo:${photo.id}`;
     groups.set(key, [...(groups.get(key) || []), source]);
   }
-  return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([key, photos]) => ({ itemId: digest(key), photos }));
+  const sorted = [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([key, photos]) => ({ key, itemId: digest(key), photos }));
+  return mergeUncodedCompanions(sorted).map(({ itemId, photos }) => ({ itemId, photos }));
+}
+
+const folderOf = (photos: GenerationSource[]) => `${photos[0].entry.sourceId}:${photos[0].entry.parents?.[0]}`;
+const traitsOf = (photos: GenerationSource[]) => {
+  const kinds = new Set(photos.map(({ photo }) => photo.kind || photo.visualHint?.kind || ''));
+  const colors = new Set(photos.map(({ photo }) => (photo.visualHint?.color || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()));
+  const [kind] = kinds; const [color] = colors;
+  return kinds.size === 1 && colors.size === 1 && kind && color ? `${kind}|${color}` : null;
+};
+const cameraNumber = (name: string) => {
+  const match = name.replace(/\.[^.]{2,5}$/, '').match(/^(IMG|DSC|DSCF|DSCN|PXL|P|DCIM|PHOTO|FOTO)[_ -]?(\d{3,})$/i);
+  return match ? { prefix: match[1].toUpperCase(), number: Number(match[2]) } : null;
+};
+
+function mergeUncodedCompanions<G extends { key: string; itemId: string; photos: GenerationSource[] }>(groups: G[]): G[] {
+  const result = groups.map(group => ({ ...group, photos: [...group.photos] }));
+  const uncoded = (group: G) => !group.photos.some(({ photo }) => photo.variantId);
+  const views = (group: G) => new Set(group.photos.map(({ photo }) => photo.view));
+  const absorb = (target: G, source: G) => { target.photos.push(...source.photos); result.splice(result.indexOf(source), 1); };
+  // Names that only differ by a view word (X-FRENTE / X-ESPALDA) join their groups. Names never split a visual group.
+  const stems = (group: G) => new Set(group.photos.map(({ entry, photo }) => entry.name || photo.name)
+    .filter(name => viewFromFileName(name)).map(viewlessStem).filter(Boolean));
+  for (let index = 0; index < result.length; index++) {
+    const group = result[index];
+    if (!uncoded(group)) continue;
+    for (const other of result.slice(index + 1)) {
+      if (uncoded(other) && folderOf(other.photos) === folderOf(group.photos) && [...stems(other)].some(stem => stems(group).has(stem))) absorb(group, other);
+    }
+  }
+  // Consecutive camera frames of the same kind and color are the same article shot twice (front, back).
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const group of result) {
+      if (!uncoded(group) || group.photos.length !== 1) continue;
+      const own = cameraNumber(group.photos[0].entry.name || group.photos[0].photo.name);
+      const traits = traitsOf(group.photos);
+      if (!own || !traits) continue;
+      const partner = result.find(other => other !== group && uncoded(other) && other.photos.length === 1 && folderOf(other.photos) === folderOf(group.photos)
+        && traitsOf(other.photos) === traits && (() => {
+          const theirs = cameraNumber(other.photos[0].entry.name || other.photos[0].photo.name);
+          return theirs?.prefix === own.prefix && Math.abs(theirs.number - own.number) === 1;
+        })() && ![...views(other)].some(view => view && view !== 'unknown' && views(group).has(view)));
+      if (partner) { absorb(group, partner); changed = true; break; }
+    }
+  }
+  // An orphan back (no front) joins the only front-without-back group of its folder with the same kind and color.
+  for (const orphan of [...result]) {
+    if (!uncoded(orphan) || views(orphan).has('front') || !views(orphan).has('back')) continue;
+    const traits = traitsOf(orphan.photos);
+    if (!traits) continue;
+    const fronts = result.filter(other => other !== orphan && uncoded(other) && folderOf(other.photos) === folderOf(orphan.photos)
+      && views(other).has('front') && !views(other).has('back') && traitsOf(other.photos) === traits);
+    if (fronts.length === 1) absorb(fronts[0], orphan);
+  }
+  return result;
 }
 
 /** 64-bit difference hash: robust to re-encoding (PNG ↔ JPG), resizing and light compression. */

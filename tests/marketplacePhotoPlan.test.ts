@@ -1,3 +1,4 @@
+import { approvedBasesForInput, modelFromBases } from './support/modelSetFixtures';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -17,10 +18,12 @@ const { projectMasterProducts } = require('./lib/functions/src/spreadsheets/mast
 const { MARKETPLACE_ADAPTERS } = require('./lib/shared/src/marketplaceExport/adapters.js');
 const article = (patch: Partial<PhotoArticle> = {}): PhotoArticle => ({ itemId: 'blue-shirt', productId: 'shirt', variantId: 'blue', name: 'Camiseta azul', kind: 'garment',
   attributes: { category: attr('ordinary'), audience: attr('adult'), bodyArea: attr('upper_body'), packaging: attr('unit'), transparency: attr(false), color: attr('azul'), components: attr('1 camiseta'), gender: attr('unisex') },
-  references: ['front', 'back', 'side'].map((view, i) => ({ id: String(i), storagePath: `garments/drafts/operator/${view}.jpg`, view: view as 'front' | 'back' | 'side' })), ...patch });
-const input = (channels = ['amazon', 'mercado-libre', 'tiktok-shop', 'shein'], articles = [article()]): PhotoPlanInput => ({ clientId: 'test', marketplaces: Object.fromEntries(channels.map(id => [id, { enabled: true }])), articles, provider: 'fal-gpt-image-2.5-flare', imageConfig: createCommercialProviderImageConfig('fal-gpt-image-2.5-flare'), aspectRatio: '3:4' });
+  references: ['front', 'side', 'back'].map((view, i) => ({ id: String(i), storagePath: `garments/drafts/operator/${view}.jpg`, view: view as 'front' | 'back' | 'side' })), ...patch });
+const rawInput = (channels = ['amazon', 'mercado-libre', 'tiktok-shop', 'shein'], articles = [article()]): PhotoPlanInput => ({ clientId: 'test', marketplaces: Object.fromEntries(channels.map(id => [id, { enabled: true }])), articles, provider: 'fal-gpt-image-2.5-flare', imageConfig: createCommercialProviderImageConfig('fal-gpt-image-2.5-flare'), aspectRatio: '3:4' });
 
-test('all channel combinations deduplicate compatible requirements, not only front labels', () => {
+const input: typeof rawInput = (...args) => { const i = rawInput(...args); return { ...i, bases: approvedBasesForInput(i) }; };
+
+test('every active channel gets its own photos; no photo is shared across marketplaces', () => {
   const channels = ['amazon', 'mercado-libre', 'tiktok-shop', 'shein'];
   for (let mask = 1; mask < 16; mask++) {
     const chosen = channels.filter((_, i) => mask & 1 << i); const plan = buildMarketplacePhotoPlan(input(chosen));
@@ -29,10 +32,11 @@ test('all channel combinations deduplicate compatible requirements, not only fro
     assert.equal(new Set(plan.tasks.map(t => t.id)).size, plan.tasks.length);
   }
   const plan = buildMarketplacePhotoPlan(input());
-  assert.equal(plan.tasks.length, 4);
-  assert.deepEqual(plan.tasks.filter(t => t.view === 'front').map(t => t.destinations.map(d => d.channel)), [['amazon', 'tiktok-shop'], ['mercado-libre', 'shein']]);
-  assert.equal(plan.estimate.generations, 4); assert.equal(plan.estimate.reviews, 4);
-  assert.ok(plan.tasks[0].instructions.includes('85%'));
+  assert.equal(plan.tasks.length, 12); // 3 views x 4 marketplaces
+  assert.ok(plan.tasks.every(t => new Set(t.destinations.map(d => d.channel)).size === 1));
+  assert.deepEqual(plan.tasks.filter(t => t.view === 'front').map(t => t.destinations.map(d => d.channel)), [['amazon'], ['mercado-libre'], ['tiktok-shop'], ['shein']]);
+  assert.equal(plan.estimate.generations, 12); assert.equal(plan.estimate.reviews, 12);
+  assert.ok(!plan.tasks[0].instructions.includes('85%')); // extensive rules belong to validation
 });
 test('no active channels preserve legacy (no production plan or hidden requirements)', () => {
   const plan = buildMarketplacePhotoPlan(input([])); assert.equal(plan.tasks.length, 0); assert.equal(plan.rules.length, 0);
@@ -56,8 +60,8 @@ test('packs are model free with exact contents; adult underwear/transparency ret
   for (const category of ['underwear', 'swimwear'] as const) {
     const a = article(); a.attributes.category = attr(category); a.attributes.transparency = attr(true);
     const plan = buildMarketplacePhotoPlan(input(undefined, [a]));
-    assert.ok(plan.tasks.every(t => /sin exposición íntima/.test(t.instructions)));
-    assert.ok(plan.tasks.every(t => /detalles ocultos/.test(t.instructions)));
+    assert.ok(plan.tasks.every(t => /no intimate exposure/.test(t.instructions)));
+    assert.ok(plan.tasks.every(t => /hidden details/.test(t.instructions)));
   }
 });
 test('uncertain attributes block only affected articles; manual/commercial facts precede inference and preserve references', () => {
@@ -74,7 +78,7 @@ test('uncertain attributes block only affected articles; manual/commercial facts
 test('insufficient back references never invent a back; different variants/references never merge', () => {
   const a = article({ references: [article().references[0]] });
   const plan = buildMarketplacePhotoPlan(input(undefined, [a, article({ itemId: 'red-shirt', variantId: 'red' })]));
-  assert.equal(plan.tasks.filter(t => t.itemId === a.itemId).length, 2);
+  assert.equal(plan.tasks.filter(t => t.itemId === a.itemId).length, 4); // front only, once per marketplace
   assert.ok(plan.issues.some(i => !i.blocking && i.code.startsWith('optional-back')));
   assert.ok(plan.tasks.filter(t => t.itemId === 'red-shirt').every(t => !plan.tasks.filter(o => o.itemId === a.itemId).some(o => o.id === t.id)));
   assert.equal(buildMarketplacePhotoPlan(input(undefined, [article({ references: [] })])).tasks.length, 0);
@@ -88,18 +92,21 @@ test('deterministic versioned identity binds effective config, evidence and froz
   assert.ok(PHOTO_RULES.filter(r => r.channel === 'shein').some(r => r.level === 'preference'));
   assert.ok(!PHOTO_RULES.some(r => r.channel === 'shein' && /fondo blanco/.test(r.text) && r.level === 'obligation'));
 });
-test('bases need observed posture/framing/background/provenance; recipe alone cannot be selected', () => {
-  const i = input(['amazon']); i.bases = [{ id: 'recipe', storagePath: 'models/a.jpg' }];
-  assert.equal(buildMarketplacePhotoPlan(i).tasks[0].base, null);
-  i.bases[0].observation = { whiteRgbVerified: true, audience: 'adult', orientation: 'front', posture: 'standing', framing: 'upper_body', background: 'white', garmentVisible: true, accessories: false, performer: 'real', verified: true, evidence: 'observed' };
-  const task = buildMarketplacePhotoPlan(i).tasks[0]; assert.equal(task.base?.id, 'recipe'); assert.equal(task.syntheticPerformer, false);
+test('bases require explicit verified recipe approval; observations and labels alone never authorize them', () => {
+  const i = input(['amazon']);
+  i.bases = [{ id: 'legacy', storagePath: 'models/a.jpg', observation: i.bases![0].observation }];
+  const plan = buildMarketplacePhotoPlan(i);
+  assert.equal(plan.tasks.length, 0);
+  assert.ok(plan.issues.some(issue => issue.code === 'base-amazon-front' && issue.blocking));
+  i.bases = approvedBasesForInput(i);
+  assert.ok(buildMarketplacePhotoPlan(i).tasks.every(task => task.base && !task.identityBase));
 });
 test('wizard and automation use equivalent planner inputs and task counts', () => {
   const i = input(); const a = article();
   i.marketplaces!.shein = { enabled: true, photoRecipeRevision: 2, photoRecipe: { general: { views: ['back'] }, categories: { ordinary: { views: ['side', 'back'], mainBackground: 'white' } } } };
   const state: any = { provider: i.provider, providerImageConfigs: { [i.provider]: i.imageConfig }, generationKind: 'garment', productScenes: [], garments: [{ id: a.itemId, name: a.name, photoAttributes: a.attributes,
     originalPhotos: a.references.map(r => ({ id: r.id, upload: { storagePath: r.storagePath }, classification: { view: r.view } })) }] };
-  const wizardInput = wizardPhotoPlanInput(state, { id: i.clientId, marketplaces: i.marketplaces } as any, null);
+  const wizardInput = wizardPhotoPlanInput(state, { id: i.clientId, marketplaces: i.marketplaces } as any, modelFromBases(i.bases!));
   const automationInput = { ...i, objectScenes: [], articles: [{ ...a, productId: a.itemId, variantId: a.itemId }] };
   assert.deepEqual(buildMarketplacePhotoPlan(wizardInput), buildMarketplacePhotoPlan(automationInput));
 });
@@ -118,10 +125,11 @@ test('recipe precedence is per field and per channel, without expanding referenc
     .sort((a, b) => a.position - b.position);
   assert.deepEqual(gallery(ordinary.itemId, 'shein').map(t => t.view), ['front', 'back']);
   assert.deepEqual(gallery(underwear.itemId, 'shein').map(t => t.view), ['front', 'side', 'back']);
-  assert.deepEqual(gallery(ordinary.itemId, 'mercado-libre').map(t => t.view), ['front', 'back', 'side']);
+  assert.deepEqual(gallery(ordinary.itemId, 'mercado-libre').map(t => t.view), ['front', 'side', 'back']);
   assert.equal(gallery(ordinary.itemId, 'shein')[1].composition, 'flat_lay');
   assert.deepEqual(gallery(ordinary.itemId, 'shein')[0].recipeSources, { background: 'category', composition: 'default' });
-  assert.ok(plan.tasks.find(t => t.itemId === ordinary.itemId && t.view === 'front')!.destinations.length === 2);
+  assert.ok(plan.tasks.filter(t => t.itemId === ordinary.itemId && t.view === 'front').every(t => t.destinations.length === 1));
+  assert.equal(plan.tasks.filter(t => t.itemId === ordinary.itemId && t.view === 'front').length, 2);
   assert.ok(plan.tasks.filter(t => t.itemId === ordinary.itemId && t.view === 'back').length === 2);
   assert.ok(plan.issues.some(issue => issue.code === 'optional-detail-shein' && !issue.blocking));
   assert.deepEqual(plan.recipeSnapshot?.channels, [{ channel: 'mercado-libre', revision: 0 }, { channel: 'shein', revision: 7 }]);
@@ -165,7 +173,7 @@ test('restoring defaults preserves legacy approval ID and optional gallery while
 test('retry prompts retain plan obligations, including manually regenerated historical job compatibility', () => {
   const task = buildMarketplacePhotoPlan(input()).tasks[0];
   const job = { photoTask: task, automationManaged: true, requestedPromptBase: 'original', provider: 'fal-gpt-image-2.5-flare', photoProfile: 'commercial-photo-v1', imageConfig: input().imageConfig, aspectRatio: '3:4' } as Job;
-  assert.ok(buildAutomaticRetryPromptPatch(job, 'ignore background').finalPrompt.includes(task.instructions));
+  assert.ok(buildAutomaticRetryPromptPatch(job, 'Fix garment texture').finalPrompt.includes(task.instructions));
   assert.ok(buildRegenerateJobPatch(job, job.provider, 'new request').finalPrompt.includes(task.instructions));
   assert.deepEqual(buildAutomaticRetryPromptPatch({ automationManaged: true } as Job, 'legacy'), { promptBase: 'legacy', finalPrompt: 'legacy' });
 });
@@ -208,30 +216,39 @@ test('real detail references are reused without generation, while flat lay tasks
   const pack = article(); pack.attributes.packaging = attr('multipack'); pack.references.push({ id: 'detail', storagePath: 'garments/drafts/operator/detail.jpg', view: 'detail' });
   const plan = buildMarketplacePhotoPlan(input(undefined, [pack]));
   assert.ok(plan.tasks.some(t => t.composition === 'reference'));
-  assert.ok(plan.tasks.filter(t => t.composition === 'flat_lay').every(t => t.instructions.includes('REMOVE the person entirely') && !t.instructions.includes('desde muslos')));
+  assert.ok(plan.tasks.filter(t => t.composition === 'flat_lay').every(t => t.instructions.includes('No person, body parts, mannequin') && !t.instructions.includes('desde muslos')));
   assert.ok(plan.estimate.generations < plan.estimate.uniqueImages);
 });
-test('a visually white base is identity evidence, not a promise of RGB white pixels', () => {
-  const i = input(['amazon']); i.bases = [{ id: 'identity', storagePath: 'models/identity.jpg', observation: { audience: 'adult', orientation: 'front', posture: 'standing', framing: 'upper_body', background: 'white', whiteRgbVerified: false, garmentVisible: true, accessories: false, performer: 'synthetic', verified: true, evidence: 'visually white only' } }];
-  const task = buildMarketplacePhotoPlan(i).tasks[0]; assert.equal(task.base, null); assert.equal(task.identityBase?.id, 'identity');
-  assert.ok(task.instructions.includes('Preserva la identidad exacta'));
+test('visually white and mislabeled bases cannot fall back to identity or RGB assumptions', () => {
+  const i = input(['amazon']);
+  i.bases = [{ id: 'identity', storagePath: 'models/identity.jpg', observation: { audience: 'adult', orientation: 'front', posture: 'standing', framing: 'upper_body', background: 'white', whiteRgbVerified: false, garmentVisible: true, accessories: false, performer: 'synthetic', verified: true, evidence: 'visually white only' } }];
+  const plan = buildMarketplacePhotoPlan(i);
+  assert.equal(plan.tasks.length, 0);
+  assert.ok(plan.issues.some(i => i.code === 'base-amazon-front' && i.blocking));
 });
 
 test('review requires structured per-destination validation; flattering prose cannot approve a missing field', async t => {
   const usage = require('./lib/functions/src/analytics/geminiUsage.js');
   const reviewer = require('./lib/functions/src/review/geminiImageReview.js');
-  const task = buildMarketplacePhotoPlan(input(['amazon', 'tiktok-shop'])).tasks[0];
+  const sidePlan = buildMarketplacePhotoPlan(input(['amazon', 'shein']));
+  let task = sidePlan.tasks.find(t => t.view === 'side' && t.destinations[0].channel === 'shein')!;
+  const amazonTask = sidePlan.tasks.find(t => t.view === 'side' && t.destinations[0].channel === 'amazon')!;
   let omit = false;
   t.mock.method(usage, 'callGeminiGenerateContent', async ({ body }: any) => {
     assert.ok(body.generationConfig.responseJsonSchema.required.includes('photoValidation'));
+    // Each photo is validated only against its own marketplace.
+    assert.deepEqual(body.generationConfig.responseJsonSchema.properties.photoValidation.properties.destinations.items.properties.channel.enum, [task.destinations[0].channel]);
     return { payload: { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: JSON.stringify({ verdict: 'approved', summary: 'All perfect', revisedPrompt: '', criteria: [{ key: 'identity', label: 'Identity', passed: true, notes: '' }], marketplaceData: {},
-      ...(!omit ? { photoValidation: { fidelity: true, destinations: task.destinations.map(d => ({ channel: d.channel, position: d.position, passed: d.channel === 'tiktok-shop', notes: 'Scoped check' })) } } : {}) }) }] } }] } };
+      ...(!omit ? { photoValidation: { fidelity: true, destinations: task.destinations.map(d => ({ channel: d.channel, position: d.position, passed: d.channel === 'shein', notes: 'Scoped check' })) } } : {}) }) }] } }] } };
   });
   const image = { bytes: Buffer.from('fixture'), mimeType: 'image/jpeg' };
-  const request = { photoTask: task, apiKey: 'test', model: 'test', generationKind: 'product', requestedPromptBase: 'test', promptBase: 'test', finalPrompt: task.instructions, attemptNumber: 1, maxAttempts: 1, poseReference: image, garmentReference: image, generatedImage: image, signal: new AbortController().signal };
-  const result = await reviewer.reviewGeneratedImageWithGemini(request);
-  assert.equal(result.verdict, 'approved'); assert.equal(result.photoValidation.destinations[0].passed, false); assert.equal(result.photoValidation.destinations[1].passed, true);
-  omit = true; await assert.rejects(reviewer.reviewGeneratedImageWithGemini(request), /validaciones estructuradas/);
+  const request = () => ({ photoTask: task, apiKey: 'test', model: 'test', generationKind: 'product', requestedPromptBase: 'test', promptBase: 'test', finalPrompt: task.instructions, attemptNumber: 1, maxAttempts: 1, poseReference: image, garmentReference: image, generatedImage: image, signal: new AbortController().signal });
+  const result = await reviewer.reviewGeneratedImageWithGemini(request());
+  assert.equal(result.verdict, 'approved'); assert.deepEqual(result.photoValidation.destinations.map((d: any) => [d.channel, d.passed]), [['shein', true]]);
+  task = amazonTask;
+  const amazonResult = await reviewer.reviewGeneratedImageWithGemini(request());
+  assert.equal(amazonResult.verdict, 'rejected'); assert.deepEqual(amazonResult.photoValidation.destinations.map((d: any) => [d.channel, d.passed]), [['amazon', false]]);
+  omit = true; await assert.rejects(reviewer.reviewGeneratedImageWithGemini(request()), /validaciones estructuradas/);
 });
 
 test('conservative white preparation preserves product pixels and edges and excludes transparency/light products', async () => {
@@ -249,11 +266,14 @@ test('conservative white preparation preserves product pixels and edges and excl
   assert.ok(buildMarketplacePhotoPlan(input(['amazon'], [light])).tasks.every(t => !t.backgroundCorrection));
 });
 
-test('trousers retain their back and side identity references when full-body bases require reframing', () => {
+test('trousers never reframe a full-body identity base; missing lower-body shots block with references retained', () => {
   const a = article(); a.attributes.bodyArea = attr('lower_body');
   const i = input(['shein'], [a]);
-  i.bases = ['front', 'back', 'side'].map(view => ({ id: view, storagePath: `models/${view}.jpg`, observation: { audience: 'adult', orientation: view, posture: 'standing', framing: 'full_body', background: 'white', garmentVisible: true, accessories: false, performer: 'synthetic', verified: true, evidence: 'observed' } })) as any;
-  for (const task of buildMarketplacePhotoPlan(i).tasks) { assert.equal(task.identityBase?.id, task.view); assert.ok(task.instructions.includes('debajo de pies')); }
+  i.bases = approvedBasesForInput(input(['shein'])); // upper-body bases
+  const plan = buildMarketplacePhotoPlan(i);
+  assert.equal(plan.tasks.length, 0);
+  assert.ok(plan.issues.filter(i => i.blocking).length === 3);
+  assert.deepEqual(plan.articles[0].references, a.references);
 });
 
 test('a declared sixteen-year-old model remains a minor despite adult-looking visual classification', () => {

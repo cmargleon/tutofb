@@ -4,6 +4,32 @@
       "collectionGroup": "products",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "catalog.listed", "order": "ASCENDING" },
+        { "fieldPath": "catalog.createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "catalog.listed", "order": "ASCENDING" },
+        { "fieldPath": "catalog.group", "order": "ASCENDING" },
+        { "fieldPath": "catalog.createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "catalog.listed", "order": "ASCENDING" },
+        { "fieldPath": "catalog.typeId", "order": "ASCENDING" },
+        { "fieldPath": "catalog.createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "products",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "catalog.status", "order": "ASCENDING" },
         { "fieldPath": "catalog.searchKeys", "arrayConfig": "CONTAINS" }
       ]

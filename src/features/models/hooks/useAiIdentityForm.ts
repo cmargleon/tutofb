@@ -15,6 +15,7 @@ import {
   SKIN_OPTIONS,
   TOP_OPTIONS,
 } from '../constants';
+import { DEFAULT_IMAGE_PROVIDER } from '../../../../shared/src/domain';
 import { buildIdentityPrompt } from '../prompts';
 import {
   createDefaultModelProviderImageConfigs,
@@ -61,6 +62,7 @@ export interface AiIdentityFormState {
   footwear: string;
   setFootwear: SetState<string>;
   provider: ModelPhotoProvider;
+  providerExplicit: boolean;
   selectedProviderDisabled: boolean;
   setProvider: SetState<ModelPhotoProvider>;
   providerImageConfigs: Record<Provider, ProviderImageConfig>;
@@ -93,7 +95,9 @@ export const useAiIdentityForm = ({
   const [top, setTop] = useState('plain white t-shirt');
   const [bottom, setBottom] = useState('plain black pants');
   const [footwear, setFootwear] = useState('plain white sneakers');
-  const [provider, setProvider] = useState<ModelPhotoProvider>('fal-gpt-image-2');
+  const [provider, updateProvider] = useState<ModelPhotoProvider>(DEFAULT_IMAGE_PROVIDER as ModelPhotoProvider);
+  const [providerExplicit, setProviderExplicit] = useState(false);
+  const setProvider: SetState<ModelPhotoProvider> = useCallback(value => { setProviderExplicit(true); updateProvider(value); }, []);
   const [providerImageConfigs, setProviderImageConfigs] = useState<Record<Provider, ProviderImageConfig>>(
     createDefaultModelProviderImageConfigs,
   );
@@ -147,6 +151,7 @@ export const useAiIdentityForm = ({
 
   const restoreAutoPrompt = useCallback(() => setPromptEdited(false), []);
   const setProviderImageConfig = useCallback((config: ProviderImageConfig) => {
+    setProviderExplicit(true);
     setProviderImageConfigs((current) => ({
       ...current,
       [config.provider]: config,
@@ -189,6 +194,7 @@ export const useAiIdentityForm = ({
     footwear,
     setFootwear,
     provider,
+    providerExplicit,
     selectedProviderDisabled,
     setProvider,
     providerImageConfigs,

@@ -102,3 +102,6 @@ export { previewMarketplacePhotoPlan, createMarketplacePhotoBatch, verifyMarketp
 export * from './callables/editJobPhoto';
 
 export { syncCatalogJob, syncCatalogDraft } from './catalog/triggers';
+export { previewModelPhotoSets, approveModelIdentity, verifyModelMarketplaceBase, generateModelMarketplaceBase } from './callables/modelMarketplaceSets';
+
+export { saveModelMarketplaceRule } from './models/marketplaceRules';

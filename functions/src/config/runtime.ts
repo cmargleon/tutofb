@@ -3,6 +3,7 @@ import { defineInt, defineSecret, defineString } from 'firebase-functions/params
 export const FAL_KEY = defineSecret('FAL_KEY');
 export const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
 export const GOOGLE_PRIVATE_KEY = defineSecret('GOOGLE_PRIVATE_KEY');
+export const GMAIL_OAUTH_CLIENT = defineSecret('GMAIL_OAUTH_CLIENT');
 
 const BATCH_MAX_JOBS = defineInt('BATCH_MAX_JOBS', { default: 100 });
 const JOB_MAX_RETRIES = defineInt('JOB_MAX_RETRIES', { default: 3 });

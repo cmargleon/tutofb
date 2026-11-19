@@ -7,7 +7,7 @@ export const normalize = (value: string) => value.normalize('NFD').replace(/\p{D
 export const code = (value: string) => normalize(value).replace(/\s*-\s*/g, '-').replace(/PACK[ -]*(\d+)/g, 'PACK$1');
 const aliases: Record<string, string> = {
   SKC: 'skc', 'CODIGO SKC': 'skc', SKU: 'sku', 'CODIGO SKU': 'sku', 'CODIGO DE PRODUCTO': 'sku', REFERENCIA: 'sku',
-  SPU: 'base', 'PRODUCTO BASE': 'base', 'MODELO BASE': 'base', NOMBRE: 'name', NOMBR: 'name',
+  SPU: 'base', 'PRODUCTO BASE': 'base', 'MODELO BASE': 'base', 'CODIGO BASE': 'base', 'COD BASE': 'base', 'CODIGO PADRE': 'base', NOMBRE: 'name', NOMBR: 'name',
   'NOMBRE DEL PRODUCTO': 'name', 'NOMBRE COMERCIAL': 'name', PRODUCTO: 'name', DESCRIPCION: 'description',
   CATEGORIA: 'category', 'TIPO DE PRODUCTO': 'category', COLOR: 'color', COLOUR: 'color', CAPACIDAD: 'capacity', VOLUMEN: 'capacity',
   CODIGO: 'sku', CODE: 'sku', ARTICULO: 'name', PRECIO: 'price',
@@ -18,6 +18,8 @@ const aliases: Record<string, string> = {
   COMENTARIO: 'comments', COMENTARIOS: 'comments', OBSERVACIONES: 'comments', NOTAS: 'comments', CALIDAD: 'comments',
 };
 export const distinct = <T>(items: T[]) => [...new Set(items)];
+/** Normalized headers the organizer reads as catalog fields (identity, name, color, size...). */
+export const CATALOG_HEADERS = new Set(Object.keys(aliases));
 const displayCode = (value: string) => /^[A-Z0-9][A-Z0-9._+/-]{0,100}$/.test(value) ? value : '';
 export const CATALOG_FIELDS = distinct([...Object.values(aliases), '']);
 export type TabMapping = { headerRow: number; fields: string[] };

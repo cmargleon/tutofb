@@ -5173,6 +5173,29 @@
           }
         ]
       },
+      "contacts": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 30000
+            },
+            "email": {
+              "type": "string",
+              "maxLength": 30000
+            }
+          },
+          "required": [
+            "name",
+            "email"
+          ],
+          "additionalProperties": false,
+          "maxProperties": 100
+        }
+      },
       "expected": {
         "type": "object",
         "properties": {
@@ -5190,6 +5213,29 @@
                 "maxLength": 30000
               }
             ]
+          },
+          "contacts": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 30000
+                },
+                "email": {
+                  "type": "string",
+                  "maxLength": 30000
+                }
+              },
+              "required": [
+                "name",
+                "email"
+              ],
+              "additionalProperties": false,
+              "maxProperties": 100
+            }
           }
         },
         "required": [],

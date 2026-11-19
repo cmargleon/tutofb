@@ -1,10 +1,12 @@
+import type { ClientContact } from './client';
 import type { ModelIdentityTraits, PoseAiClassification } from './model';
 import type { Role } from './common';
 export interface ManglarClientSaveRequest {
     id?: string;
     name?: string;
     generationPromptBase?: string | null;
-    expected?: { name?: string; generationPromptBase?: string | null };
+    contacts?: ClientContact[];
+    expected?: { name?: string; generationPromptBase?: string | null; contacts?: ClientContact[] };
 }
 export interface ManglarModelSaveRequest {
     id?: string;
@@ -177,4 +179,4 @@ export interface ManglarExecutePlanRequest {
     confirmedBudgetUsd: number;
 }
 
-export interface ManglarClientSaveResponse { id: string; values: { name: string; generationPromptBase: string | null } }
+export interface ManglarClientSaveResponse { id: string; values: { name: string; generationPromptBase: string | null; contacts: ClientContact[] } }

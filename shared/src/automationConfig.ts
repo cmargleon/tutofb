@@ -32,6 +32,11 @@ export const resolveAutomationRules = (
   classificationMinConfidence: client?.classificationMinConfidence ?? system?.classificationMinConfidence ?? DEFAULT_AUTOMATION_RULES.classificationMinConfidence,
 });
 
+/** Explicit client opt-in can enable generation while the system default is disabled. */
+export const isOrganizerGenerationEnabled = (globalEnabled: boolean = DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED, config?: ClientAutomationConfig): boolean =>
+  config?.enabled !== false && config?.organizerGeneration?.enabled !== false &&
+  (config?.organizerGeneration?.autoRun === true || globalEnabled);
+
 export type AutomationConfigSource = 'cliente' | 'sistema' | 'predeterminado';
 export type EffectiveAutomationValue<T> = { value: T; source: AutomationConfigSource };
 const effective = <T>(client: T | undefined, system: T | undefined, fallback: T): EffectiveAutomationValue<T> => ({
@@ -41,7 +46,14 @@ const effective = <T>(client: T | undefined, system: T | undefined, fallback: T)
 const defaultPresetByType = 'Según tipo: standard (prendas) / generic_product (objetos)';
 export const resolveAutomationPresetName = (
   request: Pick<CreateAutomationJobRequest, 'jobType' | 'preset'>, client?: ClientAutomationConfig,
-): string => request.preset || client?.defaultPreset || (request.jobType === 'product' ? 'generic_product' : 'standard');
+): string => {
+  const own = request.jobType === 'product' ? 'generic_product' : 'standard';
+  const other = request.jobType === 'product' ? 'standard' : 'generic_product';
+  const name = request.preset || client?.defaultPreset;
+  // A built-in preset only applies to its own item type: mixed folders (garments + objects) resolve per type.
+  if (!name || (name === other && !Object.hasOwn(client?.presets ?? {}, name))) return own;
+  return name;
+};
 
 /** Read-only explanation of the same defaults used when an automation is created. */
 export const resolveEffectiveAutomationConfig = ({ system, client, models = [] }: {
@@ -83,7 +95,9 @@ export const resolveEffectiveAutomationConfig = ({ system, client, models = [] }
   try { validateAutomationRules(rules); } catch (error) { issues.push((error as Error).message); }
   const globalEnabled = system?.organizerAutoGenerationEnabled ?? DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED;
   const organizerGenerationEnabled = effective(config?.organizerGeneration?.enabled, system?.organizerAutoGenerationEnabled, DEFAULT_ORGANIZER_AUTO_GENERATION_ENABLED);
-  if (!globalEnabled) { organizerGenerationEnabled.value = false; organizerGenerationEnabled.source = 'sistema'; }
+  organizerGenerationEnabled.value = isOrganizerGenerationEnabled(globalEnabled, config);
+  if (config?.organizerGeneration?.autoRun === true || config?.organizerGeneration?.enabled === false) organizerGenerationEnabled.source = 'cliente';
+  else if (!globalEnabled) organizerGenerationEnabled.source = 'sistema';
   if (config?.enabled === false || client.status === 'archived') {
     organizerGenerationEnabled.value = false;
     organizerGenerationEnabled.source = 'cliente';

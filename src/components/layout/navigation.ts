@@ -3,7 +3,6 @@ import {
   DollarSign,
   FolderKanban,
   Images,
-  Package,
   LayoutDashboard,
   ListOrdered,
   Settings,
@@ -58,7 +57,6 @@ export interface NavigationGroup extends NavigationBase {
 export type NavigationEntry = NavigationItem | NavigationGroup;
 
 const isPathActive = (pathname: string, path: string) => {
-  if (path === '/catalogo') return pathname === path;
   if (path === '/') {
     return pathname === '/';
   }
@@ -74,7 +72,6 @@ export const buildNavigation = (role: NavigationRole): NavigationEntry[] => {
     { type: 'item', name: 'Organizador inteligente', path: '/organizador', icon: FolderKanban, visible: role.canEvaluate, section: 'production' },
     { type: 'item', name: 'Cola', path: '/cola', icon: ListOrdered, visible: role.canEvaluate, section: 'production' },
     { type: 'item', name: 'Catálogo', path: '/catalogo', icon: Images, visible: role.canEvaluate, section: 'catalog' },
-    { type: 'item', name: 'Productos maestros', path: '/catalogo/productos', icon: Package, visible: role.canEvaluate, section: 'catalog' },
     {
       type: 'group',
       name: 'Modelos',

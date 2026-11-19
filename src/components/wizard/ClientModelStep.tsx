@@ -3,6 +3,7 @@ import { Layers3 } from 'lucide-react';
 import { BatchOutputMode, Client, Model, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../../../shared/src/types';
 import { WizardState, WizardSourceSpreadsheetState } from '../../features/generate/types';
 import { EmptyState, ImageThumb } from '../ui';
+import { marketplaceTemplateLabel } from '../../features/marketplaces/templateSelection';
 
 interface Props {
   generationKind: WizardState['generationKind'];
@@ -95,8 +96,8 @@ export const ClientModelStep: React.FC<Props> = ({
                 </div>
               ) : hideSpreadsheetControls ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-                  Este cliente no tiene spreadsheet cargado. El lote se generará solo con fotos. Si quieres usar
-                  spreadsheet, primero cárgalo desde el menú de Clientes.
+                  Este cliente no tiene plantillas de marketplace activas y configuradas. El lote se generará solo
+                  con fotos. Si quieres usar spreadsheet, súbela y actívala en Clientes → Marketplaces.
                 </div>
               ) : (
                 <div className="grid gap-2">
@@ -146,7 +147,7 @@ export const ClientModelStep: React.FC<Props> = ({
                 <option value="">Selecciona un spreadsheet</option>
                 {spreadsheetTemplates.map((template) => (
                   <option key={template.id} value={template.id}>
-                    {template.name}
+                    {marketplaceTemplateLabel(template)}
                   </option>
                 ))}
               </select>

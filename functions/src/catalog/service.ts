@@ -1,48 +1,12 @@
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
-import type { ApplyCatalogImportRequest, Batch, CatalogGenerationLink, CatalogProduct, Client, Job, MasterProduct, ProductDraft, SaveCatalogProductRequest, StoredMasterProduct } from '../../../shared/src/types';
-import { CATALOG_STATUSES } from '../../../shared/src/types';
+import type { ApplyCatalogImportRequest, CatalogGenerationLink, MasterProduct, StoredMasterProduct } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { assertHumanClientAccess } from '../auth/clientAccess';
 import { validId } from '../manglar/access';
-import { jobMasterProductId, projectMasterProducts } from '../spreadsheets/masterProducts';
-import { resolveApprovedJobOutput } from '../../../shared/src/domain';
-import { isApprovedProductPhoto } from '../../../shared/src/productWorkflow';
-import { applyOrganizerSource, loadOrganizerProducts } from '../spreadsheets/organizerProducts';
-import { catalogDigest, catalogMetadata, duplicateIssue, manualEvidence, mergeCatalogSource, normalizeCatalogSearch } from './model';
-import { assertCatalogSize, catalogRevision, catalogStringMap, catalogValues, catalogVariants } from './validation';
+import { catalogDigest, duplicateIssue, manualEvidence, mergeCatalogSource, normalizeCatalogSearch } from './model';
+import { assertCatalogSize, catalogRevision, catalogStringMap } from './validation';
 
 export const catalogClientRef = (clientId: string) => getAppFirestore().collection('clients').doc(validId(clientId));
-export async function assertCatalogAccess(uid: string, clientId: string) {
-  validId(clientId); await assertHumanClientAccess(uid, clientId);
-  const ref = catalogClientRef(clientId); const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError('not-found', 'Cliente no disponible.');
-  if (snap.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente archivado.');
-  return ref;
-}
-export function catalogProduct(id: string, data: StoredMasterProduct): CatalogProduct {
-  return { ...data, id, catalog: catalogMetadata(data, data.catalog?.createdAt || data.updatedAt) };
-}
-/** Read-only, bounded projection. Never calls preview/autofill, publishes images or persists a migration. */
-export async function loadCatalogBatch(clientId: string, batchId: string) {
-  const db = getAppFirestore(); const clientRef = catalogClientRef(clientId);
-  const [client, batchSnap] = await Promise.all([clientRef.get(), db.collection('batches').doc(validId(batchId)).get()]);
-  if (!client.exists || client.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente no disponible.');
-  if (!batchSnap.exists || batchSnap.get('clientId') !== clientId) throw new HttpsError('permission-denied', 'Lote fuera del cliente.');
-  const batch = { ...batchSnap.data(), id: batchSnap.id } as Batch;
-  const [js, ds] = await Promise.all([db.collection('jobs').where('batchId', '==', batchId).limit(1001).get(), batchSnap.ref.collection('productDrafts').limit(1001).get()]);
-  if (js.size > 1000 || ds.size > 1000) throw new HttpsError('resource-exhausted', 'El lote supera 1000 trabajos/borradores.');
-  const jobs = js.docs.map(d => ({ ...d.data(), id: d.id } as Job));
-  const drafts = ds.docs.map(d => ({ ...d.data(), id: d.id } as ProductDraft));
-  if ([...jobs, ...drafts].some(item => item.clientId !== clientId)) throw new HttpsError('permission-denied', 'Referencias fuera del cliente.');
-  const products = projectMasterProducts(clientId, [batch], jobs, drafts);
-  const commerce = await loadOrganizerProducts({ ...client.data(), id: clientId } as Client, [batch], jobs);
-  for (const p of products) {
-    const link = batch.automationJobId && commerce.get(`automationJobs/${batch.automationJobId}/organizerCommerce/${p.garmentId}`);
-    if (link) applyOrganizerSource(p, link);
-  }
-  return products;
-}
 export const sourceFingerprint = (p: MasterProduct) => catalogDigest(p);
 export async function possibleCatalogDuplicates(clientId: string, product: Pick<MasterProduct, 'id' | 'values' | 'variants'>) {
   const skus = [...new Set([product.values.sku, ...product.variants.map(v => v.values.sku)].filter((s): s is string => Boolean(s)))].slice(0, 30);
@@ -56,69 +20,9 @@ export async function possibleCatalogDuplicates(clientId: string, product: Pick<
   }
   return found;
 }
-export async function saveCatalogRecord(uid: string, input: SaveCatalogProductRequest) {
-  const clientRef = await assertCatalogAccess(uid, input.clientId);
-  const id = validId(input.productId); const expected = catalogRevision(input.expectedRevision);
-  const values = catalogValues(input.values); const variants = catalogVariants(input.variants); const attributes = catalogStringMap(input.attributes);
-  if (!CATALOG_STATUSES.includes(input.status)) throw new HttpsError('invalid-argument', 'Estado de ficha inválido.');
-  const verified = input.verifiedGtinVariantIds || [];
-  if (!Array.isArray(verified) || verified.some(id => !variants.some(v => v.id === id && /^\d{8,14}$/.test(v.values.gtin || '')))) throw new HttpsError('invalid-argument', 'GTIN verificado inválido.');
-  if (input.resolveIssueIds && (!Array.isArray(input.resolveIssueIds) || input.resolveIssueIds.length > 200 || input.resolveIssueIds.some(id => typeof id !== 'string'))) throw new HttpsError('invalid-argument', 'Incidencias inválidas.');
-  const duplicates = await possibleCatalogDuplicates(input.clientId, { id, values, variants });
-  const ref = clientRef.collection('products').doc(id);
-  return getAppFirestore().runTransaction(async tx => {
-    const [snap, client] = await Promise.all([tx.get(ref), tx.get(clientRef)]);
-    if (!client.exists || client.get('status') === 'archived') throw new HttpsError('failed-precondition', 'Cliente no disponible.');
-    const current = snap.data() as StoredMasterProduct | undefined;
-    if (current?.clientId && current.clientId !== input.clientId) throw new HttpsError('permission-denied', 'Producto fuera del cliente.');
-    if (current?.catalog?.redirectTo) throw new HttpsError('failed-precondition', 'Abre la ficha canónica asociada.');
-    if ((current?.revision || 0) !== expected) {
-      // Creation is retryable with the same caller-generated ID and identical commercial payload.
-      if (expected === 0 && current?.revision === 1 && current.updatedByUid === uid && catalogDigest([current.values, current.variants, current.catalog?.attributes, current.catalog?.status]) === catalogDigest([values, variants, attributes, input.status])) return { productId: id, revision: 1 };
-      throw new HttpsError('aborted', 'La ficha cambió. Recarga antes de guardar.');
-    }
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    const catalog = catalogMetadata({ values, variants, catalog: current?.catalog }, now);
-    catalog.status = input.status; catalog.attributes = attributes; catalog.manuallyConfirmed = true;
-    if (input.selectedImages !== undefined) {
-      if (!Array.isArray(input.selectedImages) || input.selectedImages.length > 100) throw new HttpsError('invalid-argument', 'Selecciona hasta 100 imágenes.');
-      const unique = new Set<string>();
-      for (const selection of input.selectedImages) {
-        const link = await tx.get(ref.collection('generationLinks').doc(validId(selection.linkId)));
-        const job = await tx.get(getAppFirestore().collection('jobs').doc(validId(selection.jobId)));
-        validId(selection.outputId);
-        const output = job.exists && resolveApprovedJobOutput(job.data() as Job);
-        const batch = link.exists && await tx.get(getAppFirestore().collection('batches').doc(validId(link.get('batchId'))));
-        if (!link.exists || link.get('clientId') !== input.clientId || job.get('clientId') !== input.clientId || job.get('batchId') !== link.get('batchId') || !batch || batch.get('clientId') !== input.clientId || jobMasterProductId({ ...batch.data(), id: batch.id } as Batch, job.data() as Job) !== link.get('legacyProductId') || !output || output.id !== selection.outputId || !isApprovedProductPhoto(job.data() as Job, output)) throw new HttpsError('failed-precondition', 'Solo puedes seleccionar fotografías aprobadas y vinculadas a esta ficha.');
-        if (unique.has(selection.outputId)) throw new HttpsError('invalid-argument', 'Imagen duplicada.');
-        unique.add(selection.outputId);
-      }
-      catalog.selectedImages = input.selectedImages.map(s => ({ linkId: s.linkId, jobId: s.jobId, outputId: s.outputId }));
-    }
-    const evidence = { ...catalog.evidence };
-    for (const [key, value] of Object.entries(values)) evidence[key] = manualEvidence(value!);
-    for (const variant of variants) {
-      for (const [key, value] of Object.entries(variant.values)) evidence[`variant.${variant.id}.${key}`] = { ...manualEvidence(value!), ...(key === 'gtin' ? { verified: verified.includes(variant.id) } : {}) };
-      for (const [key, value] of Object.entries(variant.attributes || {})) evidence[`attribute.${variant.id}.${key}`] = manualEvidence(value);
-    }
-    for (const [key, value] of Object.entries(attributes)) evidence[`attribute.${key}`] = manualEvidence(value);
-    catalog.evidence = evidence;
-    catalog.issues = catalog.issues.filter(i => !input.resolveIssueIds?.includes(i.id));
-    for (const [other, sku] of duplicates) {
-      const issue = duplicateIssue(other, sku);
-      if (!catalog.issues.some(i => i.id === issue.id)) catalog.issues.push(issue);
-    }
-    catalog.issues = catalog.issues.slice(-200);
-    const data: StoredMasterProduct = { clientId: input.clientId, values, variants, marketplaces: current?.marketplaces || {}, revision: expected + 1, updatedAt: now, updatedByUid: uid, catalog };
-    assertCatalogSize(data);
-    // merge preserves marketplace publications, organizer overrides and future fields.
-    if (snap.exists) tx.update(ref, { ...data }); else tx.set(ref, data);
-    return { productId: id, revision: data.revision };
-  });
-}
-
 /** Explicit per-source incorporation; no SKU/name/image based linking, no production-wide migration. */
-export async function incorporateCatalogSource(uid: string, input: ApplyCatalogImportRequest, source: MasterProduct, sourceKey = 'batch') {
+export async function incorporateCatalogSource(uid: string, input: ApplyCatalogImportRequest, source: MasterProduct, sourceKey = 'batch',
+  options: { allowNewVariants?: boolean } = {}) {
   const clientRef = catalogClientRef(validId(input.clientId));
   const productId = validId(input.productId); const legacyId = validId(input.legacyProductId);
   catalogRevision(input.expectedRevision);
@@ -146,7 +50,8 @@ export async function incorporateCatalogSource(uid: string, input: ApplyCatalogI
     const fingerprints = { ...link.get('sourceFingerprints') };
     if (fingerprints[sourceKey] === input.fingerprint && catalogDigest(link.get('variantMap')) === catalogDigest(mapping)) return { productId, revision: current?.revision || 0 };
     if ((current?.revision || 0) !== input.expectedRevision) throw new HttpsError('aborted', 'La ficha cambió. Recarga antes de incorporar.');
-    if (current && productId !== legacyId && source.variants.some(v => !current.variants.some(row => row.id === mapping[v.id]))) throw new HttpsError('invalid-argument', 'Asocia cada variante de origen a una variante existente de la ficha.');
+    // An organizer base-code binding adds unmatched variants instead of requiring a manual variant map.
+    if (current && productId !== legacyId && !options.allowNewVariants && source.variants.some(v => !current.variants.some(row => row.id === mapping[v.id]))) throw new HttpsError('invalid-argument', 'Asocia cada variante de origen a una variante existente de la ficha.');
     if (productId !== legacyId && legacy.exists && !legacy.get('catalog.redirectTo')) {
       if (input.expectedSourceRevision !== legacy.get('revision')) throw new HttpsError('aborted', 'La ficha de origen cambió. Repite la previsualización.');
       if (legacy.get('catalog.version') === 1) {
@@ -177,7 +82,8 @@ export async function incorporateCatalogSource(uid: string, input: ApplyCatalogI
     const generation: CatalogGenerationLink = { id: linkId, clientId: input.clientId, batchId: input.batchId, legacyProductId: legacyId, garmentId: source.garmentId,
       draftIds: [...new Set<string>([...(link.get('draftIds') || []), ...source.legacyDrafts.flatMap(d => d.id || [])])], organizerReferences: [...new Set<string>([...(link.get('organizerReferences') || []), ...(source.organizer ? Object.keys(source.organizer.source.origins) : [])])], variantMap: mapping };
     if (snap.exists) tx.update(productRef, { ...data }); else tx.set(productRef, data);
-    tx.set(aliasRef, { clientId: input.clientId, productId, legacyProductId: legacyId });
+    // merge keeps routing metadata (e.g. an organizer base-code binding) across later source events.
+    tx.set(aliasRef, { clientId: input.clientId, productId, legacyProductId: legacyId }, { merge: true });
     tx.set(linkRef, { ...generation, sourceFingerprints: { ...fingerprints, [sourceKey]: input.fingerprint }, updatedAt: now });
     if (productId !== legacyId && legacy.exists) tx.set(legacy.ref, { catalog: { redirectTo: productId } }, { merge: true });
     return { productId, revision: data.revision };

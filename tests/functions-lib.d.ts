@@ -19,3 +19,12 @@ declare module '*/functions/lib/functions/src/organizer/planning.js' {
 declare module '*/functions/lib/functions/src/organizer/vision.js' {
   export * from '@/functions/src/organizer/vision';
 }
+declare module '*/functions/lib/functions/src/organizer/baseCodeVision.js' {
+  export * from '@/functions/src/organizer/baseCodeVision';
+}
+declare module '*/functions/lib/functions/src/catalog/organizerBinding.js' {
+  export * from '@/functions/src/catalog/organizerBinding';
+}
+declare module '*/functions/lib/functions/src/organizer/baseCode.js' {
+  export * from '@/functions/src/organizer/baseCode';
+}

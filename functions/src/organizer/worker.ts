@@ -1,7 +1,8 @@
+import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { FieldPath, type DocumentReference } from 'firebase-admin/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { onDocumentCreated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as xlsx from 'xlsx';
 import { type OrganizerBaseProduct, type OrganizerCommercialVariant, type OrganizerPhoto, type OrganizerProductRow, type OrganizerVariant } from '../../../shared/src/types';
 import { GEMINI_API_KEY, GOOGLE_PRIVATE_KEY } from '../config/runtime';
@@ -9,31 +10,36 @@ import { getSystemConfigDocRef, isOrganizerWatcherEnabled } from '../admin/syste
 import { APP_FIRESTORE_DATABASE_ID, getAppFirestore } from '../firebase/appFirestore';
 import { assertDelegatedStamp } from '../manglar/access';
 import { ALGORITHM_VERSION, associatePhotos, associationIndex, groupProductRows, identityFromFilename, normalize, productVariant, readWorkbook, type TabMapping } from './catalog';
-import { digest, fileUrl, FOLDER, isImage, isWorkbook, OrganizerDrive, OrganizerDriveError, SHEET, versionOf, type DriveEntry, type DriveFile, type ManagedZone } from './drive';
-import { appliesCatalog, assertLease, clientRef, configs, createAttemptRecorder, documents, requiresCopy, runRef, whileLeased, writePages, type StoredConfig, type StoredRun } from './store';
+import { digest, fileUrl, FOLDER, isImage, isWorkbook, OrganizerDrive, OrganizerDriveError, versionOf, type DriveEntry } from './drive';
+import { appliesCatalog, assertLease, clientRef, configs, documents, runRef, whileLeased, writePages, type StoredConfig, type StoredRun } from './store';
 import { analyze, OrganizerBudgetExhausted, reconcileReservations, type VisionPhoto } from './vision';
 import { interpretStructure, rankCandidates, matchObservation } from './interpretation';
-import { photoDecisionKey, planFile, stableDestination } from './planning';
+import { photoDecisionKey, planFile } from './planning';
 import { automateNewPhotos } from './automation';
+import { viewFromFileName } from './viewHints';
 import { compare } from './fingerprint';
 import { watch } from './watch';
+import { associateByBaseCode, baseCodeVariantIssues, buildBaseCodeIndex, contentVersionOf } from './baseCode';
+import { identityModeOf, resolveBaseVariants, selectVariantReferences } from './baseCodeVision';
+import { scaledRunLimits } from './limits';
 
 const sliceMs = 380_000;
 const leaseMs = 560_000;
-type RunFile = { entry: DriveEntry; added?: boolean; changed?: boolean; copied?: boolean; error?: string | null };
-type PhotoState = OrganizerPhoto & { hasConflict: boolean; version: string; visionKey?: string | null; kind?: string; quality?: number; visualConfidence?: number; algorithm: string; updatedAt: number };
+type RunFile = { entry: DriveEntry; added?: boolean; changed?: boolean; error?: string | null };
+export type PhotoState = OrganizerPhoto & { hasConflict: boolean; version: string; contentVersion?: string; visionKey?: string | null; baseVisionKey?: string | null;
+  /** Near-duplicate hash keyed by content version; persisted so automation never downloads a photo twice. */
+  differenceHash?: { key: string; value: string | null };
+  kind?: string; quality?: number; visualConfidence?: number; visualColor?: string; visualLabel?: string; algorithm: string; updatedAt: number };
 const inventoryFingerprint = (files: RunFile[]) => digest(files.map(file => compare(file.entry)).sort());
 const message = (error: unknown) => error instanceof Error ? error.message.slice(0, 350) : 'Error de ejecución.';
 const assetId = (file: DriveEntry) => digest([file.id, versionOf(file)]);
 const clean = <T extends object>(data: T): T => JSON.parse(JSON.stringify(data));
-const manifestRef = (root: DocumentReference, file: DriveEntry) => root.collection('manifest').doc(assetId(file));
 
 async function inventory(drive: OrganizerDrive, config: StoredConfig, run: StoredRun, doc: DocumentReference, lease: string, deadline: number) {
   const folders = doc.collection('scanFolders');
   const files = doc.collection('files');
   if (!run.cursor) {
-    const sources = run.mode === 'generate' || !config.parentId ? await drive.originals(config.sourceIds)
-      : (await drive.zone(config.sourceIds, config.parentId, config.allowInheritedAccess)).sources;
+    const sources = await drive.originals(config.sourceIds);
     await whileLeased(doc, lease, tx => {
       for (const source of sources) tx.set(folders.doc(source.id), { entry: { ...source, path: [source.name], sourceId: source.id, ancestorIds: [] as string[] }, page: '', done: false });
       tx.update(doc, { cursor: 'started' });
@@ -60,9 +66,9 @@ async function inventory(drive: OrganizerDrive, config: StoredConfig, run: Store
 }
 
 async function loadRows(drive: OrganizerDrive, doc: DocumentReference, file: DriveEntry, mappings?: Map<string, TabMapping>) {
+  await drive.assertSource(file);
   const cached = await doc.get();
   if (!cached.exists) {
-    await drive.assertSource(file);
     for await (const { tab, rows } of readWorkbook(drive, file, mappings)) {
       await writePages(doc.collection('rows'), rows.map(row => ({ id: digest([tab.id, row.line]), value: row })));
       await doc.collection('tabs').doc(tab.id).set(tab);
@@ -99,7 +105,7 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
   const seenTabs = new Set<string>();
   const seenPhotos = new Set<string>();
   const counts: Record<string, number> = { files: files.length, folders: 0, new: 0, modified: 0, photos: 0, workbooks: 0,
-    copied: 0, verified: 0, products: 0, variants: 0, skcs: 0, skus: 0, associated: 0, unassigned: 0, conflicts: 0, errors: 0 };
+    products: 0, variants: 0, skcs: 0, skus: 0, associated: 0, unassigned: 0, conflicts: 0, errors: 0 };
   const imported = doc.collection('imports');
   const workbookFiles = files.filter(file => isWorkbook(file.entry));
   for (const file of workbookFiles) {
@@ -148,7 +154,7 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
   await writePages(doc.collection('files'), fileUpdates);
   const prior = new Map<string, OrganizerVariant>();
   for await (const item of documents(root.collection('products'))) prior.set(item.id, item.data() as OrganizerVariant);
-  if (requiresCopy(run.mode)) {
+  if (appliesCatalog(run.mode)) {
     const initial = groupProductRows(rows);
     const initialVariants = [...initial.groups].map(([id, entries]) => productVariant(id, entries, prior.get(id), initial.anchors.get(id)));
     const tabs = (await root.collection('tabs').get()).docs.filter(tab => seenTabs.has(tab.id)).map(tab => tab.data() as import('../../../shared/src/types').OrganizerTab);
@@ -178,6 +184,13 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
     variant.status = 'review';
     variant.issues.push('El SKC aparece en varias variantes incompatibles.');
   }
+  const identityMode = identityModeOf((await root.get()).data() as StoredConfig | undefined);
+  const baseIndex = identityMode === 'legacy' ? null : buildBaseCodeIndex(variants, rows);
+  if (baseIndex) for (const variant of variants) {
+    variant.baseDeclared = baseIndex.declared.has(variant.id);
+    const extra = identityMode === 'baseCode' ? baseCodeVariantIssues(variant, baseIndex) : [];
+    if (extra.length) { variant.issues = [...new Set([...variant.issues, ...extra])].slice(0, 25); variant.status = 'review'; }
+  }
   const previousPhotos = new Map<string, PhotoState>();
   for await (const photo of documents(root.collection('photos'))) previousPhotos.set(photo.id, photo.data() as PhotoState);
   const photoFiles = files.filter(file => isImage(file.entry));
@@ -187,21 +200,37 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
     const value = decision.data();
     decisions.set(decision.id, value);
     const entry = photoFiles.find(file => file.entry.id === decision.id)?.entry;
-    if (entry && value.contextKey === photoDecisionKey(entry, variants.filter(variant => (value.variantIds || [value.variantId].filter(Boolean)).includes(variant.id))) &&
+    const decided = variants.filter(variant => (value.variantIds || [value.variantId].filter(Boolean)).includes(variant.id));
+    // Base-code mode also honors path-independent decisions, so moving a file never expires a human review.
+    const validKeys = entry ? [photoDecisionKey(entry, decided), ...(identityMode === 'baseCode' ? [photoDecisionKey(entry, decided, true)] : [])] : [];
+    if (entry && validKeys.includes(value.contextKey) &&
       (value.variantIds || [value.variantId].filter(Boolean)).every((id: string) => group.has(id)))
       manual.set(decision.id, value.variantId);
   }
-  const associations = associatePhotos(photoFiles.map(file => file.entry), associationIndex(variants), manual);
+  type Association = ReturnType<typeof associatePhotos> extends Map<string, infer A> ? Omit<A, 'identityState'> & { identityState: PhotoState['identityState']; baseId?: string | null;
+    baseCodeIdentity?: OrganizerPhoto['baseCodeIdentity'] } : never;
+  const associations: Map<string, Association> = identityMode === 'baseCode' && baseIndex
+    ? associateByBaseCode(photoFiles.map(file => file.entry), baseIndex, manual)
+    : associatePhotos(photoFiles.map(file => file.entry), associationIndex(variants), manual);
+  const shadow = identityMode === 'shadow' && baseIndex ? associateByBaseCode(photoFiles.map(file => file.entry), baseIndex, manual) : null;
   const photoUpdates = photoFiles.map(({ entry }) => {
     const association = associations.get(entry.id)!;
     const old = previousPhotos.get(entry.id);
     const version = versionOf(entry);
+    const contentVersion = contentVersionOf(entry);
     const sameVersion = old && version === old.version;
-    if (sameVersion && old.method === 'gemini_evidencia' && !decisions.has(entry.id) && old.path.join('/') === entry.path.join('/') &&
+    // In base-code mode identity follows content: a move or a metadata-only change keeps the analysis.
+    const sameContent = old && (identityMode === 'baseCode' ? (old.contentVersion || old.version) === contentVersion : sameVersion);
+    const visualMethod = old && ['gemini_evidencia', 'gemini_variante'].includes(old.method);
+    const stillValid = identityMode === 'baseCode'
+      ? association.identityState === 'base' && association.candidates.includes(old?.variantId || '')
+      : old?.path.join('/') === entry.path.join('/');
+    if (sameContent && visualMethod && !decisions.has(entry.id) && stillValid &&
       old.variantId && variants.some(variant => variant.id === old.variantId && variant.catalogFingerprint === prior.get(variant.id)?.catalogFingerprint))
       Object.assign(association, { variantId: old.variantId, variantIds: [old.variantId], identityState: 'variant', method: old.method, evidence: old.evidence, confidence: old.confidence, issue: old.issue });
-    const preserveVision = sameVersion && old.variantId === association.variantId;
-    const ranked = rankCandidates({ ...entry, candidates: association.candidates }, variants);
+    const preserveVision = sameContent && old.variantId === association.variantId;
+    const ranked = rankCandidates({ ...entry, candidates: association.candidates }, variants)
+      .filter(candidate => identityMode !== 'baseCode' || association.candidates.includes(candidate.id));
     const decision = decisions.get(entry.id);
     const staleDecision = decision && !manual.has(entry.id);
     if (manual.has(entry.id)) {
@@ -213,13 +242,19 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
     else counts.unassigned++;
     if (association.issue) counts.conflicts++;
     const value: PhotoState = { id: entry.id, name: entry.name, path: entry.path, sourceUrl: fileUrl(entry),
-      copyUrl: sameVersion ? old.copyUrl : null, ...association, hasConflict: Boolean(association.issue), version, algorithm: ALGORITHM_VERSION, updatedAt: Date.now(),
-      candidates: ranked.map(candidate => candidate.id), candidateDetails: ranked, provisionalCode: identityFromFilename(entry)?.skc || null,
+      copyUrl: null, ...association, hasConflict: Boolean(association.issue), version, algorithm: ALGORITHM_VERSION, updatedAt: Date.now(),
+      candidates: identityMode === 'baseCode' ? association.candidates : ranked.map(candidate => candidate.id), candidateDetails: ranked, provisionalCode: identityFromFilename(entry)?.skc || null,
+      contentVersion, baseId: association.baseId ?? null,
+      ...(identityMode === 'baseCode' && association.baseCodeIdentity ? { baseCodeIdentity: association.baseCodeIdentity } : {}),
+      ...(shadow ? { baseCodeIdentity: shadow.get(entry.id)!.baseCodeIdentity } : {}),
+      concordance: preserveVision ? old.concordance ?? null : null, baseVisionKey: preserveVision ? old.baseVisionKey ?? null : null,
+      ...(preserveVision && old.visualColor !== undefined ? { visualColor: old.visualColor, visualLabel: old.visualLabel || '' } : {}),
       referenceEligibleFor: manual.has(entry.id) ? decision?.referenceEligibleFor || (association.variantId ? [association.variantId] : []) : association.variantId ? [association.variantId] : [],
       reviewedBy: manual.has(entry.id) ? decision?.uid || old?.reviewedBy || null : null, view: preserveVision ? old.view : null, visionKey: preserveVision ? old.visionKey || null : null,
       kind: preserveVision ? old.kind || 'unknown' : 'unknown', quality: preserveVision ? old.quality || 0 : 0,
       visualConfidence: preserveVision ? old.visualConfidence || 0 : 0,
-      ...(preserveVision && old.visualHint ? { visualHint: old.visualHint } : {}) };
+      ...(preserveVision && old.visualHint ? { visualHint: old.visualHint } : {}),
+      ...(old?.differenceHash?.key === contentVersion ? { differenceHash: old.differenceHash } : {}) };
     return { id: entry.id, value };
   });
   const target = apply ? root : doc;
@@ -227,16 +262,16 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
   const newPhotos = new Map(photoUpdates.map(photo => [photo.id, photo.value]));
   for (const variant of variants) {
     const references = Object.values(variant.references).flat();
-    if (references.some(id => !newPhotos.has(id) || !newPhotos.get(id)!.variantIds?.includes(variant.id) ||
-      newPhotos.get(id)!.version !== previousPhotos.get(id)?.version)) {
+    const changed = (id: string) => identityMode === 'baseCode'
+      ? (newPhotos.get(id)!.contentVersion || newPhotos.get(id)!.version) !== (previousPhotos.get(id)?.contentVersion || previousPhotos.get(id)?.version)
+      : newPhotos.get(id)!.version !== previousPhotos.get(id)?.version;
+    if (references.some(id => !newPhotos.has(id) || !newPhotos.get(id)!.variantIds?.includes(variant.id) || changed(id))) {
       variant.referenceState = 'pending'; variant.references = { front: [], back: [], main: [] };
     }
   }
-  const sourceDirectory = (await root.get()).data()!.directories.sources as string;
-  await writePages(doc.collection('plan'), await Promise.all(files.filter(file => file.entry.mimeType !== FOLDER).map(async ({ entry }) => ({
-    id: entry.id, value: planFile(entry, newPhotos.get(entry.id), variants, sourceDirectory,
-      (await manifestRef(root, entry).get()).data()),
-  }))));
+  await writePages(doc.collection('plan'), files.filter(file => file.entry.mimeType !== FOLDER).map(({ entry }) => ({
+    id: entry.id, value: planFile(entry, newPhotos.get(entry.id), variants),
+  })));
   await writePages(target.collection('photos'), photoUpdates);
   await writePages(target.collection('products'), variants.map(value => ({ id: value.id, value })));
   if (apply) {
@@ -249,9 +284,15 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
     }
     const bases = new Map<string, OrganizerBaseProduct>();
     const commerce = new Map<string, OrganizerCommercialVariant>();
+    // The master catalog binding lives in productAliases; keep its cached copy across catalog rebuilds.
+    const priorBases = new Map<string, OrganizerBaseProduct>();
+    if (identityMode !== 'legacy') for await (const item of documents(root.collection('baseProducts'))) priorBases.set(item.id, item.data() as OrganizerBaseProduct);
     for (const variant of variants) {
       const id = digest([variant.base]);
-      const base = bases.get(id) || { id, code: variant.base, name: variant.name, variants: [] };
+      const previousBase = priorBases.get(id);
+      const base = bases.get(id) || { id, code: variant.base, name: variant.name, variants: [],
+        ...(baseIndex ? { declared: Boolean(variant.baseDeclared), conflict: baseIndex.conflicts.get(variant.base) || null,
+          catalogProductId: previousBase?.catalogProductId ?? null, catalogIssue: previousBase?.catalogIssue ?? null } : {}) };
       base.variants.push(variant.id);
       bases.set(id, base);
       for (const row of group.get(variant.id) || []) {
@@ -271,46 +312,12 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
   counts.variants = variants.length;
   counts.skcs = new Set(variants.flatMap(variant => variant.skcs)).size;
   counts.skus = new Set(variants.flatMap(variant => variant.skus)).size;
-  await whileLeased(doc, lease, tx => tx.update(doc, { fingerprint, counts, phase: run.mode === 'generate' ? 'vision' : apply ? 'copy' : 'report', cursor: null }));
-}
-
-async function copySources(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string, deadline: number) {
-  const attempt = createAttemptRecorder(root, doc, lease);
-  const tenant = digest(['organizer', config.clientId]);
-  const folder = await drive.root(tenant, config.sourceIds, config.parentId, config.folderName, config.allowInheritedAccess, attempt);
-  await whileLeased(doc, lease, tx => {
-    tx.update(doc, { rootId: folder.id });
-    tx.update(root, { destinationId: folder.id });
-  });
-  const zone: ManagedZone = { root: folder.id, sources: config.sourceIds, tenant, parent: config.parentId };
-  const sources = await drive.folder(zone, zone.root, config.directories.sources, attempt);
-  for await (const item of documents(doc.collection('files'), run.cursor)) {
-    if (Date.now() > deadline) return;
-    const state = item.data() as RunFile;
-    const { entry } = state;
-    if (entry.mimeType !== FOLDER && entry.mimeType !== 'application/vnd.google-apps.shortcut') {
-      const manifest = manifestRef(root, entry);
-      const prior = (await manifest.get()).data();
-      try {
-        const existing = prior?.copiedId ? await drive.metadata(prior.copiedId) : null;
-        const existingParent = existing?.parents?.[0];
-        if (existingParent) await drive.managed(zone.root, existingParent, zone.sources, zone.tenant, zone.parent);
-        const copy = existing && existingParent
-          ? await drive.verifyCopy(existing.id, existingParent, entry, tenant)
-          : await drive.copy(zone, sources.id, entry, attempt);
-        await manifest.set({ fileId: entry.id, version: versionOf(entry), copiedId: copy.id, url: copy.url,
-          parentId: existingParent || sources.id, verifiedAt: Date.now(), copiedAt: prior?.copiedAt || Date.now(),
-          stableLayout: prior ? Boolean(prior.stableLayout) : true, verification: copy.verification, hash: entry.sha256Checksum || entry.md5Checksum || null });
-        await item.ref.update({ copied: true });
-        if (isImage(entry)) await root.collection('photos').doc(entry.id).update({ copyUrl: copy.url });
-      } catch (error) {
-        if (error instanceof OrganizerDriveError && (error.status >= 500 || error.status === 429)) throw error;
-        await item.ref.update({ error: state.error || message(error) });
-      }
-    }
-    await whileLeased(doc, lease, tx => tx.update(doc, { cursor: item.id }));
-  }
-  await whileLeased(doc, lease, tx => tx.update(doc, { phase: 'vision', cursor: null }));
+  // Calls and budget scale with the photos this run analyzes (between the configured floor and the client caps),
+  // so an unattended update of any size finishes without someone confirming an extension.
+  const config = (await root.get()).data() as StoredConfig;
+  const analyzed = run.photoIds.length || photoFiles.length;
+  const scaled = apply ? scaledRunLimits(analyzed, config, { maxCalls: run.maxCalls, budgetUsd: run.budgetUsd }) : {};
+  await whileLeased(doc, lease, tx => tx.update(doc, { fingerprint, counts, ...scaled, phase: apply ? 'vision' : 'report', cursor: null }));
 }
 
 async function vision(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string, deadline: number) {
@@ -318,49 +325,71 @@ async function vision(drive: OrganizerDrive, root: DocumentReference, doc: Docum
   const variants = new Map<string, OrganizerVariant>();
   for await (const item of documents(root.collection('products'))) variants.set(item.id, item.data() as OrganizerVariant);
   const allVariants = [...variants.values()];
+  const identityMode = identityModeOf(config);
   const contextKey = digest(allVariants.map(product => [product.id, product.catalogFingerprint || '']).sort());
-  for await (const item of documents(photos, run.cursor)) {
-    if (Date.now() > deadline) return;
+  const analyzePhoto = async (item: FirebaseFirestore.QueryDocumentSnapshot) => {
     const photo = item.data() as PhotoState;
     const forced = run.photoIds.includes(photo.id) || Boolean(run.variantId && photo.variantIds?.includes(run.variantId));
     const selected = (!run.photoIds.length && !run.variantId) || forced;
-    const key = digest([photo.version, photo.name, photo.path, photo.variantIds || [], contextKey, config.model, config.escalationModel, config.minimumConfidence, ALGORITHM_VERSION]);
-    if ((photo.copyUrl || run.mode === 'generate') && selected && (photo.visionKey !== key || (forced && run.mode !== 'generate'))) {
-      try {
-        const file = (await doc.collection('files').doc(photo.id).get()).data() as RunFile;
-        const original = run.mode === 'generate';
-        const copy = original ? null : (await manifestRef(root, file.entry).get()).data();
-        if (original) await drive.assertSource(file.entry);
-        else if (!copy?.copiedId) throw new Error('Copia verificada no disponible.');
-        const input = [{ file: original ? file.entry : { ...file.entry, id: copy!.copiedId as string }, candidateIds: photo.candidates }];
-        let result = await analyze(drive, root, doc, lease, config.model, input, [], false);
-        let view = result?.photos[0];
-        if (view && view.confidence < config.minimumConfidence && config.escalationModel && config.escalationModel !== config.model) {
-          const extra = await analyze(drive, root, doc, lease, config.escalationModel, input, [], false);
-          if (extra && (extra.photos[0]?.confidence || 0) > view.confidence) { result = extra; view = extra.photos[0]; }
-        }
-        if (result && view) {
-          const association = !photo.reviewedBy && photo.method !== 'revision_humana_caducada' && !photo.variantId && photo.identityState !== 'shared' && view.confidence >= config.minimumConfidence ?
-            await matchObservation(root, doc, lease, config.model, photo, allVariants, result) : null;
-          const variantId = association?.variantId || photo.variantId;
-          const ids = variantId ? [variantId] : photo.variantIds || [];
-          const evidence = association?.variantId ? [...photo.evidence, `Píxeles: ${result.label}`, ...(association.ranked[0]?.evidence || [])] : photo.evidence;
-          const update = { kind: result.kind, quality: view.quality, visualConfidence: view.confidence, view: view.view, variantId, variantIds: ids, evidence,
-            referenceEligibleFor: photo.reviewedBy ? photo.referenceEligibleFor || (variantId ? [variantId] : []) : variantId ? [variantId] : [],
-            identityState: ids.length > 1 ? 'shared' : variantId ? 'variant' : association?.baseId ? 'base' : photo.identityState || 'unresolved',
-            baseId: association?.baseId || null, visionKey: key, ...(association ? { candidates: association.ranked.map(candidate => candidate.id), candidateDetails: association.ranked } : {}),
-            ...(association?.variantId ? { method: 'gemini_evidencia', confidence: view.confidence, issue: null, hasConflict: false } : {}),
-            ...(association && !variantId ? { issue: `${association.baseId ? `Producto base ${association.baseId}; variante por confirmar. ` : ''}${'reason' in association && association.reason || photo.issue || 'Sin evidencia suficiente para asignar.'}`, hasConflict: true } : {}),
-            ...(!variantId && result.label ? { visualHint: { groupId: digest([file.entry.parents?.[0], normalize(result.label), normalize(result.color), normalize(result.pack), result.kind]),
-              label: result.label, color: result.color, pack: result.pack, kind: result.kind } } : {}) };
-          await whileLeased(doc, lease, tx => tx.update(item.ref, update));
-        } else await whileLeased(doc, lease, tx => tx.update(item.ref, { visionKey: key, hasConflict: true, issue: photo.issue || 'Análisis visual no resuelto; consulta el ledger antes de reintentar.' }));
-      } catch (error) {
-        if (error instanceof OrganizerBudgetExhausted) throw error;
-        await whileLeased(doc, lease, tx => tx.update(item.ref, { hasConflict: true, issue: photo.issue || `Error de análisis visual: ${message(error)}` }));
+    // Base-code mode keys pixel work to content, not location; variant choice has its own per-base key.
+    const key = identityMode === 'baseCode'
+      ? digest(['base-code-1', photo.contentVersion || photo.version, photo.name, config.model, config.escalationModel, config.minimumConfidence, ALGORITHM_VERSION])
+      : digest([photo.version, photo.name, photo.path, photo.variantIds || [], contextKey, config.model, config.escalationModel, config.minimumConfidence, ALGORITHM_VERSION]);
+    if (!(selected && (photo.visionKey !== key || (forced && run.mode !== 'generate')))) return;
+    try {
+      const file = (await doc.collection('files').doc(photo.id).get()).data() as RunFile;
+      await drive.assertSource(file.entry);
+      const input = [{ file: file.entry, candidateIds: photo.candidates }];
+      let result = await analyze(drive, root, doc, lease, config.model, input, [], false);
+      let view = result?.photos[0];
+      if (view && view.confidence < config.minimumConfidence && config.escalationModel && config.escalationModel !== config.model) {
+        const extra = await analyze(drive, root, doc, lease, config.escalationModel, input, [], false);
+        if (extra && (extra.photos[0]?.confidence || 0) > view.confidence) { result = extra; view = extra.photos[0]; }
       }
+      await drive.assertSource(file.entry);
+      if (result && view) {
+        const association = identityMode !== 'baseCode' && !photo.reviewedBy && photo.method !== 'revision_humana_caducada' && !photo.variantId && photo.identityState !== 'shared' && view.confidence >= config.minimumConfidence ?
+          await matchObservation(root, doc, lease, config.model, photo, allVariants, result) : null;
+        const variantId = association?.variantId || photo.variantId;
+        const ids = variantId ? [variantId] : photo.variantIds || [];
+        const evidence = association?.variantId ? [...photo.evidence, `Píxeles: ${result.label}`, ...(association.ranked[0]?.evidence || [])] : photo.evidence;
+        const update = { kind: result.kind, quality: view.quality, visualConfidence: view.confidence, view: viewFromFileName(photo.name) ?? view.view, variantId, variantIds: ids, evidence,
+          visualColor: result.color, visualLabel: result.label,
+          referenceEligibleFor: photo.reviewedBy ? photo.referenceEligibleFor || (variantId ? [variantId] : []) : variantId ? [variantId] : [],
+          identityState: ids.length > 1 ? 'shared' : variantId ? 'variant' : association?.baseId ? 'base' : photo.identityState || 'unresolved',
+          baseId: association?.baseId || photo.baseId || null, visionKey: key, ...(association ? { candidates: association.ranked.map(candidate => candidate.id), candidateDetails: association.ranked } : {}),
+          ...(association?.variantId ? { method: 'gemini_evidencia', confidence: view.confidence, issue: null, hasConflict: false } : {}),
+          ...(association && !variantId ? { issue: `${association.baseId ? `Producto base ${association.baseId}; variante por confirmar. ` : ''}${'reason' in association && association.reason || photo.issue || 'Sin evidencia suficiente para asignar.'}`, hasConflict: true } : {}),
+          ...(!variantId && result.label ? { visualHint: { groupId: digest([file.entry.parents?.[0], normalize(result.label), normalize(result.color), normalize(result.pack), result.kind]),
+            label: result.label, color: result.color, pack: result.pack, kind: result.kind } } : {}) };
+        await whileLeased(doc, lease, tx => tx.update(item.ref, update));
+      } else await whileLeased(doc, lease, tx => tx.update(item.ref, { visionKey: key, hasConflict: true, issue: photo.issue || 'Análisis visual no resuelto; consulta el ledger antes de reintentar.' }));
+    } catch (error) {
+      if (error instanceof OrganizerBudgetExhausted) throw error;
+      await whileLeased(doc, lease, tx => tx.update(item.ref, { hasConflict: true, issue: photo.issue || `Error de análisis visual: ${message(error)}` }));
     }
-    await whileLeased(doc, lease, tx => tx.update(doc, { cursor: item.id }));
+  };
+  // Bounded parallelism keeps thousands of photos within a few slices without overrunning Drive or Gemini.
+  const parallel = identityMode === 'baseCode' ? 4 : 1;
+  let chunk: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  const flush = async () => {
+    if (!chunk.length) return;
+    await Promise.all(chunk.map(analyzePhoto));
+    const last = chunk.at(-1)!.id;
+    chunk = [];
+    await whileLeased(doc, lease, tx => tx.update(doc, { cursor: last }));
+  };
+  for await (const item of documents(photos, run.cursor)) {
+    if (Date.now() > deadline) { await flush(); return; }
+    chunk.push(item);
+    if (chunk.length >= parallel) await flush();
+  }
+  await flush();
+  if (identityMode === 'baseCode') {
+    if (!await resolveBaseVariants(drive, root, doc, config, run, lease, deadline, allVariants)) return;
+    await selectVariantReferences(root, doc, config, run, lease, variants);
+    await whileLeased(doc, lease, tx => tx.update(doc, { phase: 'automation', cursor: null }));
+    return;
   }
   const byVariant = new Map<string, PhotoState[]>();
   for await (const item of documents(photos)) {
@@ -395,65 +424,16 @@ async function vision(drive: OrganizerDrive, root: DocumentReference, doc: Docum
     await root.collection('products').doc(id).update({ references: refs, referenceState: ok ? 'suggested' : 'pending', issues,
       status: ok ? product.status : 'review' });
   }
-  await whileLeased(doc, lease, tx => tx.update(doc, { phase: run.mode === 'generate' ? 'automation' : 'organize', cursor: null }));
-}
-
-async function organize(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string, deadline: number) {
-  const zone: ManagedZone = { root: run.rootId!, parent: config.parentId, sources: config.sourceIds, tenant: digest(['organizer', config.clientId]) };
-  const attempt = createAttemptRecorder(root, doc, lease);
-  const folders = new Map<string, DriveFile>();
-  const folder = async (parent: string, label: string) => {
-    const key = digest([parent, label]);
-    const cached = folders.get(key);
-    if (cached) return cached;
-    const created = await drive.folder(zone, parent, label, attempt);
-    folders.set(key, created);
-    return created;
-  };
-  for await (const item of documents(root.collection('photos'), run.cursor)) {
-    if (Date.now() > deadline) return;
-    const photo = item.data() as PhotoState;
-    if (photo.copyUrl) {
-      const fileDoc = doc.collection('files').doc(photo.id);
-      const state = (await fileDoc.get()).data() as RunFile;
-      const manifest = manifestRef(root, state.entry);
-      const copy = (await manifest.get()).data();
-      const productDoc = photo.variantId ? root.collection('products').doc(photo.variantId) : null;
-      const product = (await productDoc?.get())?.data() as OrganizerVariant | undefined;
-      if (copy?.copiedId) {
-        try {
-          const destination = stableDestination(photo, product ? [product] : [], config.directories.sources);
-          await doc.collection('plan').doc(photo.id).set(planFile(state.entry, photo, product ? [product] : [], config.directories.sources, copy));
-          // Existing layouts remain where they are until a separate migration is reviewed.
-          if (!copy.stableLayout) {
-            await doc.collection('files').doc(photo.id).update({ layoutNotice: 'Destino existente conservado; migración pendiente de revisión.' });
-            await whileLeased(doc, lease, tx => tx.update(doc, { cursor: item.id }));
-            continue;
-          }
-          let parent = await drive.metadata(zone.root);
-          for (const label of destination) parent = await folder(parent.id, label);
-          await drive.moveCopy(zone, copy.copiedId, state.entry, parent.id);
-          await manifest.update({ parentId: parent.id });
-          if (productDoc) await productDoc.update({ driveFolderUrl: fileUrl(parent) });
-        } catch (error) {
-          if (error instanceof OrganizerDriveError && (error.status >= 500 || error.status === 429)) throw error;
-          await fileDoc.update({ error: state.error || message(error) });
-        }
-      }
-    }
-    await whileLeased(doc, lease, tx => tx.update(doc, { cursor: item.id }));
-  }
   await whileLeased(doc, lease, tx => tx.update(doc, { phase: 'automation', cursor: null }));
 }
 
-async function finish(drive: OrganizerDrive, root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string) {
-  const apply = requiresCopy(run.mode);
+async function finish(root: DocumentReference, doc: DocumentReference, config: StoredConfig, run: StoredRun, lease: string) {
+  const apply = appliesCatalog(run.mode);
   const data = appliesCatalog(run.mode) ? root : doc;
   const files = await getCatalogFiles(doc);
-  const counts = { ...run.counts, copied: 0, verified: 0, associated: 0, unassigned: 0, conflicts: 0, errors: 0,
+  const counts = { ...run.counts, associated: 0, unassigned: 0, conflicts: 0, errors: 0,
     selectedReferences: 0, missingReferences: 0, productsWithoutPhotos: 0, sharedPhotos: 0, humanReviewed: 0, identityNeedsReview: 0, inaccessibleSources: 0 };
   for (const file of files) {
-    if (file.copied) { counts.copied++; counts.verified++; }
     if (file.error) counts.errors++;
   }
   const products: OrganizerVariant[] = [];
@@ -477,40 +457,39 @@ async function finish(drive: OrganizerDrive, root: DocumentReference, doc: Docum
   }
   counts.productsWithoutPhotos = products.filter(product => !photos.some(photo => photo.variantIds?.includes(product.id) || photo.variantId === product.id)).length;
   counts.inaccessibleSources = files.filter(file => isWorkbook(file.entry) && file.error).length;
-  let reportUrl: string | null = null;
-  let controlSheetUrl: string | null = null;
-  if (apply) {
-    const zone: ManagedZone = { root: run.rootId!, parent: config.parentId, sources: config.sourceIds, tenant: digest(['organizer', config.clientId]) };
-    const attempt = createAttemptRecorder(root, doc, lease);
-    const directory = await drive.folder(zone, zone.root, config.directories.reports, attempt);
-    const name = `Organizador · ${new Date(run.createdAt).toISOString().slice(0, 10)} · ${run.id.slice(0, 8)}`;
+  const reportPath = `organizers/${config.clientId}/runs/${run.id}/report.json`;
+  const controlSheetPath = config.controlSheet ? `organizers/${config.clientId}/runs/${run.id}/control.xlsx` : null;
+  {
     const ledger = [];
     for await (const entry of documents(doc.collection('ledger'))) ledger.push({ id: entry.id, ...entry.data() });
     const report = { id: run.id, clientId: config.clientId, status: 'completed', elapsedMs: Date.now() - run.createdAt, counts,
       budget: { limit: run.budgetUsd, estimated: run.estimatedUsd, uncertain: run.uncertainUsd, reserved: run.reservedUsd, calls: run.calls, alerts: run.alerts, ledger },
       generationHandoffs: (await doc.collection('generationHandoffs').get()).docs.map(item => item.data()),
-      products, photos, files: files.map(file => ({ id: file.entry.id, path: file.entry.path, version: versionOf(file.entry), copied: file.copied || false, error: file.error || null })) };
-    const file = await drive.report(zone, directory.id, digest([run.id, 'report']), `${name}.json`, 'application/json',
-      Buffer.from(JSON.stringify(report, null, 2)), attempt);
-    reportUrl = fileUrl(file);
+      products, photos, files: files.map(file => ({ id: file.entry.id, path: file.entry.path, version: versionOf(file.entry), error: file.error || null })) };
+    await admin.storage().bucket().file(reportPath).save(Buffer.from(JSON.stringify(report, null, 2)), {
+      resumable: false, metadata: { contentType: 'application/json' },
+    });
     if (config.controlSheet) {
       const workbook = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet([['Métrica', 'Valor'], ...Object.entries(counts),
         ['Gemini estimado USD', run.estimatedUsd], ['Costo incierto USD', run.uncertainUsd], ['Presupuesto USD', run.budgetUsd]]), 'Resumen');
-      xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet([['Producto', 'Variante', 'SKC', 'SKU', 'Color', 'Tallas', 'Pack', 'FOTO IA', 'UPLOAD', 'PUBLICAR', 'Estado', 'Carpeta'],
-        ...products.map(product => [product.name, product.visual, product.skcs.join(', '), product.skus.join(', '), product.color, product.sizes.join(', '), product.pack, product.documented.photo, product.documented.upload, product.documented.publish, product.status, product.driveFolderUrl || ''])]), 'Productos');
-      xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet([['Archivo', 'Ruta', 'Variante', 'Copia', 'Revisión'],
-        ...photos.map(photo => [photo.name, photo.path.join('/'), photo.variantId || '', photo.copyUrl || '', photo.issue || ''])]), 'Fotografías');
-      const book = await drive.report(zone, directory.id, digest([run.id, 'control']), name, SHEET, xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' }), attempt);
-      controlSheetUrl = fileUrl(book);
+      xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet([['Producto', 'Variante', 'SKC', 'SKU', 'Color', 'Tallas', 'Pack', 'FOTO IA', 'UPLOAD', 'PUBLICAR', 'Estado'],
+        ...products.map(product => [product.name, product.visual, product.skcs.join(', '), product.skus.join(', '), product.color, product.sizes.join(', '), product.pack, product.documented.photo, product.documented.upload, product.documented.publish, product.status])]), 'Productos');
+      xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet([['Archivo', 'Ruta', 'Variante', 'Original', 'Revisión'],
+        ...photos.map(photo => [photo.name, photo.path.join('/'), photo.variantId || '', photo.sourceUrl, photo.issue || ''])]), 'Fotografías');
+      await admin.storage().bucket().file(controlSheetPath!).save(xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' }), {
+        resumable: false, metadata: { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+      });
     }
+  }
+  if (apply) {
     await writePages(root.collection('sourceFiles'), files.map(file => ({ id: file.entry.id, value: { fingerprint: compare(file.entry), entry: file.entry } })));
     const seen = new Set(files.map(file => file.entry.id));
     for await (const prior of documents(root.collection('sourceFiles'))) if (!seen.has(prior.id)) await prior.ref.delete();
   }
   const now = Date.now();
   await whileLeased(doc, lease, tx => {
-    tx.update(doc, { status: 'completed', completedAt: now, updatedAt: now, lease: null, leaseUntil: 0, counts, reportUrl, controlSheetUrl });
+    tx.update(doc, { status: 'completed', completedAt: now, updatedAt: now, lease: null, leaseUntil: 0, counts, reportPath, controlSheetPath, reportUrl: null, controlSheetUrl: null });
     tx.update(root, { activeRunId: null, watcher: config.enabled ? 'idle' : 'disabled', watcherError: null, ...(apply ? {
       lastSyncAt: now, lastClassifiedAt: now, processedFingerprint: run.fingerprint,
     } : {}) });
@@ -540,21 +519,25 @@ async function work(drive: OrganizerDrive, config: StoredConfig, deadline: numbe
       switch (run.phase) {
         case 'inventory': await inventory(drive, config, run, doc, lease, deadline); break;
         case 'catalog': await catalog(drive, root, doc, run, lease, deadline); break;
-        case 'copy': await copySources(drive, root, doc, config, run, lease, deadline); break;
+        // Resume legacy runs through the read-only pipeline.
+        case 'copy': await whileLeased(doc, lease, tx => tx.update(doc, { phase: 'vision', cursor: null })); break;
         case 'vision': await vision(drive, root, doc, config, run, lease, deadline); break;
-        case 'organize': await organize(drive, root, doc, config, run, lease, deadline); break;
+        case 'organize': await whileLeased(doc, lease, tx => tx.update(doc, { phase: 'automation', cursor: null })); break;
         case 'automation': await automateNewPhotos(drive, root, doc, config, run, lease, deadline); break;
-        case 'report': await finish(drive, root, doc, config, run, lease); return;
+        case 'report': await finish(root, doc, config, run, lease); return;
       }
     }
-    await whileLeased(doc, lease, tx => tx.update(doc, { status: 'queued', updatedAt: Date.now(), lease: null, leaseUntil: 0 }));
+    // The slice ran out of time: organizerRunContinuation picks the run up again right away.
+    await whileLeased(doc, lease, (tx, run) => tx.update(doc, { status: 'queued', updatedAt: Date.now(), lease: null, leaseUntil: 0,
+      chainedSlices: (run.chainedSlices || 0) + 1 }));
   } catch (error) {
     await whileLeased(doc, lease, tx => {
       const temporary = error instanceof OrganizerDriveError && (error.status === 429 || error.status >= 500);
       const status = error instanceof OrganizerBudgetExhausted ? 'budget_exhausted' : temporary ? 'queued' : 'failed';
       tx.update(doc, { status, updatedAt: Date.now(), lease: null, leaseUntil: 0, error: message(error),
  });
-      tx.update(root, { watcher: 'error', watcherError: message(error) });
+      // A failed run no longer blocks the organizer: it stays resumable, but new runs can start.
+      tx.update(root, { watcher: 'error', watcherError: message(error), ...(status === 'failed' ? { activeRunId: null } : {}) });
     }).catch(() => undefined);
   } finally {
     await getAppFirestore().runTransaction(async tx => {
@@ -589,11 +572,63 @@ export const tickOrganizer = async (drive = new OrganizerDrive()) => {
   if (snapshot.size < 40) await cursor.set({ clientId: null });
 };
 
+/**
+ * Base-code clients are watched and advanced every few minutes, so thousands of photos finish in
+ * hours instead of waiting for the twice-daily tick. The lease in `work` prevents overlap with the
+ * main scheduler. Legacy clients keep the original cadence.
+ */
+export const continueBaseCodeOrganizers = async (drive = new OrganizerDrive()) => {
+  const deadline = Date.now() + sliceMs;
+  const watcherEnabled = isOrganizerWatcherEnabled((await getSystemConfigDocRef().get()).data());
+  const snapshot = await configs().where('identityMode', '==', 'baseCode').limit(100).get();
+  const candidates = snapshot.docs.map(item => item.data() as StoredConfig);
+  for (const [index, config] of candidates.entries()) {
+    if (Date.now() > deadline) return;
+    try {
+      const client = await getAppFirestore().collection('clients').doc(config.clientId).get();
+      if (!client.exists || client.data()?.status === 'archived') continue;
+      const activeRunId = config.activeRunId || (watcherEnabled ? (await watch(drive, config))?.id : undefined);
+      const share = Math.max(60_000, (deadline - Date.now()) / Math.max(1, candidates.length - index));
+      if (activeRunId && Date.now() < deadline) await work(drive, { ...config, activeRunId }, Math.min(deadline, Date.now() + share));
+    } catch (error) {
+      await clientRef(config.clientId).set(clean({ watcher: 'error', watcherError: message(error), lastPollAt: Date.now() }), { merge: true });
+    }
+  }
+};
+
+export const organizerContinuation = onSchedule({ schedule: 'every 5 minutes', timeZone: 'America/Mexico_City', retryCount: 0, timeoutSeconds: 540,
+  memory: '1GiB', maxInstances: 1, concurrency: 1, secrets: [GOOGLE_PRIVATE_KEY, GEMINI_API_KEY] }, () => continueBaseCodeOrganizers());
+
 export const organizerManualRun = onDocumentCreated({
   document: 'organizers/{clientId}/runs/{runId}', database: APP_FIRESTORE_DATABASE_ID,
   timeoutSeconds: 540, memory: '1GiB', secrets: [GEMINI_API_KEY, GOOGLE_PRIVATE_KEY],
 }, async event => {
-  if (event.data?.get('mode') !== 'generate') return;
+  // Every human-started run (inventory, simulation, classification or generation) starts immediately.
+  const config = (await clientRef(event.params.clientId).get()).data() as StoredConfig | undefined;
+  if (config?.activeRunId === event.params.runId) await work(new OrganizerDrive(), config, Date.now() + sliceMs);
+});
+
+/**
+ * Safety cap on slices chained without a human: 300 slices × ~380 s ≈ 32 h of work, far above the ~2 h that
+ * 1000 photos need. A run beyond it keeps its progress and continues with the scheduler (12:00/18:00).
+ */
+export const MAX_CHAINED_SLICES = 300;
+
+/** Whether a run transition should be worked right away instead of waiting for the scheduler. */
+export function shouldContinueRun(before: Partial<StoredRun> | undefined, after: Partial<StoredRun> | undefined) {
+  if (!before || !after || after.status !== 'queued') return false;
+  // Resumed by an operator.
+  if (['paused', 'failed', 'budget_exhausted'].includes(before.status || '')) return true;
+  // A slice that ran out of time hands over to the next one, for automatic (watcher) and manual runs alike.
+  // Drive throttling (queued with an error) waits for the scheduler.
+  return before.status === 'running' && !after.error && (after.chainedSlices || 0) < MAX_CHAINED_SLICES;
+}
+
+export const organizerRunContinuation = onDocumentUpdated({
+  document: 'organizers/{clientId}/runs/{runId}', database: APP_FIRESTORE_DATABASE_ID,
+  timeoutSeconds: 540, memory: '1GiB', secrets: [GEMINI_API_KEY, GOOGLE_PRIVATE_KEY],
+}, async event => {
+  if (!shouldContinueRun(event.data?.before.data() as StoredRun | undefined, event.data?.after.data() as StoredRun | undefined)) return;
   const config = (await clientRef(event.params.clientId).get()).data() as StoredConfig | undefined;
   if (config?.activeRunId === event.params.runId) await work(new OrganizerDrive(), config, Date.now() + sliceMs);
 });

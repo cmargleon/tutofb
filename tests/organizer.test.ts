@@ -5,7 +5,7 @@ const requireFunctions = createRequire(new URL('../functions/package.json', impo
 const xlsx: typeof import('../functions/node_modules/xlsx') = requireFunctions('xlsx');
 import { associatePhotos, associationIndex, groupProductRows, parseTab, productVariant, readWorkbook } from '../functions/lib/functions/src/organizer/catalog.js';
 import { digest, FOLDER, OrganizerDrive, SHEET } from '../functions/lib/functions/src/organizer/drive.js';
-import type { DriveEntry, DriveFile, DriveWriteAttempt } from '../functions/src/organizer/drive';
+import type { DriveEntry, DriveFile } from '../functions/src/organizer/drive';
 import { availableBudget, holdFor, parseVision, usageCost } from '../functions/lib/functions/src/organizer/vision.js';
 
 const source = { id: 'book', name: 'Catálogo', mimeType: SHEET };
@@ -86,65 +86,38 @@ test('respeta fotos hermanas, conflictos, duplicados y decisiones manuales', () 
   assert.equal(result.get('nine')?.issue, 'Carpeta general con fotos sin identificador');
 });
 
-test('Drive valida ascendencia, bloquea escrituras ajenas y reconcilia una copia de respuesta incierta', async () => {
-  const tenant = digest(['organizer', 'test']);
-  const original = { id: 'photo', name: 'A218.jpg', mimeType: 'image/jpeg', parents: ['origin'], version: '1', size: '10', md5Checksum: 'same' };
-  const entry: DriveEntry = { ...original, sourceId: 'origin', path: ['Origen', original.name] };
-  const owner = [{ permissionId: 'owner' }];
-  const folder = (id: string, parents: string[], tags?: DriveFile['appProperties']): DriveFile => ({ id, name: id, parents, owners: owner, mimeType: FOLDER, capabilities: { canAddChildren: true }, appProperties: tags });
-  const files = new Map<string, DriveFile>([
-    ['parent', folder('parent', [])], ['origin', folder('origin', ['parent'])], ['foreign', folder('foreign', ['parent'])],
-    ['root', folder('root', ['parent'], { organizerTenant: tenant })], ['photos', folder('photos', ['root'], { organizerTenant: tenant })],
-    ['photo', original],
-  ]);
-  const writes: string[] = [];
-  let rejectCopy = false;
-  const fetch: typeof globalThis.fetch = async (request, init) => {
-    const url = new URL(String(request));
-    const resource = url.pathname.split('/').at(-1)!;
-    if (init?.method === 'POST') {
-      writes.push(url.pathname);
-      assert.equal(url.pathname, '/drive/v3/files/photo/copy');
-      if (rejectCopy) return Response.json({ error: { errors: [{ reason: 'rateLimitExceeded' }] } }, { status: 429 });
-      const body = JSON.parse(String(init.body));
-      const copyId = files.has('copy') ? 'copy-version-2' : 'copy';
-      files.set(copyId, { ...files.get('photo')!, id: copyId, parents: body.parents, appProperties: body.appProperties });
-      throw new Error('Conexión interrumpida tras confirmar en Drive');
-    }
-    if (resource === 'files') {
-      const q = url.searchParams.get('q') || '';
-      const [, parent] = q.match(/^'([^']+)' in parents/) || [];
-      const [, key] = q.match(/value='([^']+)'/) || [];
-      return Response.json({ files: [...files.values()].filter(file => file.parents?.includes(parent) && (!key || file.appProperties?.organizerKey === key)) });
-    }
-    return Response.json(files.get(resource));
-  };
-  const drive = new OrganizerDrive(async () => 'mock-token', fetch, async () => undefined);
-  const zone = { tenant, root: 'root', parent: 'parent', sources: ['origin'] };
-  await assert.rejects(() => drive.zone(['origin'], 'origin', false), /fuera de los orígenes/);
-  await assert.rejects(() => drive.copy(zone, 'foreign', entry, async () => true), /fuera de la carpeta/);
-  await assert.rejects(() => drive.moveCopy(zone, 'photo', entry, 'photos'), /no es una copia/);
-  await assert.rejects(() => drive.report(zone, 'origin', 'report', 'Report', 'application/json', Buffer.from('{}'), async () => true), /fuera de la carpeta/);
-  assert.deepEqual(writes, []);
-  const copy = await drive.copy(zone, 'photos', entry, async () => true);
-  assert.equal(copy.id, 'copy');
-  assert.equal(copy.verification, 'md5');
-  assert.equal((await drive.copy(zone, 'photos', entry, async () => { throw Error('La copia ya existe'); })).id, copy.id);
-  assert.equal(writes.length, 1);
-  assert.deepEqual(files.get('photo'), original);
-
-  const versionTwo = { ...entry, version: '2' };
-  files.set(original.id, { ...original, version: '2' });
-  rejectCopy = true;
-  const statuses: number[] = [];
-  const journal: DriveWriteAttempt = Object.assign(async () => true, {
-    rejected: async (_: string, status: number) => { statuses.push(status); },
+test('Drive solo lee originales y verifica versión, pertenencia y checksums sin métodos de escritura', async () => {
+  const { createHash } = await import('node:crypto');
+  const bytes = Buffer.from('original');
+  let media = bytes;
+  const original: DriveEntry = { id: 'photo', name: 'A218.jpg', mimeType: 'image/jpeg', parents: ['origin'],
+    sourceId: 'origin', path: ['Origen', 'A218.jpg'], version: '1',
+    md5Checksum: createHash('md5').update(bytes).digest('hex'), sha256Checksum: createHash('sha256').update(bytes).digest('hex') };
+  const files = new Map<string, DriveFile>([['origin', { id: 'origin', name: 'Origen', mimeType: FOLDER }], ['photo', original]]);
+  const requests: string[] = [];
+  const drive = new OrganizerDrive(async () => 'readonly-token', async (request, init) => {
+    assert.equal(init?.method ?? 'GET', 'GET', 'Falla ante POST, PATCH o DELETE a Drive');
+    const url = new URL(String(request)); requests.push(url.pathname);
+    if (url.searchParams.get('alt') === 'media') return new Response(media);
+    if (url.pathname.endsWith('/files')) return Response.json({ files: [original] });
+    return Response.json(files.get(url.pathname.split('/').at(-1)!));
   });
-  await assert.rejects(() => drive.copy(zone, 'photos', versionTwo, journal), /429/);
-  assert.deepEqual(statuses, [429]);
-  rejectCopy = false;
-  assert.equal((await drive.copy(zone, 'photos', versionTwo, journal)).id, 'copy-version-2');
-  assert.equal(files.get('photo')?.version, '2');
+  assert.deepEqual(await drive.originals(['origin']), [files.get('origin')]);
+  assert.deepEqual((await drive.children(files.get('origin')!)).files, [original]);
+  assert.deepEqual(await drive.sourceImage(original), bytes);
+  for (const method of ['zone', 'root', 'managed', 'copy', 'verifyCopy', 'moveCopy', 'report']) assert.equal(method in drive, false);
+  files.set('photo', { ...original, version: '2' });
+  await assert.rejects(() => drive.sourceImage(original), /origen cambió/);
+  files.set('photo', { ...original, parents: ['foreign'] });
+  files.set('foreign', { id: 'foreign', name: 'Ajeno', mimeType: FOLDER });
+  await assert.rejects(() => drive.sourceImage(original), /salió de su zona/);
+  files.set('photo', { ...original, md5Checksum: 'changed' });
+  await assert.rejects(() => drive.sourceImage(original), /origen cambió/);
+  files.set('photo', original);
+  await assert.rejects(() => drive.sourceImage({ ...original, md5Checksum: 'wrong' }), /origen cambió/);
+  media = Buffer.from('changed during download');
+  await assert.rejects(() => drive.sourceImage(original), /contenido del original no coincide/);
+  assert.ok(requests.length > 5);
 });
 
 test('las tarifas incluyen razonamiento y solo el costo reconciliado reduce el presupuesto confirmado', () => {

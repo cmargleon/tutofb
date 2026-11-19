@@ -61,7 +61,7 @@ export function isAutomationDraft(value: unknown): boolean {
     if (key === 'rules') return typeof item === 'object' && !Array.isArray(item) && Object.entries(item).every(([field, entry]) =>
       ['garmentGenderMinConfidence', 'classificationMinConfidence'].includes(field) && typeof entry === 'number' && Number.isFinite(entry));
     if (key === 'organizerGeneration') return typeof item === 'object' && !Array.isArray(item) && Object.entries(item).every(([field, entry]) =>
-      field === 'enabled' ? typeof entry === 'boolean' : field === 'sourceColumns'
+      ['enabled', 'autoRun'].includes(field) ? typeof entry === 'boolean' : field === 'sourceColumns'
         ? Boolean(entry && typeof entry === 'object' && !Array.isArray(entry) && Object.values(entry).every(header => typeof header === 'string'))
         : ['preset', 'marketplaceId'].includes(field) && typeof entry === 'string');
     if (key === 'presets') return typeof item === 'object' && !Array.isArray(item) && Object.values(item).every(isPresetDraft);

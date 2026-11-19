@@ -7,7 +7,7 @@ import type { StoredRun } from '../functions/src/organizer/store';
 const requireFunctions = createRequire(new URL('../functions/package.json', import.meta.url));
 const source = (id: string, options: Partial<GenerationSource['photo']> = {}): GenerationSource => ({
   entry: { id, name: `${id}.jpg`, mimeType: 'image/jpeg', parents: ['product-folder'], path: ['Origen', 'Producto', `${id}.jpg`], sourceId: 'origin', version: '1', md5Checksum: id },
-  photo: { id, name: `${id}.jpg`, path: ['Origen', 'Producto', `${id}.jpg`], sourceUrl: '', copyUrl: `https://drive.google.com/open?id=copy-${id}`,
+  photo: { id, name: `${id}.jpg`, path: ['Origen', 'Producto', `${id}.jpg`], sourceUrl: '', copyUrl: null,
     variantId: null, candidates: [], method: 'sin_asociar', evidence: [], confidence: 0, issue: 'Sin coincidencia en el Excel', duplicateOf: null,
     reviewedBy: null, view: 'front', kind: 'product', quality: 0.9, visualConfidence: 0.95,
     visualHint: { groupId: 'bottle-blue', label: 'Botella', color: 'Azul', pack: '', kind: 'product' }, ...options },
@@ -54,14 +54,18 @@ test('el control del cliente impide generar, envía su preset y conserva referen
   const { automateNewPhotos } = requireFunctions('./lib/functions/src/organizer/automation.js');
   const item = source('unit-front');
   let globalEnabled = true;
-  let organizerGeneration: { enabled?: boolean; preset?: string } | undefined = { enabled: false };
+  let organizerGeneration: { autoRun?: boolean; enabled?: boolean; preset?: string } | undefined = { enabled: false };
   const requests: any[] = [];
   const writes: Array<{ path: string; value: any }> = [];
   let creationError: Error | undefined;
   const root = { collection: (name: string) => ({ doc: () => ({ path: name, get: async () => ({ exists: name !== 'generationSources', data: () => name === 'photos' ? item.photo : { copiedId: 'copy', parentId: 'managed' } }) }) }) };
   const doc = { collection: (name: string) => ({ doc: () => ({ path: name }), get: async () => ({ docs: [] }) }) };
-  const drive = { managed: async () => {}, verifyCopy: async () => {} };
-  t.mock.method(firestore, 'getAppFirestore', () => ({ collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ status: 'active', automation: { enabled: true, ...(organizerGeneration ? { organizerGeneration } : {}) } }) }) }) }) }));
+  const drive = { assertSource: async () => {} };
+  // getAll mirrors each reference's own get(); references without get (run collections) do not exist yet.
+  const snapshot = async (ref: any) => { const value = ref.get ? await ref.get() : { exists: false, data: () => undefined };
+    return { ...value, id: ref.path, get: (field: string) => value.exists ? value.data()?.[field] : undefined }; };
+  t.mock.method(firestore, 'getAppFirestore', () => ({ collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({ status: 'active', automation: { enabled: true, ...(organizerGeneration ? { organizerGeneration } : {}) } }) }) }) }),
+    getAll: async (...refs: any[]) => Promise.all(refs.map(snapshot)), batch: () => ({ update() {}, commit: async () => {} }) }));
   t.mock.method(system, 'getSystemConfigDocRef', () => ({ get: async () => ({ data: () => ({ organizerAutoGenerationEnabled: globalEnabled }) }) }));
   t.mock.method(roles, 'assertUserRoles', async () => 'admin');
   t.mock.method(store, 'documents', async function* () { yield { id: item.entry.id, data: () => ({ entry: item.entry, added: true }) }; });
@@ -76,11 +80,12 @@ test('el control del cliente impide generar, envía su preset y conserva referen
     globalEnabled = false;
     await invoke();
     assert.equal(requests.length, 0);
-    globalEnabled = true;
+    organizerGeneration = { ...organizerGeneration, autoRun: true };
     await invoke();
     assert.equal(requests.length, 1);
     assert.equal(requests[0].preset, 'custom-product');
     organizerGeneration = undefined;
+    globalEnabled = true;
     await invoke();
     assert.equal(requests.length, 2);
     assert.equal(Object.hasOwn(requests[1], 'preset'), false, 'Sin configurar se conserva la elección actual de preset');
@@ -90,6 +95,10 @@ test('el control del cliente impide generar, envía su preset y conserva referen
     writes.length = 0;
     await invoke();
     assert.equal(requests[2].preset, 'deleted-preset');
+    // The prepared group is saved before the automation is created, so a new slice never prepares it again.
+    assert.equal(writes[0].value.status, 'prepared');
+    assert.deepEqual(writes[0].value.inputImages.map((image: { itemId: string }) => image.itemId), [writes[0].value.itemId]);
+    writes.splice(0, 1);
     assert.deepEqual(writes, [{ path: 'generationHandoffs', value: { status: 'needs_attention', photoIds: ['unit-front'], issue: presetError.message } }]);
     assert.match(writes[0].value.issue, /Cliente → Automatizaciones/);
     assert.equal(writes.some(write => write.path === 'generationSources'), false, 'No consume referencias cuando falta el preset');
@@ -97,7 +106,11 @@ test('el control del cliente impide generar, envía su preset y conserva referen
     await assert.rejects(invoke, /Error operativo/);
     organizerGeneration = undefined;
     creationError = new AutomationAttentionError('Preset heredado inválido');
-    await assert.rejects(invoke, /Preset heredado inválido/, 'Sin preset nuevo se conserva el comportamiento anterior');
+    writes.length = 0;
+    // An attention error never fails (and blocks) the whole run: its articles wait for review.
+    await invoke();
+    writes.splice(0, writes.findIndex(write => write.value.status !== 'prepared'));
+    assert.deepEqual(writes, [{ path: 'generationHandoffs', value: { status: 'needs_attention', photoIds: ['unit-front'], issue: 'Preset heredado inválido' } }]);
   } finally { if (app) await app.delete(); }
 });
 
@@ -119,10 +132,12 @@ test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera
   const uid = 'handoff-operator';
   const jpeg = await sharp({ create: { width: 32, height: 32, channels: 3, background: 'blue' } }).jpeg().toBuffer();
   const originals: string[] = [];
-  let copiesVerified = 0;
+  let sourcesVerified = 0;
+  let frozenReads = 0;
   const drive = {
-    managed: async () => { copiesVerified++; }, verifyCopy: async () => { copiesVerified++; },
-    image: async (id: string) => { originals.push(id); assert.ok(id.startsWith('copy-')); return jpeg; },
+    assertSource: async () => { sourcesVerified++; },
+    sourceImage: async (entry: any) => { frozenReads++; originals.push(entry.id); return jpeg; },
+    image: async () => { throw new Error('Este fixture no proporciona imágenes para deduplicación perceptual'); },
   };
   const config = { ...defaultConfig(root.id, 'Cliente', { sourceIds: ['origin'], parentId: 'parent', folderName: 'Organizado', enabled: true,
     debounceMinutes: 2, budgetUsd: 40, model: 'gemini-3.1-flash-lite', escalationModel: null, minimumConfidence: 0.75,
@@ -134,7 +149,6 @@ test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera
   const insert = async (item: GenerationSource, added = true) => {
     await doc.collection('files').doc(item.entry.id).set({ entry: item.entry, added });
     await root.collection('photos').doc(item.entry.id).set(item.photo);
-    await root.collection('manifest').doc(digest([item.entry.id, item.entry.version])).set({ copiedId: `copy-${item.entry.id}`, parentId: 'managed-folder' });
   };
   try {
     await db.collection('users').doc(uid).set({ uid, active: true, role: 'operador', clientAccess: { mode: 'global' } });
@@ -158,7 +172,7 @@ test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera
     assert.equal((await db.collection('automationJobs').get()).size, 0, 'El interruptor desactivado impide enviar trabajos');
     assert.equal((await root.collection('generationSources').get()).size, 0);
     assert.equal((await doc.get()).data().counts.automationSkippedPhotos, 4);
-    assert.equal(copiesVerified, 0, 'Desactivar evita incluso la importación a Storage');
+    assert.equal(frozenReads, 0, 'Desactivar evita incluso la importación a Storage');
     await updateSystemConfig.run({ data: { organizerAutoGenerationEnabled: true }, auth: { uid: 'admin', token: { role: 'admin' } } });
     assert.equal((await system.get()).data().jobMaxRetries, 7, 'El interruptor conserva los parámetros de cola');
     await db.collection('clients').doc(root.id).update({ 'automation.enabled': false });
@@ -175,7 +189,7 @@ test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera
     assert.equal((await doc.get()).data().counts.automationNeedsReview, 1);
     assert.match((await root.collection('photos').doc('uncertain').get()).data().issue, /Generación pendiente/);
     assert.equal((await root.collection('generationSources').get()).size, 3);
-    assert.equal(copiesVerified, 4);
+    assert.equal(sourcesVerified > 0, true);
     await worker.processAutomation(job.id);
     const prepared = (await jobs.docs[0].ref.get()).data();
     assert.equal(prepared.status, 'processing', JSON.stringify(prepared.error));
@@ -223,6 +237,6 @@ test('handoff incremental: sin Excel crea las seis escenas, no repite y recupera
     await nextDoc.collection('files').doc('revoked').set({ entry: revoked.entry, added: true });
     await assert.rejects(() => automateNewPhotos(drive, root, nextDoc, config, next, 'lease', Date.now() + 60_000), { code: 'permission-denied' });
     assert.equal((await db.collection('automationJobs').get()).size, 3, 'Los permisos se comprueban de nuevo');
-    assert.ok(originals.every(id => id.startsWith('copy-')));
+    assert.ok(originals.every(id => !id.startsWith('copy-')));
   } finally { await app.delete(); }
 });

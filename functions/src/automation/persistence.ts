@@ -8,14 +8,15 @@ import { createHash } from 'node:crypto';
 import { DEFAULT_AUTOMATION_BUDGET, resolveAutomationPolicy } from '../../../shared/src/automationPolicy';
 import { DEFAULT_AUTOMATION_RULES, resolveAutomationRules } from '../../../shared/src/automationConfig';
 import { sanitizeSystemConfig } from '../admin/systemConfig';
-import type { AutomationPlan, Client } from '../../../shared/src/types';
+import type { AutomationPlan, Client, Job } from '../../../shared/src/types';
+import { jobMasterProductId, masterProductId } from '../spreadsheets/masterProducts';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { AutomationJob, AutomationJobReceipt, RetryAutomationJobRequest } from '../../../shared/src/types';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { authorizeMachineJob } from './machineAuth';
-import { automationKeys, canReadAutomation, MAX_INTAKE_ATTEMPTS, validateAutomationInput } from './domain';
+import { automationKeys, canReadAutomation, MAX_INTAKE_ATTEMPTS, ORGANIZER_MAX_INPUT_IMAGES, validateAutomationInput } from './domain';
 
 // Upload ownership is claimed on first automated use, independently of the caller's multi-client access.
 // Reuse the private idempotency namespace; bindings never expose Storage paths or credentials.
@@ -28,14 +29,75 @@ const readUploadBindings = async (tx: FirebaseFirestore.Transaction, data: impor
   return snapshots.filter((snapshot) => !snapshot.exists).map((snapshot) => snapshot.ref);
 };
 
+/** Both legacy identities a generation can produce: per automation (scene jobs) and per article (photo-plan jobs). */
+export const organizerLegacyIds = (clientId: string, automationJobId: string, itemId: string) => [
+  masterProductId({ id: automationJobId, automationJobId }, itemId),
+  jobMasterProductId({ id: automationJobId, automationJobId }, { clientId, garmentId: itemId, photoTask: { productId: itemId } as Job['photoTask'] }),
+];
+
+/** Commercial links, aliases and upload claims are written in parts of this size, outside the job transaction. */
+export const ORGANIZER_WRITE_CHUNK = 200;
+/** A new automation job leaves room in its 1 MiB document for the caches and items written during intake. */
+export const MAX_NEW_AUTOMATION_DOCUMENT_BYTES = 700_000;
+const chunks = <T>(items: T[], size = ORGANIZER_WRITE_CHUNK) => Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+
+/**
+ * An Organizer automation is created in two steps so hundreds of articles never exceed a transaction:
+ * 1. its deterministic id (derived from the idempotency key) receives every commercial link, legacy alias and
+ *    upload claim in small idempotent parts (`set` of the same content; aliases and claims only when absent);
+ * 2. one small transaction creates the job and its keys. The intake trigger only reacts to the job document,
+ *    so it never sees a job without all of its links, and a retry after a crash repeats step 1 harmlessly.
+ */
+async function writeOrganizerLinks(data: import('../../../shared/src/types').CreateAutomationJobRequest, jobRef: FirebaseFirestore.DocumentReference,
+  links: import('../organizer/commerce').OrganizerCommercialLink[]) {
+  const db = getAppFirestore();
+  const paths = [...new Set((data.inputImages || []).flatMap(image => image.storagePath ? [image.storagePath] : []))];
+  for (const part of chunks(paths)) await db.runTransaction(async tx => {
+    const refs = part.map(path => db.collection('automationKeys').doc(createHash('sha256').update(`upload-client:${path}`).digest('hex')));
+    const snapshots = await tx.getAll(...refs);
+    if (snapshots.some(snapshot => snapshot.exists && snapshot.data()?.inputClientId !== data.clientId)) throw new HttpsError('permission-denied', 'Una fotografía subida ya está asociada a otro cliente. Sube una referencia propia de este cliente.');
+    snapshots.forEach(snapshot => { if (!snapshot.exists) tx.create(snapshot.ref, { inputClientId: data.clientId }); });
+  });
+  for (const part of chunks(links)) {
+    const batch = db.batch();
+    for (const link of part) batch.set(jobRef.collection('organizerCommerce').doc(link.itemId), link);
+    await batch.commit();
+  }
+  // Route this generation's legacy master identities to the bound canonical product. Existing aliases
+  // or materialized legacy products are never rewritten: those keep their explicit review path.
+  const client = db.collection('clients').doc(data.clientId);
+  const aliases = links.flatMap(link => link.catalogBinding ? organizerLegacyIds(data.clientId, jobRef.id, link.itemId)
+    .map(id => ({ binding: link.catalogBinding!, ref: client.collection('productAliases').doc(id) })) : []);
+  for (const part of chunks(aliases, ORGANIZER_WRITE_CHUNK / 2)) await db.runTransaction(async tx => {
+    const state = await tx.getAll(...part.map(alias => alias.ref), ...part.map(alias => client.collection('products').doc(alias.ref.id)));
+    part.forEach(({ ref: alias, binding }, index) => {
+      if (!state[index].exists && !state[index + part.length].exists)
+        tx.set(alias, { clientId: data.clientId, productId: binding.productId, legacyProductId: alias.id, origin: 'organizer', baseCode: binding.baseCode, automationJobId: jobRef.id });
+    });
+  });
+}
+
 export const createAutomation = async (input: unknown, uid: string, role: string, plan?: AutomationPlan,
-  organizer?: import('../organizer/commerce').OrganizerCommercialLink): Promise<AutomationJobReceipt> => {
-  const data = validateAutomationInput(input, uid);
+  organizerInput?: import('../organizer/commerce').OrganizerCommercialLink | import('../organizer/commerce').OrganizerCommercialLink[]): Promise<AutomationJobReceipt> => {
+  // One organizer update can carry many articles: each keeps its own commercial link under organizerCommerce/{itemId}.
+  const organizerLinks = organizerInput === undefined ? [] : Array.isArray(organizerInput) ? organizerInput : [organizerInput];
+  const organizer = organizerLinks[0];
+  const data = validateAutomationInput(input, uid, organizer ? ORGANIZER_MAX_INPUT_IMAGES : undefined);
   if (role !== 'automation') await assertHumanClientAccess(uid, data.clientId);
   if (role === 'automation') await authorizeMachineJob(uid, data.clientId, data.jobType);
   const db = getAppFirestore();
   const keys = automationKeys(data).map(key => db.collection('automationKeys').doc(organizer ? `organizer-${key}` : key));
-  const ref = db.collection('automationJobs').doc();
+  // Organizer jobs use the key as id so their links can be written before the job exists (see writeOrganizerLinks).
+  const ref = organizer ? db.collection('automationJobs').doc(keys[0].id) : db.collection('automationJobs').doc();
+  if (organizer) {
+    const [known, client, system] = await db.getAll(keys[0], db.collection('clients').doc(data.clientId), db.collection('system_config').doc('main'));
+    if (!known.exists) {
+      // Validate the policy first, so a request that cannot be created leaves no links behind.
+      try { resolveAutomationPolicy(system.data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET, (client.data() as Client | undefined)?.automation, data); }
+      catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
+      await writeOrganizerLinks(data, ref, organizerLinks);
+    }
+  }
   const receipt = await db.runTransaction(async (tx) => {
     const keyDocs = await tx.getAll(...keys);
     const jobIds = [...new Set(keyDocs.filter((doc) => doc.exists).map((doc) => doc.data()!.jobId as string))];
@@ -56,7 +118,7 @@ export const createAutomation = async (input: unknown, uid: string, role: string
     let policy;
     try { policy = resolveAutomationPolicy(system.data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET, (client.data() as Client).automation, plan ? { ...data, ...plan.policy } : data); }
     catch (error) { throw new HttpsError('failed-precondition', (error as Error).message); }
-    const uploadBindings = await readUploadBindings(tx, data);
+    const uploadBindings = organizer ? [] : await readUploadBindings(tx, data);
     const now = FieldValue.serverTimestamp();
     const resolved = plan ? null : resolveAutomationPreset(data, client.data() as Client);
     const photoModelId = data.jobType !== 'garment' ? null : plan ? plan.photoModelId || null : resolved?.modelId || null;
@@ -80,9 +142,15 @@ export const createAutomation = async (input: unknown, uid: string, role: string
       error: null, retryCount: 0, leaseToken: null, leaseExpiresAt: null,
       progress: { total: 0, completed: 0, failed: 0 },
     };
+    if (Buffer.byteLength(JSON.stringify(job)) > MAX_NEW_AUTOMATION_DOCUMENT_BYTES)
+      throw new HttpsError('resource-exhausted', 'El trabajo de automatización no cabe en un documento. Divide los artículos en varios trabajos.');
+    if (organizer) {
+      // Every link was written before this transaction; the job only becomes visible once they all exist.
+      const linked = await tx.getAll(...organizerLinks.map(link => ref.collection('organizerCommerce').doc(link.itemId)));
+      if (linked.some(link => !link.exists)) throw new HttpsError('aborted', 'Faltan vínculos comerciales del Organizador; reintenta la creación.');
+    }
     uploadBindings.forEach((binding) => tx.create(binding, { inputClientId: data.clientId }));
     tx.create(ref, job);
-    if (organizer) tx.create(ref.collection('organizerCommerce').doc(organizer.itemId), organizer);
     if (plan) tx.update(db.collection('automationPlans').doc(plan.id), { executedJobId: ref.id });
     keys.forEach((key) => tx.create(key, { jobId: ref.id }));
     return { jobId: ref.id, status: 'pending' as const, duplicate: false };

@@ -139,7 +139,7 @@ export function useOrganizer() {
   };
   const save = async (settings: OrganizerSettings) => {
     if (settings.enabled && !config?.enabled && !await confirm({ title: 'Activar vigilancia automática',
-      description: `Tuto podrá copiar y clasificar los cambios de este cliente con un presupuesto de hasta USD ${settings.budgetUsd} por lote. Si está activada la generación después de organizar en Sistema → Configuración, enviará las fotos nuevas a generar con el presupuesto de automatización del cliente.`,
+      description: `Tuto podrá leer y clasificar los cambios de este cliente con un presupuesto de USD ${settings.budgetUsd} por lote, ampliado según las fotos hasta USD ${settings.budgetCapUsd ?? Math.max(40, settings.budgetUsd)}. Si está activada la generación del Organizador para el cliente o en Sistema → Configuración, enviará las fotos nuevas a generar con el presupuesto de automatización del cliente.`,
       confirmLabel: 'Activar vigilancia' })) return;
     const result = await perform<OrganizerConfig>({ action: 'configure', clientId, settings }, 'Configuración guardada');
     if (result) { setConfig(result); refresh(); }
@@ -149,21 +149,27 @@ export function useOrganizer() {
     if (paid && !selection && !planRunId) { toast({ tone: 'warning', title: 'Simula y revisa el plan antes de aplicar.' }); return; }
     if (paid && !selection && view !== 'plan') { selectView('plan'); toast({ tone: 'info', title: 'Revisa el plan y vuelve a pulsar Clasificar para aplicarlo.' }); return; }
     if (paid && (!config || !await confirm({ title: 'Iniciar clasificación',
-      description: `Se aplicará ${selection ? 'el reanálisis seleccionado' : 'el plan de la simulación revisada'} conservando los originales. Puede usar hasta USD ${config.budgetUsd} de Gemini y crear copias verificadas en Drive. Si la generación después de organizar está activada, las fotos nuevas pasarán a automatización con el presupuesto del cliente.`,
+      description: `Se aplicará ${selection ? 'el reanálisis seleccionado' : 'el plan de la simulación revisada'} conservando los originales. Puede usar USD ${config.budgetUsd} de Gemini, ampliados según las fotos hasta USD ${config.budgetCapUsd ?? Math.max(40, config.budgetUsd)}, y guardar las referencias en Tuto. Si la generación después de organizar está activada, las fotos nuevas pasarán a automatización con el presupuesto del cliente.`,
       confirmLabel: 'Iniciar ejecución' }))) return;
     if (mode === 'generate' && (!config || !await confirm({ title: 'Generar desde las fotos originales',
-      description: `Se leerá Drive y las referencias se guardarán en Tuto. Gemini puede usar hasta USD ${config.budgetUsd}. Las fotos se generarán con el presupuesto de automatización del cliente.`,
+      description: `Se leerá Drive y las referencias se guardarán en Tuto. Gemini puede usar USD ${config.budgetUsd}, ampliados según las fotos hasta USD ${config.budgetCapUsd ?? Math.max(40, config.budgetUsd)}. Las fotos se generarán con el presupuesto de automatización del cliente.`,
       confirmLabel: 'Generar fotos' }))) return;
     const result = await perform<OrganizerRun>({ action: 'start', mode, clientId, requestId: crypto.randomUUID(),
       confirmedBudgetUsd: paid || mode === 'generate' ? config?.budgetUsd : undefined, planRunId: paid && !selection ? planRunId : undefined, ...selection }, 'Ejecución en cola');
     if (result) { setRun(result); refresh(); }
   };
+  const downloadReport = async (runId: string, kind: 'reportUrl' | 'controlSheetUrl') => {
+    const result = await perform<{ run: OrganizerRun; reportUrl: string | null; controlSheetUrl: string | null }>({ action: 'report', clientId, runId });
+    const url = result?.[kind];
+    if (!url) { if (result) toast({ tone: 'info', title: 'Este archivo no está disponible para la ejecución.' }); return; }
+    const anchor = document.createElement('a'); anchor.href = url; anchor.rel = 'noreferrer'; anchor.click();
+  };
   const control = async (action: 'pause' | 'resume' | 'cancel') => {
     if (!run) return;
-    if (action === 'cancel' && !await confirm({ title: 'Cancelar ejecución', description: 'Se detendrá el trabajo pendiente. Las copias y resultados guardados se conservan.',
+    if (action === 'cancel' && !await confirm({ title: 'Cancelar ejecución', description: 'Se detendrá el trabajo pendiente. Los resultados guardados se conservan.',
       confirmLabel: 'Cancelar ejecución', tone: 'warning' })) return;
     const result = await perform<OrganizerRun>({ action, clientId, runId: run.id });
     if (result) { setRun(result); refresh(); }
   };
-  return { clients, clientId, baseProductId, variantId, batchId, revision, config, run, view, page, busy, loadError, products, simulation, filterStatus, setFilterStatus, selectClient, selectView, loadClients, loadMore, save, start, control, perform, refresh, setRun };
+  return { clients, clientId, baseProductId, variantId, batchId, revision, config, run, view, page, busy, loadError, products, simulation, filterStatus, setFilterStatus, selectClient, selectView, loadClients, loadMore, save, start, control, downloadReport, perform, refresh, setRun };
 }

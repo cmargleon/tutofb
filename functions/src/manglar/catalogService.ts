@@ -9,6 +9,8 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { getManglarContext } from './context';
 import { conflictingFields } from '../../../shared/src/fieldConcurrency';
 import { validId } from './access';
+import { normalizeClientContacts } from '../../../shared/src/clientContacts';
+import { configSnapshot } from '../../../shared/src/configSnapshot';
 const nameValue = (value: string) => {
     if (typeof value !== 'string' || !value.trim() || value.length > 500)
         throw new HttpsError('invalid-argument', 'Indica un nombre válido.');
@@ -21,21 +23,30 @@ export const saveClientService = async (input: ManglarClientSaveRequest, uid: st
     const name = input.name === undefined ? undefined : nameValue(input.name);
     if (input.generationPromptBase != null && (typeof input.generationPromptBase !== 'string' || input.generationPromptBase.length > 30000))
         throw new HttpsError('invalid-argument', 'Prompt inválido.');
+    let contacts;
+    try {
+        contacts = input.contacts === undefined ? undefined : normalizeClientContacts(input.contacts);
+        if (input.expected?.contacts !== undefined) normalizeClientContacts(input.expected.contacts);
+    } catch (error) {
+        throw new HttpsError('invalid-argument', (error as Error).message);
+    }
     const values = await db.runTransaction(async (tx) => {
         const current = await tx.get(ref);
         const now = FieldValue.serverTimestamp();
         if (input.id && !current.exists) throw new HttpsError('not-found', 'Cliente no disponible.');
         if (!current.exists && !name) throw new HttpsError('invalid-argument', 'Indica un nombre.');
-        const patch = { ...(name === undefined ? {} : { name }),
+        const patch = { ...(contacts === undefined ? {} : { contacts }), ...(name === undefined ? {} : { name }),
             ...(input.generationPromptBase === undefined ? {} : { generationPromptBase: input.generationPromptBase?.trim() || null }) };
         if (current.exists) {
-            const remote = { name: current.data()!.name, generationPromptBase: current.data()!.generationPromptBase?.trim() || null };
-            const conflicts = conflictingFields(remote, patch, input.expected);
+            const remote = { name: current.data()!.name, generationPromptBase: current.data()!.generationPromptBase?.trim() || null, contacts: current.data()!.contacts ?? [] };
+            const { contacts: _contacts, ...scalarPatch } = patch;
+            const conflicts = conflictingFields(remote, scalarPatch, input.expected);
+            if (contacts !== undefined && (input.expected?.contacts === undefined || configSnapshot(remote.contacts) !== configSnapshot(input.expected.contacts))) conflicts.push('contacts');
             if (conflicts.length) throw new HttpsError('aborted', 'Los datos generales cambiaron. Revisa los valores actuales.', { conflicts, current: remote });
         }
         tx.set(ref, { ...patch, updatedAt: now,
             ...(!current.exists ? { status: 'active', archivedAt: null, archivedByUid: null, createdAt: now, batchCount: 0, lastBatchCreatedAt: null, createdByUid: uid } : {}) }, { merge: true });
-        return { name: name ?? current.data()!.name as string, generationPromptBase: patch.generationPromptBase === undefined ? current.data()?.generationPromptBase ?? null : patch.generationPromptBase };
+        return { contacts: contacts ?? current.data()?.contacts ?? [], name: name ?? current.data()!.name as string, generationPromptBase: patch.generationPromptBase === undefined ? current.data()?.generationPromptBase ?? null : patch.generationPromptBase };
     });
     return { id: ref.id, values };
 };

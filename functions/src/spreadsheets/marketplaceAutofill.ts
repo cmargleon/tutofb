@@ -158,35 +158,48 @@ export const describeAutofillError = (error: unknown) => {
 
 type Image = { inline_data: { mime_type: string; data: string } };
 type AskOptions = { apiKey: string; model: string; uid: string };
-async function requestChoices(input: Input, fields: Candidate[], images: Image[], options: AskOptions, alreadyChosen: Record<string, string>, constrainValue = false) {
-  const answers: unknown[] = [];
-  // Keep all alternatives of each field together, even when a template needs several requests.
-  let group: Candidate[] = [];
-  const groups: Candidate[][] = [];
+/**
+ * Gemini rejects response schemas whose constraints expand into too many states ("too many states for serving"):
+ * array length bounds multiplied by large option enums. Ask in small groups without length bounds and let
+ * validateMarketplaceChoices discard anything off-list, so templates with 40+ dropdowns still get answers.
+ */
+export const AUTOFILL_GROUP_MAX_FIELDS = 8;
+const AUTOFILL_GROUP_MAX_CHARS = 24_000;
+export function groupAutofillFields<T>(fields: T[], maxFields = AUTOFILL_GROUP_MAX_FIELDS, maxChars = AUTOFILL_GROUP_MAX_CHARS) {
+  const groups: T[][] = [];
+  let group: T[] = [];
+  let size = 0;
   for (const field of fields) {
-    if (group.length && JSON.stringify([...group, field]).length > 55_000) { groups.push(group); group = []; }
+    const length = JSON.stringify(field).length;
+    if (group.length && (group.length >= maxFields || size + length > maxChars)) { groups.push(group); group = []; size = 0; }
     group.push(field);
+    size += length;
   }
   if (group.length) groups.push(group);
-  for (const fields of groups) {
+  return groups;
+}
+export function buildAutofillResponseSchema(fields: Pick<Candidate, 'key' | 'options'>[], constrainValue = false) {
+  const single = constrainValue && fields.length === 1 && fields[0].options.length <= 200;
+  return { ...responseSchema, items: { ...responseSchema.items, properties: {
+    ...responseSchema.items.properties,
+    key: { type: 'string', enum: fields.map(field => field.key) },
+    ...(single ? { value: { type: 'string', enum: fields[0].options } } : {}),
+  } } };
+}
+async function requestChoices(input: Input, fields: Candidate[], images: Image[], options: AskOptions, alreadyChosen: Record<string, string>, constrainValue = false) {
+  const groups = groupAutofillFields(fields);
+  const results = await Promise.allSettled(groups.map(async group => {
     const { payload } = await callGeminiGenerateContent<{
       candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
     }>({
-      apiKey: options.apiKey, model: options.model, signal: AbortSignal.timeout(45_000),
+      apiKey: options.apiKey, model: options.model, signal: AbortSignal.timeout(60_000),
       context: { feature: 'product_draft_enrichment', clientId: input.product.clientId, userUid: options.uid, garmentId: input.product.garmentId },
       body: {
         systemInstruction: { parts: [{ text: instruction }] },
-        contents: [{ role: 'user', parts: [{ text: JSON.stringify({ category: input.category.label, product: input.product.values.name, alreadyChosen, fields }) }, ...images] }],
+        contents: [{ role: 'user', parts: [{ text: JSON.stringify({ category: input.category.label, product: input.product.values.name, alreadyChosen, fields: group }) }, ...images] }],
         generationConfig: {
           responseMimeType: 'application/json',
-          responseJsonSchema: {
-            ...responseSchema, minItems: fields.length, maxItems: fields.length,
-            ...(constrainValue ? { items: { ...responseSchema.items, properties: {
-              ...responseSchema.items.properties,
-              key: { type: 'string', enum: [fields[0].key] },
-              value: { type: 'string', enum: fields[0].options },
-            } } } : {}),
-          },
+          responseJsonSchema: buildAutofillResponseSchema(group, constrainValue),
           maxOutputTokens: 8192, temperature: 0,
         },
       },
@@ -194,9 +207,13 @@ async function requestChoices(input: Input, fields: Candidate[], images: Image[]
     const answer = payload.candidates?.[0]?.content?.parts?.filter(part => !part.thought).map(part => part.text || '').join('') || '[]';
     const parsed: unknown = JSON.parse(answer);
     if (!Array.isArray(parsed)) throw new Error('Gemini no devolvió una lista de opciones.');
-    answers.push(...parsed);
-  }
-  return answers;
+    return parsed;
+  }));
+  const failed = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+  // Only a total failure is an error: partial answers keep their fields and the rest go to the retry.
+  if (failed.length === results.length && failed.length) throw failed[0].reason;
+  for (const failure of failed) console.warn('Marketplace autofill group unavailable', { message: failure.reason instanceof Error ? failure.reason.message.slice(0, 200) : 'Error' });
+  return results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
 }
 
 /** One automatic retry: of the whole request when Gemini fails, or of the fields left without a valid option. */
@@ -245,16 +262,22 @@ type CachedAnalysis = {
   copy?: Copy;
   error?: string;
   retryAfter?: number;
+  failedAt?: number;
   token?: string;
   leaseUntil?: number;
 };
-type CacheOptions = { model: string; uid: string; apiKey?: string; analyze?: boolean; pollMs?: number };
+/**
+ * `retryFailed` re-runs analyses that failed before; without it a failure is final for its fingerprint and the
+ * field stays pending for human review (no automatic retry on every opening). `deadline` bounds the analyses.
+ */
+type CacheOptions = { model: string; uid: string; apiKey?: string; analyze?: boolean; pollMs?: number; retryFailed?: boolean; deadline?: number };
 
 function createAnalysisCache(options: CacheOptions) {
   const db = getAppFirestore();
   const bucket = admin.storage().bucket();
   const refs = new Map<string, Promise<Reference | null>>();
-  const deadline = Date.now() + 300_000;
+  const deadline = options.deadline ?? Date.now() + 300_000;
+  const startedAt = Date.now();
   return {
     async references(paths: string[]) {
       return (await Promise.all(paths.map(path => {
@@ -269,8 +292,10 @@ function createAnalysisCache(options: CacheOptions) {
     async read(product: MasterProduct, key: unknown[], fingerprint: string,
       ready: (value: CachedAnalysis) => boolean, generate: (apiKey: string) => Promise<CachedAnalysis>, onError: (error: unknown) => string) {
       const ref = db.collection('clients').doc(product.clientId).collection('marketplaceAutofill').doc(hash(key));
+      // A stored failure is final unless the operator asked to retry; even then, a failure recorded during this
+      // same request is not repeated.
       const usable = (value: CachedAnalysis | undefined) => value !== undefined && value.fingerprint === fingerprint &&
-        (ready(value) || Boolean(value.error && (value.retryAfter || 0) > Date.now()));
+        (ready(value) || Boolean(value.error && (!options.retryFailed || (value.failedAt || 0) >= startedAt)));
       while (true) {
         const current = (await ref.get()).data() as CachedAnalysis | undefined;
         if (current && usable(current)) return current;
@@ -288,7 +313,7 @@ function createAnalysisCache(options: CacheOptions) {
           result = await generate(options.apiKey);
         } catch (error) {
           console.warn('Marketplace autofill unavailable', { clientId: product.clientId, message: error instanceof Error ? error.name : 'Error' });
-          result = { fingerprint, error: onError(error), retryAfter: Date.now() + 60_000 };
+          result = { fingerprint, error: onError(error), failedAt: Date.now() };
         }
         await db.runTransaction(async tx => {
           if ((await tx.get(ref)).get('token') === token) tx.set(ref, result);

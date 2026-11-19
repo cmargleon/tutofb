@@ -79,6 +79,10 @@ test('preset resolution retains request, client and job type precedence, includi
   assert.equal(resolveAutomationPresetName({ jobType: 'product' }), 'generic_product');
   assert.equal(resolveAutomationPresetName({ jobType: 'product' }, { defaultPreset: 'custom' }), 'custom');
   assert.equal(resolveAutomationPresetName({ jobType: 'product', preset: 'requested' }, { defaultPreset: 'custom' }), 'requested');
+  // Built-in presets apply to their own item type only, so a mixed organizer folder never fails for the other type.
+  assert.equal(resolveAutomationPresetName({ jobType: 'garment' }, { defaultPreset: 'generic_product' }), 'standard');
+  assert.equal(resolveAutomationPresetName({ jobType: 'product', preset: 'standard' }), 'generic_product');
+  assert.equal(resolveAutomationPresetName({ jobType: 'garment', preset: 'generic_product' }, { presets: { generic_product: {} as never } }), 'generic_product');
   const config = resolveEffectiveAutomationConfig({ client: { automation: { defaultPreset: 'custom', presets: { custom: {} } } } });
   assert.deepEqual(config.organizerGenerationPreset, { value: 'custom', source: 'cliente' });
 });
@@ -87,7 +91,7 @@ test('Organizer generation requires both switches, defaults to current behavior 
   for (const global of [undefined, true, false]) for (const enabled of [undefined, true, false]) {
     const result = resolveEffectiveAutomationConfig({ system: { organizerAutoGenerationEnabled: global }, client: { automation: { organizerGeneration: { enabled } } } });
     assert.equal(result.organizerGenerationEnabled.value, global !== false && enabled !== false, `${global}/${enabled}`);
-    assert.equal(result.organizerGenerationEnabled.source, global === false ? 'sistema' : enabled !== undefined ? 'cliente' : global !== undefined ? 'sistema' : 'predeterminado');
+    assert.equal(result.organizerGenerationEnabled.source, enabled === false ? 'cliente' : global === false ? 'sistema' : enabled !== undefined ? 'cliente' : global !== undefined ? 'sistema' : 'predeterminado');
   }
   for (const client of [{ automation: { enabled: false } }, { status: 'archived' as const }]) {
     assert.equal(resolveEffectiveAutomationConfig({ client }).organizerGenerationEnabled.value, false);
@@ -103,4 +107,14 @@ test('invalid policy and unavailable presets become visible issues without break
   }
   const result = resolveEffectiveAutomationConfig({ client: { automation: { organizerGeneration: { preset: 'deleted' } } } });
   assert.match(result.issues.join(' '), /Cliente → Automatizaciones/);
+});
+
+test('autoRun del cliente habilita el Organizador con global apagado y conserva las desactivaciones explícitas', () => {
+  for (const autoRun of [undefined, false, true]) for (const enabled of [undefined, false, true]) {
+    const result = resolveEffectiveAutomationConfig({ system: { organizerAutoGenerationEnabled: false },
+      client: { automation: { organizerGeneration: { autoRun, enabled } } } });
+    assert.equal(result.organizerGenerationEnabled.value, autoRun === true && enabled !== false);
+  }
+  assert.equal(resolveEffectiveAutomationConfig({ system: { organizerAutoGenerationEnabled: false },
+    client: { automation: { enabled: false, organizerGeneration: { autoRun: true } } } }).organizerGenerationEnabled.value, false);
 });

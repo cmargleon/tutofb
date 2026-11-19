@@ -6,12 +6,9 @@ import {
   createClient,
   archiveClient,
   restoreClient,
-  importClientSpreadsheetTemplate,
-  setClientSpreadsheetTemplateStatus,
-  updateClientSpreadsheetTemplateCategory,
 } from './firebase';
 import { useConfirm, useToast } from '../feedback/FeedbackProvider';
-import { Client, SpreadsheetTemplate, SpreadsheetTemplateImportStatus } from '../../../shared/src/types';
+import { Client, SpreadsheetTemplate } from '../../../shared/src/types';
 
 export { CLIENTS_PAGE_SIZE } from './clientListState';
 
@@ -29,9 +26,6 @@ export const useClientManagement = (clientId?: string, filters?: import('../../.
   const [newClientPrompt, setNewClientPrompt] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
-  const [uploadingTemplateClientId, setUploadingTemplateClientId] = useState<string | null>(null);
-  const [savingTemplateCategoryId, setSavingTemplateCategoryId] = useState<string | null>(null);
-  const [updatingTemplateStatusId, setUpdatingTemplateStatusId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -128,62 +122,15 @@ export const useClientManagement = (clientId?: string, filters?: import('../../.
     }
   };
 
-  const handleTemplateUpload = async (client: Client, file: File | null) => {
-    if (!file || !client.id) return;
-    setUploadingTemplateClientId(client.id);
-    try {
-      const result = await importClientSpreadsheetTemplate(client.id, file);
-      toast({ tone: 'success', title: 'Spreadsheet importado', description: `"${file.name}" quedó vinculado a ${client.name} con ${result.categoryCount} categoría${result.categoryCount === 1 ? '' : 's'}.` });
-    } catch (err: any) {
-      toast({ tone: 'error', title: 'No pudimos importar el spreadsheet', description: err.message || 'Revisa el archivo y vuelve a intentarlo.' });
-    } finally {
-      setUploadingTemplateClientId(null);
-    }
-  };
-
-  const handleTemplateCategoryChange = async (client: Client, template: SpreadsheetTemplate, categoryId: string | null) => {
-    if (!client.id || !template.id) return;
-    setSavingTemplateCategoryId(template.id);
-    try {
-      await updateClientSpreadsheetTemplateCategory(client.id, template.id, categoryId);
-      toast({ tone: 'success', title: 'Categoría por defecto actualizada', description: categoryId ? `El wizard usará la categoría elegida para "${template.name}" por defecto.` : `Se limpió la categoría por defecto de "${template.name}".` });
-    } catch (err: any) {
-      toast({ tone: 'error', title: 'No pudimos actualizar la categoría por defecto', description: err.message || 'Vuelve a intentarlo en un momento.' });
-    } finally {
-      setSavingTemplateCategoryId(null);
-    }
-  };
-
-  const handleTemplateStatusChange = async (client: Client, template: SpreadsheetTemplate, status: SpreadsheetTemplateImportStatus) => {
-    if (!client.id || !template.id) return;
-    if (status === 'archived' && !await confirm({
-      title: 'Archivar plantilla',
-      description: `«${template.name}» saldrá de las nuevas selecciones. Los lotes vinculados conservarán la plantilla.`,
-      confirmLabel: 'Archivar',
-    })) return;
-
-    setUpdatingTemplateStatusId(template.id);
-    try {
-      await setClientSpreadsheetTemplateStatus({ clientId: client.id, templateId: template.id, status, expectedStatus: template.status ?? 'active' });
-      toast({ tone: 'success', title: status === 'active' ? 'Plantilla activada' : status === 'archived' ? 'Plantilla archivada' : 'Plantilla desactivada' });
-    } catch (error) {
-      toast({ tone: 'error', title: 'No se pudo cambiar el estado de la plantilla', description: error instanceof Error ? error.message : undefined });
-    } finally {
-      setUpdatingTemplateStatusId(null);
-    }
-  };
-
   return {
     // state
     clients, templates, loading, error, pageInfo,
     newClientName, setNewClientName, newClientPrompt, setNewClientPrompt,
     isCreating, createSuccess,
-    uploadingTemplateClientId, savingTemplateCategoryId, updatingTemplateStatusId,
     // computed
     sortedTemplatesByClientId,
     // handlers
     handleCreate,
     handleArchive, handleRestore,
-    handleTemplateUpload, handleTemplateCategoryChange, handleTemplateStatusChange,
   };
 };

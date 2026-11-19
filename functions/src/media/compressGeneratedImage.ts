@@ -10,16 +10,18 @@ const OUTPUT_LONGEST_SIDES = [2200, 2000, 1800, 1600, 1400, 1200, 1000] as const
 
 export const compressGeneratedImageIfNeeded = async ({
   bytes,
-  contentType, photoProfile, imageConfig, syntheticPerformer, plannedPhoto,
+  contentType, photoProfile, imageConfig, syntheticPerformer, plannedPhoto, whiteBackground,
 }: {
   bytes: Buffer;
   contentType: string;
   syntheticPerformer?: boolean;
   plannedPhoto?: boolean;
+  /** Planned photo on a pure white background: near-white pixels are stored as RGB 255 (marketplace main-image rule). */
+  whiteBackground?: boolean;
   photoProfile?: CommercialPhotoProfile;
   imageConfig?: ProviderImageConfig | null;
 }): Promise<{ bytes: Buffer; contentType: string; storedImage?: StoredPhotoMetadata }> => {
-  if (photoProfile === COMMERCIAL_PHOTO_PROFILE) return normalizeCommercialPhoto(bytes, imageConfig, syntheticPerformer, plannedPhoto);
+  if (photoProfile === COMMERCIAL_PHOTO_PROFILE) return normalizeCommercialPhoto(bytes, imageConfig, syntheticPerformer, plannedPhoto, Boolean(plannedPhoto && whiteBackground));
   if (bytes.length <= MAX_STORED_OUTPUT_BYTES) {
     return { bytes, contentType };
   }
@@ -76,9 +78,22 @@ export const compressGeneratedImageIfNeeded = async ({
 
 // Resolution first, then quality: all qualities at a size precede a 10% reduction.
 // Every candidate decodes the original; no candidate JPEG is ever recompressed.
-const normalizeCommercialPhoto = async (bytes: Buffer, imageConfig?: ProviderImageConfig | null, syntheticPerformer = false, plannedPhoto = false) => {
+/** Providers render "white" studio backgrounds at 250–254. Snap near-white to RGB 255 so the stored JPEG has a pure white field. */
+export const NEAR_WHITE_THRESHOLD = 248;
+export async function snapNearWhite(bytes: Buffer) {
+  const { data, info } = await sharp(bytes, { failOn: 'warning' }).rotate().toColourspace('srgb').flatten({ background: '#ffffff' })
+    .removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let index = 0; index < data.length; index += 3) {
+    if (data[index] >= NEAR_WHITE_THRESHOLD && data[index + 1] >= NEAR_WHITE_THRESHOLD && data[index + 2] >= NEAR_WHITE_THRESHOLD) {
+      data[index] = 255; data[index + 1] = 255; data[index + 2] = 255;
+    }
+  }
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png({ compressionLevel: 1 }).toBuffer();
+}
+const normalizeCommercialPhoto = async (input: Buffer, imageConfig?: ProviderImageConfig | null, syntheticPerformer = false, plannedPhoto = false, whiteBackground = false) => {
+  const bytes = whiteBackground ? await snapNearWhite(input) : input;
   const policy = plannedPhoto ? { ...COMMERCIAL_PHOTO_STORAGE, maxSide: 1920 } : COMMERCIAL_PHOTO_STORAGE;
-  const original = await sharp(bytes, { failOn: 'warning' }).metadata();
+  const original = await sharp(input, { failOn: 'warning' }).metadata();
   if (!original.width || !original.height || (original.pages || 1) > 1) throw new Error('Imagen generada inválida o animada.');
   const swapped = [5, 6, 7, 8].includes(original.orientation || 1);
   const sourceWidth = swapped ? original.height : original.width;

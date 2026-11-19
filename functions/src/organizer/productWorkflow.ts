@@ -70,7 +70,7 @@ export async function readProductWorkflow(
   ]);
   const base = baseDoc.data() as OrganizerBaseProduct | undefined;
   const references = photos.map(photo => ({
-    id: photo.id, name: photo.get('name') || photo.id, sourceUrl: photo.get('copyUrl') || photo.get('sourceUrl') || null,
+    id: photo.id, name: photo.get('name') || photo.id, sourceUrl: photo.get('sourceUrl') || null,
     view: views.get(photo.id)!,
   }));
   const matched = new Map<string, Set<string>>();

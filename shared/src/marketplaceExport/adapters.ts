@@ -59,6 +59,50 @@ export const marketplaceSquareCandidates = (product: MasterProduct, variantId: s
     .sort((left, right) => Number(right.outputId === main) - Number(left.outputId === main));
 };
 
+/** Key used to match a source spreadsheet header to a template column: case, accents and the "(id)" suffix are ignored. */
+export const declaredColumnKey = (value: string) => normalizeMarketplaceColumnKey(value.replace(/\s*\(\d+(?:-\d+)?\)\s*$/, '').replace(/\[[^\]]*\]\s*$/, ''))
+  .replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+/** Prefix of variant attributes that carry extra columns of the client's commercial spreadsheet, by original header. */
+export const DECLARED_SHEET_ATTRIBUTE = 'sheet:';
+/** A column of the client's spreadsheet whose header equals the template column label or key (e.g. "Elasticidad de la tela"). */
+export function declaredSheetValue(variant: Pick<MasterVariant, 'attributes'>, column: Pick<SpreadsheetTemplateCategory['columns'][number], 'key' | 'label'>) {
+  const wanted = new Set([declaredColumnKey(column.label), declaredColumnKey(column.key)].filter(Boolean));
+  for (const [key, value] of Object.entries(variant.attributes || {})) {
+    if (key.startsWith(DECLARED_SHEET_ATTRIBUTE) && value.trim() && wanted.has(declaredColumnKey(key.slice(DECLARED_SHEET_ATTRIBUTE.length)))) return value.trim();
+  }
+  return '';
+}
+const UNIT_FACTORS: Record<string, Record<string, number>> = {
+  kg: { g: 1000, kg: 1, lb: 2.20462, oz: 35.274 }, g: { kg: 0.001, g: 1, lb: 0.00220462, oz: 0.035274 },
+  lb: { g: 453.592, kg: 0.453592, lb: 1, oz: 16 }, oz: { g: 28.3495, kg: 0.0283495, lb: 0.0625, oz: 1 },
+  m: { cm: 100, mm: 1000, in: 39.3701, m: 1 }, cm: { mm: 10, m: 0.01, in: 0.393701, cm: 1 },
+  mm: { cm: 0.1, m: 0.001, in: 0.0393701, mm: 1 }, in: { cm: 2.54, mm: 25.4, m: 0.0254, in: 1 },
+};
+const UNIT_GROUPS = [{ unit: 'weight_unit', values: ['weight'] }, { unit: 'length_unit', values: ['length', 'width', 'height'] }];
+/** The client's spreadsheet keeps its own units (kg, m); a template that only accepts g/cm receives converted values. */
+export function convertMeasurementUnits(category: SpreadsheetTemplateCategory, values: Record<string, string>, overrides: Record<string, string> = {}) {
+  for (const group of UNIT_GROUPS) {
+    const column = category.columns.find(item => item.key === group.unit);
+    const current = (values[group.unit] || '').trim().toLowerCase();
+    if (!column || !current || Object.hasOwn(overrides, group.unit) && overrides[group.unit].trim()) continue;
+    const allowed = getProductDraftColumnAllowedValues(category, column, values);
+    if (!allowed.length || allowed.includes(values[group.unit])) continue;
+    const target = allowed.find(option => UNIT_FACTORS[current]?.[option.trim().toLowerCase()] !== undefined);
+    if (!target) continue;
+    const factor = UNIT_FACTORS[current][target.trim().toLowerCase()];
+    for (const key of group.values) {
+      const number = Number((values[key] || '').replace(',', '.'));
+      if (values[key]?.trim() && Number.isFinite(number)) values[key] = String(Math.round(number * factor * 100) / 100);
+    }
+    values[group.unit] = target;
+  }
+}
+/** Declared product fields (MARCA, MATERIAL, COMPOSICIÓN of the client's spreadsheet) for template columns with the same name. */
+const declaredProductFields: Record<string, keyof MasterProduct['values']> = { material: 'material', marca: 'brand', composicion: 'composition' };
+export function declaredProductValue(product: Pick<MasterProduct, 'values'>, column: Pick<SpreadsheetTemplateCategory['columns'][number], 'label'>) {
+  const field = declaredProductFields[declaredColumnKey(column.label)];
+  return field ? product.values[field] || '' : '';
+}
 const sourceValue = (source: string, p: MasterProduct, v: MasterVariant, data: ProductMarketplaceData, rowIndex: number, template: SpreadsheetTemplate) => {
   const [kind, ...parts] = source.split('.'); const key = parts.join('.');
   if (kind === 'product') return p.values[key as keyof typeof p.values] ?? '';
@@ -117,7 +161,9 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         const outputId = approvedImageOutputId(product, id, variant.id, mapping?.source);
         if (outputId) imageOutputs.set(column.key, outputId);
         if (Object.prototype.hasOwnProperty.call(overrides, column.key) && overrides[column.key].trim()) return [column.key, overrides[column.key]];
-        const original = imageSource ? (outputId && data.imageUrls?.[outputId] || '') : sourceValue(mapping?.source || '', product, variant, data, rowIndex, template);
+        const original = imageSource ? (outputId && data.imageUrls?.[outputId] || '')
+          : sourceValue(mapping?.source || '', product, variant, data, rowIndex, template) || declaredSheetValue(variant, column)
+            || (mapping?.source.startsWith('legacy.') ? declaredProductValue(product, column) : '');
         const mapped = mapping?.valueMap && Object.prototype.hasOwnProperty.call(mapping.valueMap, original) ? mapping.valueMap[original] : original;
         return [column.key, mapped];
       }));
@@ -146,6 +192,8 @@ const createAdapter = (id: MarketplaceId, aliases: Record<string, string>): Mark
         const matches = allowed.filter(option => normalize(option) === normalize(value));
         if (matches.length === 1) values[column.key] = matches[0];
       };
+      // Before options are resolved, so autofill never picks a unit without converting its numbers.
+      convertMeasurementUnits(category, values, overrides);
       columnsToResolve.forEach(resolveOption);
       for (const column of category.columns) {
         const mapping: TemplateColumnMapping | undefined = mappings[column.key];

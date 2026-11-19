@@ -1,6 +1,12 @@
 import type { TimestampLike, CatalogEntityStatus } from './common';
 
+export interface ClientContact {
+  name: string;
+  email: string;
+}
+
 export interface Client {
+  contacts?: ClientContact[];
   id?: string;
   name: string;
   marketplaces?: Partial<Record<import('../marketplaces').MarketplaceId, import('./marketplace').ClientMarketplaceConfig>>;

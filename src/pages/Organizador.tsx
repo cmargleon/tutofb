@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { FolderKanban, ChevronRight, CircleAlert, FolderOpen, Images, Play } from 'lucide-react';
-import { ORGANIZER_DEFAULT_BUDGET_USD, ORGANIZER_DEFAULT_MODEL, ORGANIZER_DIRECTORIES,
+import { FolderKanban, ChevronRight, CircleAlert, Images, Play } from 'lucide-react';
+import { ORGANIZER_DEFAULT_BUDGET_USD, ORGANIZER_DEFAULT_MODEL, type OrganizerIdentityMode,
   type OrganizerConfig, type OrganizerInterpretation, type OrganizerPlanItem, type OrganizerPhoto, type OrganizerProductRow, type OrganizerPage,
   type OrganizerRun, type OrganizerSettings, type OrganizerTab, type OrganizerVariant } from '../../shared/src/types';
 import { Button, LoadingBlock, PageHeader } from '../components/ui';
@@ -23,19 +23,30 @@ const statuses: Record<string, string> = {
 };
 const documentState = { ok: 'OK', pending: 'Pendiente', review: 'En revisión', unrecorded: 'Sin registro' };
 const phases: Record<OrganizerRun['phase'], string> = {
-  inventory: 'Inventario', catalog: 'Asociación', copy: 'Copias', vision: 'Análisis visual', organize: 'Organización', automation: 'Envío a automatización', report: 'Reporte',
+  inventory: 'Inventario', catalog: 'Asociación', copy: 'Análisis visual', vision: 'Análisis visual', organize: 'Envío a automatización', automation: 'Envío a automatización', report: 'Reporte',
 };
 const metrics: Record<string, string> = {
   files: 'Archivos', folders: 'Carpetas', new: 'Nuevos', modified: 'Modificados', photos: 'Fotos', workbooks: 'Libros',
-  copied: 'Copias', verified: 'Verificadas', products: 'Productos', variants: 'Variantes', skcs: 'SKC', skus: 'SKU',
+  products: 'Productos', variants: 'Variantes', skcs: 'SKC', skus: 'SKU',
   associated: 'Asociadas', unassigned: 'Sin asignar', conflicts: 'Incidencias', errors: 'Errores',
   automationJobs: 'Artículos enviados a automatización', automationPhotos: 'Fotos nuevas procesadas', automationNeedsReview: 'Fotos pendientes de revisión para generar',
   automationSkippedPhotos: 'Fotos organizadas sin generación automática',
   selectedReferences: 'Referencias seleccionadas', missingReferences: 'Referencias pendientes', productsWithoutPhotos: 'Productos sin fotos', sharedPhotos: 'Fotos compartidas', humanReviewed: 'Revisión humana', identityNeedsReview: 'Decisiones por revalidar', inaccessibleSources: 'Fuentes inaccesibles',
 };
+const identityModes: Record<OrganizerIdentityMode, string> = {
+  legacy: 'Actual (carpetas, nombres y fotos vecinas)',
+  shadow: 'Sombra: calcula el código base sin aplicarlo',
+  baseCode: 'Código base en el nombre de la foto',
+};
+const methods: Record<string, string> = {
+  codigo_variante: 'Código de variante en el nombre', codigo_base_unico: 'Código base (variante única)', codigo_base: 'Código base · variante por IA',
+  gemini_variante: 'Variante elegida por IA entre las del producto', sin_codigo: 'Sin código reconocible', codigo_base_conflicto: 'Código base duplicado en el Excel',
+  varios_codigos: 'Código presente en varias variantes', concordancia_fallida: 'No coincide con el producto declarado', manual: 'Revisión humana',
+};
+const baseOf = (photo: OrganizerPhoto) => photo.baseCodeIdentity?.baseCode || '';
 const views: { id: CatalogView; label: string }[] = [
   { id: 'products', label: 'Productos' }, { id: 'photos', label: 'Fotografías' }, { id: 'conflicts', label: 'Conflictos' },
-  { id: 'tabs', label: 'Pestañas de origen' }, { id: 'plan', label: 'Plan de cambios' }, { id: 'interpretations', label: 'Interpretación de estructura' }, { id: 'runs', label: 'Historial' },
+  { id: 'tabs', label: 'Pestañas de origen' }, { id: 'plan', label: 'Vista previa' }, { id: 'interpretations', label: 'Interpretación de estructura' }, { id: 'runs', label: 'Historial' },
 ];
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -45,20 +56,22 @@ function GenerateFromOriginals({ disabled, start }: { disabled: boolean; start: 
   const [value, setValue] = useState('');
   const ids = value.trim().split(/\s+/).filter(Boolean).map(entry =>
     entry.match(/^https:\/\/drive\.google\.com\/file\/d\/([\w-]+)(?:\/[^\s]*)?$/)?.[1] || entry);
-  const valid = ids.length > 0 && ids.length <= 4 && ids.every(id => /^[\w-]{1,200}$/.test(id));
+  // Empty = every photo of the folder not generated yet, as one batch per item type (garments / objects).
+  const valid = ids.length <= 100 && ids.every(id => /^[\w-]{1,200}$/.test(id));
   return <details className={pane}>
     <summary className="cursor-pointer font-semibold">Generar desde originales de Drive</summary>
     <form className="mt-3 space-y-3" onSubmit={event => { event.preventDefault(); if (valid) start(ids); }}>
       <Field label="Enlaces o IDs de las fotos originales">
         <textarea className={input} rows={2} value={value} onChange={event => setValue(event.target.value)}
-          placeholder="Hasta cuatro fotos del mismo artículo, una por línea" />
+          placeholder="Vacío: todas las fotos nuevas de la carpeta. O pega hasta 100 enlaces/IDs, uno por línea." />
       </Field>
-      <Button type="submit" disabled={disabled || !valid}>Preparar generación</Button>
+      <p className="text-xs text-slate-500">Todo lo nuevo se genera en un solo lote por tipo (prendas y objetos) y se exporta en una sola descarga.</p>
+      <Button type="submit" disabled={disabled || !valid}>{ids.length ? `Generar ${ids.length} foto(s)` : 'Generar todas las fotos nuevas'}</Button>
     </form>
   </details>;
 }
-function Setup({ config, clientName, driveFolderIds, busy, save }: {
-  config: OrganizerConfig | null; clientName: string; driveFolderIds: string[]; busy: boolean; save: (settings: OrganizerSettings) => void;
+function Setup({ config, driveFolderIds, busy, save }: {
+  config: OrganizerConfig | null; driveFolderIds: string[]; busy: boolean; save: (settings: OrganizerSettings) => void;
 }) {
   const sourceOptions = [...new Set([...driveFolderIds, ...(config?.sourceIds ?? [])])];
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -66,11 +79,12 @@ function Setup({ config, clientName, driveFolderIds, busy, save }: {
     const data = new FormData(event.currentTarget);
     const get = (name: string) => String(data.get(name) || '').trim();
     const values = (name: string) => get(name).split(/[\n,]+/).map(value => value.trim()).filter(Boolean);
-    save({ sourceIds: data.getAll('sourceIds').map(String), parentId: get('parent') || config?.parentId || '', folderName: get('name') || config?.folderName || '',
+    save({ sourceIds: data.getAll('sourceIds').map(String),
       debounceMinutes: Number(get('debounce')), budgetUsd: Number(get('budget')), model: get('model'), escalationModel: get('escalation') || null,
-      enabled: data.has('enabled'), controlSheet: data.has('control'), allowInheritedAccess: data.has('inherit'),
+      enabled: data.has('enabled'), controlSheet: data.has('control'),
       minimumConfidence: Number(get('confidence')), maxCalls: Number(get('maxCalls')), operatorUids: values('operators'),
-      directories: Object.fromEntries(Object.keys(ORGANIZER_DIRECTORIES).map(key => [key, get(key)])) as typeof ORGANIZER_DIRECTORIES });
+      budgetCapUsd: Number(get('budgetCap')), maxCallsCap: Number(get('maxCallsCap')),
+      identityMode: (get('identityMode') || 'legacy') as OrganizerIdentityMode });
   };
   return <details className={pane} open={!config || undefined}>
     <summary className="cursor-pointer font-semibold text-slate-900">Configuración de Drive y vigilancia</summary>
@@ -89,11 +103,16 @@ function Setup({ config, clientName, driveFolderIds, busy, save }: {
             </span>
           </label>)}</div>}
       </fieldset>
-      <Field label="Carpeta contenedora para copias y vigilancia"><input className={input} name="parent" disabled={Boolean(config?.destinationId)} defaultValue={config?.parentId} placeholder="Opcional para generar desde originales" /></Field>
-      <Field label="Nombre de la carpeta organizada"><input className={input} name="name" required disabled={Boolean(config?.destinationId)} defaultValue={config?.folderName || `${clientName} - ORGANIZADO POR MANGLAR`} /></Field>
       <Field label="Ventana de agrupación en minutos"><input className={input} name="debounce" type="number" min="2" max="1440" required defaultValue={config?.debounceMinutes ?? 10} /></Field>
       <Field label="Presupuesto estimado por ejecución en USD"><input className={input} name="budget" type="number" min=".11" max="40" step=".01" required defaultValue={config?.budgetUsd ?? ORGANIZER_DEFAULT_BUDGET_USD} /></Field>
       <Field label="Límite de llamadas por ejecución"><input className={input} name="maxCalls" type="number" min="1" max="1000" required defaultValue={config?.maxCalls ?? 300} /></Field>
+      <Field label="Presupuesto máximo por ejecución grande en USD"><input className={input} name="budgetCap" type="number" min=".11" max="500" step=".01" required defaultValue={config?.budgetCapUsd ?? Math.max(40, config?.budgetUsd ?? 0)} /></Field>
+      <Field label="Máximo absoluto de llamadas por ejecución"><input className={input} name="maxCallsCap" type="number" min="1" max="20000" required defaultValue={config?.maxCallsCap ?? Math.max(5000, config?.maxCalls ?? 0)} /></Field>
+      <p className="text-xs text-slate-600 sm:col-span-2">Cada ejecución empieza con el presupuesto y el límite de llamadas de arriba y los amplía según las fotos que analiza (≈ USD 0.005 y 2 llamadas por foto con gemini-3.1-flash-lite), sin superar estos máximos. Así una carpeta de 1000 fotos termina sin confirmaciones.</p>
+      <Field label="Identificación de fotos"><select className={input} name="identityMode" defaultValue={config?.identityMode || 'legacy'}>
+        {Object.entries(identityModes).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+      </select></Field>
+      <p className="self-end text-xs text-slate-600">Con código base, cada foto empieza con el código del producto declarado en el Excel (columna «Código base» o SPU). Las carpetas son libres; la IA elige la variante solo entre las del producto y lo dudoso queda como excepción.</p>
       <Field label="Confianza mínima"><input className={input} name="confidence" type="number" min=".55" max=".99" step=".01" required defaultValue={config?.minimumConfidence ?? .75} /></Field>
       <Field label="Modelo Gemini principal"><select className={input} name="model" defaultValue={config?.model || ORGANIZER_DEFAULT_MODEL}>
         {[ORGANIZER_DEFAULT_MODEL, 'gemini-3-flash-preview', 'gemini-3.1-pro-preview'].map(model => <option key={model}>{model}</option>)}
@@ -104,21 +123,15 @@ function Setup({ config, clientName, driveFolderIds, busy, save }: {
       <Field label="UID de operadores o revisores · uno por línea"><textarea className={input} name="operators" rows={2} defaultValue={config?.operatorUids.join('\n')} /></Field>
       <div className="grid content-start gap-2 text-sm text-slate-700">
         <label><input name="enabled" type="checkbox" defaultChecked={config?.enabled} /> Activar vigilancia automática</label>
-        <p className="text-xs text-slate-600">Si está activado en Sistema y en la ficha del cliente, las fotos nuevas pasan a generación después de organizarse, aunque no coincidan con el Excel. Se usan el modelo, preset y presupuesto de automatización del cliente.</p>
-        <label><input name="control" type="checkbox" defaultChecked={config?.controlSheet} /> Crear Google Sheet de control</label>
-        <label><input name="inherit" type="checkbox" defaultChecked={config?.allowInheritedAccess} /> Autorizar el acceso heredado de la carpeta o unidad compartida</label>
+        <p className="text-xs text-slate-600">El Organizador solo lee Drive. Con generación habilitada por cliente o en Sistema, las fotos nuevas pasan a automatización y sus referencias se guardan en Tuto. Se usan el modelo, preset y presupuesto de automatización del cliente.</p>
+        <label><input name="control" type="checkbox" defaultChecked={config?.controlSheet} /> Preparar hoja de control descargable</label>
       </div>
-      <details className="sm:col-span-2">
-        <summary className="cursor-pointer text-sm font-medium">Nombres de las carpetas de salida</summary>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">{Object.entries(ORGANIZER_DIRECTORIES).map(([key, name]) =>
-          <div key={key}><Field label={name}><input className={input} name={key} required defaultValue={config?.directories[key as keyof typeof ORGANIZER_DIRECTORIES] || name} /></Field></div>)}</div>
-      </details>
       <div><Button type="submit" loading={busy}>Guardar configuración</Button></div>
     </form>
   </details>;
 }
 
-function RunCard({ run, controller, busy, canRun, active }: { run: OrganizerRun; controller: (action: 'pause' | 'resume' | 'cancel') => void; busy: boolean; canRun: boolean; active: boolean }) {
+function RunCard({ run, controller, download, busy, canRun, active }: { run: OrganizerRun; controller: (action: 'pause' | 'resume' | 'cancel') => void; download: (id: string, kind: 'reportUrl' | 'controlSheetUrl') => void; busy: boolean; canRun: boolean; active: boolean }) {
   return <section className={pane} aria-label="Estado de ejecución">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><p className="text-xs font-semibold uppercase tracking-widest text-slate-500">{phases[run.phase]}</p>
@@ -136,12 +149,12 @@ function RunCard({ run, controller, busy, canRun, active }: { run: OrganizerRun;
       <progress aria-label="Presupuesto estimado de Gemini" className="mt-2 h-2 w-full accent-indigo-600" max={run.budgetUsd} value={run.estimatedUsd + run.uncertainUsd + run.reservedUsd} />
       <p className="mt-1 text-xs text-slate-500">{run.calls} llamadas{run.alerts.length ? ` · Umbrales alcanzados: ${run.alerts.join(' %, ')} %` : ''}</p>
     </div>}
-    <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">{Object.entries(run.counts).map(([key, value]) =>
+    <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">{Object.entries(run.counts).filter(([key]) => !['copied', 'verified'].includes(key)).map(([key, value]) =>
       <div className="rounded-lg border border-slate-100 p-2.5" key={key}><dt className="text-xs text-slate-500">{metrics[key] || key}</dt><dd className="font-semibold tabular-nums">{value}</dd></div>)}</dl>
     <div className="mt-3 flex flex-wrap gap-4">
       {run.counts.automationJobs > 0 && <Link className={link} to="/automation">Ver automatización</Link>}
-      {run.reportUrl && <a className={link} href={run.reportUrl} target="_blank" rel="noreferrer">Abrir reporte JSON</a>}
-      {run.controlSheetUrl && <a className={link} href={run.controlSheetUrl} target="_blank" rel="noreferrer">Abrir hoja de control</a>}
+      {run.status === 'completed' && <Button variant="ghost" size="sm" disabled={busy} onClick={() => download(run.id, 'reportUrl')}>Descargar reporte JSON</Button>}
+      {run.controlSheetUrl && <Button variant="ghost" size="sm" disabled={busy} onClick={() => download(run.id, 'controlSheetUrl')}>Descargar hoja de control</Button>}
       <Button variant="ghost" size="sm" onClick={() => {
         const url = URL.createObjectURL(new Blob([JSON.stringify(run, null, 2)], { type: 'application/json' }));
         const anchor = document.createElement('a'); anchor.href = url; anchor.download = `organizador-${run.id.slice(0, 8)}.json`; anchor.click();
@@ -182,12 +195,11 @@ export function Organizador() {
         <p className="mt-1 text-[var(--color-text-muted)]">Última comprobación · {date(config.lastPollAt)}</p>
         <p className="mt-1 text-[var(--color-text-muted)]">Última sincronización · {date(config.lastSyncAt)}</p>
         <p className="mt-1 text-[var(--color-text-muted)]">Última clasificación · {date(config.lastClassifiedAt)}</p>
-        {config.destinationId && <a className="tuto-link mt-2 inline-flex items-center gap-1" href={`https://drive.google.com/drive/folders/${config.destinationId}`} target="_blank" rel="noreferrer"><FolderOpen size={16} /> Carpeta organizada</a>}
       </div>}
     </section>
     {(state.loadError || config?.watcherError) && <p role="alert" className="tuto-alert tuto-alert--warning"><CircleAlert size={18} /> {state.loadError || config?.watcherError}</p>}
     {!isFicha && access.isAdmin && client && <p className="text-sm text-slate-600">La generación posterior se configura en <Link className={link} to={`/clients/${encodeURIComponent(clientId)}?tab=automatizaciones`}>Cliente → Automatizaciones</Link>.</p>}
-    {!isFicha && access.isAdmin && client && !locked && <div key={`${clientId}-${config?.destinationId || 'setup'}-${config ? 'saved' : 'new'}`}><Setup config={config} clientName={client.name} driveFolderIds={client.driveFolderIds ?? []} busy={busy} save={state.save} /></div>}
+    {!isFicha && access.isAdmin && client && !locked && <div key={`${clientId}-${config ? 'saved' : 'new'}`}><Setup config={config} driveFolderIds={client.driveFolderIds ?? []} busy={busy} save={state.save} /></div>}
     {isFicha && <div className="space-y-3">
       <Link className="tuto-link text-sm" to={`/organizador?${new URLSearchParams({ clientId })}`}>Volver a productos</Link>
       {!detail && <LoadingBlock message="Cargando ficha del producto…" />}
@@ -204,7 +216,7 @@ export function Organizador() {
       </div>}
       {!isFicha && access.canCreateBatches && <GenerateFromOriginals key={clientId} disabled={busy || locked || !hasSources}
         start={photoIds => void state.start('generate', { photoIds })} />}
-      {!isFicha && run && <RunCard run={run} controller={state.control} busy={busy} canRun={access.canCreateBatches} active={run.id === config.activeRunId} />}
+      {!isFicha && run && <RunCard run={run} controller={state.control} download={state.downloadReport} busy={busy} canRun={access.canCreateBatches} active={run.id === config.activeRunId} />}
       <section className={pane} aria-label="Catálogo organizado">
         <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-4">{views.filter(view => !isFicha || view.id === 'products' || view.id === 'photos').map(view =>
           <Button key={view.id} variant={state.view === view.id ? 'primary' : 'ghost'} size="sm" onClick={() => { setProvenance(null); state.selectView(view.id, variantId); }}>{view.label}</Button>)}</div>
@@ -248,22 +260,31 @@ export function Organizador() {
               {provenance.page.next && <Button size="sm" variant="secondary" onClick={() => showProvenance(item.id, provenance.page.next!)}>Más filas</Button>}
             </div>}
           </li>)}
-          {(state.view === 'photos' || state.view === 'conflicts') && (state.page.items as OrganizerPhoto[]).map(item => <li key={item.id} className="space-y-2 py-4">
+          {(state.view === 'photos' || state.view === 'conflicts') && (config.identityMode === 'baseCode'
+            ? [...state.page.items as OrganizerPhoto[]].sort((a, b) => baseOf(a).localeCompare(baseOf(b)) || a.name.localeCompare(b.name))
+            : state.page.items as OrganizerPhoto[]).map((item, index, list) => <li key={item.id} className="space-y-2 py-4">
+            {config.identityMode === 'baseCode' && (index === 0 || baseOf(list[index - 1]) !== baseOf(item)) && <p className="tuto-overline">
+              {baseOf(item) ? `Producto base ${baseOf(item)} · ${list.filter(other => baseOf(other) === baseOf(item)).length} fotos en esta página` : 'Sin código base reconocible'}
+            </p>}
             <h3 className="font-semibold">{item.name}</h3>
-            <p className="break-words text-xs text-slate-500">{item.path.join(' / ')} · {item.method} · {Math.round(item.confidence * 100)} %</p>
+            {item.baseCodeIdentity && <p className="text-xs text-slate-600">
+              {config.identityMode === 'shadow' ? 'Sombra · ' : ''}{item.baseCodeIdentity.baseCode ? `Código base ${item.baseCodeIdentity.baseCode}` : 'Sin código base'} · {methods[item.baseCodeIdentity.method] || item.baseCodeIdentity.method}
+              {item.concordance && ` · ${item.concordance.matches ? 'Concordancia visual verificada' : `Concordancia fallida: ${item.concordance.reason}`}`}
+            </p>}
+            <p className="break-words text-xs text-slate-500">{item.path.join(' / ')} · {methods[item.method] || item.method} · {Math.round(item.confidence * 100)} %</p>
             {item.issue && <p className="text-sm text-amber-800">{item.issue}</p>}
             {item.visualHint && <p className="text-xs text-slate-600">Grupo visual sugerido · {[item.visualHint.label, item.visualHint.color, item.visualHint.pack, item.visualHint.groupId.slice(0, 8)].filter(Boolean).join(' · ')}</p>}
             {item.evidence.length > 0 && <p className="text-xs text-slate-600">{item.evidence.join(' · ')}</p>}
             
             <div className="flex flex-wrap items-center gap-3">
               <a className={link} href={item.sourceUrl} target="_blank" rel="noreferrer">Origen</a>
-              {item.copyUrl && <a className={link} href={item.copyUrl} target="_blank" rel="noreferrer">Copia</a>}
               {access.canCreateBatches && !state.simulation && <Button size="sm" variant="ghost" disabled={busy || locked || Boolean(state.simulation)} onClick={() => state.start('classify', { photoIds: [item.id] })}>Reanalizar</Button>}
               {access.canCreateBatches && <Button size="sm" variant="ghost" disabled={busy || locked} onClick={() => state.start('generate', { photoIds: [item.id] })}>Generar desde original</Button>}
             </div>
             <PhotoReview clientId={clientId} photo={item} products={state.products} disabled={locked || busy || Boolean(state.simulation)}
-              group={(state.page.items as OrganizerPhoto[]).filter(other => other.path.slice(0, -1).join('/') === item.path.slice(0, -1).join('/') &&
-                [...other.candidates].sort().join() === [...item.candidates].sort().join()).map(other => other.id).slice(0, 25)}
+              group={(state.page.items as OrganizerPhoto[]).filter(other => config.identityMode === 'baseCode' && item.baseCodeIdentity?.baseId
+                ? other.baseCodeIdentity?.baseId === item.baseCodeIdentity.baseId
+                : other.path.slice(0, -1).join('/') === item.path.slice(0, -1).join('/') && [...other.candidates].sort().join() === [...item.candidates].sort().join()).map(other => other.id).slice(0, 25)}
               correct={async (variantIds, photoIds, referenceVariantIds) => {
                 if (await state.perform({ action: 'correct', clientId, photoId: item.id, variantId: variantIds.length === 1 ? variantIds[0] : null, variantIds, photoIds, referenceVariantIds }, 'Asociación guardada; se conservaron las excepciones humanas')) state.refresh();
               }} />
@@ -279,9 +300,8 @@ export function Organizador() {
             {item.links?.map((source, index) => <p key={index} className="text-xs"><a className={link} href={source.url} target="_blank" rel="noreferrer">Fuente adicional · {source.cell}</a> · {source.sourceId && config.sourceIds.includes(source.sourceId) ? 'Origen seleccionado' : 'Requiere autorización y selección en Clientes; no se importa automáticamente'}</p>)}
           </li>)}
           {state.view === 'plan' && (state.page.items as OrganizerPlanItem[]).map(item => <li key={item.id} className="space-y-1 py-3">
-            <h3 className="font-semibold">{item.name} · {{ copy: 'Copiar', place: 'Organizar', reuse: 'Reutilizar', retain_legacy: 'Conservar destino existente' }[item.action]}</h3>
-            <p className="text-xs text-slate-600">{item.sourcePath.join(' / ')} → {item.destination.join(' / ')}</p><p className="text-sm">{item.reason}</p>
-            {item.currentFolderUrl && <a className={link} href={item.currentFolderUrl} target="_blank" rel="noreferrer">Ubicación actual de la copia</a>}
+            <h3 className="font-semibold">{item.name} · Leer original</h3>
+            <p className="text-xs text-slate-600">{item.sourcePath.join(' / ')}{item.destination.length > 0 && ` · Catálogo: ${item.destination.join(', ')}`}</p><p className="text-sm">{item.reason}</p>
           </li>)}
           {state.view === 'interpretations' && (state.page.items as OrganizerInterpretation[]).map((item, index) => <li key={index} className="space-y-1 py-3">
             <h3 className="font-semibold">{item.resolved ? 'Interpretación con evidencia' : 'Estructura por resolver'}</h3>
@@ -291,7 +311,7 @@ export function Organizador() {
           </li>)}
           {state.view === 'runs' && (state.page.items as OrganizerRun[]).map(item => <li key={item.id} className="flex items-center justify-between gap-2 py-3">
             <span className="text-sm">{date(item.createdAt)} · {statuses[item.status]} · {item.id.slice(0, 8)}</span>
-            <Button size="sm" variant="ghost" icon={ChevronRight} onClick={() => state.setRun(item)}>Detalles</Button>
+            <Button size="sm" variant="ghost" icon={ChevronRight} onClick={async () => { const selected = await state.perform<OrganizerRun>({ action: 'run', clientId, runId: item.id }); if (selected) state.setRun(selected); }}>Detalles</Button>
           </li>)}
         </ul>
         {state.page.next && <Button className="mt-4" variant="secondary" disabled={busy} onClick={state.loadMore}>Cargar más</Button>}

@@ -2,20 +2,21 @@ import React, { Suspense, lazy } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { Client } from '../../shared/src/types';
 import { History } from 'lucide-react';
-import { LoadingBlock, EmptyState, SectionNav, Page, Card, CardHeader, CardBody, SectionHeading, Alert, buttonClasses } from '../components/ui';
+import { LoadingBlock, EmptyState, SectionNav, Page, Card, CardHeader, CardBody, SectionHeading, Alert, Button, buttonClasses } from '../components/ui';
 import { useClientManagement } from '../features/clients/useClientManagement';
 import { useClientAutomationConfig } from '../features/automation/useClientAutomationConfig';
 import { clientListUrl } from '../features/clients/clientListState';
 import { ClientDetailHeader } from '../components/clients/ClientDetailHeader';
 import { ClientOverview } from '../components/clients/ClientOverview';
 import { ClientMarketplaces } from '../features/marketplaces/ClientMarketplaces';
+import { ClientContacts } from '../components/clients/ClientContacts';
+import { ClientEmail } from '../components/clients/ClientEmail';
 import { ClientSettings } from '../components/clients/ClientSettings';
-import { ClientSpreadsheetSection } from '../components/clients/ClientSpreadsheetSection';
 import { ClientAutomationFields, ClientAutomationSave, ClientDriveFolders } from '../components/clients/ClientAutomationSection';
 
 const ClientCatalog = lazy(() => import('./Catalogo').then(module => ({ default: module.Catalogo })));
 
-const TABS = [['resumen', 'Resumen'], ['productos', 'Productos'], ['marketplaces', 'Marketplaces'], ['fuentes', 'Fuentes de datos'], ['automatizaciones', 'Automatizaciones'], ['configuracion', 'Configuración'], ['historial', 'Historial']] as const;
+const TABS = [['resumen', 'Resumen'], ['contactos', 'Contactos'], ['correos', 'Correos'], ['productos', 'Productos'], ['marketplaces', 'Marketplaces'], ['fuentes', 'Fuentes de datos'], ['automatizaciones', 'Automatizaciones'], ['configuracion', 'Configuración'], ['historial', 'Historial']] as const;
 
 const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typeof useClientManagement> }> = ({ client, management }) => {
   const automation = useClientAutomationConfig(client);
@@ -33,6 +34,15 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
       <h2 className="sr-only">Resumen</h2>
       <ClientOverview client={client} templates={templates} onOpenTab={changeTab} />
     </section>
+
+    <section hidden={active !== 'contactos'} aria-label="Contactos">
+      <Card className="overflow-hidden rounded-2xl">
+        <CardHeader title="Contactos" description="Personas de contacto del cliente, con su nombre y correo electrónico." />
+        <CardBody><ClientContacts client={client} /></CardBody>
+      </Card>
+    </section>
+
+    {active === 'correos' && <section aria-label="Correos"><ClientEmail key={client.id} client={client} /></section>}
 
     <section hidden={active !== 'productos'} aria-label="Productos">
       <SectionHeading title="Productos" description="Fotografías generadas y fichas de producto del cliente." actions={<Link className={buttonClasses('secondary', 'sm')} to={`/catalogo?clientId=${encodeURIComponent(client.id!)}`}>Abrir catálogo de {client.name} →</Link>} />
@@ -52,7 +62,7 @@ const ClientDetailContent: React.FC<{ client: Client; management: ReturnType<typ
           <ClientDriveFolders state={automation} disabled={archived || automation.saving} />
         </CardBody>
       </Card>
-      <ClientSpreadsheetSection client={client} templates={templates} uploadingTemplateClientId={management.uploadingTemplateClientId} savingTemplateCategoryId={management.savingTemplateCategoryId} updatingTemplateStatusId={management.updatingTemplateStatusId} onUpload={management.handleTemplateUpload} onCategoryChange={management.handleTemplateCategoryChange} onStatusChange={management.handleTemplateStatusChange} />
+      <Alert tone="info" action={<Button size="sm" variant="secondary" onClick={() => changeTab('marketplaces')}>Ir a Marketplaces</Button>}>Las plantillas Excel del cliente se gestionan por marketplace y son la fuente de verdad (estructura, categorías y mapeos) para el wizard y la exportación.</Alert>
     </section>
 
     <section hidden={active !== 'automatizaciones'} aria-label="Automatizaciones">

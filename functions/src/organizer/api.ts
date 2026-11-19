@@ -3,7 +3,7 @@ import { assertHumanClientAccess, loadHumanClientIds } from '../auth/clientAcces
 import { FieldPath, Filter } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import sharp from 'sharp';
-import { ORGANIZER_DEFAULT_BUDGET_USD, ORGANIZER_DEFAULT_MODEL, ORGANIZER_DIRECTORIES,
+import { ORGANIZER_DEFAULT_BUDGET_USD, ORGANIZER_DEFAULT_MODEL, ORGANIZER_IDENTITY_MODES,
   type OrganizerInterpretation, type OrganizerPlanItem, type OrganizerBaseProduct, type OrganizerCommercialVariant, type OrganizerDraft, type OrganizerLedgerItem, type OrganizerRunFile, type OrganizerPhoto, type OrganizerProductRow, type OrganizerRequest, type OrganizerResponse,
   type OrganizerRun, type OrganizerSettings, type OrganizerTab, type OrganizerVariant, type Role } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
@@ -12,9 +12,14 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { assertClientAccess, delegatedStamp } from '../manglar/access';
 import type { DelegatedCaller } from '../manglar/context';
 import { OrganizerDrive, digest, versionOf, type DriveEntry } from './drive';
-import { checkedId, clientRef, configs, defaultConfig, enqueue, listPage, publicConfig, publicRun, requiresCopy, runRef, type StoredConfig, type StoredRun } from './store';
+import { checkedId, clientRef, configs, defaultConfig, enqueue, listPage, publicConfig, publicRun, requiresAnalysis, runRef, type StoredConfig, type StoredRun } from './store';
 import { MODEL_PRICES } from './vision';
+import { BUDGET_CAP_LIMIT_USD, DEFAULT_BUDGET_CAP_USD, DEFAULT_MAX_CALLS_CAP, MAX_CALLS_CAP_LIMIT } from './limits';
 import { photoDecisionKey } from './planning';
+import { contentVersionOf } from './baseCode';
+import { identityModeOf } from './baseCodeVision';
+import { freezeOriginal } from './source';
+import { reportLinks } from './reports';
 
 type Actor = { uid: string; role: Role; delegated?: DelegatedCaller };
 const actions = ['clients', 'config', 'configure', 'start', 'run', 'pause', 'resume', 'cancel', 'report',
@@ -28,11 +33,6 @@ const text = (input: unknown, fallback: string, max = 120) => {
   const value = input === undefined ? fallback : typeof input === 'string' ? input.trim() : '';
   if (!value || value.length > max || /[\u0000-\u001f]/.test(value)) throw new HttpsError('invalid-argument', 'Texto de configuración inválido.');
   return value;
-};
-const folderName = (input: unknown, fallback: string) => {
-  const name = text(input, fallback);
-  if (/[\\/]/.test(name)) throw new HttpsError('invalid-argument', 'Usa un nombre de carpeta sin separadores.');
-  return name;
 };
 const number = (input: unknown, fallback: number, min: number, max: number, integer = false) => {
   const value = input ?? fallback;
@@ -48,28 +48,34 @@ const driveId = (input: unknown) => {
   if (typeof input !== 'string') return checkedId(input);
   return checkedId(input.trim().match(/^https:\/\/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([\w-]+)(?:\?[^#]*)?$/)?.[1] || input.trim());
 };
-const validateSettings = (input: OrganizerSettings, name: string): OrganizerSettings => {
+const validateSettings = (input: OrganizerSettings): OrganizerSettings => {
   if (!input || typeof input !== 'object' || !Array.isArray(input.sourceIds) || input.sourceIds.length > 20)
     throw new HttpsError('invalid-argument', 'Selecciona hasta 20 carpetas de origen.');
   const sourceIds = [...new Set(input.sourceIds.map(driveId))].sort();
   const enabled = bool(input.enabled);
-  const parentId = input.parentId ? driveId(input.parentId) : '';
   if (enabled && !sourceIds.length) throw new HttpsError('invalid-argument', 'Selecciona al menos un origen para activar la vigilancia.');
-  if (enabled && !parentId) throw new HttpsError('invalid-argument', 'Configura el destino de las copias para activar la vigilancia.');
   const operatorUids = input.operatorUids ?? [];
   if (!Array.isArray(operatorUids) || operatorUids.length > 100) throw new HttpsError('invalid-argument', 'Lista de operadores inválida.');
   const model = text(input.model, ORGANIZER_DEFAULT_MODEL);
   const escalationModel = input.escalationModel ? text(input.escalationModel, '') : null;
   if (!Object.hasOwn(MODEL_PRICES, model) || escalationModel && !Object.hasOwn(MODEL_PRICES, escalationModel))
     throw new HttpsError('invalid-argument', 'Modelo Gemini sin tarifa configurada.');
-  const directories = Object.fromEntries(Object.entries(ORGANIZER_DIRECTORIES).map(([key, value]) =>
-    [key, folderName(input.directories?.[key as keyof typeof ORGANIZER_DIRECTORIES], value)])) as typeof ORGANIZER_DIRECTORIES;
-  if (new Set(Object.values(directories)).size !== Object.keys(directories).length) throw new HttpsError('invalid-argument', 'Las carpetas de organización deben tener nombres distintos.');
-  return { sourceIds, parentId, folderName: folderName(input.folderName, `${name} - ORGANIZADO POR MANGLAR`),
+  const budgetUsd = Math.round(number(input.budgetUsd, ORGANIZER_DEFAULT_BUDGET_USD, 0.11, 40) * 100) / 100;
+  const maxCalls = number(input.maxCalls, 300, 1, 1000, true);
+  // Caps bound the per-photo scaling of each run; they can never be below the configured floor.
+  const budgetCapUsd = Math.round(number(input.budgetCapUsd, Math.max(DEFAULT_BUDGET_CAP_USD, budgetUsd), budgetUsd, BUDGET_CAP_LIMIT_USD) * 100) / 100;
+  const maxCallsCap = number(input.maxCallsCap, Math.max(DEFAULT_MAX_CALLS_CAP, maxCalls), maxCalls, MAX_CALLS_CAP_LIMIT, true);
+  return { sourceIds,
     enabled, debounceMinutes: number(input.debounceMinutes, 10, 2, 1440, true),
-    budgetUsd: Math.round(number(input.budgetUsd, ORGANIZER_DEFAULT_BUDGET_USD, 0.11, 40) * 100) / 100, model, escalationModel,
+    budgetUsd, budgetCapUsd, model, escalationModel,
     minimumConfidence: number(input.minimumConfidence, 0.75, 0.55, 0.99), controlSheet: bool(input.controlSheet),
-    allowInheritedAccess: bool(input.allowInheritedAccess), directories, operatorUids: [...new Set(operatorUids.map(checkedId))], maxCalls: number(input.maxCalls, 300, 1, 1000, true) };
+    operatorUids: [...new Set(operatorUids.map(checkedId))], maxCalls, maxCallsCap,
+    identityMode: identityMode(input.identityMode) };
+};
+const identityMode = (input: unknown) => {
+  if (input === undefined) return 'legacy' as const;
+  if (typeof input !== 'string' || !(ORGANIZER_IDENTITY_MODES as readonly string[]).includes(input)) throw new HttpsError('invalid-argument', 'Modo de identificación inválido.');
+  return input as OrganizerSettings['identityMode'];
 };
 const currentConfig = async (clientId: string) => (await clientRef(clientId).get()).data() as StoredConfig | undefined;
 const assertSourceFolders = (requested: string[], authorized: string[], existing: string[] = []) => {
@@ -111,38 +117,29 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
   if (request.action === 'configure') {
     if (actor.role !== 'admin') throw new HttpsError('permission-denied', 'La configuración requiere rol administrador.');
     const clientName = String(client.data()?.name || clientId);
-    const settings = validateSettings(request.settings, clientName);
+    const settings = validateSettings(request.settings);
     const limitedConnection = actor.delegated && actor.delegated.allowedClientIds !== null;
     assertSourceFolders(settings.sourceIds, client.data()?.automation?.driveFolderIds ?? [], limitedConnection ? [] : config?.sourceIds);
     const drive = new OrganizerDrive();
-    if (settings.parentId) await drive.zone(settings.sourceIds, settings.parentId, settings.allowInheritedAccess);
-    else await drive.originals(settings.sourceIds);
-    const [parentChain, chains] = await Promise.all([
-      settings.parentId ? drive.lineage(settings.parentId) : [],
-      Promise.all(settings.sourceIds.map(id => drive.lineage(id))),
-    ]);
-    const parentAncestors = new Set(parentChain.map(item => item.id));
+    await drive.originals(settings.sourceIds);
+    const chains = await Promise.all(settings.sourceIds.map(id => drive.lineage(id)));
     const sourceAncestors = new Set(chains.flatMap(chain => chain.map(item => item.id)));
     const otherConfigs = (await configs().get()).docs.filter(doc => doc.id !== clientId);
     for (const doc of otherConfigs) {
       const other = doc.data() as StoredConfig;
-      if (other.parentId && (await drive.lineage(other.parentId)).some(item => settings.sourceIds.includes(item.id)))
-        throw new HttpsError('failed-precondition', 'Un destino de otro cliente quedaría dentro de estos orígenes.');
       for (const source of other.sourceIds) {
-        if (parentAncestors.has(source) || sourceAncestors.has(source) || (await drive.lineage(source)).some(item => settings.sourceIds.includes(item.id)))
+        if (sourceAncestors.has(source) || (await drive.lineage(source)).some(item => settings.sourceIds.includes(item.id)))
           throw new HttpsError('failed-precondition', 'Una carpeta de origen se superpone con la de otro cliente.');
       }
     }
     return getAppFirestore().runTransaction(async tx => {
       const [snapshot, currentConfigs, currentClient] = await Promise.all([tx.get(root), tx.get(configs()), tx.get(client.ref)]);
-      if (digest(currentConfigs.docs.filter(doc => doc.id !== clientId).map(doc => [doc.id, doc.data().sourceIds, doc.data().parentId])) !==
-          digest(otherConfigs.map(doc => [doc.id, doc.data().sourceIds, doc.data().parentId]))) throw new HttpsError('aborted', 'La configuración de otro cliente cambió. Reintenta.');
+      if (digest(currentConfigs.docs.filter(doc => doc.id !== clientId).map(doc => [doc.id, doc.data().sourceIds])) !==
+          digest(otherConfigs.map(doc => [doc.id, doc.data().sourceIds]))) throw new HttpsError('aborted', 'La configuración de otro cliente cambió. Reintenta.');
       const previous = snapshot.data() as StoredConfig | undefined;
       if (!currentClient.exists || currentClient.data()?.status === 'archived') throw new HttpsError('not-found', 'Cliente no disponible.');
       assertSourceFolders(settings.sourceIds, currentClient.data()?.automation?.driveFolderIds ?? [], limitedConnection ? [] : previous?.sourceIds);
       if (previous?.activeRunId) throw new HttpsError('failed-precondition', 'Termina o cancela la ejecución activa para cambiar la configuración.');
-      if (previous?.destinationId && (previous.parentId !== settings.parentId || previous.folderName !== settings.folderName))
-        throw new HttpsError('failed-precondition', 'La carpeta de destino administrada ya existe. Conserva su ubicación y nombre.');
       const updated: StoredConfig = { ...(previous || defaultConfig(clientId, clientName, settings)), ...settings, clientName,
         generationActor: { uid: actor.uid, delegated: actor.delegated ? delegatedStamp(actor.delegated) : null },
         watcher: settings.enabled ? 'idle' : 'disabled', watcherError: null, observedAt: null, observedFingerprint: null, changeCursor: null, lastFullScanAt: null };
@@ -161,15 +158,16 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
         throw new HttpsError('invalid-argument', 'Selecciona hasta 100 fotos o una variante.');
       const photoIds = [...new Set(ids.map(checkedId))].sort();
       const variantId = request.variantId === undefined ? undefined : checkedId(request.variantId);
-      if (request.mode === 'generate' && (!photoIds.length || photoIds.length > 4 || variantId || request.planRunId))
-        throw new HttpsError('invalid-argument', 'Selecciona de una a cuatro fotos originales para la generación manual.');
+      // Without a selection, generation takes every new photo of the folder in one batch per item type.
+      if (request.mode === 'generate' && (variantId || request.planRunId))
+        throw new HttpsError('invalid-argument', 'La generación desde originales usa fotos seleccionadas o todas las fotos nuevas de la carpeta.');
       if ((photoIds.length || variantId) && !['classify', 'generate'].includes(request.mode)) throw new HttpsError('invalid-argument', 'La selección requiere clasificación o generación manual.');
       if (variantId && !(await root.collection('products').doc(variantId).get()).exists) throw new HttpsError('not-found', 'Variante no disponible.');
       if (photoIds.length && request.mode !== 'generate') {
         const photos = await getAppFirestore().getAll(...photoIds.map(id => root.collection('photos').doc(id)));
         if (photos.some(photo => !photo.exists)) throw new HttpsError('not-found', 'Una fotografía no está disponible.');
       }
-      if (requiresCopy(request.mode) && !photoIds.length && !variantId && !request.planRunId)
+      if (requiresAnalysis(request.mode) && !photoIds.length && !variantId && !request.planRunId)
         throw new HttpsError('failed-precondition', 'Simula y revisa el plan antes de aplicar cambios.');
       return enqueue(clientId, request.mode, checkedId(request.requestId), actor.uid, {
         confirmedBudgetUsd: request.confirmedBudgetUsd, photoIds, variantId, planRunId: request.planRunId ? checkedId(request.planRunId) : undefined, delegated: actor.delegated ? delegatedStamp(actor.delegated) : null,
@@ -207,10 +205,10 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
       if (!(await run.get()).exists) throw new HttpsError('not-found', 'Ejecución no disponible.');
       if (request.action === 'plan') return listPage<OrganizerPlanItem>(run.collection('plan'), request.cursor);
       if (request.action === 'ledger') return listPage<OrganizerLedgerItem>(run.collection('ledger'), request.cursor);
-      const page = await listPage<{ id: string; entry: DriveEntry; added?: boolean; changed?: boolean; copied?: boolean; error?: string }>(
+      const page = await listPage<{ id: string; entry: DriveEntry; added?: boolean; changed?: boolean; error?: string }>(
         run.collection('files'), request.cursor);
       return { ...page, items: page.items.map(item => ({ id: item.id, name: item.entry.name, path: item.entry.path, version: versionOf(item.entry),
-        added: Boolean(item.added), changed: Boolean(item.changed), copied: Boolean(item.copied), error: item.error || null } as OrganizerRunFile)) };
+        added: Boolean(item.added), changed: Boolean(item.changed), error: item.error || null } as OrganizerRunFile)) };
     }
     case 'provenance': {
       const product = root.collection('products').doc(checkedId(request.variantId));
@@ -234,11 +232,14 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
         const photo = (await root.collection('photos').doc(id).get()).data();
         const associated = photo?.variantIds || [photo?.variantId].filter(Boolean);
         const eligible = photo?.referenceEligibleFor || (photo?.variantId ? [photo.variantId] : []);
-        if (!source || !photo || !config.sourceIds.includes(source.sourceId) || !associated.includes(variantId) || !eligible.includes(variantId) || decisionDoc.data()?.versions?.[id] !== versionOf(source))
+        // Base-code mode compares content, so moving an approved photo between folders keeps it valid.
+        const contents = decisionDoc.data()?.contents as Record<string, string> | undefined;
+        const unchanged = source && (identityModeOf(config) === 'baseCode' && contents?.[id] ? contents[id] === contentVersionOf(source!) : decisionDoc.data()?.versions?.[id] === versionOf(source));
+        if (!source || !photo || !config.sourceIds.includes(source.sourceId) || !associated.includes(variantId) || !eligible.includes(variantId) || !unchanged)
           throw new HttpsError('failed-precondition', 'Cambió una foto aprobada. Revisa de nuevo las referencias.');
-        const copy = (await root.collection('manifest').doc(digest([id, versionOf(source)])).get()).data();
-        if (!copy?.copiedId) throw new HttpsError('not-found', 'No está disponible la copia de la referencia.');
-        const bytes = await sharp(await drive.image(copy.copiedId), { limitInputPixels: 60_000_000 }).rotate()
+        const frozen = await freezeOriginal(drive, source, actor.uid, clientId);
+        const [originalBytes] = await frozen.file.download();
+        const bytes = await sharp(originalBytes, { limitInputPixels: 60_000_000 }).rotate()
           .resize(1440, 1440, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 86 }).toBuffer();
         const view = product.references.front.includes(id) ? 'front' : product.references.back.includes(id) ? 'back' : null;
         return { name: photo.name.replace(/\.[^.]+$/, '') + '.jpg', view, base64: bytes.toString('base64') } as OrganizerDraft['photos'][number];
@@ -249,12 +250,12 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
       const photoId = checkedId(request.photoId);
       const [photo, source] = await getAppFirestore().getAll(root.collection('photos').doc(photoId), root.collection('sourceFiles').doc(photoId));
       const entry = source.data()?.entry as DriveEntry | undefined;
-      const manifest = entry && config.sourceIds.includes(entry.sourceId)
-        ? (await root.collection('manifest').doc(digest([entry.id, versionOf(entry)])).get()).data() : undefined;
-      if (!photo.exists || !manifest?.copiedId) throw new HttpsError('not-found', 'Miniatura no disponible.');
+      if (!photo.exists || !entry || !config.sourceIds.includes(entry.sourceId)) throw new HttpsError('not-found', 'Miniatura no disponible.');
       const drive = new OrganizerDrive();
-      const preview = await drive.thumbnail(manifest.copiedId);
-      if (!preview) throw new HttpsError('not-found', 'Drive aún no tiene una miniatura disponible para esta copia.');
+      await drive.assertSource(entry);
+      const preview = await drive.thumbnail(entry.id);
+      await drive.assertSource(entry);
+      if (!preview) throw new HttpsError('not-found', 'Drive aún no tiene una miniatura disponible para este original.');
       const bytes = await sharp(preview, { limitInputPixels: 60_000_000 }).rotate()
         .resize(360, 360, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 80 }).toBuffer();
       return { mimeType: 'image/jpeg', base64: bytes.toString('base64') };
@@ -268,23 +269,30 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
       if (request.action === 'run' || request.action === 'report') {
         const data = (await run.get()).data() as StoredRun | undefined;
         if (!data) throw new HttpsError('not-found', 'Ejecución no disponible.');
-        return request.action === 'run' ? publicRun(data) : { run: publicRun(data), reportUrl: data.reportUrl, controlSheetUrl: data.controlSheetUrl };
+        const links = await reportLinks(data);
+        const summary = { ...publicRun(data), ...links };
+        return request.action === 'run' ? summary : { run: summary, ...links };
       }
       if (actor.role === 'revisor') throw new HttpsError('permission-denied', 'El revisor no puede controlar ejecuciones.');
       const action = request.action;
       return getAppFirestore().runTransaction(async tx => {
         const [snapshot, current] = await tx.getAll(run, root);
         const data = snapshot.data() as StoredRun | undefined;
-        if (!data || current.data()?.activeRunId !== data.id) throw new HttpsError('not-found', 'La ejecución no está activa.');
+        // A failed run released the organizer; resuming it re-acquires it if nothing else is running.
+        const detached = data?.status === 'failed' && !current.data()?.activeRunId && (action === 'resume' || action === 'cancel');
+        const reacquire = detached && action === 'resume';
+        if (!data || (current.data()?.activeRunId !== data.id && !detached)) throw new HttpsError('not-found', 'La ejecución no está activa.');
         const valid = action === 'resume' ? ['paused', 'failed'] : action === 'pause' ? ['queued', 'running'] : ['queued', 'running', 'paused', 'failed', 'budget_exhausted'];
         if (!valid.includes(data.status)) throw new HttpsError('failed-precondition', 'Acción incompatible con el estado actual.');
         // Preserve the lease deadline so a resumed worker cannot overlap any in-flight Drive call.
         const status = action === 'resume' ? 'queued' : action === 'pause' ? 'paused' : 'cancelled';
         if (action === 'cancel' && data.leaseUntil > Date.now()) throw new HttpsError('failed-precondition', 'Pausa la ejecución y espera a que termine la operación en curso.');
-        const update = { status, updatedAt: Date.now(), ...(action === 'cancel' ? { lease: null, completedAt: Date.now() } : {}) } as const;
+        const update = { status, updatedAt: Date.now(), ...(action === 'cancel' ? { lease: null, completedAt: Date.now() } : {}),
+          ...(action === 'resume' ? { chainedSlices: 0 } : {}) } as const;
         tx.update(run, update);
-        if (action === 'cancel') tx.update(root, { activeRunId: null, watcher: config.enabled ? 'idle' : 'disabled',
-          ...(requiresCopy(data.mode) ? { blockedFingerprint: data.fingerprint || config.observedFingerprint } : {}) });
+        if (reacquire) tx.update(root, { activeRunId: data.id, watcher: 'running', watcherError: null });
+        if (action === 'cancel' && !detached) tx.update(root, { activeRunId: null, watcher: config.enabled ? 'idle' : 'disabled',
+          ...(requiresAnalysis(data.mode) ? { blockedFingerprint: data.fingerprint || config.observedFingerprint } : {}) });
         return publicRun({ ...data, ...update });
       });
     }
@@ -307,7 +315,10 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
           throw new HttpsError('not-found', 'Foto, origen o variante no disponible.');
         if (current.data()?.activeRunId) throw new HttpsError('failed-precondition', 'Termina la ejecución antes de aplicar correcciones.');
         const seed = photos.find(photo => photo.id === request.photoId)!.data() as OrganizerPhoto;
-        const groupKey = (photo: OrganizerPhoto) => digest([photo.path.slice(0, -1), [...photo.candidates].sort()]);
+        // Base-code mode groups by product base: the client may spread one product across folders.
+        const baseCode = identityModeOf(config) === 'baseCode';
+        const groupKey = (photo: OrganizerPhoto) => baseCode && photo.baseCodeIdentity?.baseId ? digest(['base', photo.baseCodeIdentity.baseId])
+          : digest([photo.path.slice(0, -1), [...photo.candidates].sort()]);
         const selected: string[] = [];
         let result: OrganizerPhoto | null = null;
         for (let index = 0; index < photos.length; index++) {
@@ -316,7 +327,7 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
           const target = targets.length === 1 ? targets[0] : null;
           const entry = sources[index].data()!.entry as DriveEntry;
           const selectedVariants = variants.filter(variant => targets.includes(variant.id)).map(variant => variant.data() as OrganizerVariant);
-          const decision = { variantId: target, variantIds: targets, referenceEligibleFor, uid: actor.uid, at: Date.now(), version: versionOf(entry), contextKey: photoDecisionKey(entry, selectedVariants) };
+          const decision = { variantId: target, variantIds: targets, referenceEligibleFor, uid: actor.uid, at: Date.now(), version: versionOf(entry), contextKey: photoDecisionKey(entry, selectedVariants, baseCode) };
           tx.set(root.collection('decisions').doc(photo.id), decision);
           tx.create(root.collection('reviewHistory').doc(), { ...decision, photoId: photo.id, previousVariantId: old.variantId, type: 'association' });
           const update = { variantId: target, variantIds: targets, referenceEligibleFor, identityState: targets.length > 1 ? 'shared' as const : target ? 'variant' as const : 'unresolved' as const,
@@ -345,13 +356,14 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
         const photos = ids.length ? await tx.getAll(...ids.map(id => root.collection('photos').doc(id))) : [];
         if (request.decision === 'approve' && photos.some(photo => {
           const value = photo.data();
-          return !value?.copyUrl || !(value.variantIds || [value.variantId].filter(Boolean)).includes(variant.id) ||
+          return !value?.version || !(value.variantIds || [value.variantId].filter(Boolean)).includes(variant.id) ||
             !(value.referenceEligibleFor || (value.variantId ? [value.variantId] : [])).includes(variant.id);
         }))
           throw new HttpsError('failed-precondition', 'Una de las referencias ya no pertenece a esta variante.');
         const versions = Object.fromEntries(photos.map(photo => [photo.id, photo.data()?.version || '']));
+        const contents = Object.fromEntries(photos.map(photo => [photo.id, photo.data()?.contentVersion || '']).filter(([, value]) => value));
         tx.update(variant, { referenceState });
-        const decision = { decision: request.decision, references: value.references, versions, uid: actor.uid, at: Date.now() };
+        const decision = { decision: request.decision, references: value.references, versions, contents, uid: actor.uid, at: Date.now() };
         tx.set(root.collection('referenceDecisions').doc(variant.id), decision);
         tx.create(root.collection('reviewHistory').doc(), { ...decision, variantId: variant.id, previousState: value.referenceState, type: 'references' });
         return { ...value, referenceState };

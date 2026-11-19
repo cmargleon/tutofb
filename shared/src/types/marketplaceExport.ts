@@ -95,7 +95,14 @@ export type MarketplaceAutofillRow = ProductDraftRow & {
   reasons?: Record<string, string>;
   failures?: Record<string, string>;
 };
-export interface MarketplaceExportScope { clientId: string; batchIds: string[]; masterProductId?: string; organizerContext?: import('./organizer').OrganizerProductContext }
+export interface MarketplaceExportScope { clientId: string; batchIds: string[]; masterProductId?: string; organizerContext?: import('./organizer').OrganizerProductContext;
+  /**
+   * Export from the master catalog: canonical product IDs (1–50) instead of batches. `batchIds` must be empty;
+   * the server derives them from each product's generation links. Products without generations export their stored data.
+   */
+  catalogProductIds?: string[];
+  /** Also export the other batches created by the same Organizer update (garments and objects run as separate batches). */
+  includeOrganizerRun?: boolean }
 export interface PublishMarketplaceImagesRequest extends MarketplaceExportScope {
   productId: string; marketplaceId: MarketplaceId; authorizePublicImages: boolean;
 }
@@ -121,18 +128,27 @@ export interface MarketplaceExportPreview {
   autofillIncomplete?: boolean;
   /** Some Gemini analyses are not available yet; request the preview again with `analyzeAutofill`. */
   autofillPending?: boolean;
+  /** The analyses, squares and image links of these batches are being prepared in the background; poll the preview. */
+  autofillBackground?: boolean;
 }
-/** `analyzeAutofill` runs (or waits for) the Gemini analyses that the plain preview reports as pending. */
-export interface MarketplaceExportPreviewRequest extends MarketplaceExportScope { analyzeAutofill?: boolean }
+/**
+ * `analyzeAutofill` runs (or waits for) the Gemini analyses that the plain preview reports as pending.
+ * `retryFailedAutofill` also re-runs analyses that failed before (an explicit operator action).
+ */
+export interface MarketplaceExportPreviewRequest extends MarketplaceExportScope { analyzeAutofill?: boolean; retryFailedAutofill?: boolean }
 export interface DownloadMarketplaceExportRequest extends MarketplaceExportScope {
   marketplaceIds: MarketplaceId[];
   requestId: string;
   /** Allows publication of approved images needed for the selected exports. */
   authorizePublicImages?: boolean;
+  /** Export the products that are ready and leave out (and report) the ones with blocking requirements. */
+  skipBlockedProducts?: boolean;
 }
 export interface DownloadMarketplaceExportResponse {
   fileName: string | null; downloadUrl: string | null; expiresAt: number;
   failures: Array<{ marketplaceId: MarketplaceId; message: string }>; exportedMarketplaces: MarketplaceId[];
+  /** Products left out of a destination because they still had blocking requirements (only with skipBlockedProducts). */
+  skippedProducts?: Array<{ marketplaceId: MarketplaceId; productId: string; productName: string; reasons: string[] }>;
 }
 export interface ConfigureMarketplaceTemplateRequest {
   clientId: string; templateId: string; marketplaceId: MarketplaceId;

@@ -5,6 +5,7 @@ import { DEFAULT_AUTOMATION_RULES } from '../../../shared/src/automationConfig';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { classifyGarmentWithGemini } from '../callables/classifyGarmentViewsWithGemini';
 import { templateUsable } from '../spreadsheets/marketplaceExportService';
+import { loadSharedSheinTemplates } from '../spreadsheets/sharedSheinCatalog';
 import type { OrganizerCommercialLink } from '../organizer/commerce';
 import { digest } from '../organizer/drive';
 
@@ -23,7 +24,9 @@ export async function organizerCategory(job: AutomationJob, client: Client, item
   if (!channel || !enabled.some(({ id }) => id === channel)) return null;
   const snapshot = await db.collection('clients').doc(job.clientId).collection('spreadsheetTemplates')
     .where('exportConfig.marketplaceId', '==', channel).limit(201).get();
-  const templates = snapshot.size > 200 ? [] : snapshot.docs.flatMap(doc => {
+  // Clients without their own SHEIN template use the shared official catalogue, exactly like the export does.
+  const shared = channel === 'shein' ? await loadSharedSheinTemplates([]) : [];
+  const templates = snapshot.size > 200 ? [] : [...snapshot.docs, ...shared].flatMap(doc => {
     const template = { ...doc.data(), id: doc.id } as SpreadsheetTemplate;
     return templateUsable(template, channel) && template.exportConfig!.version > 0 && !template.exportConfig!.supersededByTemplateId
       ? [{ doc, template }] : [];

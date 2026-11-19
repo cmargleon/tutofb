@@ -10,7 +10,12 @@ const id = (value: unknown, name: string): string => {
   }
   return value.trim();
 };
-export const validateAutomationInput = (value: unknown, uid: string): CreateAutomationJobRequest => {
+/**
+ * External API callers keep the 40-photo limit. The Organizer validates up to 500 articles × 4 references; in
+ * practice it splits an update into jobs that fit one Firestore document (see ORGANIZER_ARTICLES_PER_JOB).
+ */
+export const ORGANIZER_MAX_INPUT_IMAGES = 2000;
+export const validateAutomationInput = (value: unknown, uid: string, maxImages = 40): CreateAutomationJobRequest => {
   if (!value || typeof value !== 'object') throw new HttpsError('invalid-argument', 'Payload inválido.');
   const data = value as CreateAutomationJobRequest;
   if (!['gmail', 'manual', 'api'].includes(data.source) || !['garment', 'product'].includes(data.jobType)) {
@@ -80,7 +85,7 @@ export const validateAutomationInput = (value: unknown, uid: string): CreateAuto
   }
   const counts = new Map<string, number>();
   result.inputImages.forEach((image) => counts.set(image.itemId, (counts.get(image.itemId) || 0) + 1));
-  if (result.inputImages.length > 40 || [...counts.values()].some((count) => count > 4)) throw new HttpsError('invalid-argument', 'Máximo 40 fotos y 4 vistas por artículo.');
+  if (result.inputImages.length > maxImages || [...counts.values()].some((count) => count > 4)) throw new HttpsError('invalid-argument', `Máximo ${maxImages} fotos y 4 vistas por artículo.`);
   if (!result.inputImages.length && !result.driveUrl) throw new HttpsError('invalid-argument', 'Se requieren imágenes o driveUrl.');
   return result;
 };

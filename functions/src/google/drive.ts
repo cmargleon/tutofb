@@ -153,8 +153,8 @@ const getAccessToken = async (config: GoogleDriveCredentials, scope = DRIVE_SCOP
   return payload.access_token;
 };
 
-export const getOrganizerDriveToken = (readOnly: boolean): Promise<string> =>
-  getAccessToken(getGoogleCredentials(), readOnly ? `${DRIVE_SCOPE}.readonly` : DRIVE_SCOPE);
+export const getOrganizerDriveToken = (): Promise<string> =>
+  getAccessToken(getGoogleCredentials(), `${DRIVE_SCOPE}.readonly`);
 
 const buildMultipartBody = (metadata: Record<string, unknown>, media: Buffer): { body: Buffer; contentType: string } => {
   const boundary = `batch_spreadsheet_${Date.now()}_${Math.random().toString(36).slice(2)}`;

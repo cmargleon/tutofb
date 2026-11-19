@@ -98,7 +98,7 @@ export interface AutomationBudgetConfig {
 }
 export interface ClientAutomationConfig {
   rules?: Partial<AutomationRules>;
-  organizerGeneration?: { enabled?: boolean; preset?: string; marketplaceId?: import('../marketplaces').MarketplaceId; sourceColumns?: import('./marketplaceExport').OrganizerSourceColumns };
+  organizerGeneration?: { autoRun?: boolean; enabled?: boolean; preset?: string; marketplaceId?: import('../marketplaces').MarketplaceId; sourceColumns?: import('./marketplaceExport').OrganizerSourceColumns };
   enabled?: boolean;
   driveFolderIds?: string[];
   defaultModelId?: string;
@@ -107,6 +107,8 @@ export interface ClientAutomationConfig {
   defaultPreset?: string;
   presets?: Record<string, AutomationPreset>;
   defaultBudgetUsd?: number;
+  /** Client maximum USD per automation job; replaces the global maximum for this client only. */
+  maxBudgetUsd?: number;
   maxReviewAttempts?: number;
   maxOperationalRetries?: number;
 }

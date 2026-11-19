@@ -21,10 +21,12 @@ async function* scan(drive: Pick<OrganizerDrive, 'children'>, sourceFiles: Drive
   }
 }
 
-export async function watch(drive: Pick<OrganizerDrive, 'zone' | 'children' | 'changes' | 'startChanges'>, config: StoredConfig) {
+/** A trusted operator can explicitly request one immediate scan; scheduled calls always obey the global watcher switch in enqueue. */
+export async function watch(drive: Pick<OrganizerDrive, 'originals' | 'children' | 'changes' | 'startChanges'>, config: StoredConfig, immediateActor?: { uid: string; delegated: import('./store').StoredRun['delegated'] }) {
   if (!config.enabled || config.activeRunId) return;
   const ref = clientRef(config.clientId);
-  const { sources } = await drive.zone(config.sourceIds, config.parentId, config.allowInheritedAccess);
+  const sources = await drive.originals(config.sourceIds);
+  if (!sources.length) return;
   const now = Date.now();
   let cursor = config.changeCursor;
   let changed = true;
@@ -50,15 +52,15 @@ export async function watch(drive: Pick<OrganizerDrive, 'zone' | 'children' | 'c
   }
   const shouldEnqueue = await getAppFirestore().runTransaction(async tx => {
     const current = (await tx.get(ref)).data() as StoredConfig;
-    if (!current.enabled || current.activeRunId || digest(current.sourceIds) !== digest(config.sourceIds) || current.parentId !== config.parentId) return false;
+    if (!current.enabled || current.activeRunId || digest(current.sourceIds) !== digest(config.sourceIds)) return false;
     const changed = fingerprint !== current.observedFingerprint;
     const observedAt = changed ? now : current.observedAt || now;
     const pending = fingerprint !== current.processedFingerprint && fingerprint !== current.blockedFingerprint;
     tx.update(ref, { observedFingerprint: fingerprint, observedAt, lastPollAt: now, changeCursor: cursor, watcherError: null,
       lastFullScanAt: needsScan ? now : current.lastFullScanAt || null, watcher: pending ? 'collecting' : 'idle' });
-    return pending && now - observedAt >= current.debounceMinutes * 60_000;
+    return pending && (Boolean(immediateActor) || now - observedAt >= current.debounceMinutes * 60_000);
   });
   if (!shouldEnqueue || !fingerprint) return;
-  return enqueue(config.clientId, 'classify', `automatic-${fingerprint}-${config.observedAt}`, 'watcher', { automaticFingerprint: fingerprint });
+  return enqueue(config.clientId, 'classify', `automatic-${fingerprint}-${config.observedAt}`, immediateActor?.uid || 'watcher', { automaticFingerprint: fingerprint, delegated: immediateActor?.delegated });
 }
 

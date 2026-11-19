@@ -132,6 +132,15 @@ test('current human permissions, direct Firebase access, transaction conflicts a
       await assert.rejects(() => saveClientMarketplace({ clientId: clientA, marketplaceId: 'amazon', settings: { region: 'XX' } }), { code: 'aborted' });
       await Promise.all([saveClientService({ id: clientA, name: 'new name', expected: { name: clientA } }, uid), saveClientService({ id: clientA, generationPromptBase: 'new prompt', expected: { generationPromptBase: 'original' } }, uid)]);
       const client = (await db.collection('clients').doc(clientA).get()).data(); assert.equal(client.name, 'new name'); assert.equal(client.generationPromptBase, 'new prompt');
+      const contacts = [{ name: 'Ana', email: 'ana@example.com' }, { name: 'Luis', email: 'luis@example.com' }];
+      const contactResult = await saveClientService({ id: clientA, contacts, expected: { contacts: [] } }, uid);
+      assert.deepEqual(contactResult.values.contacts, contacts);
+      await assert.rejects(() => saveClientService({ id: clientA, contacts: [], expected: { contacts: [] } }, uid), { code: 'aborted' });
+      await saveClientService({ id: clientA, name: 'contact-safe name', expected: { name: 'new name' } }, uid);
+      assert.deepEqual((await db.collection('clients').doc(clientA).get()).data().contacts, contacts);
+      await assert.rejects(() => saveClientService({ id: clientA, contacts: [{ name: 'Ana', email: 'bad' }], expected: { contacts } }, uid), { code: 'invalid-argument' });
+      await saveClientService({ id: clientA, contacts: [], expected: { contacts } }, uid);
+      assert.deepEqual((await db.collection('clients').doc(clientA).get()).data().contacts, []);
       await assert.rejects(() => saveClientService({ id: clientA, name: 'stale', expected: { name: clientA } }, uid), { code: 'aborted' });
       await assert.rejects(() => saveClientService({ id: clientA, generationPromptBase: 'stale', expected: { generationPromptBase: 'original' } }, uid), { code: 'aborted' });
     });

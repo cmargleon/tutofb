@@ -1,0 +1,132 @@
+{
+  "run": {
+    "id": "74f2bb1110288c3ad1599093533f22d3561c9cdc6ca302ed2082a6e8df11de24",
+    "mode": "classify",
+    "status": "completed",
+    "createdBy": "RHnl1Q8znRapEBLLhdts2Ep3oP12",
+    "createdAt": 1795055361423,
+    "completedAt": 1795055450498,
+    "budgetUsd": 2,
+    "estimatedUsd": 0.020594,
+    "counts": {
+      "files": 41,
+      "folders": 12,
+      "new": 41,
+      "modified": 0,
+      "photos": 27,
+      "workbooks": 2,
+      "products": 19,
+      "variants": 19,
+      "skcs": 19,
+      "skus": 39,
+      "associated": 25,
+      "unassigned": 2,
+      "conflicts": 9,
+      "errors": 0,
+      "automationArticles": 1,
+      "automationJobs": 1,
+      "automationPhotos": 1,
+      "automationNeedsReview": 0,
+      "automationSkippedPhotos": 0,
+      "selectedReferences": 12,
+      "missingReferences": 7,
+      "productsWithoutPhotos": 0,
+      "sharedPhotos": 0,
+      "humanReviewed": 0,
+      "identityNeedsReview": 0,
+      "inaccessibleSources": 0
+    },
+    "reportPath": "organizers/automation-e2e-test/runs/74f2bb1110288c3ad1599093533f22d3561c9cdc6ca302ed2082a6e8df11de24/report.json",
+    "controlSheetPath": "organizers/automation-e2e-test/runs/74f2bb1110288c3ad1599093533f22d3561c9cdc6ca302ed2082a6e8df11de24/control.xlsx"
+  },
+  "automation": [
+    {
+      "id": "nK8nbgRXfbOTjKUUit3k",
+      "status": "completed",
+      "error": null,
+      "batchId": "automation-nK8nbgRXfbOTjKUUit3k",
+      "inputImages": [
+        {
+          "itemId": "6b9740d88572b2f4a4df2995d69bb8647ee44c56a0b86fa6a2bcbf390de187bb",
+          "fileName": "AT-V02-BLA-RO1911.jpg",
+          "storagePath": "garments/drafts/RHnl1Q8znRapEBLLhdts2Ep3oP12/nK8nbgRXfbOTjKUUit3k/6b9740d88572b2f4a4df2995d69bb8647ee44c56a0b86fa6a2bcbf390de187bb/0.jpg",
+          "normalizedSha256": "bd4457f99e630c0077a98bf31ddcfb9bf97abe23d69f437dd4cd6233e8378c60"
+        }
+      ],
+      "progress": {
+        "total": 6,
+        "completed": 6,
+        "failed": 0
+      },
+      "batch": {
+        "status": "completed",
+        "provider": "fal-gpt-image-2.5-flare",
+        "totalJobs": 6,
+        "completedJobs": 6,
+        "failedJobs": 0
+      }
+    }
+  ],
+  "drive": {
+    "before": 41,
+    "after": 41,
+    "added": [],
+    "removed": [],
+    "changes": [
+      {
+        "id": "1NknXAaO0fw1R57xBYxREh9djjdzhsH0s",
+        "fields": {
+          "version": {
+            "before": "1",
+            "after": "2"
+          }
+        }
+      }
+    ]
+  },
+  "frozenSource": {
+    "path": "garments/drafts/RHnl1Q8znRapEBLLhdts2Ep3oP12/organizer-33ab7f274d8d4297a15a115a5dd50a3153bcf0b7bf392a55cdc492104495a37a/source/image.jpg",
+    "mime": "image/jpeg",
+    "size": 162867,
+    "generation": "1795055448992235",
+    "created": "2026-11-19T02:30:49.004Z",
+    "originalVersion": "1",
+    "counts": {
+      "manifest": 0,
+      "driveAttempts": 0
+    }
+  },
+  "reports": {
+    "callableStatus": 200,
+    "reportUrl": {
+      "httpStatus": 200,
+      "bytes": 147763,
+      "mime": "application/json"
+    },
+    "controlSheetUrl": {
+      "httpStatus": 200,
+      "bytes": 40952,
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "sheets": [
+        "Resumen",
+        "Productos",
+        "Fotografías"
+      ]
+    }
+  },
+  "globals": {
+    "organizerWatcherEnabled": false,
+    "organizerAutoGenerationEnabled": false
+  },
+  "globalsUnchanged": true,
+  "otherClientUnchanged": true,
+  "testClient": {
+    "autoRun": true,
+    "enabled": true,
+    "parentId": ""
+  },
+  "initialParentIds": {
+    "5RPUrQKfkERh4josuuvX": "",
+    "automation-e2e-test": ""
+  }
+}

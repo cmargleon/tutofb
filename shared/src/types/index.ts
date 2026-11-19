@@ -24,3 +24,4 @@ export * from './marketplaceExport';
 export * from './catalog';
 
 export * from './photoPlan';
+export * from './email';

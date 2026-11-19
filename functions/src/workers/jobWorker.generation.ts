@@ -210,6 +210,7 @@ export const preparePlannedPhoto = async (
     imageConfig: imageConfig.imageConfig,
     plannedPhoto: true,
     syntheticPerformer: job.photoTask!.syntheticPerformer,
+    whiteBackground: job.photoTask!.background === 'white',
   });
   providerResult.imageBytes = providerResult.preparedPhoto.bytes;
   providerResult.contentType = providerResult.preparedPhoto.contentType;

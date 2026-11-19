@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { Client, MarketplaceTemplateConfig, SpreadsheetTemplate, SpreadsheetTemplateCategory } from '../../../shared/src/types';
+import type { Client, MarketplaceTemplateConfig, SpreadsheetTemplate, SpreadsheetTemplateCategory, SpreadsheetTemplateImportStatus } from '../../../shared/src/types';
 import { PRODUCT_FIELDS, VARIANT_FIELDS, isSpreadsheetTemplateActive } from '../../../shared/src/types';
 import { MARKETPLACES, type MarketplaceId } from '../../../shared/src/marketplaces';
 import { MARKETPLACE_ADAPTERS } from '../../../shared/src/marketplaceExport/adapters';
 import { subscribeToClientSpreadsheetTemplates, importClientSpreadsheetTemplate, setClientSpreadsheetTemplateStatus } from '../clients/firebase';
 import { resolveStorageAssetUrl } from '../storage/assets';
 import { useConfirm, useToast } from '../feedback/FeedbackProvider';
-import { Button, INPUT_CLASS } from '../../components/ui';
+import { Button, INPUT_CLASS, Switch } from '../../components/ui';
+import { Archive, ArchiveRestore } from 'lucide-react';
+import { isRestorableArchivedTemplate } from './templateSelection';
 import { configureMarketplaceTemplate } from './exportFirebase';
 import { formatDateTimeLong } from '../../../shared/src/utils/dateUtils';
 
@@ -64,31 +65,50 @@ function TemplateConfiguration({ clientId, template, channel, onClose }: { key?:
     <Button loading={busy} disabled={!confirmed || !categories.length || unresolved.length > 0 || review?.validationStatus === 'incompatible'} onClick={() => void activate()}>Activar nueva versión</Button>
     </fieldset></div></dialog>;
 }
+const templateStatusText = (t: SpreadsheetTemplate) => t.status === 'disabled' ? 'Desactivada'
+  : t.status === 'archived' ? t.exportConfig?.supersededByTemplateId ? 'Sustituida · disponible para productos históricos vinculados' : 'Archivada'
+  : t.exportConfig?.validationStatus === 'compatible' ? 'Activa · configurada' : t.exportConfig?.validationStatus === 'incompatible' ? 'Plantilla incompatible' : 'Activa · requiere configurar atributos';
 export function MarketplaceTemplates({ client, channel, templates }: { client: Client; channel: MarketplaceId; templates: SpreadsheetTemplate[] }) {
   const toast = useToast(); const confirm = useConfirm(); const fileInput = useRef<HTMLInputElement>(null);
   const [replacing, setReplacing] = useState<string | undefined>(); const [busy, setBusy] = useState(false); const [configuring, setConfiguring] = useState<SpreadsheetTemplate | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const disabled = busy || client.status === 'archived';
+  const visible = templates.filter(t => t.status !== 'archived');
+  const archived = templates.filter(isRestorableArchivedTemplate);
   const upload = async (file?: File) => {
     if (!file) return; setBusy(true);
     try { await importClientSpreadsheetTemplate(client.id!, file, { marketplaceId: channel, ...(replacing ? { replacesTemplateId: replacing } : {}) }); toast({ tone: 'success', title: 'Plantilla analizada', description: 'Revisa sus atributos y asociaciones antes de activarla.' }); }
     catch (e) { toast({ tone: 'error', title: 'No se pudo importar', description: (e as Error).message }); }
     finally { setBusy(false); setReplacing(undefined); if (fileInput.current) fileInput.current.value = ''; }
   };
+  const changeStatus = async (template: SpreadsheetTemplate, status: SpreadsheetTemplateImportStatus, successTitle: string) => {
+    setBusy(true);
+    try { await setClientSpreadsheetTemplateStatus({ clientId: client.id!, templateId: template.id!, status, expectedStatus: template.status ?? 'active' }); toast({ tone: 'success', title: successTitle }); }
+    catch (e) { toast({ tone: 'error', title: 'No se pudo cambiar el estado de la plantilla', description: (e as Error).message }); }
+    finally { setBusy(false); }
+  };
   const archive = async (template: SpreadsheetTemplate) => {
-    if (!await confirm({ title: 'Archivar plantilla', description: 'La plantilla saldrá de las nuevas selecciones. Los lotes vinculados conservarán la plantilla.', confirmLabel: 'Archivar' })) return;
-    setBusy(true); try { await setClientSpreadsheetTemplateStatus({ clientId: client.id!, templateId: template.id!, status: 'archived', expectedStatus: template.status ?? 'active' }); } catch (e) { toast({ tone: 'error', title: 'No se pudo archivar', description: (e as Error).message }); } finally { setBusy(false); }
+    if (!await confirm({ title: 'Archivar plantilla', description: `«${template.name}» saldrá de las nuevas selecciones y de esta lista. Los lotes vinculados conservarán la plantilla y podrás desarchivarla desde «Ver archivadas».`, confirmLabel: 'Archivar' })) return;
+    await changeStatus(template, 'archived', 'Plantilla archivada');
   };
   const download = async (template: SpreadsheetTemplate) => {
     setBusy(true); try { const { url } = await resolveStorageAssetUrl(template.storagePath); const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.download = template.originalFileName; a.click(); } catch (e) { toast({ tone: 'error', title: 'No se pudo descargar', description: (e as Error).message }); } finally { setBusy(false); }
   };
-  return <div className="mt-4 space-y-3 border-t border-slate-100 pt-4"><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">Plantillas de salida · {templates.filter(isSpreadsheetTemplateActive).length} activas / en revisión</p><Button size="sm" variant="secondary" loading={busy} disabled={disabled} onClick={() => { setReplacing(undefined); fileInput.current?.click(); }}>Subir XLSX</Button></div><input ref={fileInput} className="sr-only" type="file" accept=".xlsx" aria-label={`Subir plantilla ${channel}`} disabled={disabled} onChange={e => void upload(e.target.files?.[0])} />
-    {!templates.length && <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{channel === 'shein' ? 'Puedes usar las categorías del catálogo compartido desde la exportación. Sube un XLSX oficial para añadir categorías o configurar una plantilla para este cliente.' : 'Falta una plantilla oficial compatible para exportar.'}</p>}
-    {templates.map(t => <details key={t.id} className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium">{t.name} · {t.exportConfig?.validationStatus === 'compatible' ? `v${t.exportConfig.version}` : 'Pendiente'}<span className={`mt-1 block text-xs font-normal ${t.exportConfig?.validationStatus === 'compatible' ? 'text-emerald-700' : 'text-amber-800'}`}>{t.status === 'disabled' ? 'Desactivada' : t.status === 'archived' ? t.exportConfig?.supersededByTemplateId ? 'Sustituida · disponible para productos históricos vinculados' : 'Archivada' : t.exportConfig?.validationStatus === 'compatible' ? 'Configurada · carga final pendiente de verificar' : t.exportConfig?.validationStatus === 'incompatible' ? 'Plantilla incompatible' : 'Requiere configurar atributos'}</span></summary><p className="mt-3 text-xs text-slate-500">{t.originalFileName} · Actualizada: {formatDateTimeLong(t.updatedAt)}<br />Categorías: {t.categories?.map(c => c.label).join(', ') || 'No detectadas'}</p>{t.exportConfig?.validationMessages.map((m, i) => <p className="mt-2 text-xs text-amber-800" key={i}>{m}</p>)}<div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="ghost" disabled={disabled || !isSpreadsheetTemplateActive(t)} onClick={() => setConfiguring(t)}>Reglas de llenado</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => void download(t)}>Descargar original</Button><Button size="sm" variant="ghost" disabled={disabled || !isSpreadsheetTemplateActive(t) || t.exportConfig?.validationStatus !== 'compatible'} onClick={() => { setReplacing(t.id); fileInput.current?.click(); }}>Reemplazar</Button><Button size="sm" variant="ghost" disabled={disabled || t.status === 'archived'} onClick={() => void archive(t)}>Archivar</Button></div></details>)}
+  return <div className="mt-4 space-y-3 border-t border-slate-100 pt-4"><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">Plantillas de salida · {visible.filter(isSpreadsheetTemplateActive).length} activas · {visible.filter(t => t.status === 'disabled').length} desactivadas</p><Button size="sm" variant="secondary" loading={busy} disabled={disabled} onClick={() => { setReplacing(undefined); fileInput.current?.click(); }}>Subir XLSX</Button></div><input ref={fileInput} className="sr-only" type="file" accept=".xlsx" aria-label={`Subir plantilla ${channel}`} disabled={disabled} onChange={e => void upload(e.target.files?.[0])} />
+    {!visible.length && <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{channel === 'shein' ? 'Puedes usar las categorías del catálogo compartido desde la exportación. Sube un XLSX oficial para añadir categorías o configurar una plantilla para este cliente.' : 'Falta una plantilla oficial compatible para exportar.'}</p>}
+    {visible.map(t => { const active = isSpreadsheetTemplateActive(t); const compatible = t.exportConfig?.validationStatus === 'compatible'; return <div key={t.id} className="rounded-lg border border-slate-200 p-3" data-template-status={t.status ?? 'active'}>
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-medium">{t.name} · {compatible ? `v${t.exportConfig!.version}` : 'Pendiente'}</p><p className={`mt-1 text-xs ${!active ? 'text-slate-500' : compatible ? 'text-emerald-700' : 'text-amber-800'}`}>{templateStatusText(t)}</p></div>
+        <div className="flex shrink-0 items-center gap-2"><Switch label={`${active ? 'Desactivar' : 'Activar'} plantilla ${t.name}`} checked={active} disabled={disabled} onCheckedChange={next => void changeStatus(t, next ? 'active' : 'disabled', next ? 'Plantilla activada' : 'Plantilla desactivada')} /><Button size="sm" variant="ghost" icon={Archive} disabled={disabled} onClick={() => void archive(t)}>Archivar</Button></div></div>
+      <details className="mt-2"><summary className="cursor-pointer text-xs text-slate-600">Detalles y reglas de llenado</summary><p className="mt-3 text-xs text-slate-500">{t.originalFileName} · Actualizada: {formatDateTimeLong(t.updatedAt)}<br />Categorías: {t.categories?.map(c => c.label).join(', ') || 'No detectadas'}</p>{t.exportConfig?.validationMessages.map((m, i) => <p className="mt-2 text-xs text-amber-800" key={i}>{m}</p>)}<div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant="ghost" disabled={disabled || !active} onClick={() => setConfiguring(t)}>Reglas de llenado</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => void download(t)}>Descargar original</Button><Button size="sm" variant="ghost" disabled={disabled || !active || !compatible} onClick={() => { setReplacing(t.id); fileInput.current?.click(); }}>Reemplazar</Button></div></details>
+    </div>; })}
+    {archived.length > 0 && <div className="pt-1"><Button size="sm" variant="ghost" aria-expanded={showArchived} onClick={() => setShowArchived(!showArchived)}>{showArchived ? 'Ocultar archivadas' : `Ver archivadas (${archived.length})`}</Button>
+      {showArchived && <ul className="mt-2 space-y-2">{archived.map(t => <li key={t.id} className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3"><div className="min-w-0"><p className="text-sm font-medium text-slate-700">{t.name}{t.exportConfig?.version ? ` · v${t.exportConfig.version}` : ''}</p><p className="mt-1 text-xs text-slate-500">Archivada{t.archivedAt ? ` · ${formatDateTimeLong(t.archivedAt)}` : ''} · {t.originalFileName}</p></div><Button size="sm" variant="secondary" icon={ArchiveRestore} disabled={disabled} onClick={() => void changeStatus(t, 'disabled', 'Plantilla desarchivada · queda desactivada hasta que la actives')}>Desarchivar</Button></li>)}</ul>}
+    </div>}
     {configuring && <TemplateConfiguration key={configuring.id} clientId={client.id!} template={configuring} channel={channel} onClose={() => setConfiguring(null)} />}
   </div>;
 }
 export function LegacyMarketplaceTemplates({ client, templates }: { client: Client; templates: SpreadsheetTemplate[] }) {
   const [selection, setSelection] = useState<{ template: SpreadsheetTemplate; channel: MarketplaceId } | null>(null);
   if (!templates.length) return null;
-  return <section className="space-y-3 rounded-xl border border-amber-200 p-4"><h3 className="text-sm font-semibold">Plantillas anteriores sin marketplace</h3><p className="text-xs text-slate-600">Se conservan intactas para los lotes existentes. Asocia explícitamente cada plantilla; se creará una versión para exportación.</p>{templates.map(t => <label key={t.id} className="block text-sm">{t.name}<select className={INPUT_CLASS} value="" disabled={client.status === 'archived'} onChange={e => { if (e.target.value) setSelection({ template: t, channel: e.target.value as MarketplaceId }); }}><option value="">Revisar y asociar a marketplace…</option>{MARKETPLACES.filter(m => client.marketplaces?.[m.id]?.enabled).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>)}<Link className="text-xs text-indigo-700 underline" to={`/clients/${client.id}?tab=fuentes`}>Ver configuración histórica en Fuentes de datos</Link>{selection && <TemplateConfiguration clientId={client.id!} template={selection.template} channel={selection.channel} onClose={() => setSelection(null)} />}</section>;
+  return <section className="space-y-3 rounded-xl border border-amber-200 p-4"><h3 className="text-sm font-semibold">Plantillas anteriores sin marketplace</h3><p className="text-xs text-slate-600">Se conservan intactas para los lotes existentes, pero ya no se usan en el wizard. Asocia explícitamente cada plantilla a un marketplace; se creará una versión configurable que pasa a ser la fuente de verdad.</p>{templates.map(t => <label key={t.id} className="block text-sm">{t.name}<select className={INPUT_CLASS} value="" disabled={client.status === 'archived'} onChange={e => { if (e.target.value) setSelection({ template: t, channel: e.target.value as MarketplaceId }); }}><option value="">Revisar y asociar a marketplace…</option>{MARKETPLACES.filter(m => client.marketplaces?.[m.id]?.enabled).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>)}{selection && <TemplateConfiguration clientId={client.id!} template={selection.template} channel={selection.channel} onClose={() => setSelection(null)} />}</section>;
 }

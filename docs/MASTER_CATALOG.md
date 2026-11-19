@@ -1,5 +1,7 @@
 # Catálogo Maestro — Fase 1
 
+> **Actualización 19 nov 2026:** la interfaz propia del catálogo maestro (lista `/catalogo/productos`, ficha por producto, «Nuevo producto», «Fotos sin ficha» e incorporación de histórico) y sus 7 callables (`listCatalogProducts`, `getCatalogProduct`, `saveCatalogProduct`, `listCatalogLegacyBatches`, `previewCatalogImport`, `applyCatalogImport`, `getCatalogGenerationImages`) se retiraron. `/catalogo` es la vista de fotos por lote y el drawer «Exportar a marketplaces» es el único formulario maestro. Se conservan el documento canónico `clients/{c}/products/{id}`, los triggers `syncCatalogJob`/`syncCatalogDraft`, los vínculos de generación, los alias y la vinculación por código base del Organizador (`functions/src/catalog/organizerBinding.ts`). Las secciones «Interfaz y uso» y las menciones a la UI de abajo describen la versión retirada.
+
 Implementación del 18 de noviembre de 2026. Esta guía describe el código de esta fase; el estado de verificación y despliegue está en `docs/reports/MASTER_CATALOG_PHASE1_2026-11-18.md`.
 
 ## Arquitectura encontrada y decisiones

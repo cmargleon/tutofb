@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { associatePhotos, associationIndex, groupProductRows, parseTab, productVariant } from '../functions/lib/functions/src/organizer/catalog.js';
 import { parseInterpretation, rankCandidates, visualAssociation } from '../functions/lib/functions/src/organizer/interpretation.js';
-import { photoDecisionKey, planFile, stableDestination } from '../functions/lib/functions/src/organizer/planning.js';
+import { photoDecisionKey, planFile } from '../functions/lib/functions/src/organizer/planning.js';
 import { assertInputLimit, pixelKey } from '../functions/lib/functions/src/organizer/vision.js';
 import type { OrganizerPhoto, OrganizerVariant } from '../shared/src/types';
 import type { DriveEntry } from '../functions/src/organizer/drive';
@@ -68,7 +68,7 @@ test('una foto compartida conserva varios vínculos y no se convierte en referen
   const variants = catalog([['SKC', 'Nombre', 'Pack'], ['A216-PACK4', 'Vaso 400 ML', '4'], ['A217-PACK6', 'Vaso 380 ML', '6']]);
   const shared = photo('A216 Y A217.jpg', 'COCINA', variants);
   assert.equal(shared.variantId, null); assert.equal(shared.identityState, 'shared'); assert.equal(shared.variantIds?.length, 2);
-  assert.deepEqual(stableDestination(shared, variants, 'Fuentes'), ['Fuentes']);
+  assert.deepEqual(planFile(entry('A216 Y A217.jpg', 'COCINA'), shared, variants).destination, variants.map(variant => `${variant.name} · ${variant.visual}`));
   assert.equal(variants.every(v => v.referenceState === 'pending'), true);
 });
 
@@ -90,9 +90,9 @@ test('cache de píxeles ignora Excel, ruta e ID; decisiones y aprobaciones sí i
   assert.notEqual(pixelKey(source, 'model'), pixelKey({ ...source, md5Checksum: 'new-image' }, 'model'));
   assert.notEqual(photoDecisionKey(source, variants), photoDecisionKey(source, [updated]));
   const pending = photo('foto.jpg', 'ALFA', variants);
-  const oldPath = stableDestination(pending, variants, 'Fuentes');
-  variants[0].status = 'uploaded'; assert.deepEqual(stableDestination(pending, variants, 'Fuentes'), oldPath);
-  assert.equal(planFile(source, pending, variants, 'Fuentes', { copiedId: 'old-copy' }).action, 'retain_legacy');
+  const oldPath = planFile(source, pending, variants).destination;
+  variants[0].status = 'uploaded'; assert.deepEqual(planFile(source, pending, variants).destination, oldPath);
+  assert.equal(planFile(source, pending, variants).action, 'read');
   assert.throws(() => assertInputLimit('x'.repeat(17000)), /Contexto demasiado grande/);
 });
 

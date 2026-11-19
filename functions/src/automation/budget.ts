@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { AutomationJob, Job } from '../../../shared/src/types';
-import { DEFAULT_AUTOMATION_BUDGET, remainingAutomationBudget, usd, validateAutomationBudget } from '../../../shared/src/automationPolicy';
+import { DEFAULT_AUTOMATION_BUDGET, effectiveMaxBudgetUsd, remainingAutomationBudget, usd, validateAutomationBudget } from '../../../shared/src/automationPolicy';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { authorizeMachineJob } from './machineAuth';
 
@@ -46,7 +46,7 @@ export const reserveAutomationOperation = async (
     if (!job.effectivePolicy.allowEstimatedCosts) throw new AutomationBudgetError('Se requiere allowEstimatedCosts explícito: las tarifas disponibles son estimadas, no un máximo contractual del proveedor.');
     if (kind === 'classification' && !job.effectivePolicy.authorizeClassification) throw new AutomationBudgetError('La clasificación pagada requiere authorizeClassification explícito.');
     if (existing.exists) throw new AutomationBudgetError('Operación ya reservada o registrada; requiere reconciliación antes de repetir.');
-    const limitUsd = Math.min(job.budget.limitUsd, global.maxBudgetUsd);
+    const limitUsd = Math.min(job.budget.limitUsd, effectiveMaxBudgetUsd(global, client.data()?.automation));
     if (remainingAutomationBudget({ ...job.budget, limitUsd }) + 0.0000001 < holdUsd) {
       tx.update(ref, { spendingPaused: true, updatedAt: FieldValue.serverTimestamp() });
       return false;

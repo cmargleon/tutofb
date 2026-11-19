@@ -1,4 +1,4 @@
-import { isSpreadsheetTemplateActive } from '../../../../shared/src/types';
+import { isUsableMarketplaceTemplate } from '../../marketplaces/templateSelection';
 import { FirebaseError } from 'firebase/app';
 import { getDownloadURL, getMetadata, ref } from 'firebase/storage';
 import { isActiveCatalogEntity, isPoseActive } from '../../../../shared/src/domain';
@@ -70,7 +70,7 @@ export const loadDraftCatalog = async (draft: WizardDraft): Promise<WizardDraftC
     models: models
       .filter((model) => model.clientId === selectedClientId && isActiveCatalogEntity(model))
       .map((model) => ({ ...model, poses: model.poses.filter(isPoseActive) })),
-    templates: templates?.filter((template) => isSpreadsheetTemplateActive(template) && !template.exportConfig) ?? null,
+    templates: templates?.filter(isUsableMarketplaceTemplate) ?? null,
     categories,
     paths: new Map([...imageChecks, ...fileChecks]),
   };

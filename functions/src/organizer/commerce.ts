@@ -4,7 +4,8 @@ import type {
   OrganizerSourceColumns, OrganizerSourceField, OrganizerVariant,
 } from '../../../shared/src/types';
 import { ORGANIZER_SOURCE_FIELDS } from '../../../shared/src/types';
-import { code, distinct, normalize } from './catalog';
+import { CATALOG_HEADERS, code, distinct, normalize } from './catalog';
+import { DECLARED_SHEET_ATTRIBUTE } from '../../../shared/src/marketplaceExport/adapters';
 import { digest } from './drive';
 import { getAppFirestore } from '../firebase/appFirestore';
 
@@ -14,6 +15,8 @@ export interface OrganizerCommercialLink {
   organizerVariantId: string | null;
   source: OrganizerCommercialSource;
   category?: OrganizerCategoryDecision | null;
+  /** Canonical master product chosen by the base-code binding; aliases route this generation to it. */
+  catalogBinding?: { productId: string; baseCode: string } | null;
 }
 
 export async function organizerReferenceViews(job: Pick<import('../../../shared/src/types').AutomationJob, 'id' | 'clientId' | 'organizerCommerce'>, itemId: string) {
@@ -60,6 +63,24 @@ const declaredProductColumns = {
   composition: /^(?:COMPOSICION|COMPOSITION)$/,
 } as const;
 const foodContactColumn = /^MATERIALES? EN CONTACTO CON ALIMENTOS\s*(?:\(1000463\))?$/;
+/** Headers already consumed as identity, commercial or declared product fields; every other column travels as a sheet attribute. */
+const consumedHeader = (header: string) => {
+  const key = keyText(header);
+  return !key || CATALOG_HEADERS.has(key) || Object.values(defaultHeaders).some(list => list.includes(key)) ||
+    Object.values(unitPatterns).some(pattern => pattern.test(key)) || Object.values(declaredProductColumns).some(pattern => pattern.test(key)) ||
+    foodContactColumn.test(key);
+};
+/** Extra columns of one row (e.g. "Elasticidad de la tela", "Tipo de embalaje") keyed by their original header. */
+export function declaredSheetAttributes(row: OrganizerProductRow) {
+  const values: Record<string, string> = {};
+  for (const cell of row.cells) {
+    const header = (cell.header || '').trim().slice(0, 120);
+    const value = cell.value.trim().slice(0, 500);
+    if (!header || !value || cell.field || consumedHeader(header)) continue;
+    values[`${DECLARED_SHEET_ATTRIBUTE}${header}`] = value;
+  }
+  return values;
+}
 const declaredCell = (row: OrganizerProductRow, header: RegExp) => {
   const cells = row.cells.filter(cell => header.test(keyText(cell.header || '')));
   const value = cells.length === 1 ? cells[0].originalValue : null;
@@ -121,7 +142,9 @@ export function resolveCommercialRows(variant: OrganizerVariant, rows: Organizer
     const commercial = readCommercialValues(row, mapping);
     issues.push(...commercial.issues.map(issue => `${row.tab} fila ${row.line}. ${issue}.`));
     const sourceId = (field: 'skc' | 'sku') => row.cells.find(cell => cell.field === field && code(cell.value) === row[field])?.value.trim() || row[field];
-    const values = { skc: sourceId('skc'), sku: sourceId('sku'), color, size: row.size, pack, ...commercial.values };
+    // SHEIN "Número del artículo" is the SPU shared by every size/color: the declared base code, else the SKC.
+    const declaredBase = row.cells.some(cell => cell.field === 'base' && cell.value.trim()) ? row.base : '';
+    const values = { skc: sourceId('skc'), sku: sourceId('sku'), color, size: row.size, pack, spu: declaredBase || sourceId('skc') || '', ...commercial.values };
     const previous = variants.get(id);
     if (includeDeclaredAttributes) {
       const declaredFoodContact = declaredCell(row, foodContactColumn);
@@ -135,8 +158,9 @@ export function resolveCommercialRows(variant: OrganizerVariant, rows: Organizer
     const variantNames = names.get(id) || new Set<string>();
     if (row.name) variantNames.add(keyText(row.name));
     names.set(id, variantNames);
+    const attributes = { ...previous?.attributes, ...(includeDeclaredAttributes ? declaredSheetAttributes(row) : {}), ...(row.capacity ? { capacity: row.capacity } : {}) };
     variants.set(id, { id, values: { ...previous?.values, ...Object.fromEntries(Object.entries(values).filter(([, value]) => value !== '')) },
-      ...(row.capacity ? { attributes: { capacity: row.capacity } } : previous?.attributes ? { attributes: previous.attributes } : {}) });
+      ...(Object.keys(attributes).length ? { attributes } : {}) });
     (origins[id] ??= []).push(origin(row));
   }
   for (const [id, labels] of names) if (labels.size > 1) {

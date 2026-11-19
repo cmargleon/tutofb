@@ -1,0 +1,40 @@
+{
+  "description": "Gold set for the deterministic base-code resolver. expected: variant SKC, 'base:<code>' (variant left to vision), or null (exception). Extend with real labeled filenames before activating a client.",
+  "sheet": [
+    ["Código base", "SKC", "SKU", "Nombre", "Categoría", "Color", "Talla"],
+    ["CAM001", "CAM001-N", "CAM001-N-S", "Camisa Oxford", "Camisas", "Negro", "S"],
+    ["CAM001", "CAM001-N", "CAM001-N-M", "Camisa Oxford", "Camisas", "Negro", "M"],
+    ["CAM001", "CAM001-B", "CAM001-B-S", "Camisa Oxford", "Camisas", "Blanco", "S"],
+    ["CAM001", "CAM001-R", "CAM001-R-S", "Camisa Oxford", "Camisas", "Rojo", "S"],
+    ["CAM0010", "CAM0010-N", "CAM0010-N-U", "Camisa Lino", "Camisas", "Negro", "U"],
+    ["AB-120", "AB-120-AZ", "AB-120-AZ", "Taza esmaltada", "Cocina", "Azul", ""],
+    ["AB-121", "AB-121-RO", "AB-121-RO", "Plato hondo", "Cocina", "Rojo", ""],
+    ["PROD_AZUL-20", "PROD_AZUL-20-1", "PROD_AZUL-20-1", "Botella térmica", "Cocina", "Azul", ""],
+    ["CAM-001", "CAM-001-VE", "CAM-001-VE", "Playera básica", "Playeras", "Verde", ""],
+    ["CAM002", "CAM002-LISO", "CAM002-LISO", "Blusa", "Blusas", "Negro", ""],
+    ["CAM002", "CAM002-EST", "CAM002-EST", "Blusa", "Blusas", "Negro", ""],
+    ["DUP9", "DUP9-A", "DUP9-A", "Sartén antiadherente", "Cocina", "Negro", ""],
+    ["DUP9", "DUP9-B", "DUP9-B", "Mochila escolar", "Mochilas", "Negro", ""]
+  ],
+  "photos": [
+    { "name": "CAM001-01.jpg", "expected": "base:CAM001", "case": "A" },
+    { "name": "CAM001-05.JPG", "expected": "base:CAM001", "case": "A" },
+    { "name": "cam001_3.png", "expected": "base:CAM001", "case": "C" },
+    { "name": "CAM001 (2).jpg", "expected": "base:CAM001", "case": "C" },
+    { "name": "CAM001-N-01.jpg", "expected": "CAM001-N", "case": "A" },
+    { "name": "CAM001-B_frente.jpg", "expected": "CAM001-B", "case": "A" },
+    { "name": "CAM0010-01.jpg", "expected": "CAM0010-N", "case": "B" },
+    { "name": "CAM00101.jpg", "expected": null, "case": "B" },
+    { "name": "AB-120-01.jpg", "expected": "AB-120-AZ", "case": "C" },
+    { "name": "AB-120_2.webp", "expected": "AB-120-AZ", "case": "C" },
+    { "name": "AB-12001.jpg", "expected": null, "case": "C" },
+    { "name": "AB-121-01.jpg", "expected": "AB-121-RO", "case": "C" },
+    { "name": "PROD_AZUL-20 (3).jpg", "expected": "PROD_AZUL-20-1", "case": "C" },
+    { "name": "CAM-001-02.jpg", "expected": "CAM-001-VE", "case": "C" },
+    { "name": "CAM002-01.jpg", "expected": "base:CAM002", "case": "G" },
+    { "name": "CAM002-EST-01.jpg", "expected": "CAM002-EST", "case": "G" },
+    { "name": "DUP9-01.jpg", "expected": null, "case": "D" },
+    { "name": "IMG_4432.jpg", "expected": null, "case": "E" },
+    { "name": "foto producto.jpeg", "expected": null, "case": "E" }
+  ]
+}

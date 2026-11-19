@@ -37,11 +37,11 @@ async function setup(page: Page, role = 'admin') {
     if (name === 'archive' || name === 'restore') client.status = name === 'archive' ? 'archived' : 'active';
     if (name === 'create') clients.unshift({ ...initialClients()[0], id: 'new-client', name: input.name, generationPromptBase: input.prompt });
     if (name === 'update') {
-      const current: Record<string, unknown> = { name: client.name, generationPromptBase: client.generationPromptBase ?? null };
-      const patch = Object.fromEntries(['name', 'generationPromptBase'].filter(key => key in input).map(key => [key, input[key]]));
-      if (Object.keys(patch).some(key => input.expected?.[key] !== current[key])) return { _conflict: { current } };
+      const current: Record<string, unknown> = { name: client.name, generationPromptBase: client.generationPromptBase ?? null, contacts: client.contacts ?? [] };
+      const patch = Object.fromEntries(['name', 'generationPromptBase', 'contacts'].filter(key => key in input).map(key => [key, input[key]]));
+      if (Object.keys(patch).some(key => JSON.stringify(input.expected?.[key]) !== JSON.stringify(current[key]))) return { _conflict: { current } };
     }
-    if (name === 'update') { if (input.name !== undefined) client.name = input.name; if (input.generationPromptBase !== undefined) client.generationPromptBase = input.generationPromptBase; }
+    if (name === 'update') { if (input.contacts !== undefined) client.contacts = input.contacts; if (input.name !== undefined) client.name = input.name; if (input.generationPromptBase !== undefined) client.generationPromptBase = input.generationPromptBase; }
     if (name === 'automation') {
       if (input.section === 'sources' && controls.rejectSource) throw new Error('No se pudo verificar el acceso a la carpeta');
       if (input.section === 'sources') client.automation = { ...client.automation, driveFolderIds: input.automation.driveFolderIds };
@@ -62,7 +62,7 @@ async function setup(page: Page, role = 'admin') {
         return { success: true, current: { ...recipeCurrent, photoRecipe: input.photoRecipe, photoRecipeRevision: next.photoRecipeRevision } };
       }
       const patch = { ...input.settings, ...('enabled' in input ? { enabled: input.enabled } : {}) };
-      if (Object.keys(patch).some(key => input.expected?.[key] !== current[key])) return { _conflict: { current } };
+      if (Object.keys(patch).some(key => JSON.stringify(input.expected?.[key]) !== JSON.stringify(current[key]))) return { _conflict: { current } };
       client.marketplaces[input.marketplaceId] = { enabled: false, ...previous, ...('enabled' in input ? { enabled: input.enabled } : {}), ...('settings' in input ? { settings: { ...previous?.settings, ...Object.fromEntries(Object.entries(input.settings).map(([key, value]) => [key, (value as string).trim()])) } } : {}) };
     }
     return name === 'automation' ? { automation: client.automation } : { success: true };
@@ -94,6 +94,7 @@ async function setup(page: Page, role = 'admin') {
     export const importClientSpreadsheetTemplate = () => { throw Error('No upload expected'); };
     export const deleteClientSpreadsheetTemplate = () => { throw Error('No deletion expected'); };
     export const updateClientSpreadsheetTemplateCategory = () => { throw Error('No category edit expected'); };
+    export const setClientSpreadsheetTemplateStatus = () => { throw Error('No status edit expected'); };
   ` }));
   await page.route('**/src/features/models/firebase.ts*', route => route.fulfill({ contentType: 'application/javascript', body: `export const subscribeToModels = callback => { callback([
     { id: 'man', name: 'Modelo masculino', clientId: 'client-0', status: 'active', identityTraits: { sex: 'male' }, poses: [] },
@@ -102,7 +103,7 @@ async function setup(page: Page, role = 'admin') {
   await page.route('**/src/features/auth/AuthProvider.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `export const useRole = () => ({ isAdmin: true, canRegenerate: true, canEvaluate: true }); export const useAuth = () => ({ user: { uid: 'admin' }, appUser: { active: true, role: '${role}' }, loading: false });` }));
   await page.route('**/src/components/Layout.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '${reactImport}'; import { Outlet } from '${routerImport}'; export const Layout = () => React.createElement('main', { style: { padding: 16 } }, React.createElement(Outlet));` }));
   await page.route('**/src/pages/Dashboard.tsx*', route => route.fulfill({ contentType: 'application/javascript', body: `import React from '${reactImport}'; export const Dashboard = () => React.createElement('h1', null, 'Inicio');` }));
-  await page.route('http://localhost:3000/**', route => {
+  await page.route(`${process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'}/**`, route => {
     if (!route.request().isNavigationRequest()) return route.fallback();
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="es" class="theme-dark"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div>
       <script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;</script>
@@ -460,4 +461,50 @@ test('directory presents loading, empty and read errors without losing filter co
   await expect(page.getByRole('alert')).toContainText('Lectura no disponible');
   await expect(page.getByRole('heading', { name: 'No se pudo cargar el directorio' })).toBeVisible();
   expect(state.calls).toEqual([]);
+});
+
+test('client contacts add multiple people, persist, edit and remove independently', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/clients/client-0?tab=contactos');
+  await expect(page.getByText('Todavía no hay contactos.', { exact: false })).toBeVisible();
+  for (const [index, name, email] of [[1, 'Ana', 'ana@example.com'], [2, 'Luis', 'luis@example.com']] as const) {
+    await page.getByRole('button', { name: 'Agregar contacto', exact: true }).click();
+    const row = page.getByRole('group', { name: `Contacto ${index}`, exact: true });
+    await row.getByRole('textbox', { name: 'Nombre', exact: true }).fill(name);
+    await row.getByRole('textbox', { name: 'Correo electrónico' }).fill(email);
+  }
+  await page.getByRole('button', { name: 'Guardar contactos', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Contactos guardados');
+  expect(state.clients[0].contacts).toEqual([{ name: 'Ana', email: 'ana@example.com' }, { name: 'Luis', email: 'luis@example.com' }]);
+  await page.reload();
+  const first = page.getByRole('group', { name: 'Contacto 1', exact: true });
+  await expect(first.getByRole('textbox', { name: 'Nombre', exact: true })).toHaveValue('Ana');
+  await first.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Ana María');
+  await page.getByRole('button', { name: 'Quitar contacto 2', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Quitar contacto', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar contactos', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Contactos guardados');
+  expect(state.clients[0].contacts).toEqual([{ name: 'Ana María', email: 'ana@example.com' }]);
+  expect(state.clients[0].generationPromptBase).toBe('Prompt conservado');
+  await page.goto('/clients/client-1?tab=contactos');
+  await expect(page.getByRole('group', { name: 'Contacto 1', exact: true })).toHaveCount(0);
+});
+
+test('contact conflicts preserve the draft and archived clients disable contact edits', async ({ page }) => {
+  const state = await setup(page);
+  await page.goto('/clients/client-0?tab=contactos');
+  await page.getByRole('button', { name: 'Agregar contacto', exact: true }).click();
+  const row = page.getByRole('group', { name: 'Contacto 1', exact: true });
+  await row.getByRole('textbox', { name: 'Nombre', exact: true }).fill('Ana');
+  await row.getByRole('textbox', { name: 'Correo electrónico' }).fill('ana@example.com');
+  state.clients[0].contacts = [{ name: 'Luis', email: 'luis@example.com' }];
+  await page.getByRole('button', { name: 'Guardar contactos', exact: true }).click();
+  await expect(page.getByText('Contactos actuales en el servidor:')).toBeVisible();
+  await expect(row.getByRole('textbox', { name: 'Nombre', exact: true })).toHaveValue('Ana');
+  await page.getByRole('button', { name: 'Conservar mi borrador y revisar antes de guardar' }).click();
+  await page.getByRole('button', { name: 'Guardar contactos', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Contactos guardados');
+  expect(state.clients[0].contacts).toEqual([{ name: 'Ana', email: 'ana@example.com' }]);
+  await page.goto('/clients/client-44?tab=contactos');
+  await expect(page.getByRole('button', { name: 'Agregar contacto', exact: true })).toBeDisabled();
 });

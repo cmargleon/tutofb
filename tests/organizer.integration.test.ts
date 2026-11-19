@@ -41,6 +41,12 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
   let brokenHeader = false;
   const backJpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'blue' } }).jpeg().toBuffer();
   const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } }).jpeg().toBuffer();
+  let frontBytes = jpeg;
+  const { createHash } = await import('node:crypto');
+  const hash = (bytes: Buffer) => createHash('md5').update(bytes).digest('hex');
+  files.set('front', { ...files.get('front')!, md5Checksum: hash(jpeg) });
+  files.set('back', { ...files.get('back')!, md5Checksum: hash(backJpeg) });
+  for (const [id, file] of files) original.set(id, structuredClone(file));
   const transport: typeof globalThis.fetch = async (request, init) => {
     const url = new URL(String(request));
     const path = url.pathname.split('/');
@@ -52,23 +58,7 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
         [brokenHeader ? ['Campo extraño', 'Título', 'Valor'] : ['SKC', 'Nombre', 'Color'], ['A218', catalogName, 'Rojo']] });
       return Response.json({ sheets: [{ properties: { sheetId: 0, title: 'Portada', sheetType: 'GRID' } }, { properties: { sheetId: 8, title: "Ropa d'otoño", sheetType: 'GRID' } }] });
     }
-    if (init?.method === 'POST') {
-      writes.push(url.pathname);
-      const bodyText = String(init.body);
-      const body = bodyText.startsWith('--') ? JSON.parse(bodyText.split('\r\n')[3]) : JSON.parse(bodyText);
-      const copy = resource === 'copy' ? files.get(path.at(-2)!) : undefined;
-      const id = `managed-${++created}`;
-      const item = { ...copy, ...body, id };
-      files.set(id, item);
-      return Response.json(item);
-    }
-    if (init?.method === 'PATCH') {
-      assert.ok(!original.has(resource), 'Nunca modifica un original');
-      writes.push(url.pathname);
-      const item = { ...files.get(resource)!, parents: [url.searchParams.get('addParents')!] };
-      files.set(resource, item);
-      return Response.json(item);
-    }
+    assert.equal(init?.method ?? 'GET', 'GET', 'Ninguna fase puede escribir en Drive');
     if (resource === 'files') {
       const query = url.searchParams.get('q') || '';
       const [, parent] = query.match(/^'([^']+)' in parents/) || [];
@@ -79,12 +69,12 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
       pages++;
       return Response.json({ files: all.slice(index, index + 1), ...(index + 1 < all.length ? { nextPageToken: String(index + 1) } : {}) });
     }
-    if (url.searchParams.get('alt') === 'media') return new Response(Uint8Array.from(files.get(resource)?.name === '2.jpg' ? backJpeg : jpeg));
+    if (url.searchParams.get('alt') === 'media') return new Response(Uint8Array.from(files.get(resource)?.name === '2.jpg' ? backJpeg : frontBytes));
     if (files.has(resource)) return Response.json(files.get(resource));
     return Response.json({ error: { errors: [{ reason: 'notFound' }] } }, { status: 404 });
   };
   const drive = new OrganizerDrive(async () => 'fake-oauth', transport);
-  const settings: OrganizerSettings = { sourceIds: ['origin'], parentId: 'parent', folderName: 'Salida', enabled: false, debounceMinutes: 2,
+  const settings: OrganizerSettings = { sourceIds: ['origin'], enabled: false, debounceMinutes: 2,
     budgetUsd: 40, model: 'gemini-3.1-flash-lite', escalationModel: null, minimumConfidence: 0.75, controlSheet: true,
     allowInheritedAccess: false, operatorUids: ['operator'], directories: { sources: 'Fuentes', pending: 'Pendientes', review: 'Revisar', uploaded: 'Subidos', reports: 'Reportes' } };
   const nativeFetch = globalThis.fetch;
@@ -133,14 +123,17 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
     await tickOrganizer(drive);
     const completed = (await runRef(clientId, run.id).get()).data() as StoredRun;
     assert.equal(completed.status, 'completed', completed.error || undefined);
-    assert.equal(completed.counts.copied, 3);
+    assert.equal(completed.counts.copied ?? 0, 0);
     assert.equal(completed.counts.automationJobs, 1, 'La organización inicia la automatización sin esperar aprobación manual de referencias');
     assert.equal(completed.counts.selectedReferences, 1, JSON.stringify({counts:completed.counts,imports:(await runRef(clientId,run.id).collection('imports').get()).docs.map(doc=>doc.data()), photos:(await clientRef(clientId).collection('photos').get()).docs.map(doc => doc.data())}));
     assert.equal(completed.reservedUsd, 0);
     assert.ok(completed.estimatedUsd > 0 && completed.estimatedUsd < 0.01);
     assert.equal(pixelCalls, 2);
     assert.ok(geminiCalls >= 3);
-    assert.ok(completed.reportUrl && completed.controlSheetUrl);
+    assert.ok(completed.reportPath && completed.controlSheetPath);
+    assert.equal((await clientRef(clientId).collection('manifest').get()).size, 0);
+    assert.equal((await clientRef(clientId).collection('driveAttempts').get()).size, 0);
+    assert.deepEqual(writes, []);
     assert.ok(pages >= 4);
     assert.deepEqual([...original].map(([id]) => files.get(id)), [...original.values()]);
     const product = (await clientRef(clientId).collection('products').get()).docs[0];
@@ -153,7 +146,7 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
     assert.equal(after.counts.automationJobs, 0, 'Una sincronización sin fotos nuevas no vuelve a generar');
     assert.equal(after.calls, 0);
     assert.equal((await clientRef(clientId).collection('products').doc(product.id).get()).data()?.referenceState, 'approved');
-    assert.equal(writes.filter(path => path.endsWith('/copy')).length, 3);
+    assert.equal(writes.length, 0);
 
     const second = clientRef(clientId).collection('products').doc('second-variant');
     await second.set({ ...product.data(), id: second.id, visual: 'BETA', base: 'BETA', name: 'Termo de acero', references: { front: [], back: [], main: [] }, referenceState: 'pending' });
@@ -167,20 +160,22 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
     await second.update({ referenceState: 'suggested', references: { front: [], back: [], main: ['front'] } });
     await executeOrganizer({ action: 'references', clientId, variantId: product.id, decision: 'approve' }, actor);
     await assert.rejects(() => executeOrganizer({ action: 'references', clientId, variantId: second.id, decision: 'approve' }, actor), /ya no pertenece/);
-    const imageMock = mock.method(OrganizerDrive.prototype, 'image', async () => jpeg);
+    const imageMock = mock.method(OrganizerDrive.prototype, 'sourceImage', async () => jpeg);
+    const actualAssertSource = drive.assertSource.bind(drive);
+    const assertionMock = mock.method(OrganizerDrive.prototype, 'assertSource', actualAssertSource);
     try {
       const draft = await executeOrganizer({ action: 'draft', clientId, variantId: product.id }, actor) as { photos: unknown[] };
       assert.equal(draft.photos.length, 2, 'Una foto compartida puede servir a la variante explícitamente aprobada');
-    } finally { imageMock.mock.restore(); }
+    } finally { imageMock.mock.restore(); assertionMock.mock.restore(); }
     await executeOrganizer({ action: 'correct', clientId, photoId: 'front', variantId: product.id }, actor);
     await second.delete();
 
-    const movesBeforeStatus = writes.filter(path => !path.endsWith('/copy') && path.includes('/files/')).length;
+    const movesBeforeStatus = writes.length;
     await product.ref.update({ status: 'uploaded' });
     const statusRun = (await enqueue(clientId, 'sync', 'status-filter', actor.uid, { confirmedBudgetUsd: 40 }))!;
     await tickOrganizer(drive);
     assert.equal((await runRef(clientId, statusRun.id).get()).data()?.calls, 0);
-    assert.equal(writes.filter(path => !path.endsWith('/copy') && path.includes('/files/')).length, movesBeforeStatus, 'Los estados no mueven productos');
+    assert.equal(writes.length, movesBeforeStatus, 'Los estados no mueven productos');
 
     catalogName = 'Suéter de lana';
     files.set('book', { ...files.get('book')!, version: '2' });
@@ -195,7 +190,8 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
     assert.equal((await runRef(clientId, decisionRun.id).get()).data()?.status, 'completed');
     assert.equal((await clientRef(clientId).collection('photos').doc('front').get()).data()?.reviewedBy, actor.uid);
     assert.equal(pixelCalls, 2);
-    files.set('front', { ...files.get('front')!, version: '2', md5Checksum: 'changed-pixels' });
+    frontBytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'green' } }).jpeg().toBuffer();
+    files.set('front', { ...files.get('front')!, version: '2', md5Checksum: hash(frontBytes) });
     const imageRun = (await enqueue(clientId, 'sync', 'image-change', actor.uid, { confirmedBudgetUsd: 40 }))!;
     await tickOrganizer(drive);
     assert.equal((await runRef(clientId, imageRun.id).get()).data()?.status, 'completed');
@@ -254,6 +250,27 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
     assert.equal(automatic.generationUid, actor.uid, 'La vigilancia recupera al responsable de la última ejecución manual en configuraciones anteriores');
     assert.equal(automatic.counts.new, 1);
     assert.equal(pixelCalls, 3, 'Un archivo nuevo no reanaliza píxeles previos');
+
+    await t.test('vigilante sin parentId llega a automatización con autoRun del cliente y global apagado', async () => {
+      await systemConfig.update({ organizerAutoGenerationEnabled: false });
+      await db.collection('clients').doc(clientId).update({ 'automation.organizerGeneration.autoRun': true });
+      files.set('fresh-auto', { id: 'fresh-auto', name: 'C300.jpg', mimeType: 'image/jpeg', parents: ['origin'], version: '1', md5Checksum: hash(frontBytes) });
+      await configRef.update({ lastFullScanAt: 0 });
+      await tickOrganizer(drive);
+      await configRef.update({ observedAt: Date.now() - 3 * 60_000 });
+      const before = new Set((await runs.get()).docs.map(doc => doc.id));
+      await tickOrganizer(drive);
+      const auto = (await runs.get()).docs.find(doc => !before.has(doc.id))!.data() as StoredRun;
+      assert.equal(auto.createdBy, 'watcher');
+      assert.equal(auto.status, 'completed', auto.error || undefined);
+      assert.equal(auto.counts.automationJobs, 1);
+      assert.equal((await systemConfig.get()).get('organizerAutoGenerationEnabled'), false);
+      assert.ok(!(await configRef.get()).get('parentId'));
+      assert.equal((await configRef.collection('manifest').get()).size, 0);
+      assert.equal((await configRef.collection('driveAttempts').get()).size, 0);
+      assert.deepEqual(writes, []);
+      assert.deepEqual([...files.keys()].sort(), [...original.keys(), 'extra', 'fresh-auto'].sort());
+    });
 
     const ledgerRun = (await enqueue(clientId, 'classify', 'ledger', actor.uid, { confirmedBudgetUsd: 40 }))!;
     const ledger = runRef(clientId, ledgerRun.id);
@@ -403,7 +420,7 @@ test('organizador de extremo a extremo con Firestore local, Drive y Gemini simul
       assert.equal(Boolean(result), reason === 'pending');
     });
 
-    for (const update of [{ sourceIds: ['different-source'] }, { parentId: 'different-parent' }, { enabled: false }, { activeRunId: 'ongoing-run' }])
+    for (const update of [{ sourceIds: ['different-source'] }, { enabled: false }, { activeRunId: 'ongoing-run' }])
       await t.test(`watch: revalida configuración cambiada durante la observación ${Object.keys(update)[0]}`, async () => {
         const f = await watcherFixture();
         const before = await f.config();

@@ -236,7 +236,13 @@ const buildPhotoTaskScope = (photoTask: NonNullable<ReviewRequest['photoTask']>)
   'El XMP y el esquema de asignación se verifican en el servidor, no por apariencia visual. ' +
   'Evalúa cada destino independientemente; recomendaciones y preferencias no bloquean. ' +
   'Marca como false lo incierto. ' +
-  'No apliques obligaciones de otros canales o categorías. Una portada puede fallar para un canal y servir para otro.';
+  'No apliques obligaciones de otros canales o categorías. Una portada puede fallar para un canal y servir para otro. ' +
+  `La composición del plan es «${photoTask.composition}»: ${photoTask.composition === 'model'
+    ? 'la persona/modelo es obligatoria; nunca rechaces por mostrar una modelo y nunca pidas quitarla en revisedPrompt. ' +
+      'Las prendas complementarias neutras que viste la modelo (p. ej. una camiseta lisa con un pantalón vendido) son estilismo, no un error, salvo que el plan las prohíba.'
+    : 'no debe haber personas; nunca pidas añadir una modelo en revisedPrompt.'} ` +
+  'Si rechazas, revisedPrompt debe conservar esa composición, la vista y el fondo del plan, y corregir solo los defectos detectados. ' +
+  'El veredicto debe ser coherente con el resumen: si el resumen dice que la imagen cumple, el veredicto es approved.';
 
 const EXACT_AUTOMATION_NOTE =
   '\nIf a requirement is ambiguous or unverifiable, record uncertainty in criteria notes and reject for operator ' +

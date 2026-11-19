@@ -235,11 +235,6 @@ const marketplacePreview = (input = {}) => {
     : [] })) });
 };
 export const httpsCallable = (_, name) => async input => {
-  if (window.__masterCatalogFixture) {
-    const { catalogFixtureCall } = await import('./catalog-fixtures.mjs');
-    const response = catalogFixtureCall(name, input);
-    if (response) { (window.__localCalls ||= []).push({ name, input }); return response; }
-  }
   (window.__localCalls ||= []).push({ name, input });
   if (window.__photoEditFixture && ['editJobPhoto', 'selectJobOutput', 'regenerateJob'].includes(name)) {
     const current = records.jobs[0];
@@ -290,7 +285,7 @@ export const httpsCallable = (_, name) => async input => {
       if (input.masterProductId !== 'local-master' || input.organizerContext?.variantId !== workflowVariant.id) return unexpected();
       data.channels = [{ marketplaceId: 'shein', ready: false, compatibleTemplates: 1, issues: [{ marketplaceId: 'shein', code: 'required', productId: 'local-master', field: 'material', message: 'Falta el material.' }] }];
     }
-    if (batchId === window.__dashboardExportError) throw new Error('Error de exportación simulado');
+    if (batchId && batchId === window.__dashboardExportError) throw new Error('Error de exportación simulado');
     if (dashboard && batchId === 'blocked-batch') data.channels = data.channels.map(channel => ({
       ...channel, ready: false, issues: [{ code: 'required', message: 'Falta SKU de la variante.' }],
     }));

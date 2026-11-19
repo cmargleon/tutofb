@@ -24,7 +24,7 @@ export const CatalogBatchExportPanel: React.FC<{
   onExportSpreadsheet,
 }) => (
   <>
-    {selectedBatch && !hasError && !batchLinkError && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4"><p className="text-sm text-slate-600">Completa los datos y prepara los archivos de los destinos de este cliente.</p><MarketplaceExportAction scope={{ clientId: selectedBatch.clientId, batchIds: [selectedBatch.id!] }} /></div>}
+    {selectedBatch && !hasError && !batchLinkError && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4"><p className="text-sm text-slate-600">Completa los datos y prepara los archivos de los destinos de este cliente.{selectedBatch.automationJobId ? ' Incluye todos los lotes de la misma actualización del Organizador.' : ''}</p><MarketplaceExportAction scope={{ clientId: selectedBatch.clientId, batchIds: [selectedBatch.id!], ...(selectedBatch.automationJobId ? { includeOrganizerRun: true } : {}) }} /></div>}
 
     {selectedBatch?.spreadsheetTemplateId && !hasError && (
       <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">

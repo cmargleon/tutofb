@@ -13,8 +13,10 @@ export const ORGANIZER_DIRECTORIES = {
 
 export interface OrganizerSettings {
   sourceIds: string[];
-  parentId: string;
-  folderName: string;
+  /** @deprecated Ignored: Drive is read-only. */
+  parentId?: string;
+  /** @deprecated Ignored: Drive is read-only. */
+  folderName?: string;
   enabled: boolean;
   debounceMinutes: number;
   budgetUsd: number;
@@ -22,11 +24,21 @@ export interface OrganizerSettings {
   escalationModel: string | null;
   minimumConfidence: number;
   controlSheet: boolean;
-  allowInheritedAccess: boolean;
-  directories: typeof ORGANIZER_DIRECTORIES;
+  /** @deprecated Ignored: Drive is read-only. */
+  allowInheritedAccess?: boolean;
+  /** @deprecated Ignored: Drive is read-only. */
+  directories?: typeof ORGANIZER_DIRECTORIES;
   operatorUids: string[];
   maxCalls?: number;
+  /** Absolute call maximum per run; the run limit scales with its photos between `maxCalls` and this cap. */
+  maxCallsCap?: number;
+  /** Absolute USD maximum per run; the run budget scales with its photos between `budgetUsd` and this cap. */
+  budgetCapUsd?: number;
+  /** legacy: current association; shadow: base-code resolver computed and recorded only; baseCode: base-code resolver drives identity. */
+  identityMode?: OrganizerIdentityMode;
 }
+export const ORGANIZER_IDENTITY_MODES = ['legacy', 'shadow', 'baseCode'] as const;
+export type OrganizerIdentityMode = typeof ORGANIZER_IDENTITY_MODES[number];
 
 export interface OrganizerConfig extends OrganizerSettings {
   clientId: string;
@@ -121,6 +133,18 @@ export interface OrganizerVariant {
   catalogFingerprint?: string;
   description?: string;
   sourceTabs?: string[];
+  /** The base code was read from a declared base column (SPU / Código base), not derived. */
+  baseDeclared?: boolean;
+}
+
+/** Result of the deterministic base-code resolver plus, when applicable, the closed-set visual choice. */
+export interface OrganizerBaseCodeIdentity {
+  baseCode: string | null;
+  baseId: string | null;
+  variantId: string | null;
+  candidates: string[];
+  method: 'codigo_variante' | 'codigo_base_unico' | 'codigo_base' | 'sin_codigo' | 'codigo_base_conflicto' | 'varios_codigos';
+  issue: string | null;
 }
 
 export interface OrganizerPhoto {
@@ -146,6 +170,10 @@ export interface OrganizerPhoto {
   candidateDetails?: { id: string; label: string; score: number; evidence: string[] }[];
   quality?: number;
   provisionalCode?: string | null;
+  /** Base-code resolution (active in baseCode mode, informational in shadow mode). */
+  baseCodeIdentity?: OrganizerBaseCodeIdentity;
+  /** The visible product contradicts the declared code or the variant's attributes. */
+  concordance?: { matches: boolean; reason: string } | null;
 }
 
 export interface OrganizerBaseProduct {
@@ -153,6 +181,12 @@ export interface OrganizerBaseProduct {
   code: string;
   name: string;
   variants: string[];
+  declared?: boolean;
+  /** The same declared base code describes different products in the Excel. */
+  conflict?: string | null;
+  /** Canonical master catalog binding (clients/{clientId}/products/{productId}). */
+  catalogProductId?: string | null;
+  catalogIssue?: string | null;
 }
 export interface OrganizerCommercialVariant {
   id: string;
@@ -183,7 +217,7 @@ export interface OrganizerPlanItem {
   name: string;
   sourcePath: string[];
   destination: string[];
-  action: 'copy' | 'place' | 'reuse' | 'retain_legacy';
+  action: 'read';
   reason: string;
   currentFolderUrl?: string | null;
 }
@@ -256,7 +290,7 @@ export interface OrganizerRunFile {
   version: string;
   added: boolean;
   changed: boolean;
-  copied: boolean;
+  copied?: boolean;
   error: string | null;
 }
 export interface OrganizerLedgerItem {

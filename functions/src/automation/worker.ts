@@ -163,4 +163,9 @@ export const recoverAutomation = async (): Promise<void> => {
     });
   }
 };
-export const recoverAutomationImports = onSchedule('every 5 minutes', recoverAutomation);
+export const recoverAutomationImports = onSchedule('every 5 minutes', async () => {
+  await recoverAutomation();
+  // Background marketplace preparations whose instance died return to the queue.
+  const { requeueExpiredMarketplacePrecomputes } = await import('../spreadsheets/marketplacePrecompute');
+  await requeueExpiredMarketplacePrecomputes();
+});

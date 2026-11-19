@@ -90,7 +90,7 @@ export const createClient = async (name: string, generationPromptBase: string = 
   return (await httpsCallable<import('../../../shared/src/types').ManglarClientSaveRequest, { id: string }>(functions, 'saveClient')({ name, generationPromptBase })).data.id;
 };
 
-export const updateClient = async (id: string, patch: Pick<import('../../../shared/src/types').ManglarClientSaveRequest, 'name' | 'generationPromptBase' | 'expected'>) => {
+export const updateClient = async (id: string, patch: Pick<import('../../../shared/src/types').ManglarClientSaveRequest, 'name' | 'generationPromptBase' | 'contacts' | 'expected'>) => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
   
   return (await httpsCallable<import('../../../shared/src/types').ManglarClientSaveRequest, import('../../../shared/src/types').ManglarClientSaveResponse>(functions, 'saveClient')({ id, ...patch })).data;

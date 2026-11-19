@@ -4,13 +4,14 @@ import type { Client, SpreadsheetTemplate } from '../../../shared/src/types';
 import { MARKETPLACES } from '../../../shared/src/marketplaces';
 import { formatDateTimeLong } from '../../../shared/src/utils/dateUtils';
 import { Badge, Card, CardHeader } from '../ui';
+import { isUsableMarketplaceTemplate } from '../../features/marketplaces/templateSelection';
 
 export const ClientOverview = ({ client, templates, onOpenTab }: { client: Client; templates: SpreadsheetTemplate[]; onOpenTab?: (tab: string) => void }) => {
   const channels = MARKETPLACES.filter(channel => client.marketplaces?.[channel.id]?.enabled === true);
   const fields = [
     ['Creado', formatDateTimeLong(client.createdAt)],
     ['Marketplaces habilitados', channels.map(channel => channel.name).join(', ') || 'Ninguno'],
-    ['Fuentes', `${templates.length} plantillas · ${client.automation?.driveFolderIds?.length ?? 0} carpetas autorizadas de Drive`],
+    ['Fuentes', `${templates.filter(isUsableMarketplaceTemplate).length} plantillas de marketplace activas · ${client.automation?.driveFolderIds?.length ?? 0} carpetas autorizadas de Drive`],
     ['Automatización', client.automation?.enabled === false ? 'Desactivada' : client.automation?.enabled === true ? 'Activada' : 'Sin configuración explícita'],
     ['Lotes de generación', Number.isFinite(client.batchCount) ? String(client.batchCount) : 'No disponible'],
     ['Último lote creado', client.lastBatchCreatedAt ? formatDateTimeLong(client.lastBatchCreatedAt) : 'Sin lotes registrados'],

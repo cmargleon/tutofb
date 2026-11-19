@@ -9,6 +9,7 @@ admin.initializeApp();
 setGlobalOptions({ maxInstances: 10, enforceAppCheck: ENFORCE_APP_CHECK });
 
 // Export callables
+export { getGmailConnection, startGmailConnection, gmailOAuthCallback, disconnectGmail, listClientEmails, sendClientEmail } from './email/api';
 export { setUserClientAccess } from './callables/setUserClientAccess';
 export { listClients } from './callables/listClients';
 export * from './callables/updateClientMarketplace';
@@ -88,10 +89,11 @@ export { getManglarConnectionRequest, decideManglarConnection, listManglarConnec
 export { saveClient, saveModel, setClientArchived, setModelArchived, replaceModelPose, setJobManualFlag } from './manglar/catalogService';
 
 export { organizerAction } from './organizer/api';
-export { organizerManualRun, organizerScheduler } from './organizer/worker';
+export { organizerContinuation, organizerManualRun, organizerRunContinuation, organizerScheduler } from './organizer/worker';
 
 export { manageDriveBackup, scheduledDriveBackup, driveBackupWorker, agentDriveWorkspace } from "./backups/functions";
 export { previewMarketplaceExports, downloadMarketplaceExports, saveMasterProduct, configureMarketplaceTemplate, archiveMarketplaceTemplate } from './callables/marketplaceExports';
+export { marketplacePrecomputeOnAutomation, marketplacePrecomputeWorker } from './spreadsheets/marketplacePrecompute';
 export { cleanupMarketplaceExportsOnSchedule } from './spreadsheets/cleanupMarketplaceExports';
 export { publishMarketplaceImages } from './callables/publishMarketplaceImages';
 
@@ -99,5 +101,4 @@ export { previewMarketplacePhotoPlan, createMarketplacePhotoBatch, verifyMarketp
 
 export * from './callables/editJobPhoto';
 
-export { listCatalogProducts, getCatalogProduct, saveCatalogProduct, listCatalogLegacyBatches, previewCatalogImport, applyCatalogImport, getCatalogGenerationImages } from './callables/catalogProducts';
 export { syncCatalogJob, syncCatalogDraft } from './catalog/triggers';

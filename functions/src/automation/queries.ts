@@ -1,6 +1,6 @@
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import * as admin from 'firebase-admin';
-import { DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
+import { DEFAULT_AUTOMATION_BUDGET, effectiveMaxBudgetUsd } from '../../../shared/src/automationPolicy';
 import { PROVIDER_VALUES } from '../../../shared/src/domain';
 import type { AutomationJob } from '../../../shared/src/types';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -36,6 +36,7 @@ export const readAutomationJobStatus = async (id: string, caller: { uid: string;
       const [url] = await admin.storage().bucket().file(output.storagePath).getSignedUrl({ action: 'read', version: 'v4', expires: Date.now() + 15 * 60_000 });
       return { url, type: output.type, metadata: { clientId: job.clientId, generationJobId: output.jobId, itemId: output.itemId, scene: output.type, outputId: output.outputId || null, reviewStatus: 'approved' }, expiresInSeconds: 900 };
     }));
-    const currentBudget = (await getAppFirestore().collection('system_config').doc('main').get()).data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET;
-    return { jobId: job.id, status: job.status, progress: job.progress, outputs, error: job.error, batchId: job.batchId, retryCount: job.retryCount, ...automationPolling(job), ...automationReport(job, currentBudget.maxBudgetUsd) };
+    const [system, client] = await getAppFirestore().getAll(getAppFirestore().collection('system_config').doc('main'), getAppFirestore().collection('clients').doc(job.clientId));
+    const currentBudget = system.data()?.automationBudget ?? DEFAULT_AUTOMATION_BUDGET;
+    return { jobId: job.id, status: job.status, progress: job.progress, outputs, error: job.error, batchId: job.batchId, retryCount: job.retryCount, ...automationPolling(job), ...automationReport(job, effectiveMaxBudgetUsd(currentBudget, client.data()?.automation)) };
 };

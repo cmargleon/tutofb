@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import type { ClientAutomationConfig, Model, UpdateClientAutomationRequest } from '../../../shared/src/types';
-import { resolveAutomationPolicy, DEFAULT_AUTOMATION_BUDGET } from '../../../shared/src/automationPolicy';
+import { resolveAutomationPolicy, DEFAULT_AUTOMATION_BUDGET, validateClientMaxBudget } from '../../../shared/src/automationPolicy';
 import { isProvider } from '../../../shared/src/domain';
 import { isProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
@@ -51,6 +51,11 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
     }
     if (config.defaultMaleModelId && config.defaultMaleModelId === config.defaultFemaleModelId) throw new HttpsError('invalid-argument', 'Selecciona modelos distintos para masculino y femenino.');
     for (const key of ['defaultBudgetUsd', 'maxReviewAttempts', 'maxOperationalRetries'] as const) if (raw[key] !== undefined) config[key] = raw[key];
+    // Admin-only: a client maximum replaces the global maximum for this client's automation jobs (large Organizer updates).
+    if (raw.maxBudgetUsd !== undefined && raw.maxBudgetUsd !== null) {
+      try { config.maxBudgetUsd = validateClientMaxBudget(raw.maxBudgetUsd, typeof raw.defaultBudgetUsd === 'number' ? raw.defaultBudgetUsd : undefined); }
+      catch (error) { throw new HttpsError('invalid-argument', (error as Error).message); }
+    }
     config.presets = raw.presets || {};
     if (Array.isArray(config.presets) || Object.keys(config.presets).length > 20 || JSON.stringify(config.presets).length > 100000) throw new HttpsError('invalid-argument', 'Presets inválidos.');
     for (const [name, preset] of Object.entries(config.presets)) {
@@ -70,7 +75,8 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
     if (raw.organizerGeneration !== undefined) {
       const value = raw.organizerGeneration;
       if (!value || typeof value !== 'object' || Array.isArray(value)
-        || Object.keys(value).some(key => !['enabled', 'preset', 'marketplaceId', 'sourceColumns'].includes(key))
+        || Object.keys(value).some(key => !['enabled', 'autoRun', 'preset', 'marketplaceId', 'sourceColumns'].includes(key))
+        || (value.autoRun !== undefined && typeof value.autoRun !== 'boolean')
         || (value.enabled !== undefined && typeof value.enabled !== 'boolean')
         || (value.marketplaceId !== undefined && !isMarketplaceId(value.marketplaceId))
         || (value.sourceColumns !== undefined && (!value.sourceColumns || typeof value.sourceColumns !== 'object' || Array.isArray(value.sourceColumns) ||
@@ -81,6 +87,7 @@ export const saveClientAutomation = async (input: UpdateClientAutomationRequest,
         throw new HttpsError('invalid-argument', 'Generación desde el Organizador inválida: revisa la activación y el preset en Cliente → Automatizaciones.');
       }
       const organizerGeneration = {
+        ...(value.autoRun !== undefined ? { autoRun: value.autoRun } : {}),
         ...(value.enabled !== undefined ? { enabled: value.enabled } : {}),
         ...(value.preset !== undefined ? { preset: value.preset } : {}),
         ...(value.marketplaceId !== undefined ? { marketplaceId: value.marketplaceId } : {}),

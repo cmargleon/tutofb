@@ -1,4 +1,3 @@
-import { assertLegacyDriveDestination } from '../backups/legacyGuard';
 import { createHash } from 'node:crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getOrganizerDriveToken } from '../google/drive';
@@ -26,14 +25,13 @@ export interface DriveEntry extends DriveFile { path: string[]; sourceId: string
 export class OrganizerDriveError extends Error {
   constructor(readonly status: number, readonly reason: string) { super(`Google Drive respondió ${status} (${reason}).`); }
 }
-export type DriveWriteAttempt = ((key: string) => Promise<boolean>) & { rejected?: (key: string, status: number) => Promise<void> };
 export class OrganizerDrive {
-  constructor(private readonly token = getOrganizerDriveToken, private readonly request = fetch, private readonly destinationGuard = assertLegacyDriveDestination) {}
+  constructor(private readonly token = getOrganizerDriveToken, private readonly request = fetch) {}
 
-  private async google(path: string, query: Record<string, string> = {}, init?: RequestInit) {
+  private async google(path: string, query: Record<string, string> = {}) {
     const response = await this.request(`${path}?${new URLSearchParams(query)}`, {
-      ...init, redirect: 'error', signal: AbortSignal.timeout(30_000),
-      headers: { Authorization: `Bearer ${await this.token(!init)}`, ...init?.headers },
+      method: 'GET', redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: { Authorization: `Bearer ${await this.token()}` },
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null);
@@ -41,15 +39,15 @@ export class OrganizerDrive {
     }
     return response;
   }
-  private api(path: string, query?: Record<string, string>, init?: RequestInit) {
-    return this.google(`https://www.googleapis.com/drive/v3/${path}`, query, init);
+  private api(path: string, query?: Record<string, string>) {
+    return this.google(`https://www.googleapis.com/drive/v3/${path}`, query);
   }
   async metadata(fileId: string): Promise<DriveFile> {
     return (await this.api(`files/${id(fileId)}`, { fields: FIELDS, supportsAllDrives: 'true' })).json();
   }
-  async children(parent: DriveFile, pageToken = '', key?: string): Promise<{ files: DriveFile[]; nextPageToken?: string }> {
+  async children(parent: DriveFile, pageToken = ''): Promise<{ files: DriveFile[]; nextPageToken?: string }> {
     const result = await (await this.api('files', {
-      q: `'${id(parent.id)}' in parents and trashed = false${key ? ` and appProperties has { key='organizerKey' and value='${id(key)}' }` : ''}`,
+      q: `'${id(parent.id)}' in parents and trashed = false`,
       fields: `nextPageToken,incompleteSearch,files(${FIELDS})`, pageSize: '100', supportsAllDrives: 'true', includeItemsFromAllDrives: 'true',
       ...(pageToken ? { pageToken } : {}), ...(parent.driveId ? { corpora: 'drive', driveId: id(parent.driveId) } : { corpora: 'user' }),
     })).json();
@@ -114,7 +112,9 @@ export class OrganizerDrive {
       }
     }
     if (!inSource || chain.some(item => item.appProperties?.organizerTenant) ||
-        !versionOf(file) || versionOf(chain[0]) !== versionOf(file)) {
+        !versionOf(file) || versionOf(chain[0]) !== versionOf(file) ||
+        (file.md5Checksum && chain[0].md5Checksum !== file.md5Checksum) ||
+        (file.sha256Checksum && chain[0].sha256Checksum !== file.sha256Checksum)) {
       throw new HttpsError('failed-precondition', 'El origen cambió o salió de su zona.');
     }
     return chain[0];
@@ -125,7 +125,7 @@ export class OrganizerDrive {
     const url = new URL(file.thumbnailLink);
     if (url.protocol !== 'https:' || !/^lh[1-9]\.googleusercontent\.com$/.test(url.hostname)) return null;
     const response = await this.request(url, { redirect: 'error', signal: AbortSignal.timeout(10_000),
-      headers: { Authorization: `Bearer ${await this.token(true)}` } });
+      headers: { Authorization: `Bearer ${await this.token()}` } });
     if (!response.ok || !response.headers.get('Content-Type')?.startsWith('image/')) return null;
     return this.readBytes(response, 2 * 1024 * 1024);
   }
@@ -134,6 +134,16 @@ export class OrganizerDrive {
   }
   async image(fileId: string): Promise<Buffer> {
     return this.bytes(fileId, 35 * 1024 * 1024);
+  }
+  async sourceImage(file: DriveEntry): Promise<Buffer> {
+    await this.assertSource(file);
+    const bytes = await this.image(file.id);
+    await this.assertSource(file);
+    for (const [algorithm, expected] of [['sha256', file.sha256Checksum], ['md5', file.md5Checksum]] as const) {
+      if (expected && createHash(algorithm).update(bytes).digest('hex') !== expected)
+        throw new HttpsError('failed-precondition', 'El contenido del original no coincide con la versión inventariada.');
+    }
+    return bytes;
   }
   private async bytes(fileId: string, limit: number) {
     return this.readBytes(await this.api(`files/${id(fileId)}`, { alt: 'media', supportsAllDrives: 'true' }), limit);
@@ -190,126 +200,4 @@ export class OrganizerDrive {
     return (await this.sourceChains(sources)).map(chain => chain[0]);
   }
 
-  async zone(sources: string[], parentId: string, allowInheritedAccess: boolean) {
-    const [parentChain, sourceChains] = await Promise.all([this.lineage(parentId), this.sourceChains(sources)]);
-    const parent = parentChain[0];
-    await this.destinationGuard(parent.id, id => this.metadata(id));
-    if (parent.mimeType !== FOLDER || !parent.capabilities?.canAddChildren ||
-        parentChain.some(item => sources.includes(item.id) || item.appProperties?.organizerTenant) ||
-        (!allowInheritedAccess && (parent.driveId || parentChain.some(item => item.shared)))) {
-      throw new HttpsError('failed-precondition', 'El destino debe estar fuera de los orígenes, ser escribible y respetar la política de acceso heredado.');
-    }
-    for (const chain of sourceChains) {
-      const source = chain[0];
-      const sameDrive = source.driveId ? source.driveId === parent.driveId : !parent.driveId &&
-        Boolean(source.owners?.some(owner => parent.owners?.some(other => owner.permissionId === other.permissionId)));
-      if (!sameDrive) {
-        throw new HttpsError('failed-precondition', 'Los orígenes deben ser independientes y pertenecer al mismo Drive que el destino.');
-      }
-    }
-    return { parent, sources: sourceChains.map(chain => chain[0]) };
-  }
-
-  private async find(parent: DriveFile, tenant: string, key: string) {
-    const matches: DriveFile[] = [];
-    let token = '';
-    do {
-      const page = await this.children(parent, token, key);
-      matches.push(...page.files);
-      token = page.nextPageToken || '';
-    } while (token);
-    if (matches.length > 1 || matches.some(file => file.appProperties?.organizerTenant !== tenant || !file.parents?.includes(parent.id))) {
-      throw new HttpsError('failed-precondition', 'Se detectaron copias o carpetas administradas en conflicto.');
-    }
-    return matches[0];
-  }
-  private async createOrFind(parent: DriveFile, tenant: string, key: string, create: () => Promise<DriveFile>, attempt: DriveWriteAttempt) {
-    const existing = await this.find(parent, tenant, key);
-    if (existing) return existing;
-    if (!await attempt(key)) throw new HttpsError('failed-precondition', 'Hay una escritura anterior sin confirmar. Verifica el destino antes de volver a intentar.');
-    try { return await create(); } catch (error) {
-      const reconciled = await this.find(parent, tenant, key);
-      if (reconciled) return reconciled;
-      if (error instanceof OrganizerDriveError && [400, 401, 403, 404, 413, 415, 422, 429].includes(error.status))
-        await attempt.rejected?.(key, error.status);
-      throw error;
-    }
-  }
-  private async write(path: string, payload: object, method = 'POST', query: Record<string, string> = {}) {
-    return (await this.api(path, { fields: FIELDS, supportsAllDrives: 'true', ...query }, {
-      method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-    })).json() as Promise<DriveFile>;
-  }
-  async root(tenant: string, sources: string[], parentId: string, name: string, allowInherited: boolean, attempt: DriveWriteAttempt) {
-    const { parent } = await this.zone(sources, parentId, allowInherited);
-    const key = digest(['root', tenant, parent.id]);
-    return this.createOrFind(parent, tenant, key, () => this.write('files', {
-      name, mimeType: FOLDER, parents: [parent.id], appProperties: { organizerTenant: tenant, organizerKey: key },
-    }), attempt);
-  }
-  async managed(rootId: string, parentId: string, sources: string[], tenant: string, allowedParent: string): Promise<DriveFile> {
-    await this.destinationGuard(parentId, id => this.metadata(id));
-    const chain = await this.lineage(parentId);
-    const root = chain.find(file => file.id === rootId);
-    const managedParent = chain[0];
-    if (!root || root.mimeType !== FOLDER || !root.parents?.includes(allowedParent) ||
-        root.appProperties?.organizerTenant !== tenant || managedParent.mimeType !== FOLDER ||
-        managedParent.appProperties?.organizerTenant !== tenant || chain.some(file => sources.includes(file.id))) {
-      throw new HttpsError('permission-denied', 'Escritura fuera de la carpeta administrada.');
-    }
-    return managedParent;
-  }
-  async folder(zone: ManagedZone, parentId: string, name: string, attempt: DriveWriteAttempt) {
-    const parent = await this.managed(zone.root, parentId, zone.sources, zone.tenant, zone.parent);
-    const key = digest(['folder', parent.id, name]);
-    return this.createOrFind(parent, zone.tenant, key, () => this.write('files', {
-      name, mimeType: FOLDER, parents: [parent.id], appProperties: { organizerTenant: zone.tenant, organizerKey: key },
-    }), attempt);
-  }
-  async copy(zone: ManagedZone, parentId: string, file: DriveEntry, attempt: DriveWriteAttempt) {
-    const [parent, original] = await Promise.all([
-      this.managed(zone.root, parentId, zone.sources, zone.tenant, zone.parent), this.assertSource(file),
-    ]);
-    if (!zone.sources.includes(file.sourceId) || original.capabilities?.canCopy === false) {
-      throw new HttpsError('failed-precondition', 'El origen cambió, salió de su zona o no permite copias.');
-    }
-    const key = digest(['copy', file.id, versionOf(file)]);
-    const copied = await this.createOrFind(parent, zone.tenant, key, () => this.write(`files/${id(file.id)}/copy`, {
-      name: file.name, parents: [parent.id], appProperties: { organizerTenant: zone.tenant, organizerKey: key },
-    }), attempt);
-    await this.assertSource(file);
-    return this.verifyCopy(copied.id, parent.id, file, zone.tenant);
-  }
-  async verifyCopy(copyId: string, parentId: string, file: DriveEntry, tenant: string) {
-    const copy = await this.metadata(copyId);
-    if (copy.id === file.id || copy.trashed || !copy.parents?.includes(parentId) || copy.mimeType !== file.mimeType ||
-        copy.appProperties?.organizerTenant !== tenant || copy.appProperties?.organizerKey !== digest(['copy', file.id, versionOf(file)]) ||
-        (file.size && copy.size !== file.size) || (file.sha256Checksum && file.sha256Checksum !== copy.sha256Checksum) ||
-        (file.md5Checksum && file.md5Checksum !== copy.md5Checksum)) throw new Error('La copia no pudo verificarse.');
-    return { id: copy.id, url: fileUrl(copy), verification: file.sha256Checksum ? 'sha256' : file.md5Checksum ? 'md5' : file.size ? 'size_mime' : 'metadata' };
-  }
-  async moveCopy(zone: ManagedZone, copyId: string, file: DriveEntry, parentId: string) {
-    const [copy, parent] = await Promise.all([this.metadata(copyId), this.managed(zone.root, parentId, zone.sources, zone.tenant, zone.parent)]);
-    const current = copy.parents?.[0];
-    if (!current || copyId === file.id || copy.trashed || copy.appProperties?.organizerTenant !== zone.tenant ||
-        copy.appProperties?.organizerKey !== digest(['copy', file.id, versionOf(file)])) {
-      throw new HttpsError('permission-denied', 'El archivo no es una copia administrada de esta versión.');
-    }
-    await this.managed(zone.root, current, zone.sources, zone.tenant, zone.parent);
-    if (current !== parent.id) await this.write(`files/${id(copyId)}`, {}, 'PATCH', { addParents: parent.id, removeParents: current });
-    return this.verifyCopy(copyId, parent.id, file, zone.tenant);
-  }
-  async report(zone: ManagedZone, parentId: string, key: string, name: string, mimeType: string, bytes: Buffer, attempt: DriveWriteAttempt) {
-    const parent = await this.managed(zone.root, parentId, zone.sources, zone.tenant, zone.parent);
-    return this.createOrFind(parent, zone.tenant, key, async () => {
-      const boundary = `organizer-${key}`;
-      const metadata = { name, mimeType, parents: [parent.id], appProperties: { organizerTenant: zone.tenant, organizerKey: key } };
-      const mediaType = mimeType === SHEET ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : mimeType;
-      const body = Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${mediaType}\r\n\r\n`), bytes, Buffer.from(`\r\n--${boundary}--\r\n`)]);
-      return (await this.google('https://www.googleapis.com/upload/drive/v3/files', {
-        uploadType: 'multipart', supportsAllDrives: 'true', fields: FIELDS,
-      }, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body: body as unknown as BodyInit })).json();
-    }, attempt);
-  }
 }
-export interface ManagedZone { tenant: string; root: string; parent: string; sources: string[] }

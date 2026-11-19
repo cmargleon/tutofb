@@ -35,12 +35,23 @@ export async function validatePlannedPhotoReview(bytes: Buffer, task: PhotoTask,
     const minSide = dest.channel === 'shein' ? 900 : dest.channel === 'tiktok-shop' ? 600 : 500;
     const requiredXmp = dest.channel === 'amazon' && task.syntheticPerformer;
     const whiteRequired = task.background === 'white' && dest.position === 1 && ['amazon', 'tiktok-shop'].includes(dest.channel);
-    if (dest.channel === 'tiktok-shop' && !technical.tiktokRatio || requiredXmp && !technical.xmp || whiteRequired && !technical.whiteCorners || Math.min(metadata.width!, metadata.height!) < minSide) {
-      dest.passed = false; dest.notes += ' Archivo final: revisar resolución, proporción, blanco RGB o XMP requerido.';
+    const failures = [
+      dest.channel === 'tiktok-shop' && !technical.tiktokRatio ? 'proporción 3:4 o 4:3' : '',
+      requiredXmp && !technical.xmp ? 'metadato XMP de intérprete sintético' : '',
+      whiteRequired && !technical.whiteCorners ? 'esquinas en blanco puro RGB 255' : '',
+      Math.min(metadata.width!, metadata.height!) < minSide ? `lado menor de al menos ${minSide} px` : '',
+    ].filter(Boolean);
+    if (failures.length) {
+      dest.passed = false; dest.notes += ` Archivo final no cumple: ${failures.join(', ')}.`;
     }
   }
   if (!review.photoValidation.fidelity || !review.photoValidation.destinations.some(d => d.passed)) {
     review.verdict = 'rejected';
-    review.summary += ' Hay validaciones obligatorias por destino pendientes en el archivo final.';
+    // The verdict must explain itself: Gemini's summary describes the image, not the destination checks that failed.
+    const reasons = [
+      !review.photoValidation.fidelity ? 'Gemini marcó la fidelidad al producto como no cumplida' : '',
+      ...review.photoValidation.destinations.filter(d => !d.passed).map(d => `${d.channel} posición ${d.position}: ${d.notes.trim()}`),
+    ].filter(Boolean);
+    review.summary = `Rechazada por validación del archivo final. ${reasons.join(' ')} Revisión visual de Gemini: ${review.summary}`.slice(0, 2000);
   }
 }

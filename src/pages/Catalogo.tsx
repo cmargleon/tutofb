@@ -20,14 +20,8 @@ import { CatalogLightbox } from '../components/catalog/CatalogLightbox';
 import { CatalogPageSummary, CatalogPaginationControls } from '../components/catalog/CatalogPageSummary';
 import { CatalogStatusMessages } from '../components/catalog/CatalogStatusMessages';
 import { useSystemConfig } from '../features/system/useSystemConfig';
-import { MasterCatalog } from '../features/catalog/MasterCatalog';
 
 export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
-  const [params] = useSearchParams();
-  return client && params.get('catalogView') === 'products' ? <MasterCatalog client={client} /> : <CatalogPhotos client={client} />;
-};
-
-const CatalogPhotos: React.FC<{ client?: Client }> = ({ client }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlClientId = client?.id ?? searchParams.get('clientId') ?? '';
   const batchParam = client ? 'productBatchId' : 'batchId';
@@ -167,7 +161,6 @@ const CatalogPhotos: React.FC<{ client?: Client }> = ({ client }) => {
           {!masterProductId && <p className="text-sm text-amber-800">El lote tiene varias fichas comerciales para esta variante. La exportación individual no se puede determinar desde este enlace.</p>}
         </section>}
         {!client && !scoped && <PageHeader title="Catálogo" icon={Images} description="Fotografías aprobadas y fallidas por cliente, lote y prenda. Revisa, regenera o exporta a marketplaces." />}
-        {!scoped && <nav aria-label="Vistas del catálogo" className="flex gap-5 border-b border-slate-200 pb-3 text-sm"><Link className="tuto-link" to={client ? '?tab=productos&catalogView=products' : `/catalogo/productos${urlClientId ? `?clientId=${encodeURIComponent(urlClientId)}` : ''}`}>Productos maestros</Link><span aria-current="page" className="font-semibold text-emerald-800">Fotografías</span></nav>}
         {!scoped && <div className="tuto-surface p-4">
           <CatalogFilters
             client={client}

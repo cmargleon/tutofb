@@ -3,7 +3,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { getSystemConfigDocRef, isOrganizerWatcherEnabled } from '../admin/systemConfig';
 import { getAppFirestore } from '../firebase/appFirestore';
 import type { OrganizerConfig, OrganizerMode, OrganizerPage, OrganizerRun, OrganizerSettings } from '../../../shared/src/types';
-import { digest, type DriveWriteAttempt } from './drive';
+import { digest } from './drive';
 import type { delegatedStamp } from '../manglar/access';
 
 export const configs = () => getAppFirestore().collection('organizers');
@@ -21,6 +21,8 @@ export interface StoredConfig extends OrganizerConfig {
 export interface StoredRun extends OrganizerRun {
   generationUid?: string | null;
   maxCalls?: number;
+  /** Slices chained by organizerRunContinuation since the run started or was resumed (safety cap). */
+  chainedSlices?: number;
   expectedFingerprint?: string | null;
   cursor: string | null;
   lease: string | null;
@@ -29,7 +31,10 @@ export interface StoredRun extends OrganizerRun {
   variantId: string | null;
   photoIds: string[];
   delegated: ReturnType<typeof delegatedStamp> | null;
-  rootId: string | null;
+  /** Legacy rootId/phase fields are ignored when resuming pre-readonly runs. */
+  rootId?: string | null;
+  reportPath?: string;
+  controlSheetPath?: string;
   supersededBy?: string;
 }
 export const checkedId = (input: unknown): string => {
@@ -58,11 +63,11 @@ export const publicConfig = (config: StoredConfig): OrganizerConfig => {
 };
 export const publicRun = (run: StoredRun): OrganizerRun => {
   const { cursor: _cursor, lease: _lease, leaseUntil: _leaseUntil, fingerprint: _fingerprint, variantId: _variant, photoIds: _photos,
-    generationUid: _generationUid, delegated: _delegated, rootId: _root, supersededBy: _superseded, ...publicFields } = run;
+    generationUid: _generationUid, delegated: _delegated, rootId: _root, supersededBy: _superseded, reportPath: _report, controlSheetPath: _control, ...publicFields } = run;
   return publicFields;
 };
-export const requiresCopy = (mode: OrganizerMode) => mode === 'classify' || mode === 'sync';
-export const appliesCatalog = (mode: OrganizerMode) => requiresCopy(mode) || mode === 'generate';
+export const requiresAnalysis = (mode: OrganizerMode) => mode === 'classify' || mode === 'sync';
+export const appliesCatalog = (mode: OrganizerMode) => requiresAnalysis(mode) || mode === 'generate';
 export async function enqueue(clientId: string, mode: OrganizerMode, key: string, actor: string, options: {
   confirmedBudgetUsd?: number; variantId?: string; photoIds?: string[]; delegated?: StoredRun['delegated']; automaticFingerprint?: string;
   planRunId?: string;
@@ -82,23 +87,22 @@ export async function enqueue(clientId: string, mode: OrganizerMode, key: string
     }
     if (options.automaticFingerprint && (!config.enabled || config.activeRunId || config.observedFingerprint !== options.automaticFingerprint))
       return null;
-    if (options.automaticFingerprint && !isOrganizerWatcherEnabled((await tx.get(getSystemConfigDocRef())).data()))
+    if (options.automaticFingerprint && actor === 'watcher' && !isOrganizerWatcherEnabled((await tx.get(getSystemConfigDocRef())).data()))
       return null;
     let generationActor = config.generationActor;
     if (actor === 'watcher' && !generationActor) {
       const history = await tx.get(ref.collection('runs').where('createdBy', '!=', 'watcher'));
-      const last = history.docs.map(doc => doc.data() as StoredRun).filter(run => requiresCopy(run.mode))
+      const last = history.docs.map(doc => doc.data() as StoredRun).filter(run => requiresAnalysis(run.mode))
         .sort((a, b) => b.createdAt - a.createdAt)[0];
       if (last) generationActor = { uid: last.createdBy, delegated: last.delegated || null };
     }
     if (!config.sourceIds.length) throw new HttpsError('failed-precondition', 'Selecciona al menos una carpeta de origen para iniciar el organizador.');
-    if (requiresCopy(mode) && !config.parentId) throw new HttpsError('failed-precondition', 'Configura el destino de las copias antes de clasificar.');
     const plan = options.planRunId ? (await tx.get(runRef(clientId, options.planRunId))).data() as StoredRun | undefined : null;
     if (options.planRunId && (!plan || plan.status !== 'completed' || plan.mode !== 'dry_run' || plan.counts.errors))
       throw new HttpsError('failed-precondition', 'La simulación debe estar completada.');
     if (config.activeRunId) {
       const active = (await tx.get(runRef(clientId, config.activeRunId))).data() as StoredRun | undefined;
-      if (active?.status !== 'budget_exhausted' || !requiresCopy(mode) || actor === 'watcher' || options.confirmedBudgetUsd !== config.budgetUsd)
+      if (active?.status !== 'budget_exhausted' || !requiresAnalysis(mode) || actor === 'watcher' || options.confirmedBudgetUsd !== config.budgetUsd)
         throw new HttpsError('failed-precondition', 'Ya hay una ejecución activa. Consulta su estado antes de iniciar otra.');
       tx.update(runRef(clientId, active.id), { supersededBy: id, updatedAt: Date.now() });
     }
@@ -112,32 +116,13 @@ export async function enqueue(clientId: string, mode: OrganizerMode, key: string
       photoIds: options.photoIds || [], delegated: options.delegated || (actor === 'watcher' ? generationActor?.delegated : null) || null,
       generationUid: actor === 'watcher' ? generationActor?.uid || config.operatorUids[0] || null : actor,
       rootId: null, maxCalls: config.maxCalls ?? 300,
-      planRunId: options.planRunId || null, expectedFingerprint: plan?.fingerprint || null };
+      planRunId: options.planRunId || null, expectedFingerprint: plan?.fingerprint || (actor !== 'watcher' ? options.automaticFingerprint : null) || null };
     tx.create(runDocument, run);
-    tx.update(ref, { activeRunId: id, watcher: 'running', watcherError: null, ...(requiresCopy(mode) ? { blockedFingerprint: null,
+    tx.update(ref, { activeRunId: id, watcher: 'running', watcherError: null, ...(requiresAnalysis(mode) ? { blockedFingerprint: null,
       ...(actor !== 'watcher' ? { generationActor: { uid: actor, delegated: options.delegated || null } }
         : generationActor ? { generationActor } : {}) } : {}) });
     return publicRun(run);
   });
-}
-export function createAttemptRecorder(root: DocumentReference, runDocument: DocumentReference, lease: string): DriveWriteAttempt {
-  const attempts = root.collection('driveAttempts');
-  const record: DriveWriteAttempt = key => getAppFirestore().runTransaction(async tx => {
-    const doc = attempts.doc(key);
-    const [attempt, run] = await tx.getAll(doc, runDocument);
-    assertLease(run.data() as StoredRun | undefined, lease);
-    if (attempt.exists && attempt.data()?.state !== 'rejected') return false;
-    const prior = attempt.data();
-    tx.set(doc, { state: 'submitted', firstAt: prior?.firstAt || Date.now(), at: Date.now(),
-      attempts: (prior?.attempts || 0) + 1, runId: run.id, lease });
-    return true;
-  });
-  record.rejected = (key, status) => getAppFirestore().runTransaction(async tx => {
-    const doc = attempts.doc(key);
-    const prior = (await tx.get(doc)).data();
-    if (prior?.state === 'submitted' && prior.lease === lease) tx.update(doc, { state: 'rejected', status, rejectedAt: Date.now() });
-  });
-  return record;
 }
 export function assertLease(run: StoredRun | undefined, lease: string): asserts run is StoredRun {
   if (!run || run.lease !== lease || run.status !== 'running' || run.leaseUntil < Date.now())

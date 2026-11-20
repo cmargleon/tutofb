@@ -1,3 +1,4 @@
+import { MODEL_NEUTRAL_TONES, modelBackgroundVerification } from '../../../shared/src/modelBackgrounds';
 import { MODEL_POSE_RECIPES_BY_ID } from '../../../shared/src/modelPoseRecipes';
 import sharp from 'sharp';
 import { verifyWhiteBackground } from '../media/verifyWhiteBackground';
@@ -41,9 +42,11 @@ const POSE_CLASSIFICATION_RESPONSE_SCHEMA = {
       orientation: { type: 'string', enum: ['front', 'back', 'side'] },
       posture: { type: 'string', enum: ['standing', 'other'] },
       framing: { type: 'string', enum: ['upper_body', 'lower_body', 'full_body'] },
+      backgroundTone: { type: 'string', enum: ['white', 'neutral', ...MODEL_NEUTRAL_TONES, 'context', 'unknown'] },
+      backgroundMatches: { type: 'boolean' }, backgroundEvidence: { type: 'string' },
       background: { type: 'string', enum: ['white', 'neutral', 'context'] },
       garmentVisible: { type: 'boolean' }, accessories: { type: 'boolean' }, evidence: { type: 'string' },
-    }, required: ['concretePoseMatches', 'concretePoseEvidence', 'pose', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'identityEvidence', 'audience', 'orientation', 'posture', 'framing', 'background', 'garmentVisible', 'accessories', 'evidence'] },
+    }, required: ['concretePoseMatches', 'concretePoseEvidence', 'pose', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'identityEvidence', 'audience', 'orientation', 'posture', 'framing', 'background', 'backgroundTone', 'backgroundMatches', 'backgroundEvidence', 'garmentVisible', 'accessories', 'evidence'] },
     orientationDetail: {
       type: 'string',
       enum: [
@@ -153,6 +156,7 @@ export const classifyPoseWithGemini = async ({
     'photoObservation.framing: upper_body desde muslos hasta encima de cabeza; lower_body desde pecho o cintura hasta debajo de pies, sin rostro, cintura y bajos completos; full_body cabeza a pies completa.',
     ...(pose.marketplaceBaseSpec?.poseRecipeId ? [`Pose concreta solicitada: ${JSON.stringify(MODEL_POSE_RECIPES_BY_ID.get(pose.marketplaceBaseSpec.poseRecipeId))}. Evalúa sus detalles visibles y modificadores (por ejemplo caminando, contrapposto, diagonal). concretePoseMatches solo true si coincide también esta pose concreta, no basta compartir orientación. Explica concretePoseEvidence.`] : ['Sin pose concreta solicitada: concretePoseMatches=false.']),
     ...(pose.marketplaceBaseSpec?.rulesRevision !== undefined ? [`Configuración editable de Reglas Marketplace: ${JSON.stringify(pose.marketplaceBaseSpec)}. concretePoseMatches evalúa la postura, orientación y gesto de la pose concreta. Para encuadre y mirada prevalece esta configuración sobre el texto genérico del catálogo de poses. Registra lo observado; no des por cumplida la configuración solicitada.`] : []),
+    ...(pose.marketplaceBaseSpec ? [modelBackgroundVerification(pose.marketplaceBaseSpec)] : ['Reporta backgroundTone aproximado y backgroundEvidence visible; sin fondo solicitado backgroundMatches=false.']),
     'Reglas:',
     '- front: cuerpo mayormente de frente',
     '- front_three_quarter: cuerpo de frente con giro parcial visible',
@@ -219,6 +223,8 @@ export const classifyPoseWithGemini = async ({
       || !['front', 'front_three_quarter', 'commercial_back', 'profile', 'unknown'].includes(observation.pose)
       || !['upper_body', 'lower_body', 'full_body'].includes(observation.framing)
       || !['white', 'neutral', 'context'].includes(observation.background)
+      || !['white', 'neutral', ...MODEL_NEUTRAL_TONES, 'context', 'unknown'].includes(observation.backgroundTone)
+      || typeof observation.backgroundMatches !== 'boolean' || typeof observation.backgroundEvidence !== 'string' || !observation.backgroundEvidence.trim()
       || !['baby', 'child', 'adult'].includes(observation.audience)
       || !['standing', 'other'].includes(observation.posture))
       throw new Error('Respuesta incompleta de Gemini; conserva la imagen para volver a verificar sin regenerar.');

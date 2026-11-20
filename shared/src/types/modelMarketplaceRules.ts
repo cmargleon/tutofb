@@ -3,6 +3,7 @@ import type { ModelSetShot } from './modelPhotoSet';
 
 export interface ModelMarketplaceAppearance {
   background: 'client' | 'white' | 'neutral';
+  backgroundTone?: import('../modelBackgrounds').ModelNeutralTone;
   framing: 'auto' | 'upper_body' | 'lower_body' | 'full_body';
   face: 'auto' | 'visible' | 'hidden';
   lookingAtCamera: boolean;

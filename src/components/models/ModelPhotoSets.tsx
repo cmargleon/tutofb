@@ -9,6 +9,7 @@ import { MARKETPLACES } from '../../../shared/src/marketplaces';
 import { MODEL_SET_SHOT_LABELS } from '../../../shared/src/modelPhotoSets';
 import { PHOTO_RECIPE_CATEGORIES } from '../../../shared/src/marketplacePhotoRecipe';
 import { PHOTO_LABELS } from '../../features/generate/MarketplacePhotoPlanPreview';
+import { modelBackground } from '../../../shared/src/modelBackgrounds';
 import { useModelPhotoSets } from '../../features/models/hooks/useModelPhotoSets';
 import { PROVIDER_OPTIONS } from '../../features/models/constants';
 import { Alert, Button, ImageThumb } from '../ui';
@@ -45,7 +46,7 @@ function BaseShot({ model, shot, sets }: { model: Model; shot: ModelPhotoSetsPre
     </div>
     <div className="space-y-3 p-4">
       <p className="font-semibold">{label}</p><p className="text-xs text-slate-600">Zona: {PHOTO_LABELS[shot.spec.bodyArea]} · Toma: {shot.spec.shot === 'front' ? 'Frente' : shot.spec.shot === 'commercial_back' ? 'Espalda' : '3/4'}</p>
-      <p className="text-xs text-slate-600">{shot.spec.role === 'main' ? 'Portada' : 'Galería'} · {PHOTO_LABELS[shot.spec.background]} · {shot.spec.aspectRatio} · {shot.spec.faceVisible ? shot.spec.lookingAtCamera === false ? 'Rostro visible' : 'Rostro hacia cámara' : 'Sin rostro'}</p>
+      <p className="text-xs text-slate-600">{shot.spec.role === 'main' ? 'Portada' : 'Galería'} · {modelBackground(shot.spec).label} · {shot.spec.aspectRatio} · {shot.spec.faceVisible ? shot.spec.lookingAtCamera === false ? 'Rostro visible' : 'Rostro hacia cámara' : 'Sin rostro'}</p>
       {!shot.poseId && shot.issues?.length ? <Alert tone="warning">{shot.issues.join(" ")}</Alert> : null}
       {operation && <BaseOperationHistory operation={operation} approved={Boolean(shot.poseId)} /> }
       {sets.canGenerate(shot) && <Button size="sm" disabled={sets.busy || Boolean(sets.preview?.issues.length)} onClick={() => void sets.generate([shot])}>{operation ? 'Reanudar toma' : pose ? 'Reintentar toma' : 'Generar toma'} · ${shot.estimatedCostUsd.toFixed(3)}</Button>}

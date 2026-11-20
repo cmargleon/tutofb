@@ -65,3 +65,17 @@ Antes de cada intento el worker revalida modelo/aprobación y generación actual
 Pruebas de dominio: combinaciones de canales, igualdad de entradas del wizard, ausencia de fallback, proporciones por tarea, dimensiones de compatibilidad, excepciones sin modelo, evidencia insuficiente, prompts/revisión coherentes y blanco técnico. Integraciones con Firebase local: generación simulada por toma, idempotencia, candidatas fallidas conservadas, aprobación explícita del mismo asset para otro set, recetas congeladas y paridad de automatización, bytes sustituidos, pertenencia, ZIP y reglas de protección. Prueba de interfaz con conectores simulados: selección de formatos, faltantes, aprobación de costo y generación individual, en móvil/escritorio.
 
 Los tests usan proveedores simulados y archivos sintéticos de prueba. No acreditan mejoras visuales en fotografías reales; no se han encargado generaciones pagadas reales para validar calidad.
+
+## Fondo configurado por marketplace y rol
+
+La identidad conserva el fondo elegido en su formulario. Al generar una base, la referencia de identidad solo aporta persona, edad y proporciones: su fondo se ignora y se reemplaza completamente por el resuelto para destino y función (`main`/`alternative`). La configuración prevalece sobre cualquier fondo mencionado por la receta de pose.
+
+`ModelMarketplaceAppearance.background` conserva `client | white | neutral`. Solo `neutral` permite `backgroundTone` opcional: `light_gray` (gris claro), `medium_gray` (gris medio), `warm_beige` (beige cálido), `cool_sand` (arena fría), `off_white` (blanco roto). Sin tono se mantiene neutro genérico; `client` resuelve la receta del cliente o el default histórico del destino/rol. Las etiquetas y textos exactos viven en `shared/src/modelBackgrounds.ts`, usados por generación, verificación y vista previa de Reglas Marketplace. Las tarjetas de Poses muestran el tono esperado.
+
+La especificación/aprobación congela `backgroundTone` cuando existe. Un cambio de tono cambia la especificación incluso sin incrementar revisión; el guardado incrementa únicamente la revisión del destino editado e invalida sus aprobaciones previas. Las reglas, especificaciones y observaciones históricas `white`/`neutral` sin tono siguen siendo válidas. No hay migración ni regeneración automática.
+
+Gemini recibe el fondo esperado y devuelve categoría, tono aproximado (`backgroundTone`), cumplimiento (`backgroundMatches`) y evidencia visible (`backgroundEvidence`). Para un tono específico se exige categoría neutra, tono coincidente, cumplimiento afirmativo y evidencia no vacía. Un blanco cuando se pide gris claro se rechaza como «Fondo requerido: gris claro neutro; observado: blanco». Se toleran sombras e iluminación natural, no otro tono de fondo. El blanco puro conserva la comprobación técnica existente.
+
+Al vestir una base aprobada, su fondo es la única referencia de fondo: se ignoran los fondos de identidad y prendas, y se conserva el tono, escena y sombras de la base. La revisión final recibe la misma definición compartida y exige conservarla. El texto de vestuario de relleno de las bases no cambia.
+
+MCP `system.saveModelMarketplaceRule`: `main` y `alternative` admiten el `backgroundTone` opcional anterior exclusivamente con `background: neutral`; conserva `expectedRevision` y la autorización administrativa existente. Contratos generados en `functions/src/manglar/contracts.json`.

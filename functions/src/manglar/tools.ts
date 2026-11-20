@@ -52,7 +52,7 @@ export const MANGLAR_DOMAIN_TOOLS = [
             // envelope in every branch so authorization and idempotency survive discovery.
             oneOf: operations.map(op => object({ action: { type: 'string', const: op.action }, data: operationSchema(op), idempotencyKey, authorization },
                 ['action', 'data', ...(op.risk === 'write' ? ['idempotencyKey'] : ['paid', 'critical', 'destructive'].includes(op.risk) ? ['authorization'] : [])])) };
-        return definition(`manglar_${domain}`, `Operaciones de ${domain}: ${operations.map(op => `${op.action} (${op.risk})`).join(', ')}. Usa manglar_describe para detalles. Lecturas directas; cambios reversibles con idempotencyKey; paid/critical/destructive requieren manglar_prepare_action y autorización exacta.`, compactSchema(schema), operations.every(op => op.risk === 'read'));
+        return definition(`manglar_${domain}`, `Operaciones de ${domain}: ${operations.map(op => `${op.action} (${op.risk})`).join(', ')}. Usa manglar_describe para detalles.${domain === 'system' ? ' saveModelMarketplaceRule: main/alternative.background admiten client, white o neutral; para neutral se puede añadir backgroundTone: light_gray, medium_gray, warm_beige, cool_sand u off_white. Sin tono conserva neutro genérico. El guardado con expectedRevision invalida solo las aprobaciones del destino editado.' : ''} Lecturas directas; cambios reversibles con idempotencyKey; paid/critical/destructive requieren manglar_prepare_action y autorización exacta.`, compactSchema(schema), operations.every(op => op.risk === 'read'));
     }),
 ];
 export const executeDomainTool = async (name: string, args: Record<string, unknown>, caller: DelegatedCaller): Promise<unknown> => {

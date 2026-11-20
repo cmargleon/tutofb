@@ -60,6 +60,9 @@ export interface PhotoBaseObservation {
   height?: number;
   mainPoseCompliant?: boolean;
   whiteRgbVerified?: boolean;
+  backgroundTone?: import('../modelBackgrounds').ModelNeutralTone | 'white' | 'neutral' | 'context' | 'unknown';
+  backgroundMatches?: boolean;
+  backgroundEvidence?: string;
   audience?: 'baby' | 'child' | 'adult';
   orientation: GarmentView; posture: 'standing' | 'other'; framing: 'upper_body' | 'lower_body' | 'full_body';
   background: 'white' | 'neutral' | 'context'; garmentVisible: boolean; accessories: boolean;

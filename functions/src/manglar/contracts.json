@@ -15064,6 +15064,36 @@
                     }
                   ]
                 },
+                "backgroundTone": {
+                  "type": "string",
+                  "enum": [
+                    "white",
+                    "neutral",
+                    "unknown",
+                    "light_gray",
+                    "medium_gray",
+                    "warm_beige",
+                    "cool_sand",
+                    "off_white",
+                    "context"
+                  ]
+                },
+                "backgroundMatches": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "backgroundEvidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                },
                 "audience": {
                   "type": "string",
                   "enum": [
@@ -15240,6 +15270,16 @@
                         "enum": [
                           "white",
                           "neutral"
+                        ]
+                      },
+                      "backgroundTone": {
+                        "type": "string",
+                        "enum": [
+                          "light_gray",
+                          "medium_gray",
+                          "warm_beige",
+                          "cool_sand",
+                          "off_white"
                         ]
                       },
                       "aspectRatio": {
@@ -15448,6 +15488,36 @@
                             "type": "boolean"
                           }
                         ]
+                      },
+                      "backgroundTone": {
+                        "type": "string",
+                        "enum": [
+                          "white",
+                          "neutral",
+                          "unknown",
+                          "light_gray",
+                          "medium_gray",
+                          "warm_beige",
+                          "cool_sand",
+                          "off_white",
+                          "context"
+                        ]
+                      },
+                      "backgroundMatches": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "backgroundEvidence": {
+                        "type": "string",
+                        "maxLength": 30000
                       },
                       "audience": {
                         "type": "string",
@@ -17081,6 +17151,36 @@
                     }
                   ]
                 },
+                "backgroundTone": {
+                  "type": "string",
+                  "enum": [
+                    "white",
+                    "neutral",
+                    "unknown",
+                    "light_gray",
+                    "medium_gray",
+                    "warm_beige",
+                    "cool_sand",
+                    "off_white",
+                    "context"
+                  ]
+                },
+                "backgroundMatches": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "backgroundEvidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                },
                 "audience": {
                   "type": "string",
                   "enum": [
@@ -17257,6 +17357,16 @@
                         "enum": [
                           "white",
                           "neutral"
+                        ]
+                      },
+                      "backgroundTone": {
+                        "type": "string",
+                        "enum": [
+                          "light_gray",
+                          "medium_gray",
+                          "warm_beige",
+                          "cool_sand",
+                          "off_white"
                         ]
                       },
                       "aspectRatio": {
@@ -17465,6 +17575,36 @@
                             "type": "boolean"
                           }
                         ]
+                      },
+                      "backgroundTone": {
+                        "type": "string",
+                        "enum": [
+                          "white",
+                          "neutral",
+                          "unknown",
+                          "light_gray",
+                          "medium_gray",
+                          "warm_beige",
+                          "cool_sand",
+                          "off_white",
+                          "context"
+                        ]
+                      },
+                      "backgroundMatches": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "backgroundEvidence": {
+                        "type": "string",
+                        "maxLength": 30000
                       },
                       "audience": {
                         "type": "string",
@@ -21229,6 +21369,16 @@
                   "client"
                 ]
               },
+              "backgroundTone": {
+                "type": "string",
+                "enum": [
+                  "light_gray",
+                  "medium_gray",
+                  "warm_beige",
+                  "cool_sand",
+                  "off_white"
+                ]
+              },
               "framing": {
                 "type": "string",
                 "enum": [
@@ -21272,6 +21422,16 @@
                   "white",
                   "neutral",
                   "client"
+                ]
+              },
+              "backgroundTone": {
+                "type": "string",
+                "enum": [
+                  "light_gray",
+                  "medium_gray",
+                  "warm_beige",
+                  "cool_sand",
+                  "off_white"
                 ]
               },
               "framing": {

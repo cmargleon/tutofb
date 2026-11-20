@@ -3,14 +3,20 @@ import type { ModelMarketplaceAppearance, ModelMarketplaceRule } from '../../../
 import { MODEL_RULE_POSES, MODEL_RULE_SHOTS } from '../../../../shared/src/modelMarketplaceRules';
 import { MODEL_SET_SHOT_LABELS } from '../../../../shared/src/modelPhotoSets';
 
+import { MODEL_BACKGROUNDS, modelBackground, type ModelNeutralTone } from '../../../../shared/src/modelBackgrounds';
+
 const framingLabels = { auto: 'Según la zona de la pose', full_body: 'Cuerpo completo', upper_body: 'Parte superior', lower_body: 'Parte inferior · sin rostro' };
 function Appearance({ title, value, onChange }: { title: string; value: ModelMarketplaceAppearance; onChange: (value: ModelMarketplaceAppearance) => void }) {
   const prefix = title;
   return <fieldset className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-5">
     <legend className="px-2 text-base font-semibold">{title}</legend>
-    <label className="block min-w-0 text-sm">Fondo · {prefix}<select className="tuto-field mt-2 w-full min-w-0 max-w-full" value={value.background} onChange={e => onChange({ ...value, background: e.target.value as typeof value.background })}>
-      <option value="client">Regla actual / configuración del cliente</option><option value="white">Blanco puro · #FFFFFF</option><option value="neutral">Neutro claro de estudio</option>
-    </select></label>
+    <label className="block min-w-0 text-sm">Fondo · {prefix}<select className="tuto-field mt-2 w-full min-w-0 max-w-full" value={value.backgroundTone ?? value.background} onChange={e => {
+      const { backgroundTone: _oldTone, ...appearance } = value;
+      const selected = e.target.value;
+      onChange({ ...appearance, background: selected === 'client' || selected === 'white' ? selected : 'neutral', ...(selected !== 'client' && selected !== 'white' && selected !== 'neutral' ? { backgroundTone: selected as ModelNeutralTone } : {}) });
+    }}>
+      <option value="client">Regla actual / configuración del cliente</option>{Object.entries(MODEL_BACKGROUNDS).map(([id, option]) => <option key={id} value={id}>{option.label}</option>)}
+    </select></label><p className="text-xs text-slate-500">{value.background === 'client' ? 'El texto se resolverá según el fondo de la receta del cliente o el predeterminado del destino para este rol.' : modelBackground({ ...value, background: value.background }).prompt}</p>
     <label className="block min-w-0 text-sm">Encuadre · {prefix}<select className="tuto-field mt-2 w-full min-w-0 max-w-full" value={value.framing} onChange={e => {
       const framing = e.target.value as typeof value.framing;
       onChange({ ...value, framing, face: framing === 'lower_body' || value.face === 'hidden' ? 'auto' : value.face });

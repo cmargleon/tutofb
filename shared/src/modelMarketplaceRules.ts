@@ -1,3 +1,4 @@
+import { MODEL_NEUTRAL_TONES } from './modelBackgrounds';
 import { MODEL_POSE_RECIPES } from './modelPoseRecipes';
 import type { MarketplaceId } from './marketplaces';
 import type { ModelMarketplaceAppearance, ModelMarketplaceRule, ModelMarketplaceRules } from './types/modelMarketplaceRules';
@@ -24,7 +25,8 @@ export function validateModelMarketplaceRule(value: unknown): ModelMarketplaceRu
   if (!oneOf(value.aspectRatio, MODEL_RULE_RATIOS) || !list(value.shots, MODEL_RULE_SHOTS) || !(value.shots as string[]).includes('front')
     || !list(value.allowedPoseRecipeIds, MODEL_RULE_POSES.map(p => p.id))) return invalid();
   for (const appearance of [value.main, value.alternative]) {
-    if (!exact(appearance, ['background', 'framing', 'face', 'lookingAtCamera', 'standingFront'])
+    if (!exact(appearance, ['background', 'framing', 'face', 'lookingAtCamera', 'standingFront', ...(record(appearance) && Object.hasOwn(appearance, 'backgroundTone') ? ['backgroundTone'] : [])])
+      || record(appearance) && Object.hasOwn(appearance, 'backgroundTone') && (appearance.background !== 'neutral' || !oneOf(appearance.backgroundTone, MODEL_NEUTRAL_TONES))
       || !oneOf(appearance.background, ['client', 'white', 'neutral']) || !oneOf(appearance.framing, MODEL_RULE_FRAMINGS)
       || !oneOf(appearance.face, ['auto', 'visible', 'hidden']) || typeof appearance.lookingAtCamera !== 'boolean' || typeof appearance.standingFront !== 'boolean'
       || appearance.face === 'hidden' && appearance.framing !== 'lower_body'

@@ -15,6 +15,7 @@ export interface ModelBaseSpec {
   shot: ModelSetShot;
   role: 'main' | 'alternative';
   background: 'white' | 'neutral';
+  backgroundTone?: import('../modelBackgrounds').ModelNeutralTone;
   aspectRatio: AspectRatio;
   framing: PhotoBaseObservation['framing'];
   faceVisible: boolean;

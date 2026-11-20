@@ -20,7 +20,7 @@ const idempotency = (key: unknown, caller: DelegatedCaller): string => {
     return oauthHash(`${caller.uid}:${key}`);
 };
 // Bind confirmations to the current documents as well as the exact payload. No free-form writes.
-const targetVersions = async (operation: Operation, data: any): Promise<Record<string, string>> => {
+const targetVersions = async (operation: Operation, data: any, uid: string): Promise<Record<string, string>> => {
     const db = getAppFirestore();
     const paths = new Set<string>();
     const visit = (value: any) => {
@@ -31,6 +31,10 @@ const targetVersions = async (operation: Operation, data: any): Promise<Record<s
             return;
         }
         for (const [key, entry] of Object.entries(value)) {
+            if (['jobIds', 'batchIds'].includes(key) && Array.isArray(entry)) {
+                for (const id of entry) if (typeof id === 'string' && /^[\w-]{1,200}$/.test(id))
+                    paths.add(`${key === 'jobIds' ? 'jobs' : 'batches'}/${id}`);
+            }
             if (typeof entry === 'string' && /^[\w-]{1,200}$/.test(entry)) {
                 if (key === 'clientId')
                     paths.add(`clients/${entry}`);
@@ -50,12 +54,20 @@ const targetVersions = async (operation: Operation, data: any): Promise<Record<s
         }
     };
     visit(data);
+    if (data.jobId && (data.sourceOutputId || data.outputId))
+        paths.add(`jobs/${data.jobId}/outputs/${data.sourceOutputId || data.outputId}`);
     if (operation.domain === 'system')
-        paths.add(operation.action === 'alerts' ? 'system_alert_settings/main' : 'system_config/main');
+        paths.add(operation.action === 'alerts' ? 'system_alert_settings/main' : operation.action === 'saveModelMarketplaceRule' ? 'system_config/model_marketplace_rules' : 'system_config/main');
     if (operation.domain === 'finance' && operation.action === 'pricing')
         paths.add(`finance_client_pricing/${data.clientId}`);
-    if (operation.domain === 'spreadsheets' && ['delete', 'selectCategory'].includes(operation.action))
+    if (operation.domain === 'spreadsheets' && data.templateId)
         paths.add(`clients/${data.clientId}/spreadsheetTemplates/${data.templateId}`);
+    if (['spreadsheets.analyzeMarketplace', 'spreadsheets.downloadMarketplace', 'catalog.publishMarketplaceImages'].includes(`${operation.domain}.${operation.action}`)) {
+        const { loadExportContext } = await import('../spreadsheets/marketplaceExportService');
+        const context = await loadExportContext(data, uid);
+        for (const id of context.scope.batchIds) paths.add(`batches/${id}`);
+        for (const product of context.products) paths.add(`clients/${data.clientId}/products/${product.canonicalProductId || product.id}`);
+    }
     if (operation.domain === 'finance' && operation.action === 'settings')
         paths.add('finance_settings/main');
     if (operation.domain === 'connections' && operation.action === 'setAccess')
@@ -102,7 +114,7 @@ export const prepareAction = async (input: PrepareActionInput, caller: Delegated
     const hash = actionHash(input.domain, input.action, input.data);
     const id = idempotency(input.idempotencyKey, caller);
     const token = opaqueValue();
-    const versions = await targetVersions(operation, input.data);
+    const versions = await targetVersions(operation, input.data, caller.uid);
     const ref = getAppFirestore().collection('manglarOperations').doc(id);
     const existing = await ref.get();
     if (existing.exists) {
@@ -136,7 +148,7 @@ export const executeOperation = async (operation: Operation, data: any, caller: 
     const db = getAppFirestore();
     const ref = db.collection('manglarOperations').doc(id);
     const hash = actionHash(operation.domain, operation.action, data);
-    const versions = needsConfirmation ? await targetVersions(operation, data) : {};
+    const versions = needsConfirmation ? await targetVersions(operation, data, caller.uid) : {};
     const claim = await db.runTransaction(async (tx) => {
         const snapshot = await tx.get(ref);
         const stored = snapshot.data();

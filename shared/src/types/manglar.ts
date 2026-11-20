@@ -1,6 +1,11 @@
 import type { ClientContact } from './client';
 import type { ModelIdentityTraits, PoseAiClassification } from './model';
 import type { Role } from './common';
+import type { MarketplaceExportPreviewRequest } from './marketplaceExport';
+/** Cached-only preview. Gemini analysis has its own paid MCP action. */
+export type ManglarMarketplacePreviewRequest = Omit<MarketplaceExportPreviewRequest, 'analyzeAutofill' | 'retryFailedAutofill'>;
+export interface ManglarTemplateArchiveRequest { clientId: string; templateId: string }
+export interface ManglarVerifyPhotoBasesRequest { modelId: string; poseIds: string[] }
 export interface ManglarClientSaveRequest {
     id?: string;
     name?: string;

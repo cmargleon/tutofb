@@ -10,6 +10,7 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { validId } from '../manglar/access';
 import { validatePhotoEditInstructions } from '../workers/jobImageEdit';
 import { buildRegenerationReviewSignalsPatch } from '../review/reviewSignals';
+import { getManglarContext } from '../manglar/context';
 
 export const editJobPhoto = onCall<EditJobPhotoRequest, Promise<EditJobPhotoResponse>>(async request => {
   await assertCallableRoles(request, ['admin', 'operador']);
@@ -56,6 +57,7 @@ export const editJobPhoto = onCall<EditJobPhotoRequest, Promise<EditJobPhotoResp
     };
     const displayName = userSnapshot.get('displayName');
     tx.update(jobRef, {
+      ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
       imageEdit,
       ...(job.automationJobId ? { automationManaged: false, automationReviewPending: false, automationGate: null } : {}),
       status: 'pending', queuePriority: 1, retryCount: 0, retryNotBefore: null,

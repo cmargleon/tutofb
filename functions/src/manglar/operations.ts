@@ -51,6 +51,7 @@ op('users', 'get', 'ManglarGetRequest', ['admin'], 'read', 'src/features/users/f
     return sanitizeResult({ ...snapshot.data(), uid: snapshot.id });
 });
 op('system', 'operations', 'ManglarQueryRequest', ['admin'], 'read', 'functions/src/admin/backfillModelPoses.ts', (data, caller) => queryDataset('operations', data, caller));
+op('system', 'modelMarketplaceRules', null, ['admin'], 'read', 'functions/src/models/marketplaceRules.ts', async () => (await import('../models/marketplaceRules')).getModelMarketplaceRules());
 op('connections', 'list', 'ManglarConnectionListRequest', all, 'read', 'functions/src/automation/mcpOAuth.ts', listConnections);
 op('connections', 'revoke', 'ManglarConnectionRevokeRequest', all, 'critical', 'functions/src/automation/mcpOAuth.ts', (data, caller) => revokeConnection(data.connectionId, caller));
 op('connections', 'setAccess', 'ManglarAccessRequest', ['admin'], 'critical', 'functions/src/manglar/connections.ts', setUserAccess);
@@ -146,6 +147,15 @@ export const authorizeOperation = async (operation: Operation, data: any, caller
         const { jobId: _, ...rest } = data;
         await authorizeManglarInput(caller, rest);
         return;
+    }
+    // Export scope may expand from catalog products or the rest of an Organizer run.
+    // Check every resolved batch, not only the IDs explicitly present in the request.
+    if (['spreadsheets.previewMarketplace', 'spreadsheets.analyzeMarketplace', 'spreadsheets.downloadMarketplace',
+        'catalog.saveMasterProduct', 'catalog.publishMarketplaceImages'].includes(`${operation.domain}.${operation.action}`)) {
+        assertClientAccess(caller, data.clientId);
+        const { loadExportContext } = await import('../spreadsheets/marketplaceExportService');
+        const context = await loadExportContext(data, caller.uid);
+        for (const id of context.scope.batchIds) await assertResourceAccess(caller, 'batches', id);
     }
     await authorizeManglarInput(caller, data);
 };

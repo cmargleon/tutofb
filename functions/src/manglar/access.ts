@@ -91,9 +91,9 @@ export const authorizeManglarInput = async (caller: DelegatedCaller, input: unkn
         if (['jobId', 'batchId', 'modelId', 'planId'].includes(key) && typeof value === 'string') {
             await assertResourceAccess(caller, ({ jobId: 'jobs', batchId: 'batches', modelId: 'models', planId: 'automationPlans' } as const)[key as 'jobId'], value);
         }
-        if (key === 'jobIds' && Array.isArray(value))
+        if (['jobIds', 'batchIds'].includes(key) && Array.isArray(value))
             for (const id of value)
-                await assertResourceAccess(caller, 'jobs', id);
+                await assertResourceAccess(caller, key === 'jobIds' ? 'jobs' : 'batches', id);
         if (['storagePath', 'referenceStoragePath'].includes(key))
             await assertStorageAccess(caller, value);
         if (key === 'referencePaths' && Array.isArray(value))

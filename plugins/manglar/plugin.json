@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "manglar",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Opera Tuto desde ChatGPT con permisos individuales, fotografías, producción, revisión, administración y finanzas, presupuestos y confirmaciones exactas."
 }

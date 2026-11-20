@@ -35,14 +35,30 @@ assert.equal((await initialized.json()).result.serverInfo.name, 'manglar');
 const list = await rpc('tools/list');
 assert.equal(list.status, 200);
 const tools = (await list.json()).result.tools;
-assert.equal(tools.length, 23);
+assert.equal(tools.length, 25);
 for (const name of ['manglar_describe','manglar_prepare_action','manglar_operation_status','manglar_clients','manglar_models','manglar_wizard','manglar_catalog','manglar_finance','manglar_users']) assert.ok(tools.some(tool=>tool.name===name));
 assert.ok(tools.every((tool) => tool.securitySchemes[0].type === 'oauth2'));
 assert.equal(tools.find((tool) => tool.name === 'manglar_execute_plan').annotations.readOnlyHint, false);
+for (const name of ['manglar_organizer_read', 'manglar_organizer_manage']) assert.ok(tools.some(tool => tool.name === name));
+const resolve = (root, schema) => schema.$ref ? resolve(root, root.$defs[schema.$ref.split('/').at(-1)]) : schema;
+for (const tool of tools.filter(tool => tool.inputSchema.oneOf)) {
+  const root = tool.inputSchema;
+  for (const entry of root.oneOf) {
+    const branch = resolve(root, entry);
+    assert.equal(branch.type, 'object');
+    for (const field of ['action', 'data', 'idempotencyKey', 'authorization']) assert.ok(branch.properties[field], `${tool.name}: ${field}`);
+    assert.ok(branch.required.includes('action') && branch.required.includes('data'));
+  }
+}
 const unauthorized = await rpc('tools/call', { name: 'manglar_capabilities', arguments: {} });
 assert.equal(unauthorized.status, 401);
 assert.ok(unauthorized.headers.get('www-authenticate')?.includes('oauth-protected-resource'));
 await unauthorized.arrayBuffer();
+// Read-only deployment check; does not create OAuth requests or touch customer data.
+if (process.argv.includes('--discovery-only')) {
+  console.log(JSON.stringify({ discoveryPassed: true, tools: tools.map(tool => tool.name), completeActionEnvelopes: true, anonymousCallsRejected: true }));
+  process.exit(0);
+}
 const invalidToken = await get('/api/manglar/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'https://chatgpt.com/oauth/client.json', code: 'invalid', resource }) });
 assert.equal(invalidToken.status, 400);
 await invalidToken.arrayBuffer();

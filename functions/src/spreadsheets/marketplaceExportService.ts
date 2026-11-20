@@ -10,6 +10,7 @@ import { MARKETPLACES, isMarketplaceId, type MarketplaceId } from '../../../shar
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { validId } from '../manglar/access';
+import { getManglarContext } from '../manglar/context';
 import { applyStoredMasterProduct, jobMasterProductId, projectMasterProducts } from './masterProducts';
 import { inspectWorkbookPackage, patchWorkbookCells, assertPatchableCells, rangeContains, type SheetPatch, type CellPatch, xmlAttrs, validationAccepts } from './ooxmlWorkbook';
 import { applySharedSheinBrands, isSharedSheinPath, loadSharedSheinTemplates, sheinCategoryCode } from './sharedSheinCatalog';
@@ -608,7 +609,10 @@ export async function downloadMarketplaceExport(input: DownloadMarketplaceExport
             }
           });
           if (!squaresDone || !imagesDone) {
-            await enqueueMarketplacePrecompute(scope.clientId, context.scope.batchIds, uid).catch(() => undefined);
+            // MCP work must retain the exact approved operation budget. The regular
+            // background queue has its own lifecycle and cannot inherit that approval.
+            if (!getManglarContext()?.budgetId)
+              await enqueueMarketplacePrecompute(scope.clientId, context.scope.batchIds, uid).catch(() => undefined);
             throw new Error('Las fotos para el marketplace todavía se están preparando en segundo plano. Vuelve a descargar en unos minutos.');
           }
           ({ plans } = await validateTemplateCoordinates(channelContext, channel));

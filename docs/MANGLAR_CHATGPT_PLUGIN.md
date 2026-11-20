@@ -103,6 +103,18 @@ Son instrucciones de uso con IDs descubiertos en cada cuenta; no son operaciones
 | «Configura este presupuesto de automatización para el cliente» | `clients.get`; preparar/confirmar `clients.automation`; límites globales mediante `system.update` |
 | «Crea un operador y permite que conecte su propio ChatGPT solo para este cliente» | Confirmar `users.create`; confirmar `connections.setAccess`; el operador completa OAuth con su sesión |
 
+## Actualización 2.1 — 20 de noviembre de 2026
+
+- El descubrimiento publica 25 herramientas, incluidas las dos del organizador. Cada rama de acción contiene el sobre completo `action`, `data`, `idempotencyKey` y `authorization`; no depende de que el cliente combine propiedades heredadas del esquema raíz. Refresca la ficha de la conexión existente para cargarlo.
+- Los contratos se regeneran desde los tipos actuales: contactos y edición parcial de clientes, controles de concurrencia, prompts por género, reglas y opciones globales del organizador, automatización del cliente y `selectedChannels`.
+- `clients.marketplace` configura canales/recetas; `models.previewSets`, `approveIdentity`, `verifyBase`, `generateBase`, `verifyPhotoBases` y `setActive` operan bases e identidad. `system.modelMarketplaceRules` consulta reglas y `saveModelMarketplaceRule` las guarda con confirmación administrativa.
+- `wizard.previewMarketplacePlan` y `createMarketplaceBatch` cubren producción por canal. `catalog.editPhoto` conserva el presupuesto aprobado en el job para su worker; `recordRejection` y `acknowledgeFailures` reutilizan las acciones de revisión de la aplicación.
+- `spreadsheets.previewMarketplace` consulta exclusivamente resultados cacheados: no admite banderas para iniciar Gemini. Usa `analyzeMarketplace` con presupuesto y confirmación para analizar/completar; `downloadMarketplace` prepara archivos y las imágenes que falten bajo el presupuesto aprobado. Un timeout MCP no encola gasto nuevo fuera de ese presupuesto.
+- `catalog.saveMasterProduct`, `publishMarketplaceImages`, `spreadsheets.configureMarketplaceTemplate`, `archiveMarketplaceTemplate` y `setStatus` cubren fichas, imágenes y plantillas. Publicar imágenes exige confirmación exacta y `authorizePublicImages:true`. Los lotes resueltos indirectamente desde productos o ejecuciones del organizador también respetan cliente y propietario.
+- El organizador permite `workflow`, `thumbnail`, preparación `draft` mediante la herramienta de gestión y el modo `generate`, con los controles existentes de scopes y presupuesto.
+
+La actualización no cambia la URL del servidor, los scopes OAuth ni el acceso asignado. El inventario ejecutable se encuentra en [MANGLAR_TOOL_INVENTORY.md](MANGLAR_TOOL_INVENTORY.md).
+
 ## Diagnóstico y límites explícitos
 
 - `unauthenticated` / HTTP 401: conexión vencida/revocada o token inválido; reconectar. `permission-denied`: rol, cliente o dueño fuera de alcance; no intentar una herramienta privilegiada alternativa.

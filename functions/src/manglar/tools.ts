@@ -48,7 +48,10 @@ export const MANGLAR_DOMAIN_TOOLS = [
     ...domains.map(domain => {
         const operations = MANGLAR_OPERATIONS.filter(op => op.domain === domain);
         const schema = { ...object({ action: { type: 'string', enum: operations.map(op => op.action) }, data: { type: 'object' }, idempotencyKey, authorization }, ['action', 'data']),
-            oneOf: operations.map(op => ({ properties: { action: { const: op.action }, data: operationSchema(op) }, ...(op.risk === 'write' ? { required: ['idempotencyKey'] } : ['paid', 'critical', 'destructive'].includes(op.risk) ? { required: ['authorization'] } : {}) })) };
+            // Some MCP clients compile each union branch independently. Keep the entire
+            // envelope in every branch so authorization and idempotency survive discovery.
+            oneOf: operations.map(op => object({ action: { type: 'string', const: op.action }, data: operationSchema(op), idempotencyKey, authorization },
+                ['action', 'data', ...(op.risk === 'write' ? ['idempotencyKey'] : ['paid', 'critical', 'destructive'].includes(op.risk) ? ['authorization'] : [])])) };
         return definition(`manglar_${domain}`, `Operaciones de ${domain}: ${operations.map(op => `${op.action} (${op.risk})`).join(', ')}. Usa manglar_describe para detalles. Lecturas directas; cambios reversibles con idempotencyKey; paid/critical/destructive requieren manglar_prepare_action y autorización exacta.`, compactSchema(schema), operations.every(op => op.risk === 'read'));
     }),
 ];

@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-11-20T00:28:31.805Z",
+  "resource": "https://tutofb-260320-1003.web.app/api/manglar/mcp",
+  "serverVersion": "2.1.0",
+  "tools": 25,
+  "domainOperations": 120,
+  "publishedSchemasMatchLocal": true,
+  "authenticatedDiscovery": "catalog.editPhoto returned paid risk and current request contract",
+  "deployedFunctions": [
+    "manglarMcp",
+    "editJobPhoto",
+    "downloadMarketplaceExports"
+  ],
+  "checks": {
+    "frontendTypecheck": "passed",
+    "functionsTypecheck": "passed",
+    "functionsBuild": "passed",
+    "generatedSchemas": "95 request schemas; --check passed",
+    "focusedEmulatorSuite": {
+      "passed": 92,
+      "failed": 0,
+      "skipped": 0
+    },
+    "fullEmulatorSuite": {
+      "passed": 691,
+      "failed": 1,
+      "skipped": 3,
+      "failure": "organizerMarketplace.integration.test.ts: existing SHEIN fixture rejected by sanitizeSharedSheinWorkbook; production validator and fixture unchanged"
+    }
+  },
+  "installedConnectionRefresh": "Not completed: native app access blocked by Computer Use and browser opening timed out; refresh the existing connection to reload schemas.",
+  "paidProductionOperations": false
+}

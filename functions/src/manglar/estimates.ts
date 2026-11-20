@@ -28,6 +28,18 @@ export const estimateManglarAction = async (operation: Operation, data: any) => 
             rateEstimateUsd = null;
         }
     }
+    else if (key === 'catalog.editPhoto') {
+        units = 1;
+        const { DEFAULT_IMAGE_PROVIDER } = await import('../../../shared/src/domain');
+        const job = (await getAppFirestore().collection('jobs').doc(data.jobId).get()).data();
+        const output = (await getAppFirestore().collection('jobs').doc(data.jobId).collection('outputs').doc(data.sourceOutputId).get()).data()
+            || [job?.currentOutput, job?.userSelectedOutput, job?.retainedApprovedOutput].find(item => item?.id === data.sourceOutputId);
+        const provider = data.provider || DEFAULT_IMAGE_PROVIDER;
+        const config = (job?.photoProfile ? resolveCommercialPhotoConfig : normalizeProviderImageConfig)(provider, output?.imageConfig, output?.aspectRatio).imageConfig;
+        const hold = estimateGenerationHold(provider, config, 1);
+        initialHoldUsd = hold.holdUsd + GEMINI_OPERATION_HOLD_USD;
+        rateEstimateUsd = hold.estimateUsd;
+    }
     else if (key === 'models.generate') {
         units = data.count;
         const provider = mapModelPhotoProviderToProvider(data.provider);

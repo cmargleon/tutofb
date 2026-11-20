@@ -20,7 +20,7 @@ import { resolveAutomationPresetName } from '../../../shared/src/automationConfi
 import { assertUserRoles } from '../auth/roles';
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { FAL_KEY, GEMINI_API_KEY, getGeminiPoseClassificationModel } from '../config/runtime';
+import { FAL_KEY, GEMINI_API_KEY, getGeminiModelBaseVerifierModel } from '../config/runtime';
 import { assertProviderEnabledInSystemConfig, getSystemConfigCached } from '../admin/systemConfig';
 import { classifyPoseWithGemini } from '../utils/classifyPose';
 import { generateSingleModelPhoto } from '../utils/modelPhotoGeneration';
@@ -129,7 +129,7 @@ export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: st
   const identityFingerprint = await modelAssetFingerprint(identity.storagePath);
   if (identity.sha256 !== identityFingerprint.sha256 || identity.storageGeneration !== identityFingerprint.storageGeneration) throw new HttpsError('failed-precondition', 'La identidad cambió. Apruébala de nuevo.');
   const fingerprint = await modelAssetFingerprint(pose.storagePath);
-  const result = await classifyPoseWithGemini({ apiKey: GEMINI_API_KEY.value(), model: getGeminiPoseClassificationModel(), pose: { ...pose, marketplaceBaseSpec: spec },
+  const result = await classifyPoseWithGemini({ apiKey: GEMINI_API_KEY.value(), model: getGeminiModelBaseVerifierModel(), pose: { ...pose, marketplaceBaseSpec: spec },
     clientId: model.clientId, modelId: ref.id, userUid: uid, identityStoragePath: identity.storagePath, performer: identity.performer, onUsage: onReviewCost });
   const observation = result.photoObservation && withDeclaredModelAge(result.photoObservation, model.identityTraits);
   if (!observation?.verified) throw new HttpsError('unavailable', 'Gemini no produjo una observación fiable. Conserva la imagen y verifica de nuevo, sin regenerar.');
@@ -143,7 +143,7 @@ export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: st
     if ((rules?.[spec.channel]?.revision ?? 0) !== (spec.rulesRevision ?? 0)) throw new HttpsError('aborted', 'Las reglas cambiaron durante la verificación. Revisa y verifica de nuevo.');
     const approvals = (current.marketplaceBaseApprovals || []).filter(a => !(a.poseId === pose.id && sameBaseSpec(a.spec, spec)));
     if (!issues.length) approvals.push({ clientId: model.clientId, modelId: ref.id, recipeRevision: context.client.marketplaces?.[spec.channel]?.photoRecipeRevision ?? 0,
-      verifierModel: getGeminiPoseClassificationModel(), confidence: result.confidence, spec, poseId: pose.id, storagePath: pose.storagePath, ...fingerprint, identitySha256: identity.sha256, observation: observation!,
+      verifierModel: getGeminiModelBaseVerifierModel(), confidence: result.confidence, spec, poseId: pose.id, storagePath: pose.storagePath, ...fingerprint, identitySha256: identity.sha256, observation: observation!,
       verifiedAt: new Date().toISOString(), verifiedByUid: uid, verifierVersion: 'model-base-verifier-v1' });
     tx.update(ref, { marketplaceBaseApprovals: approvals, poses: current.poses.map(p => p.id === pose.id && observation ? { ...p, photoObservation: observation, aiClassification: buildPoseAiClassification({ ...result, taggedAt: new Date().toISOString(), displayLabel: spec.poseRecipeId ? MODEL_POSE_RECIPES_BY_ID.get(spec.poseRecipeId)?.label : null }) } : p), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   });

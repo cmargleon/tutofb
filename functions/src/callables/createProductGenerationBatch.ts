@@ -1,3 +1,4 @@
+import type { OrganizerCommercialLink } from '../organizer/commerce';
 import { resolveOrganizerBatchOrigin } from '../organizer/productWorkflow';
 import { COMMERCIAL_PHOTO_PROFILE, resolveCommercialPhotoConfig } from '../../../shared/src/commercialPhoto';
 import { getManglarContext } from '../manglar/context';
@@ -7,7 +8,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { AutomationJob, Batch, Client, CreateGenerationBatchResponse, CreateProductGenerationBatchRequest, Job } from '../../../shared/src/types';
 import { isActiveCatalogEntity } from '../../../shared/src/domain';
-import { buildProductPrompt, buildProductSceneInstructions } from '../../../shared/src/productGeneration';
+import { buildProductPrompt, buildProductSceneInstructions, resolveProductScene, productPackCountFromVariants, parseProductPackCount } from '../../../shared/src/productGeneration';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { assertCallableRoles } from '../auth/roles';
@@ -57,19 +58,33 @@ export const createProductGenerationBatchCore = async (
     const imageConfig = profilePatch.photoProfile
       ? resolveCommercialPhotoConfig(data.provider, data.imageConfig, data.aspectRatio)
       : normalizeProviderImageConfig(data.provider, data.imageConfig, data.aspectRatio || '1:1');
+    // Read quantity evidence before transaction writes; never infer a pack from the filename or reference count.
+    const packCounts = new Map<string, number | undefined>();
+    if (automationRef) {
+      const links = await Promise.all(data.items.map(item => tx.get(automationRef.collection('organizerCommerce').doc(item.id))));
+      links.forEach((snapshot, index) => {
+        const link = snapshot.data() as OrganizerCommercialLink | undefined;
+        packCounts.set(data.items[index].id, productPackCountFromVariants(link?.source?.variants || []));
+      });
+    } else if (organizerOrigin) {
+      const variant = await tx.get(db.doc(`organizers/${data.clientId}/products/${organizerOrigin.variantId}`));
+      packCounts.set(organizerOrigin.itemId, parseProductPackCount(variant.get('pack')));
+    }
     const jobs: Array<{ id: string; data: Omit<Job, 'id'> }> = [];
     for (const item of data.items) {
       for (const scene of data.scenes) {
-        const instructions = buildProductSceneInstructions(data.prompt, scene.prompt);
+        const resolved = resolveProductScene(scene, packCounts.has(item.id) ? packCounts.get(item.id) : item.packCount);
+        const instructions = buildProductSceneInstructions(data.prompt, resolved.prompt);
         jobs.push({ id: db.collection('jobs').doc().id, data: {
           ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
           ...buildJobDraft({ garmentIsMultiAngle: item.referencePaths.length > 1 }, data.provider, instructions, null, Math.max(1, Math.min(3, getJobAutoReviewMaxAttempts() || 3))),
           ...(automation ? { automationJobId: automation.id } : {}), generationKind: 'product', productScene: scene.type,
+          ...(resolved.quantity ? { productQuantity: resolved.quantity } : {}),
           productReferencePaths: item.referencePaths, batchId, clientId: data.clientId, clientNameSnapshot: client.name,
           modelId: '', modelNameSnapshot: 'Producto', poseImageId: scene.type,
           poseImagePath: item.referencePaths[0], poseFileName: item.name,
           garmentId: item.id, garmentName: item.name, garmentFilePath: item.referencePaths[1] || item.referencePaths[0],
-          garmentIsMultiAngle: item.referencePaths.length > 1, finalPrompt: buildProductPrompt(data.prompt, scene.prompt),
+          garmentIsMultiAngle: item.referencePaths.length > 1, finalPrompt: buildProductPrompt(data.prompt, resolved.prompt),
           provider: data.provider, aspectRatio: imageConfig.aspectRatio, imageConfig: imageConfig.imageConfig, ...profilePatch,
           maxRetries: system.jobMaxRetries, completedAt: null, currentOutputId: null, currentOutput: null,
           completedOutputCount: 0, totalCostUsd: 0, totalDurationSeconds: 0, manualRegenerationCount: 0,

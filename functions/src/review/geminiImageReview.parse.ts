@@ -192,6 +192,8 @@ export const decideVerdict = ({
   usesApprovedPrompt: boolean;
   photoValidation: PhotoValidation | undefined;
 }): JobAutoReviewVerdict => {
+  if (!request.imageEditInstructions && request.generationKind === 'product' && request.productQuantity?.scope === 'display' &&
+      !criteria.some(criterion => criterion.key === 'quantity' && criterion.passed)) return 'rejected';
   if (photoValidation) {
     return photoValidation.fidelity && photoValidation.destinations.some(d => d.passed) ? 'approved' : 'rejected';
   }

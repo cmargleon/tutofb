@@ -1,7 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { isAspectRatio, isProvider } from '../../../shared/src/domain';
 import { isProviderImageConfig } from '../../../shared/src/providerImageConfig';
-import { PRODUCT_SCENES } from '../../../shared/src/productGeneration';
+import { PRODUCT_SCENES, parseProductPackCount } from '../../../shared/src/productGeneration';
 import type { CreateProductGenerationBatchRequest } from '../../../shared/src/types';
 
 const text = (value: unknown, name: string, max: number, allowEmpty = false): string => {
@@ -31,7 +31,8 @@ export const validateProductGenerationInput = (value: unknown, uid: string, maxJ
       }
       return path;
     });
-    return { id: identifier(item.id, 'Objeto'), name: text(item.name, 'Nombre del objeto', 200), referencePaths };
+    const packCount = parseProductPackCount(item.packCount);
+    return { id: identifier(item.id, 'Objeto'), name: text(item.name, 'Nombre del objeto', 200), referencePaths, ...(packCount ? { packCount } : {}) };
   });
   if (new Set(items.map((item) => item.id)).size !== items.length) throw new HttpsError('invalid-argument', 'Hay objetos duplicados.');
   if (items.reduce((sum, item) => sum + item.referencePaths.length, 0) > 40) throw new HttpsError('invalid-argument', 'Máximo 40 fotos por lote.');

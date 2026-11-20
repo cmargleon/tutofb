@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { buildProductPrompt, buildProductSceneInstructions, createDefaultProductScenes, PRODUCT_IDENTITY_RULES } = require('../shared/src/productGeneration.ts') as typeof import('../shared/src/productGeneration');
+const { buildProductPrompt, buildProductSceneInstructions, createDefaultProductScenes, resolveProductScene, parseProductPackCount, productPackCountFromVariants, PRODUCT_IDENTITY_RULES } = require('../shared/src/productGeneration.ts') as typeof import('../shared/src/productGeneration');
 const { createInitialGenerateWizardState, getGenerateWizardTotalJobs, getGenerateWizardLastAccessibleStep, isGenerateWizardStepComplete } = require('../src/features/generate/wizard/state.ts') as typeof import('../src/features/generate/wizard/state');
 const { validateProductGenerationInput } = require('../functions/lib/functions/src/callables/createProductGenerationBatch.helpers.js') as typeof import('../functions/src/callables/createProductGenerationBatch.helpers');
 const { buildRegenerateJobPatch } = require('../functions/lib/functions/src/callables/regenerateJob.helpers.js') as typeof import('../functions/src/callables/regenerateJob.helpers');
@@ -83,4 +83,65 @@ test('scene instructions survive prompt composition and product regeneration wit
   assert.doesNotMatch(patch.finalPrompt, /try.on|IMAGE A|IMAGE B/i);
   const edited = createDefaultProductScenes(); edited[0].prompt = 'Custom';
   assert.notEqual(createDefaultProductScenes()[0].prompt, 'Custom');
+});
+
+const { selectReviewPrompt, usesApprovedReviewPrompt } = require('../functions/lib/functions/src/review/geminiImageReview.prompts.js') as typeof import('../functions/src/review/geminiImageReview.prompts');
+const { decideVerdict } = require('../functions/lib/functions/src/review/geminiImageReview.parse.js') as typeof import('../functions/src/review/geminiImageReview.parse');
+
+test('pack counts use unambiguous explicit commercial values, never filenames or photo counts', () => {
+  for (const raw of [4, '4', ' 4 ']) assert.equal(parseProductPackCount(raw), 4);
+  for (const raw of [undefined, null, '', 'pack 4', '4/6', '4 piezas', '2x2', 0, -1, 1.5, Infinity, true, {}, 'JST-O02-PACK4']) {
+    assert.equal(parseProductPackCount(raw), undefined);
+  }
+  assert.equal(productPackCountFromVariants([{ values: { pack: '4' } }, { values: { pack: '4' } }]), 4);
+  for (const variants of [[], [{ values: { pack: '4' } }, { values: { pack: '6' } }], [{ values: { pack: '4' } }, { values: {} }]]) {
+    assert.equal(productPackCountFromVariants(variants), undefined);
+  }
+  assert.equal(validateProductGenerationInput({ ...input(), items: [{ ...input().items[0], packCount: 4 }] }, 'user', 100).items[0].packCount, 4);
+  assert.equal(validateProductGenerationInput({ ...input(), items: [{ ...input().items[0], packCount: '4/6' }] }, 'user', 100).items[0].packCount, undefined);
+});
+
+test('pack 4 display scenes require the full set and use scenes allow a single unit, including exact automation review', () => {
+  for (const scene of createDefaultProductScenes()) {
+    const resolved = resolveProductScene(scene, 4);
+    const display = ['clean', 'hero', 'lifestyle_1'].includes(scene.type);
+    assert.equal(resolved.quantity?.scope, display ? 'display' : 'use');
+    if (display) assert.match(resolved.prompt, /exactly 4 identical units/);
+    else {
+      assert.match(resolved.prompt, /one unit/i);
+      assert.match(resolved.prompt, /background but are not required/);
+      assert.doesNotMatch(resolved.prompt, /exactly 4/);
+    }
+    for (const exactAutomationPrompt of [false, true]) {
+      const request = { generationKind: 'product', productQuantity: resolved.quantity, exactAutomationPrompt,
+        requestedPromptBase: resolved.prompt, finalPrompt: buildProductPrompt('', resolved.prompt) } as any;
+      const reviewPrompt = selectReviewPrompt(request);
+      if (display) assert.match(reviewPrompt, /exactly 4 identical units/);
+      else assert.match(reviewPrompt, /Do not require or reject for the total pack count/);
+      const criteria = ['identity', 'colors', 'logos', 'parts', 'geometry', 'artifacts', 'scene'].map(key => ({ key, label: key, notes: 'ok', passed: true }));
+      const verdict = (quantity?: boolean) => decideVerdict({ request, parsed: { verdict: 'approved' },
+        criteria: [...criteria, ...(quantity === undefined ? [] : [{ key: 'quantity', label: 'Cantidad', notes: 'conteo', passed: quantity }])],
+        usesApprovedPrompt: usesApprovedReviewPrompt(request), photoValidation: undefined });
+      assert.equal(verdict(), display ? 'rejected' : 'approved');
+      if (display) {
+        assert.equal(verdict(false), 'rejected');
+        assert.equal(verdict(true), 'approved');
+      }
+    }
+  }
+});
+
+test('unit/unknown packs, custom prompts and existing snapshots retain their exact text', () => {
+  for (const scene of createDefaultProductScenes()) {
+    for (const pack of [undefined, 1, '1', '4/6']) assert.deepEqual(resolveProductScene(scene, pack), { prompt: scene.prompt });
+    const custom = { ...scene, prompt: 'Show the product according to the approved client layout.' };
+    assert.deepEqual(resolveProductScene(custom, 4), { prompt: custom.prompt });
+    const configured = createDefaultProductScenes({ systemProductScenePrompts: { [scene.type]: custom.prompt } });
+    assert.deepEqual(resolveProductScene(configured.find(s => s.type === scene.type)!, 4), { prompt: custom.prompt });
+    const frozen = { ...scene };
+    resolveProductScene(scene, 4);
+    assert.deepEqual(scene, frozen);
+  }
+  const oldRequest = { generationKind: 'product', requestedPromptBase: 'Old scene', finalPrompt: 'Old prompt' } as any;
+  assert.doesNotMatch(selectReviewPrompt(oldRequest), /Pack quantity|total pack count/);
 });

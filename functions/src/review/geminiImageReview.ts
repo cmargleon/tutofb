@@ -28,6 +28,7 @@ export interface ReviewRequest {
   exactAutomationPrompt?: boolean;
   promptFormat?: 'approved-try-on-v1';
   generationKind?: 'garment' | 'product';
+  productQuantity?: import('../../../shared/src/types/productGeneration').ProductQuantity;
   productReferences?: ReviewImageAsset[];
   apiKey: string;
   model: string;

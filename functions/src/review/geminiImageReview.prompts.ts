@@ -216,6 +216,14 @@ export const buildApprovedTryOnReviewPrompt = (finalPrompt: string, imageOrder =
   'END APPROVED GENERATION PROMPT',
 ].join('\n\n');
 
+export const buildProductQuantityReviewPrompt = (request: ReviewRequest): string => {
+  const quantity = request.productQuantity;
+  if (!quantity) return '';
+  return quantity.scope === 'display'
+    ? `Pack quantity is a required criterion (key: quantity). The result must show exactly ${quantity.packCount} identical units of the referenced product, all visible and separately countable, as the complete retail set. Reject missing or extra units, non-identical units, or a count that cannot be verified. Preserve this exact count in any revisedPrompt.`
+    : 'This is a use scene: one unit in use is sufficient. Other pack units may appear in the background but are optional. Do not require or reject for the total pack count, and do not require extra units in revisedPrompt.';
+};
+
 const buildProductReviewPrompt = (request: ReviewRequest): string => [
     'Evaluate commercial product photography. All images except the LAST are reference views of the exact same ' +
       'product. The LAST image is the generated result.',
@@ -277,6 +285,7 @@ export const selectReviewPrompt = (request: ReviewRequest): string => {
     `Cambio solicitado: ${request.imageEditInstructions}`,
   ].join('\n');
   let prompt = selectBaseReviewPrompt(request);
+  if (request.generationKind === 'product' && request.productQuantity) prompt += '\n' + buildProductQuantityReviewPrompt(request);
   const configuredModel = request.photoTask?.composition === 'model' && request.photoTask.baseSpec?.rulesRevision !== undefined;
   const overriddenCompositionRules = ['amazon-main', 'ml-main', 'tiktok-main', 'tiktok-set-square', 'shein-context'];
   if (request.photoTask) {

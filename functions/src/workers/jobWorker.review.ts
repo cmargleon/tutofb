@@ -70,6 +70,7 @@ export const buildReviewRequest = async (
     ...(job.imageEdit ? { imageEditInstructions: job.imageEdit.instructions, productReferences: [poseReference] } : {}),
     ...(job.photoTask ? { photoTask: job.photoTask } : {}),
     generationKind: job.generationKind,
+    ...(job.productQuantity ? { productQuantity: job.productQuantity } : {}),
     ...productFields,
     apiKey: GEMINI_API_KEY.value(),
     model: systemConfig.geminiImageReviewModel,

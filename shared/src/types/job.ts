@@ -220,6 +220,7 @@ export interface Job {
   automationReferencePaths?: string[];
   generationKind?: 'garment' | 'product';
   productScene?: string;
+  productQuantity?: import('./productGeneration').ProductQuantity;
   productReferencePaths?: string[];
   id?: string;
   batchId: string;

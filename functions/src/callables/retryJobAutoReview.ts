@@ -103,6 +103,7 @@ export const retryJobAutoReview = onCall<RetryJobAutoReviewRequest, Promise<Retr
           ...(job.generationKind !== 'product' ? { productReferences: [poseReference, ...await Promise.all((job.automationReferencePaths || [job.garmentFilePath]).map(downloadStorageImage))] } : {}) } : {}),
         ...(job.photoTask ? { photoTask: job.photoTask } : {}),
         generationKind: job.generationKind,
+        ...(job.productQuantity ? { productQuantity: job.productQuantity } : {}),
         ...(job.generationKind === 'product' && !output.imageEdit ? { productReferences: await Promise.all((job.productReferencePaths || [job.poseImagePath]).map(downloadStorageImage)) } : {}),
         ...(output.imageEdit ? {
           imageEditInstructions: output.imageEdit.instructions, productReferences: [poseReference], photoTask: undefined,

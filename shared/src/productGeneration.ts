@@ -20,3 +20,34 @@ export const createDefaultProductGeneration = (config?: Partial<SystemConfig>) =
 });
 export const buildProductSceneInstructions = (general: string, scene: string): string => [general.trim(), scene.trim()].filter(Boolean).join('\n');
 export const buildProductPrompt = (general: string, scene: string): string => [PRODUCT_IDENTITY_RULES, buildProductSceneInstructions(general, scene)].filter(Boolean).join('\n');
+
+/** Only an explicit positive integer is a pack count; names/SKUs are not quantity evidence. */
+export const parseProductPackCount = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value.trim()))) return undefined;
+  const count = Number(value);
+  return Number.isSafeInteger(count) && count > 0 ? count : undefined;
+};
+
+/** All commercial variants represented by an article must agree, including missing/invalid values. */
+export const productPackCountFromVariants = (variants: Array<{ values: { pack?: unknown } }>): number | undefined => {
+  const counts = variants.map(variant => parseProductPackCount(variant.values.pack));
+  return counts.length && counts[0] !== undefined && counts.every(count => count === counts[0]) ? counts[0] : undefined;
+};
+
+export const resolveProductScene = (scene: ProductSceneInput, pack: unknown): {
+  prompt: string; quantity?: import('./types/productGeneration').ProductQuantity;
+} => {
+  const count = parseProductPackCount(pack);
+  const preset = PRODUCT_SCENES.find(preset => preset.type === scene.type);
+  // Custom system/client/operator text is authoritative. Existing jobs never pass through this resolver.
+  if (!count || count === 1 || scene.prompt.trim() !== preset?.prompt) return { prompt: scene.prompt };
+  const display = ['clean', 'lifestyle_1', 'hero'].includes(scene.type);
+  const prompt = display
+    ? scene.prompt.replace('One product', `The complete retail set of exactly ${count} identical units of the referenced product`) +
+      ` Show all ${count} units clearly and separately countable. Do not add extra units or omit any unit.`
+    : (scene.prompt.startsWith('One product')
+      ? scene.prompt.replace('One product', 'One unit of the referenced product')
+      : scene.prompt.replace('the exact referenced product', 'one unit of the exact referenced product')) +
+      ' Only one unit needs to be shown in use. Other units from the pack may appear in the background but are not required.';
+  return { prompt, quantity: { packCount: count, scope: display ? 'display' : 'use' } };
+};

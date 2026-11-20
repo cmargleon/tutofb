@@ -177,5 +177,16 @@ test('SINCOD → nueva fila → vínculo humano → fusión, fotos, ficha y expo
       await db.doc('users/outsider').set({ uid: 'outsider', role: 'operador', active: true, clientIds: [] });
       await assert.rejects(executeOrganizer({ action: 'linkCandidates', clientId, photoId: 'front' }, { uid: 'outsider', role: 'operador' }), /permiso|acceso|asignado|alcance/i);
     });
+    await t.test('un revisor con acceso puede consultar candidatas pero no confirmar el vínculo', async () => {
+      const operatorUids = (await root.get()).get('operatorUids') || [];
+      await db.doc('users/reviewer').set({ uid: 'reviewer', role: 'revisor', active: true, clientAccess: { mode: 'assigned', clientIds: [clientId] } });
+      await root.update({ operatorUids: [...operatorUids, 'reviewer'] });
+      try {
+        const reviewer = { uid: 'reviewer', role: 'revisor' };
+        await executeOrganizer({ action: 'linkCandidates', clientId, photoId: 'front' }, reviewer);
+        await assert.rejects(executeOrganizer({ action: 'link', clientId, photoId: 'front', variantId: 'new-row', previewToken: 'a'.repeat(64), requestId: 'reviewer-link' }, reviewer),
+          /operador o administrador/);
+      } finally { await root.update({ operatorUids }); }
+    });
   } finally { await cleanupEmulatorDatabase(db); await app.delete(); }
 });

@@ -55,7 +55,7 @@ const cameraNumber = (name: string) => {
 
 function mergeUncodedCompanions<G extends { key: string; itemId: string; photos: GenerationSource[] }>(groups: G[]): G[] {
   const result = groups.map(group => ({ ...group, photos: [...group.photos] }));
-  const uncoded = (group: G) => !group.photos.some(({ photo }) => photo.variantId);
+  const uncoded = (group: G) => !group.photos.some(({ photo }) => photo.variantId || uncodedGroupName(photo.name));
   const views = (group: G) => new Set(group.photos.map(({ photo }) => photo.view));
   const absorb = (target: G, source: G) => { target.photos.push(...source.photos); result.splice(result.indexOf(source), 1); };
   // Names that only differ by a view word (X-FRENTE / X-ESPALDA) join their groups. Names never split a visual group.
@@ -116,7 +116,7 @@ export function mergeNearDuplicateGroups<G extends { itemId: string; photos: Gen
   const merged: G[] = [];
   for (const group of groups) {
     const folder = (item: G) => `${item.photos[0].entry.sourceId}:${item.photos[0].entry.parents?.[0]}`;
-    const coded = (item: G) => item.photos.some(({ photo }) => photo.variantId);
+    const coded = (item: G) => item.photos.some(({ photo }) => photo.variantId || uncodedGroupName(photo.name));
     const target = coded(group) ? undefined : merged.find(other => !coded(other) && folder(other) === folder(group) &&
       other.photos.some(a => group.photos.some(b => {
         const [x, y] = [hashes.get(a.photo.id), hashes.get(b.photo.id)];
@@ -173,7 +173,10 @@ async function baseCodeGroups(root: DocumentReference, doc: DocumentReference, t
   const groups: Group[] = [];
   let needsReview = 0;
   const byVariant = new Map<string, GenerationSource[]>();
+  const pendingGroups = groupGenerationSources(touched.filter(source => !source.photo.variantId && Boolean(uncodedGroupName(source.photo.name))));
+  groups.push(...pendingGroups);
   for (const source of touched) {
+    if (!source.photo.variantId && uncodedGroupName(source.photo.name)) continue;
     if (!source.photo.variantId || source.photo.issue) { needsReview++; continue; }
     byVariant.set(source.photo.variantId, [...(byVariant.get(source.photo.variantId) || []), source]);
   }

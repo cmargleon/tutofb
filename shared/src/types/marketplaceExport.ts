@@ -16,6 +16,8 @@ export interface OrganizerCommercialSource {
   origins: Record<string, OrganizerRowOrigin[]>;
   values: MasterProduct['values'];
   issue: string | null;
+  /** SINCOD group still waiting for the Excel link: only the link flow resolves it, never the export drawer's identity override. */
+  pendingCommercialLink?: string;
 }
 export interface OrganizerCategoryDecision {
   marketplaceId: MarketplaceId;

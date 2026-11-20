@@ -157,7 +157,9 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
   switch (request.action) {
     case 'linkCandidates': return readLinkCandidates(clientId, checkedId(request.photoId));
     case 'previewLink': return previewCommercialLink(clientId, checkedId(request.photoId), checkedId(request.variantId));
-    case 'link': return confirmCommercialLink(clientId, checkedId(request.photoId), checkedId(request.variantId), request.previewToken, checkedId(request.requestId), actor.uid, request.resolutions);
+    case 'link':
+      if (actor.role === 'revisor') throw new HttpsError('permission-denied', 'El vínculo comercial requiere un operador o administrador.');
+      return confirmCommercialLink(clientId, checkedId(request.photoId), checkedId(request.variantId), request.previewToken, checkedId(request.requestId), actor.uid, request.resolutions);
     case 'start': {
       if (actor.role === 'revisor') throw new HttpsError('permission-denied', 'El revisor no puede iniciar una ejecución.');
       if (!['inventory', 'dry_run', 'generate', ...paidModes].includes(request.mode)) throw new HttpsError('invalid-argument', 'Modo inválido.');

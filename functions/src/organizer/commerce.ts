@@ -1,4 +1,4 @@
-import { commercialIdentityOf } from '../../../shared/src/organizerIdentity';
+import { commercialIdentityOf, uncodedGroupName } from '../../../shared/src/organizerIdentity';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import type {
   MasterVariant, OrganizerCategoryDecision, OrganizerCommercialSource, OrganizerPhoto, OrganizerProductRow,
@@ -193,10 +193,12 @@ export async function readOrganizerCommerce(root: DocumentReference, photos: Org
   const snapshots = await Promise.all(photos.map(photo => root.collection('photos').doc(photo.id).get()));
   const current = snapshots.map(snapshot => { const photo = snapshot.data() as (OrganizerPhoto & { version: string }) | undefined; return photo ? commercialIdentityOf(photo) : undefined; });
   const id = current[0]?.variantId || null;
+  const sincod = current.map(photo => photo && !(photo.reviewedBy && photo.variantId) ? uncodedGroupName(photo.name) : null).find(Boolean);
   if (!id || current.some((photo, index) => !photo || photo.version !== photos[index].version || photo.variantId !== id ||
     photo.identityState === 'needs_review' || photo.issue || photo.method === 'fotos_hermanas')) {
-    return { organizerVariantId: null, source: pending('Confirma la asociación de la foto a una variante en el Organizador. ' +
-      (current.find(photo => photo?.issue)?.issue || 'Falta una coincidencia comercial inequívoca.')) };
+    const source = pending('Confirma la asociación de la foto a una variante en el Organizador. ' +
+      (current.find(photo => photo?.issue)?.issue || 'Falta una coincidencia comercial inequívoca.'));
+    return { organizerVariantId: null, source: sincod ? { ...source, pendingCommercialLink: sincod } : source };
   }
   const ref = root.collection('products').doc(id);
   const [snapshot, provenance] = await Promise.all([ref.get(), ref.collection('provenance').limit(201).get()]);

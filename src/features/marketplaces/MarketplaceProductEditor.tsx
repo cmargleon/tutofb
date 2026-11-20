@@ -112,7 +112,8 @@ export const MarketplaceProductEditor = ({ product, preview, scope, focusedIssue
   return <fieldset ref={editor} disabled={busy || publication.busyChannel !== null} className="space-y-5 border-t border-slate-200 pt-4">
     {product.organizer?.source.issue && <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
       <p>{product.organizer.source.issue}</p>
-      {product.organizer.confirmedIdentity ? <p className="mt-2">Identidad confirmada en Catálogo.</p> : <label className="mt-2 flex gap-2">
+      {product.organizer.source.pendingCommercialLink ? <p className="mt-2">Vincula el grupo SINCOD a una fila del Excel desde los avisos del lote en Catálogo o desde Organizador; la confirmación manual no aplica a estas fotos.</p>
+        : product.organizer.confirmedIdentity ? <p className="mt-2">Identidad confirmada en Catálogo.</p> : <label className="mt-2 flex gap-2">
         <input data-export-identity type="checkbox" checked={confirmIdentity} onChange={event => setConfirmIdentity(event.target.checked)} />
         Verifiqué el SKC o SKU y la correspondencia de las fotos para cada variante que guardo.
       </label>}

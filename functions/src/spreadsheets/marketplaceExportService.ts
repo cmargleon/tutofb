@@ -274,10 +274,13 @@ type Context = Awaited<ReturnType<typeof loadExportContext>>;
 export const templateUsable = (t: SpreadsheetTemplate, channel: MarketplaceId, historicallyLinked = false) =>
   canUseSpreadsheetTemplate(t, historicallyLinked)
   && t.exportConfig?.marketplaceId === channel && t.exportConfig.validationStatus === 'compatible';
+/** A drawer identity override never replaces the SINCOD → Excel link. */
+export const identityConfirmed = (product: { organizer?: { source: { pendingCommercialLink?: string }; confirmedIdentity?: boolean } }) =>
+  Boolean(product.organizer?.confirmedIdentity && !product.organizer.source.pendingCommercialLink);
 type AnalysisLimits = { deadline?: number; retryFailed?: boolean };
 function suggestCategories(context: Context, channels: MarketplaceId[], uid: string, analyze = false, apiKey?: string, limits: AnalysisLimits = {}) {
   const inputs = context.products.flatMap(product => {
-    if (product.organizer?.source.issue && !product.organizer.confirmedIdentity) return [];
+    if (product.organizer?.source.issue && !identityConfirmed(product)) return [];
     return channels.flatMap(channel => {
       const assigned = product.marketplaces[channel];
       if (assigned?.categoryId) return [];
@@ -304,7 +307,7 @@ function suggestCategories(context: Context, channels: MarketplaceId[], uid: str
   return resolveMarketplaceCategories(inputs, { model: getGeminiGarmentViewClassificationModel(), uid, analyze, apiKey, ...limits });
 }
 async function resolveMarketplaceAutofill(context: Context, channels: MarketplaceId[], uid: string, apiKey?: string, analyze = false, limits: AnalysisLimits = {}) {
-  const products = context.products.filter(product => !product.organizer?.source.issue || product.organizer.confirmedIdentity);
+  const products = context.products.filter(product => !product.organizer?.source.issue || identityConfirmed(product));
   const inputs = products.flatMap(product => {
     return channels.flatMap(channel => {
       const channelData = product.marketplaces[channel];
@@ -338,7 +341,7 @@ export function previewExportContext(context: Context): MarketplaceExportPreview
       const data = p.marketplaces[id]; const template = templates.find(t => t.id === data?.templateId && templateUsable(t, id, true));
       const category = categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
       const issue = (code: string, message: string) => ({ marketplaceId: id, productId: p.id, productName: p.values.name || p.garmentId, code, message });
-      const sourceIssues = p.organizer?.source.issue && !p.organizer.confirmedIdentity ? [issue('organizer_identity', p.organizer.source.issue)] : [];
+      const sourceIssues = p.organizer?.source.issue && !identityConfirmed(p) ? [issue('organizer_identity', p.organizer.source.issue)] : [];
       if (!template || !category) {
         const decision = p.organizer?.category;
         const reason = decision?.marketplaceId === id && !decision.templateId ? decision.reason : null;

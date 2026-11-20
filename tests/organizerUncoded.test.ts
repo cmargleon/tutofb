@@ -60,3 +60,8 @@ test('una negativa de Gemini elimina la base sugerida incluso si devuelve un ID 
     assert.equal(result.variantId, null);
   }
 });
+
+test('grupos SINCOD distintos no se unen por tener frente/espalda, tipo y color iguales', () => {
+  const sources = files.map((entry, index) => ({ entry, photo: { ...photo(index), name: index ? 'SINCOD_OTRO-BUZO_ESPALDA_01.jpg' : names[0], kind: 'garment', visualHint: { groupId: String(index), kind: 'garment', label: 'Buzo', color: 'Azul', pack: '' } } }));
+  assert.equal(groupGenerationSources(sources).length, 2);
+});

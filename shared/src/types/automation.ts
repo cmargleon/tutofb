@@ -132,6 +132,8 @@ export interface AutomationBudgetState {
   pendingUsd?: number;
   spentUsd: number;
   recordedUsd: number;
+  /** Full holds for settled operations whose billing outcome is unknown. */
+  uncertainUsd?: number;
   providerConfirmedUsd: number | null;
 }
 export interface AutomationSceneState {

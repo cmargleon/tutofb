@@ -105,6 +105,7 @@ export async function interpretStructure(root: DocumentReference, run: DocumentR
 
 // A model's confidence is never enough: matching catalog words/attributes and a clear margin are required.
 export function visualAssociation(photo: OrganizerPhoto, variants: OrganizerVariant[], observation: VisionResult) {
+  if (!candidatesIn(photo.name, associationIndex(variants)).length) return { ranked: [], variantId: null, baseId: null };
   const ranked = rankCandidates(photo, variants, [observation.label, observation.color, observation.pack].join(' '));
   const first = ranked[0];
   const product = variants.find(variant => variant.id === first?.id);
@@ -158,5 +159,12 @@ export async function matchObservation(root: DocumentReference, run: DocumentRef
     variantId: { anyOf: [{ type: 'string', enum: candidates.map(candidate => candidate.id) }, { type: 'null' }] },
     evidence: { type: 'array', items: { type: 'string', enum: ['visual', 'catalog', 'path'] } }, unresolved: { type: 'string' },
   } });
-  return { ...checked, reason: result?.unresolved || '', variantId: result?.variantId === checked.variantId && result?.evidence.includes('visual') && result.evidence.includes('catalog') ? checked.variantId : null };
+  return acceptObservation(checked, result);
+}
+
+export function acceptObservation(checked: ReturnType<typeof visualAssociation>, result: { variantId: string | null; evidence: string[]; unresolved: string } | null) {
+  const accepted = Boolean(result?.variantId && !result.unresolved && result.variantId === checked.variantId &&
+    result.evidence.includes('visual') && result.evidence.includes('catalog'));
+  return accepted ? { ...checked, reason: '' } : { ranked: [], baseId: null, variantId: null,
+    reason: `Sin coincidencia: ${result?.unresolved || 'sin evidencia comercial suficiente'}` };
 }

@@ -1,3 +1,4 @@
+import { uncodedGroupName } from '../../../shared/src/organizerIdentity';
 import { isOrganizerGenerationEnabled } from '../../../shared/src/automationConfig';
 import type { DocumentReference } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -31,7 +32,8 @@ export function groupGenerationSources(sources: GenerationSource[]) {
   const groups = new Map<string, GenerationSource[]>();
   for (const source of sources) {
     const photo = source.photo;
-    const key = photo.variantId ? `variant:${photo.variantId}` : photo.visualHint?.groupId
+    const uncoded = !photo.reviewedBy && uncodedGroupName(photo.name);
+    const key = uncoded ? `uncoded:${source.entry.sourceId}:${source.entry.parents?.[0]}:${uncoded}` : photo.variantId ? `variant:${photo.variantId}` : photo.visualHint?.groupId
       ? `visual:${source.entry.sourceId}:${source.entry.parents?.[0]}:${photo.visualHint.groupId}` : `photo:${photo.id}`;
     groups.set(key, [...(groups.get(key) || []), source]);
   }

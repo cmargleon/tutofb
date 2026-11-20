@@ -3,7 +3,7 @@ import { type OrganizerDocumentStatus, type OrganizerProductRow, type OrganizerT
 import { digest, SHEET, type DriveFile, type OrganizerDrive } from './drive';
 import { VIEW_TOKENS } from './viewHints';
 
-export const ALGORITHM_VERSION = '5';
+export const ALGORITHM_VERSION = '6';
 export const normalize = (value: string) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toUpperCase();
 export const code = (value: string) => normalize(value).replace(/\s*-\s*/g, '-').replace(/PACK[ -]*(\d+)/g, 'PACK$1');
 const aliases: Record<string, string> = {
@@ -234,6 +234,7 @@ const colorTieBreak = (ids: string[], words: string[], index: AssociationIndex) 
   return matching.length === 1 ? matching : ids;
 };
 export const candidatesIn = (label: string, index: AssociationIndex) => {
+  if (/^SINCOD[_\s-]/i.test(label)) return [];
   let name = code(label.replace(/\.[^.]{2,5}$/i, ''));
   if (index.has(name)) return [...index.get(name)!];
   // A trailing photographic sequence or a pasted extension is not a new catalog identity.
@@ -270,26 +271,16 @@ export function associationIndex(variants: OrganizerVariant[]): AssociationIndex
 type PhotoCandidate = { id: string; name: string; path: string[]; parents?: string[]; sha256Checksum?: string; md5Checksum?: string; size?: string };
 export function associatePhotos(files: PhotoCandidate[], index: AssociationIndex, manual: Map<string, string | null>) {
   const own = new Map(files.map(file => [file.id, candidatesIn(file.name, index)]));
-  const siblings = new Map<string, string[]>();
-  for (const file of files) {
-    const parent = file.parents?.[0] || '';
-    const known = manual.has(file.id) ? [manual.get(file.id)].filter((item): item is string => Boolean(item)) : own.get(file.id)!;
-    siblings.set(parent, distinct([...(siblings.get(parent) || []), ...known]));
-  }
   const byHash = new Map<string, string[]>();
   const results = new Map(files.map(file => {
-    const parent = file.parents?.[0] || '';
     const folder = file.path.slice(1, -1).reverse().find(name => !container.test(normalize(name)) && candidatesIn(name, index).length);
     const folderCandidates = folder ? candidatesIn(folder, index) : [];
     const explicit = own.get(file.id)!;
-    const neighboring = siblings.get(parent) || [];
-    const generalFolder = container.test(normalize(file.path.at(-2) || ''));
-    const candidates = distinct([...explicit, ...folderCandidates, ...neighboring]);
+    const candidates = explicit.length ? distinct([...explicit, ...folderCandidates]) : [];
     const shared = explicit.length > 1 && /(?:\sY\s|\sAND\s|[&+])/i.test(file.name);
     const variantId = manual.has(file.id) ? manual.get(file.id)! : shared ? null
       : explicit.length === 1 && (!folderCandidates.length || folderCandidates.includes(explicit[0])) ? explicit[0]
-        : !explicit.length && candidates.length === 1 && (!generalFolder || folderCandidates.length === 1)
-          ? candidates[0] : null;
+        : null;
     const method = manual.has(file.id) ? 'manual' : !variantId ? 'pendiente' : explicit.length ? 'codigo_archivo' : folderCandidates.length ? 'codigo_ruta' : 'fotos_hermanas';
     const hash = file.sha256Checksum ? `sha256:${file.sha256Checksum}` : file.md5Checksum ? `md5:${file.md5Checksum}:${file.size}` : '';
     if (hash) byHash.set(hash, [...(byHash.get(hash) || []), file.id]);
@@ -297,7 +288,7 @@ export function associatePhotos(files: PhotoCandidate[], index: AssociationIndex
       confidence: variantId ? method === 'codigo_archivo' || method === 'manual' ? 1 : 0.95 : 0,
       variantIds: variantId ? [variantId] : shared ? explicit : [], identityState: variantId ? 'variant' as const : shared ? 'shared' as const : 'unresolved' as const,
       issue: variantId || shared ? null : candidates.length > 1 ? 'Conflicto de identidad' :
-        generalFolder && neighboring.length ? 'Carpeta general con fotos sin identificador' : 'Sin identificación',
+        'Sin ficha comercial: el nombre no contiene un código reconocible del catálogo.',
       duplicateOf: null as string | null }] as [string, { variantId: string | null; candidates: string[]; method: string; evidence: string[]; confidence: number; issue: string | null; duplicateOf: string | null; variantIds: string[]; identityState: 'variant' | 'shared' | 'unresolved' }];
   }));
   for (const [hash, ids] of byHash) {

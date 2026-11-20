@@ -31,7 +31,7 @@ export const buildNewFalRequest = (
       prompt,
       image_size: imageConfig.imageSize,
       num_images: 1,
-      output_format: imageConfig.outputFormat ?? 'png',
+      output_format: imageConfig.outputFormat ?? 'jpeg',
       ...('quality' in imageConfig ? { quality: imageConfig.quality } : { enable_safety_checker: true }),
       ...(referenceImageUrls.length ? { image_urls: referenceImageUrls } : {}),
     },

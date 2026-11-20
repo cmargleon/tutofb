@@ -266,7 +266,8 @@ export type OrganizerRequest =
   | { action: 'configure'; clientId: string; settings: OrganizerSettings }
   | { action: 'start'; clientId: string; mode: OrganizerMode; requestId: string; confirmedBudgetUsd?: number; photoIds?: string[]; variantId?: string; planRunId?: string }
   | { action: 'run' | 'pause' | 'resume' | 'cancel' | 'report'; clientId: string; runId: string }
-  | { action: 'runs' | 'products' | 'photos' | 'conflicts' | 'tabs'; clientId: string; cursor?: string; variantId?: string; runId?: string; status?: OrganizerVariant['status'] }
+  | { action: 'catalogAlerts'; clientId: string; batchId: string }
+  | { action: 'runs' | 'products' | 'photos' | 'conflicts' | 'tabs'; clientId: string; cursor?: string; variantId?: string; runId?: string; status?: OrganizerVariant['status']; photoId?: string }
   | { action: 'baseProducts' | 'commercial'; clientId: string; cursor?: string; variantId?: string }
   | { action: 'files' | 'ledger' | 'plan'; clientId: string; runId: string; cursor?: string }
   | { action: 'interpretations'; clientId: string; cursor?: string }
@@ -311,7 +312,10 @@ export interface OrganizerClient {
   driveFolderIds?: string[];
 }
 
-export type OrganizerResponse = OrganizerProductWorkflow | OrganizerDraft | { mimeType: 'image/jpeg'; base64: string } | OrganizerConfig | OrganizerRun | OrganizerVariant | OrganizerPhoto | null
+export interface CatalogSourceAlert { itemId: string | null; severity: 'error' | 'warning'; message: string; photoId: string | null }
+export interface CatalogSourceAlerts { alerts: CatalogSourceAlert[] }
+
+export type OrganizerResponse = CatalogSourceAlerts | OrganizerProductWorkflow | OrganizerDraft | { mimeType: 'image/jpeg'; base64: string } | OrganizerConfig | OrganizerRun | OrganizerVariant | OrganizerPhoto | null
   | OrganizerPage<OrganizerClient>
   | OrganizerPage<OrganizerRun | OrganizerVariant | OrganizerPhoto | OrganizerProductRow | OrganizerTab | OrganizerRunFile | OrganizerLedgerItem | OrganizerBaseProduct | OrganizerCommercialVariant | OrganizerPlanItem | OrganizerInterpretation>
   | { run: OrganizerRun; reportUrl: string | null; controlSheetUrl: string | null };

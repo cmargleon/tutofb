@@ -3,19 +3,21 @@ import sharp from 'sharp';
 import type { PhotoTask } from '../../../shared/src/types';
 export const SYNTHETIC_PERFORMER_SUBJECT = 'contains-synthetic-performer';
 const XMP_HEADER = Buffer.from('http://ns.adobe.com/xap/1.0/\0', 'ascii');
+export const SYNTHETIC_PERFORMER_XMP = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:subject><rdf:Bag><rdf:li>contains-synthetic-performer</rdf:li></rdf:Bag></dc:subject></rdf:Description></rdf:RDF></x:xmpmeta>';
 export function addSyntheticPerformerXmp(bytes: Buffer): Buffer {
   if (bytes[0] !== 0xff || bytes[1] !== 0xd8) throw new Error('El XMP final requiere JPEG.');
-  const packet = Buffer.from('<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:subject><rdf:Bag><rdf:li>contains-synthetic-performer</rdf:li></rdf:Bag></dc:subject></rdf:Description></rdf:RDF></x:xmpmeta>', 'utf8');
+  const packet = Buffer.from(SYNTHETIC_PERFORMER_XMP, 'utf8');
   const payload = Buffer.concat([XMP_HEADER, packet]);
   const header = Buffer.alloc(4); header[0] = 0xff; header[1] = 0xe1; header.writeUInt16BE(payload.length + 2, 2);
   return Buffer.concat([bytes.subarray(0, 2), header, payload, bytes.subarray(2)]);
 }
 export function hasSyntheticPerformerXmp(bytes: Buffer): boolean {
-  return bytes.includes(XMP_HEADER) && bytes.includes(Buffer.from(`<rdf:li>${SYNTHETIC_PERFORMER_SUBJECT}</rdf:li>`));
+  return (bytes.includes(XMP_HEADER) || bytes.includes(Buffer.from('XML:com.adobe.xmp')))
+    && bytes.includes(Buffer.from(`<rdf:li>${SYNTHETIC_PERFORMER_SUBJECT}</rdf:li>`));
 }
 export async function inspectPlannedPhoto(bytes: Buffer, task: PhotoTask) {
   const metadata = await sharp(bytes, { failOn: 'warning' }).metadata();
-  if (!metadata.width || !metadata.height || metadata.format !== 'jpeg' || bytes.length > 2_800_000) throw new Error('Archivo final fuera del perfil fotográfico.');
+  if (!metadata.width || !metadata.height || !['jpeg', 'png'].includes(metadata.format || '') || bytes.length > 2_800_000) throw new Error('Archivo final fuera del perfil fotográfico.');
   const ratio = metadata.width / metadata.height;
   const expectedRatio = task.aspectRatio?.split(':').map(Number);
   const plannedRatio = !expectedRatio || Math.abs(ratio - expectedRatio[0] / expectedRatio[1]) < .002;

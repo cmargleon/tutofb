@@ -25,6 +25,7 @@ export function useOrganizer() {
     (requestedView === 'conflicts' || requestedView === 'tabs' || requestedView === 'runs' || requestedView === 'plan' || requestedView === 'interpretations'))
     ? requestedView : 'products';
   const [page, setPage] = useState<OrganizerPage<CatalogItem>>({ items: [], next: null });
+  const photoId = params.get('photoId') || undefined;
   const filterVariant = view === 'photos' ? variantId || params.get('photoVariantId') || '' : '';
   const [filterStatus, setFilterStatus] = useState<OrganizerVariant['status'] | ''>('');
   const [products, setProducts] = useState<OrganizerVariant[]>([]);
@@ -92,12 +93,12 @@ export function useOrganizer() {
     let current = true;
     if (view === 'plan' && !run?.id) return;
     const request: OrganizerRequest = view === 'plan' ? { action: 'plan', clientId, runId: run!.id } : view === 'interpretations' ? { action: view, clientId } :
-      { action: view, clientId, variantId: filterVariant || undefined, runId: simulation, status: filterStatus || undefined };
+      { action: view, clientId, variantId: filterVariant || undefined, runId: simulation, photoId, status: filterStatus || undefined };
     void organizer<OrganizerPage<CatalogItem>>(request).then(result => {
       if (current) setPage(result);
     }).catch(error => { if (current) setLoadError(error.message); });
     return () => { current = false; };
-  }, [clientId, configured, revision, view, filterVariant, variantId, simulation, filterStatus, run?.id]);
+  }, [clientId, configured, revision, view, filterVariant, variantId, photoId, simulation, filterStatus, run?.id]);
 
   const perform = async <Result extends OrganizerResponse>(input: OrganizerRequest, success?: string) => {
     setBusy(true);
@@ -133,7 +134,7 @@ export function useOrganizer() {
   const loadMore = async () => {
     if (!page.next) return;
     const request: OrganizerRequest = view === 'plan' ? { action: 'plan', clientId, runId: run!.id, cursor: page.next } : view === 'interpretations' ? { action: view, clientId, cursor: page.next } :
-      { action: view, clientId, cursor: page.next, variantId: filterVariant || undefined, runId: simulation, status: filterStatus || undefined };
+      { action: view, clientId, cursor: page.next, variantId: filterVariant || undefined, runId: simulation, photoId, status: filterStatus || undefined };
     const result = await perform<OrganizerPage<CatalogItem>>(request);
     if (result) setPage(old => ({ items: [...old.items, ...result.items], next: result.next }));
   };

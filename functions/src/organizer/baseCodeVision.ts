@@ -45,6 +45,7 @@ export function decideVariant(photo: PhotoState, answer: Answer | undefined, cho
   const reason = answer.reason || 'sin detalle';
   if (!answer.matchesProduct) {
     return { baseVisionKey: key, concordance: { matches: false, reason }, variantId: null, variantIds: [], referenceEligibleFor: [],
+      baseId: null, candidates: [], candidateDetails: [], baseCodeIdentity: { baseCode: null, baseId: null, variantId: null, candidates: [], method: 'sin_codigo', issue: 'Sin coincidencia' },
       identityState: 'needs_review', method: 'concordancia_fallida', confidence: 0, hasConflict: true,
       issue: `La foto no parece mostrar el producto ${baseCode}: ${reason}` };
   }

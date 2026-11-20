@@ -154,7 +154,7 @@ export function resolveBaseCode(name: string, index: BaseCodeIndex): OrganizerBa
   const match = longestCode(stem, known);
   const none: OrganizerBaseCodeIdentity = { baseCode: null, baseId: null, variantId: null, candidates: [], method: 'sin_codigo',
     issue: 'El nombre no empieza con un código base del catálogo.' };
-  if (!match) return none;
+  if (/^SINCOD[_\s-]/i.test(name) || !match) return { ...none, issue: 'Sin ficha comercial: el nombre no contiene un código reconocible del catálogo.' };
   const baseVariants = index.bases.get(match);
   // A declared multi-variant base wins over an identical variant-level code: never guess the variant.
   if (baseVariants && (baseVariants.length > 1 || !index.variantCodes.has(match))) {

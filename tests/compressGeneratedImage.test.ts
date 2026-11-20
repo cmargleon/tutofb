@@ -223,7 +223,7 @@ test('commercial profile normalizes small PNG/WebP/JPEG, bounds geometry and rec
     for (const format of ['png', 'webp', 'jpeg'] as const) {
       const source = await sharp({ create: { width, height, channels: 4, background: '#66332200' } })[format]().toBuffer();
       const result = await commercial({ bytes: source, contentType: 'image/wrong', photoProfile: profile,
-        imageConfig: { provider: 'fal-gpt-image-2.5-flare', imageSize: { width: 1536, height: 2048 }, quality: 'medium', outputFormat: 'png' } });
+        imageConfig: { provider: 'fal-gpt-image-2.5-flare', imageSize: { width: 1536, height: 2048 }, quality: 'medium', outputFormat: 'jpeg' } });
       const metadata = await sharp(result.bytes).metadata();
       const scale = Math.min(1, 2048 / Math.max(width, height));
       assert.deepEqual([metadata.width, metadata.height], [Math.round(width * scale), Math.round(height * scale)]);
@@ -299,4 +299,32 @@ test('commercial candidate order reduces size only after all qualities, avoids d
   await assert.rejects(module.exports.compressGeneratedImageIfNeeded({ bytes: input, contentType: 'image/png', photoProfile: profile }), /máximo absoluto/);
   const scales = attempts.filter(a => a.quality === 90).map(a => a.size);
   assert.equal(scales.length, new Set(scales).size); assert.equal(scales.at(-1), 1);
+});
+
+
+test('explicit PNG survives commercial storage with alpha and XMP, and white validation inspects final bytes', async () => {
+  const { hasSyntheticPerformerXmp, inspectPlannedPhoto } = require('./lib/functions/src/media/photoPlanFile.js');
+  const { verifyWhiteBackground } = require('./lib/functions/src/media/verifyWhiteBackground.js');
+  const imageConfig = { provider: 'fal-gpt-image-2.5-flare', imageSize: 'portrait_4_3', quality: 'medium', outputFormat: 'png' } as const;
+  const bytes = await sharp({ create: { width: 120, height: 160, channels: 4, background: '#ffffff00' } }).png().toBuffer();
+  const result = await commercial({ bytes, contentType: 'image/png', photoProfile: profile, imageConfig, syntheticPerformer: true, plannedPhoto: true });
+  assert.equal(result.contentType, 'image/png');
+  assert.equal((await sharp(result.bytes).metadata()).format, 'png');
+  assert.equal(result.storedImage!.format, 'png'); assert.equal(result.storedImage!.hasAlpha, true);
+  assert.equal(hasSyntheticPerformerXmp(result.bytes), true);
+  assert.equal(await verifyWhiteBackground(result.bytes), false);
+  const white = await commercial({ bytes, contentType: 'image/png', photoProfile: profile, imageConfig, syntheticPerformer: true, plannedPhoto: true, whiteBackground: true });
+  assert.equal(await verifyWhiteBackground(white.bytes), true);
+  const inspected = await inspectPlannedPhoto(white.bytes, { aspectRatio: '3:4', background: 'white' });
+  assert.equal(inspected.whiteCorners, true); assert.equal(inspected.xmp, true);
+});
+
+
+test('new legacy Seedream outputs become JPEG and oversized explicit PNG stays PNG', async () => {
+  const bytes = await small().png().toBuffer();
+  const seedream = await commercial({ bytes, contentType: 'image/png', imageConfig: { provider: 'fal-seedream', imageSize: 'portrait_4_3' } });
+  assert.equal(seedream.contentType, 'image/jpeg'); assert.equal((await sharp(seedream.bytes).metadata()).format, 'jpeg');
+  const png = await commercial({ bytes: pad(bytes, limit + 1), contentType: 'image/png', imageConfig: { provider: 'fal-gpt-image-2.5-flare', imageSize: 'portrait_4_3', quality: 'medium', outputFormat: 'png' } });
+  assert.equal(png.contentType, 'image/png'); assert.equal((await sharp(png.bytes).metadata()).format, 'png');
+  assert.ok(png.bytes.length <= limit);
 });

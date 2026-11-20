@@ -1,4 +1,4 @@
-import type { AutomationBudgetConfig, AutomationPolicy, ClientAutomationConfig, CreateAutomationJobRequest } from './types';
+import type { AutomationBudgetState, AutomationBudgetConfig, AutomationPolicy, ClientAutomationConfig, CreateAutomationJobRequest } from './types';
 
 export const DEFAULT_AUTOMATION_BUDGET: AutomationBudgetConfig = {
   defaultBudgetUsd: 10, maxBudgetUsd: 100, maxReviewAttempts: 3, maxOperationalRetries: 2,
@@ -44,5 +44,14 @@ export const resolveAutomationPolicy = (
     allowEstimatedCosts: request.allowEstimatedCosts === true, authorizeClassification: request.authorizeClassification === true };
 };
 export const usd = (value: number): number => Math.round(value * 1_000_000) / 1_000_000;
-export const remainingAutomationBudget = (budget: { limitUsd: number; spentUsd: number; reservedUsd: number }): number =>
-  Math.max(0, usd(budget.limitUsd - budget.spentUsd - budget.reservedUsd));
+export const remainingAutomationBudget = (budget: { limitUsd: number; spentUsd: number; reservedUsd: number; pendingUsd?: number }): number =>
+  Math.max(0, usd(budget.limitUsd - budget.spentUsd - budget.reservedUsd - Math.max(0, budget.pendingUsd || 0)));
+
+/** Old ledgers retained surplus holds even for recorded results. Keep that exposure
+ * visible without calling it unknown provider billing or releasing historical money. */
+export const automationBudgetBreakdown = (budget: AutomationBudgetState) => ({
+  recordedUsd: budget.recordedUsd,
+  reservedUsd: usd(Math.max(0, budget.reservedUsd) + Math.max(0, budget.pendingUsd || 0)),
+  uncertainUsd: budget.uncertainUsd ?? 0,
+  historicalRetainedUsd: Math.max(0, usd(budget.spentUsd - budget.recordedUsd - (budget.uncertainUsd ?? 0))),
+});

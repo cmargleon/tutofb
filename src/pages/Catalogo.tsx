@@ -1,3 +1,5 @@
+import { CatalogSourceAlerts } from '../components/catalog/CatalogSourceAlerts';
+import { useCatalogSourceAlerts } from '../features/catalog/useCatalogSourceAlerts';
 import { MarketplaceExportDrawer } from '../features/marketplaces/MarketplaceExportDrawer';
 import { useProductWorkflow, workflowUrl } from '../features/organizer/productWorkflow';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -104,6 +106,9 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
     openLightboxForJob,
     handleCloseLightbox,
   } = useCatalogLightbox(displayGarmentGroups);
+
+  const sourceAlerts = useCatalogSourceAlerts(selectedClientId, selectedBatchId ? [selectedBatchId] : displayGarmentGroups.flatMap(group => group.jobs.map(job => job.batchId)));
+  const allSourceAlerts = Object.values(sourceAlerts.byBatch).flatMap(batch => batch.alerts);
 
   const batchActions = useCatalogBatchActions({ selectedBatchId, selectedBatch });
 
@@ -226,6 +231,11 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
           garmentGroupsCount={displayGarmentGroups.length}
         />}
 
+        {sourceAlerts.error && <p role="alert" className="tuto-alert tuto-alert--warning">No se pudieron cargar los avisos de origen: {sourceAlerts.error}</p>}
+        {allSourceAlerts.length > 0 && <section className="tuto-surface" aria-label="Avisos del lote">
+          <h2 className="px-4 pt-3 font-semibold">Avisos del lote · {allSourceAlerts.filter(alert => alert.severity === 'error').length} errores · {allSourceAlerts.filter(alert => alert.severity === 'warning').length} avisos</h2>
+          <CatalogSourceAlerts alerts={allSourceAlerts} clientId={selectedClientId} />
+        </section>}
         <RetryFailedJobsDialog
           isOpen={batchActions.isRetryDialogOpen}
           isSubmitting={batchActions.isRegeneratingFailed}
@@ -245,6 +255,7 @@ export const Catalogo: React.FC<{ client?: Client }> = ({ client }) => {
               <CatalogGarmentSection
                 key={group.garmentId}
                 group={group}
+                sourceAlerts={Object.entries(sourceAlerts.byBatch).filter(([id]) => group.jobs.some(job => job.batchId === id)).flatMap(([, batch]) => batch.alerts).filter(alert => alert.itemId === group.garmentId)}
                 deferGallery={Boolean(selectedBatchId)}
                 showProductPhotoStatus={scoped}
                 onImageClick={openLightboxForJob}

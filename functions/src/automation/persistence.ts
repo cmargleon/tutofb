@@ -139,7 +139,7 @@ export const createAutomation = async (input: unknown, uid: string, role: string
       ...data, clientNameSnapshot: client.data()!.name, effectivePolicy: policy,
       effectiveRules: plan ? plan.effectiveRules ?? { ...DEFAULT_AUTOMATION_RULES }
         : resolveAutomationRules(sanitizeSystemConfig(system.data()).automationRules, (client.data() as Client).automation?.rules),
-      budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, providerConfirmedUsd: null },
+      budget: { limitUsd: policy.budgetUsd, reservedUsd: 0, spentUsd: 0, recordedUsd: 0, uncertainUsd: 0, providerConfirmedUsd: null },
       ...(plan ? { planId: plan.id, resolvedPreset: plan.preset, estimatedCostUsd: plan.estimatedCostUsd, ...(plan.modelOptions ? { modelOptions: plan.modelOptions } : {}) } : {}), ...(role === 'automation' ? { automationPrincipalId: uid.slice('automation-'.length) } : {}), id: ref.id, requestedPreset: data.preset || resolved?.name || plan?.presetName || '', createdByUid: uid, status: 'pending',
       inputImages: data.inputImages || [], sourceImages: data.inputImages || [], outputImages: [], generationJobIds: [], batchId: null,
       createdAt: now, updatedAt: now, startedAt: null, completedAt: null, failedAt: null,

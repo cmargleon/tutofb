@@ -84,14 +84,40 @@ test('approved photo publication, stable direct URLs, automatic Excel links, iso
     assert.equal(p.marketplaces.shein.imageUrls.out, image.url);
     assert.equal(preview.channels.find((channel: any) => channel.marketplaceId === 'shein').ready, true);
     assert.equal(preview.autofillPending, true);
-    const analyzed = await previewMarketplaceExports.run(req({ ...scope, analyzeAutofill: true }));
+    // Simulate a batch with approved images and no public copies before background preparation.
+    await registry.doc('shein').delete();
+    await publishedBucket.file(image.storagePath).delete();
+    const imagesService = require('../functions/lib/functions/src/spreadsheets/marketplaceImages.js');
+    const squaresService = require('../functions/lib/functions/src/spreadsheets/marketplaceSquares.js');
+    const { precomputeMarketplaceExport } = require('../functions/lib/functions/src/spreadsheets/marketplaceExportService.js');
+    const publish = t.mock.method(imagesService, 'publishMarketplaceImage');
+    const prepareSquares = t.mock.method(squaresService, 'prepareMarketplaceSquares');
+    const autofill = require('../functions/lib/functions/src/spreadsheets/marketplaceAutofill.js');
+    // Isolate the image preparation regression from Gemini text/category responses.
+    const copy = t.mock.method(autofill, 'resolveMarketplaceCopy', async () => ({ suggestions: [], pending: false, incomplete: false }));
+    for (let slice = 0; slice < 2; slice++) {
+      const prepared = await precomputeMarketplaceExport(scope, uid, 'emulator-only', Date.now() + 60_000);
+      assert.equal(prepared.pending, false);
+      assert.equal(prepared.counts.published, 0);
+      assert.equal(publish.mock.callCount(), 0, 'Background preparation must never call publishMarketplaceImage');
+      assert.equal((await registry.get()).size, 0);
+      assert.equal((await publishedBucket.getFiles({ prefix: marketplaceImageClientPrefix(clientId) }))[0].length, 0);
+    }
+    assert.ok(prepareSquares.mock.callCount() > 0);
+    for (const call of prepareSquares.mock.calls) assert.equal(call.arguments[2].publish, false);
+    prepareSquares.mock.restore();
+    publish.mock.restore();
+    copy.mock.restore();
+    const analyzed = await previewMarketplaceExports.run(req(scope));
     const square = analyzed.products[0].marketplaceSquares.v;
     assert.equal(square.url, undefined);
     assert.equal((await bucket.file(square.storagePath).exists())[0], true);
-    assert.equal((await publishedBucket.getFiles({ prefix: marketplaceImageClientPrefix(clientId) }))[0].length, 1);
+    assert.equal((await publishedBucket.getFiles({ prefix: marketplaceImageClientPrefix(clientId) }))[0].length, 0);
     assert.equal(segment.mock.callCount(), 1);
     const rejectedExport = await downloadMarketplaceExports.run(req({ ...scope, marketplaceIds: ['shein'], requestId: randomUUID() }));
     assert.match(rejectedExport.failures[0].message, /Autoriza la publicación/);
+    assert.equal((await publishedBucket.getFiles({ prefix: marketplaceImageClientPrefix(clientId) }))[0].length, 0);
+    assert.equal((await registry.get()).size, 0);
     const exported = await downloadMarketplaceExports.run(req({ ...scope, marketplaceIds: ['shein'], requestId: randomUUID(), authorizePublicImages: true }));
     assert.deepEqual(exported.failures, []);
     assert.equal(segment.mock.callCount(), 1);

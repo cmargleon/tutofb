@@ -480,8 +480,8 @@ export async function inParallel<T>(items: T[], size: number, deadline: number, 
   return complete;
 }
 /**
- * Background preparation of an export (categories, Gemini autofill, SHEIN squares and image publication), run
- * when a batch finishes. Every result is cached (marketplaceAutofill, square crops, publications), so a later
+ * Private background preparation of an export (categories, Gemini autofill and SHEIN squares), run
+ * when a batch finishes. Results are cached privately (marketplaceAutofill and square crops), so a later
  * slice — and the export panel — reuse it. Failed analyses stay failed until an operator retries them.
  */
 export async function precomputeMarketplaceExport(input: MarketplaceExportScope, uid: string, apiKey: string, deadline: number) {
@@ -502,22 +502,11 @@ export async function precomputeMarketplaceExport(input: MarketplaceExportScope,
       .map(variant => ({ product, variantId: variant.id, column })) : [];
   }) : [];
   const squaresDone = await inParallel([...new Set(squares.map(square => square.product))], 4, deadline, async product => {
-    try { await prepareMarketplaceSquares(squares.filter(square => square.product === product), uid, { apiKey, publish: true }); counts.squares++; }
+    try { await prepareMarketplaceSquares(squares.filter(square => square.product === product), uid, { apiKey, publish: false }); counts.squares++; }
     catch (error) { counts.failures++; console.warn('Marketplace precompute square failed', { productId: product.id, message: (error as Error).message?.slice(0, 200) }); }
   });
-  const images = enabled.flatMap(channel => context.products.flatMap(product => {
-    const data = product.marketplaces[channel];
-    const template = context.templates.find(t => t.id === data?.templateId && templateUsable(t, channel, true));
-    const category = context.categories.find(c => c.templateId === template?.id && c.id === data?.categoryId);
-    if (!template || !category) return [];
-    const pendingIds = new Set(MARKETPLACE_ADAPTERS[channel].prepare(product, template, category).pendingImageOutputIds);
-    return product.approvedImages.filter(image => pendingIds.has(image.outputId)).map(image => ({ product, image, channel }));
-  }));
-  const imagesDone = await inParallel(images, 8, deadline, async ({ product, image, channel }) => {
-    try { applyMarketplacePublication(product, await publishMarketplaceImage(product, image, channel, uid)); counts.published++; }
-    catch (error) { counts.failures++; console.warn('Marketplace precompute publication failed', { outputId: image.outputId, message: (error as Error).message?.slice(0, 200) }); }
-  });
-  return { pending: !squaresDone || !imagesDone, counts };
+  // Public copies require an explicit operator authorization in download/publishMarketplaceImages.
+  return { pending: !squaresDone, counts };
 }
 /** Without `analyzeAutofill` only cached Gemini choices are used, so the panel opens at once and reports pending analyses. */
 export async function previewMarketplaceExport(input: MarketplaceExportPreviewRequest, uid: string, apiKey?: string) {
@@ -590,7 +579,7 @@ export async function downloadMarketplaceExport(input: DownloadMarketplaceExport
         };
         let { plans, pendingImages, squares } = await validateTemplateCoordinates(channelContext, channel, true);
         if (pendingImages.length || squares.length) {
-          // Normally prepared in the background when the batch finished; this is the fallback for what is missing.
+          // Background preparation keeps crops private. Publish missing URLs only under this request’s authorization.
           if (input.authorizePublicImages !== true) throw new Error('Autoriza la publicación de las fotos aprobadas al descargar desde el Catálogo.');
           await assertHumanClientAccess(uid, scope.clientId);
           const squareProducts = [...new Set(squares.map(square => square.product))];

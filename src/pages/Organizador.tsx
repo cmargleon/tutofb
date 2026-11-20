@@ -1,3 +1,4 @@
+import { uncodedGroupName } from '../../shared/src/organizerIdentity';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { FolderKanban, ChevronRight, CircleAlert, Images, Play } from 'lucide-react';
@@ -262,7 +263,7 @@ export function Organizador() {
           </li>)}
           {(state.view === 'photos' || state.view === 'conflicts') && (config.identityMode === 'baseCode'
             ? [...state.page.items as OrganizerPhoto[]].sort((a, b) => baseOf(a).localeCompare(baseOf(b)) || a.name.localeCompare(b.name))
-            : state.page.items as OrganizerPhoto[]).map((item, index, list) => <li key={item.id} className="space-y-2 py-4">
+            : state.page.items as OrganizerPhoto[]).map((item, index, list) => <li key={item.id} id={`photo-${item.id}`} className="space-y-2 py-4">
             {config.identityMode === 'baseCode' && (index === 0 || baseOf(list[index - 1]) !== baseOf(item)) && <p className="tuto-overline">
               {baseOf(item) ? `Producto base ${baseOf(item)} · ${list.filter(other => baseOf(other) === baseOf(item)).length} fotos en esta página` : 'Sin código base reconocible'}
             </p>}
@@ -282,7 +283,9 @@ export function Organizador() {
               {access.canCreateBatches && <Button size="sm" variant="ghost" disabled={busy || locked} onClick={() => state.start('generate', { photoIds: [item.id] })}>Generar desde original</Button>}
             </div>
             <PhotoReview clientId={clientId} photo={item} products={state.products} disabled={locked || busy || Boolean(state.simulation)}
-              group={(state.page.items as OrganizerPhoto[]).filter(other => config.identityMode === 'baseCode' && item.baseCodeIdentity?.baseId
+              group={(state.page.items as OrganizerPhoto[]).filter(other => uncodedGroupName(item.name)
+                ? uncodedGroupName(other.name) === uncodedGroupName(item.name) && other.path.slice(0, -1).join('/') === item.path.slice(0, -1).join('/')
+                : config.identityMode === 'baseCode' && item.baseCodeIdentity?.baseId
                 ? other.baseCodeIdentity?.baseId === item.baseCodeIdentity.baseId
                 : other.path.slice(0, -1).join('/') === item.path.slice(0, -1).join('/') && [...other.candidates].sort().join() === [...item.candidates].sort().join()).map(other => other.id).slice(0, 25)}
               correct={async (variantIds, photoIds, referenceVariantIds) => {

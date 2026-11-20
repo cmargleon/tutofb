@@ -1,3 +1,4 @@
+import { extensionForContentType } from '../workers/jobWorker.helpers';
 import { assertCallableRoles } from '../auth/roles';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
@@ -81,7 +82,7 @@ export const generateModelPose = onCall(
           preserveReferenceDetails,
         });
 
-        const ext = result.contentType.includes('jpeg') || result.contentType.includes('jpg') ? 'jpg' : 'png';
+        const ext = extensionForContentType(result.contentType);
         const storageBasePath = modelId
           ? `model_generations/${clientId}/${modelId}/${stage ?? 'general'}/${tempSessionId}`
           : `model_generations/${clientId}/${tempSessionId}`;

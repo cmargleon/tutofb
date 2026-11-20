@@ -61,7 +61,7 @@ test('Excel conserva offsets de fila y columna y procesa todas las pestañas', a
   assert.deepEqual(imported[0].rows[0].cells.map(cell => cell.column), ['C', 'D']);
 });
 
-test('respeta fotos hermanas, conflictos, duplicados y decisiones manuales', () => {
+test('no hereda identidad sin código; conserva duplicados y decisiones manuales', () => {
   const { rows } = parseTab(source, 'Productos', 0, [
     ['SKC', 'Color', 'Talla', 'Pack'], ['A218-N-CH', 'Negro', 'CH'], ['A218-N-G', 'Negro', 'G'],
     ['A218-A', 'Azul'], ['B220', 'Rojo', '', '4'], ['A218-R', 'Rojo'],
@@ -76,14 +76,15 @@ test('respeta fotos hermanas, conflictos, duplicados y decisiones manuales', () 
     image('seven', '1.jpg', 'Cocina'), image('eight', 'A218-R.jpg', 'Ropa'), image('nine', '1.jpg', 'Ropa'),
   ], index, new Map([['seven', null]]));
   assert.equal(variants.length, 4);
-  assert.equal(result.get('two')?.method, 'fotos_hermanas');
+  assert.equal(result.get('two')?.method, 'pendiente');
+  assert.equal(result.get('two')?.variantId, null);
   assert.equal(result.get('three')?.variantId, null);
   assert.equal(result.get('three')?.duplicateOf, 'one');
-  assert.equal(result.get('six')?.issue, 'Conflicto de identidad');
+  assert.match(result.get('six')!.issue!, /Sin ficha comercial/);
   assert.equal(result.get('seven')?.method, 'manual');
   assert.equal(result.get('seven')?.variantId, null);
   assert.equal(result.get('nine')?.variantId, null);
-  assert.equal(result.get('nine')?.issue, 'Carpeta general con fotos sin identificador');
+  assert.match(result.get('nine')!.issue!, /Sin ficha comercial/);
 });
 
 test('Drive solo lee originales y verifica versión, pertenencia y checksums sin métodos de escritura', async () => {

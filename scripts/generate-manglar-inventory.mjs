@@ -11,6 +11,7 @@ let text=`# Inventario de operaciones MCP\n\n${MANGLAR_MCP_TOOLS.length} herrami
 for(const op of [...MANGLAR_OPERATIONS].sort((a,b)=>`${a.domain}.${a.action}`.localeCompare(`${b.domain}.${b.action}`))){
  text+=`| ${op.domain}.${op.action} | \`manglar_${op.domain}\` → \`${op.action}\` | ${op.roles.join(', ')} | ${labels[op.risk]} | [${op.source}](../${op.source}) |\n`;
 }
+text+='\nExportaciones marketplace: `spreadsheets.previewMarketplace` consulta cachés y URLs existentes sin publicar. El precompute de automatizaciones prepara categorías, autollenado y recortes cuadrados privados, sin crear copias públicas. `spreadsheets.downloadMarketplace` publica imágenes aprobadas y recortes pendientes solo con `authorizePublicImages:true`, además del presupuesto y confirmación MCP.\n';
 text+='\n## Herramientas de control y compatibilidad\n\n';
 for(const tool of MANGLAR_MCP_TOOLS.filter(tool=>!MANGLAR_OPERATIONS.some(op=>tool.name===`manglar_${op.domain}`)))text+=`- \`${tool.name}\`: ${tool.description}\n`;
 fs.writeFileSync('docs/MANGLAR_TOOL_INVENTORY.md',text);

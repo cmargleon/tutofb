@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { runManglarPaid } from '../manglar/budget';
 import { estimateGenerationHold } from '../costs/generationEstimates';
 import { isNewFalProvider, NewFalImageConfig } from '../providers/falModels';
@@ -84,4 +85,10 @@ export const generateSingleModelPhoto = async ({
   falKey: string;
   referenceImageUrl?: string | null;
   preserveReferenceDetails?: boolean;
-}): Promise<TextToImageResult> => runProvider(provider, prompt, imageConfig, falKey, referenceImageUrl);
+}): Promise<TextToImageResult> => {
+  const result = await runProvider(provider, prompt, imageConfig, falKey, referenceImageUrl);
+  // v4.5 has no output_format parameter. Normalize only this new result, before storing/reviewing it.
+  if (provider !== 'fal-seedream-v4.5' || result.contentType === 'image/jpeg') return result;
+  const imageBytes = await sharp(result.imageBytes).rotate().flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
+  return { ...result, imageBytes, contentType: 'image/jpeg' };
+};

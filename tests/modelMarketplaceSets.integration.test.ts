@@ -34,9 +34,9 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
   let generations = 0, failThreeQuarter = true, concretePoseMatches = true, failProvider = false;
   t.mock.method(generator, 'generateSingleModelPhoto', async ({ imageConfig, prompt }: any) => {
     if (failProvider) throw new Error('Provider outage fixture');
-    generations++; assert.match(prompt, /approved identity reference/); assert.match(prompt, /Plain fitted opaque/);
+    generations++; assert.equal(imageConfig.outputFormat, 'jpeg'); assert.match(prompt, /approved identity reference/); assert.match(prompt, /Plain fitted opaque/);
     const ratio = typeof imageConfig.imageSize === 'object' ? imageConfig.imageSize.width / imageConfig.imageSize.height : .75;
-    return { imageBytes: await sharp(bytes).resize(1200, Math.round(1200 / ratio)).png().toBuffer(), contentType: 'image/png' };
+    return { imageBytes: await sharp(bytes).resize(1200, Math.round(1200 / ratio)).jpeg().toBuffer(), contentType: 'image/jpeg' };
   });
   t.mock.method(classifier, 'classifyPoseWithGemini', async ({ pose, identityStoragePath }: any) => {
     assert.equal(identityStoragePath, sourcePath);
@@ -53,6 +53,12 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
     const noIdentity = await callables.previewModelPhotoSets.run({ data: baseRequest, auth });
     assert.ok(noIdentity.issues.some((i: string) => i.includes('identidad'))); assert.equal(generations, 0);
     await callables.approveModelIdentity.run({ data: { modelId, poseId: 'identity', performer: 'synthetic' }, auth });
+    const pngConfig = { provider: baseRequest.provider, imageSize: 'portrait_4_3', quality: 'medium', outputFormat: 'png' };
+    assert.equal((await service.loadModelSetContext({ ...baseRequest, imageConfig: pngConfig }, uid)).normalized.imageConfig.outputFormat, 'png');
+    await db.doc(`clients/${clientId}`).update({ automation: { presets: { standard: { provider: baseRequest.provider, imageConfig: pngConfig } } } });
+    assert.equal((await service.loadModelSetContext(baseRequest, uid)).normalized.imageConfig.outputFormat, 'png');
+    assert.equal((await service.loadModelSetContext({ ...baseRequest, imageConfig: { ...pngConfig, outputFormat: 'jpeg' } }, uid)).normalized.imageConfig.outputFormat, 'jpeg');
+    await db.doc(`clients/${clientId}`).update({ automation: admin.firestore.FieldValue.delete() });
     let preview = (await service.loadModelSetContext(baseRequest, uid)).preview;
     assert.equal(preview.shots.length, 3); assert.equal(preview.missing, 3); assert.ok(preview.estimatedCostUsd > 0);
     const request = { ...baseRequest, channel: 'amazon', shot: 'front', requestId: 'front-once', approvedPreviewId: preview.id };
@@ -63,11 +69,12 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
     preview = (await service.loadModelSetContext(baseRequest, uid)).preview; assert.equal(preview.missing, 2);
     const side = await service.generateModelBaseCore({ ...request, shot: 'front_three_quarter', requestId: 'side-once', approvedPreviewId: preview.id }, uid);
     assert.equal(side.approved, false); assert.match(side.issues.join(' '), /Pose requerida/); assert.equal(generations, 4);
-    assert.ok((await db.doc(`models/${modelId}`).get()).get('poses').some((p: any) => p.id === side.poseId));
+    assert.equal((await db.doc(`models/${modelId}`).get()).get('poses').find((p: any) => p.id === side.poseId).active, false);
     failThreeQuarter = false;
     assert.equal((await service.verifyModelBaseCore({ ...baseRequest, channel: 'amazon', shot: 'front_three_quarter', poseId: side.poseId }, uid)).approved, true);
     const shared = await service.verifyModelBaseCore({ ...baseRequest, channel: 'shein', shot: 'front_three_quarter', poseId: side.poseId }, uid);
     assert.equal(shared.approved, true); assert.equal(generations, 4);
+    assert.equal((await db.doc(`models/${modelId}`).get()).get('poses').find((p: any) => p.id === side.poseId).active, true);
     const saved = (await db.doc(`models/${modelId}`).get()).data();
     assert.equal(saved.poses.length, 5); assert.equal(saved.marketplaceBaseApprovals.filter((a: any) => a.poseId === side.poseId).length, 2);
     const square = (await service.loadModelSetContext({ ...baseRequest, channels: ['tiktok-shop'] }, uid)).preview;
@@ -234,6 +241,7 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
     const beforeQueue = generations;
     const ids = await service.scheduleModelPhotoSetsCore(queued, uid);
     assert.equal(ids.length, 2); assert.equal(generations, beforeQueue);
+    for (const id of ids) assert.equal((await db.doc(`models/${queueModelId}/baseOperations/${id}`).get()).get('imageConfig.outputFormat'), 'jpeg');
     assert.deepEqual(await service.scheduleModelPhotoSetsCore(queued, uid), ids);
     const same = await service.scheduleModelPhotoSetsCore({ ...queued, requestId: 'concurrent-other-batch' }, uid);
     assert.deepEqual(same, ids);
@@ -251,6 +259,11 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
     await service.processModelBaseOperation(queueModelId, ids[0]);
     queuedOp = (await db.doc(`models/${queueModelId}/baseOperations/${ids[0]}`).get()).data();
     assert.equal(queuedOp.status, 'approved'); assert.equal(queuedOp.attempts.length, 2);
+    for (const attempt of queuedOp.attempts) {
+      assert.match(attempt.storagePath, /\.jpg$/);
+      assert.equal((await sharp((await bucket.file(attempt.storagePath).download())[0]).metadata()).format, 'jpeg');
+      assert.equal((await bucket.file(attempt.storagePath).getMetadata())[0].contentType, 'image/jpeg');
+    }
     assert.match(queuedOp.attempts[1].prompt, /Fondo requerido/);
     assert.ok(queuedOp.attempts.every((a: any) => a.storagePath && a.generationCostUsd > 0 && a.reviewCostUsd === .003 && a.verification.observation));
     await service.processModelBaseOperation(queueModelId, ids[0]);
@@ -260,6 +273,7 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
     await service.processModelBaseOperation(queueModelId, ids[1]);
     const outage = (await db.doc(`models/${queueModelId}/baseOperations/${ids[1]}`).get()).data();
     assert.equal(outage.status, 'needs_attention'); assert.equal(outage.attemptNumber, 1);
+    assert.equal((await db.doc(`models/${queueModelId}`).get()).get('poses').find((p: any) => p.id === outage.attempts[0].poseId).active, false);
     assert.ok(outage.attempts[0].storagePath); assert.equal(outage.attempts[0].verification, undefined);
     await service.processModelBaseOperation(queueModelId, ids[1]); assert.equal(generations, beforeQueue + 3);
     const uncertainInput = { ...queuedInput, channels: ['shein'], poseRecipeIds: ['full-front'] };

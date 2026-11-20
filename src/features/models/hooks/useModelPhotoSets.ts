@@ -1,3 +1,4 @@
+import { groupModelCatalogPoses } from '../../../../shared/src/modelPoseCatalog';
 import { useModelMarketplaceRules } from '../marketplaceRules/useModelMarketplaceRules';
 import { useEffect, useRef, useState, type SetStateAction } from 'react';
 import { selectedModelMarketplacePoses } from '../../../../shared/src/modelMarketplaceRules';
@@ -94,6 +95,6 @@ export function useModelPhotoSets(model: Model, client?: Client, options: { wiza
     setIssues(result.issues);
     toast({ tone: result.approved ? 'success' : 'warning', title: result.approved ? 'Base aprobada para esta toma' : 'Base incompatible', description: result.issues.join(' ') });
   });
-  return { rulesLoading, rulesError, poseRecipeIds, setPoseRecipeIds, active, channels, setChannels, category, setCategory, bodyArea, setBodyArea, aspectRatio, setAspectRatio, provider, setProvider, preview, busy, progress, issues: operationError ? [...issues, operationError] : issues, operationFor, canGenerate,
+  return { catalogGroups: groupModelCatalogPoses(model, operations), rulesLoading, rulesError, poseRecipeIds, setPoseRecipeIds, active, channels, setChannels, category, setCategory, bodyArea, setBodyArea, aspectRatio, setAspectRatio, provider, setProvider, preview, busy, progress, issues: operationError ? [...issues, operationError] : issues, operationFor, canGenerate,
     identityPoseId, setIdentityPoseId, performer, setPerformer, approveIdentity, generate, verify };
 }

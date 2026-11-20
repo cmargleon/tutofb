@@ -42,12 +42,12 @@ test('lee combinadas únicamente dentro del rango y registra enlaces sin añadir
   assert.equal(tab.links?.[0].sourceId, 'extra-folder');
 });
 
-test('secuencias, extensiones pegadas y marketplace no crean SKC ni bloquean rutas inequívocas', () => {
+test('reconoce secuencias y extensiones pero no hereda códigos de la ruta', () => {
   const variants = catalog([['SKC', 'Nombre', 'Color'], ['A021', 'Dardos'], ['A091-PACK6', 'Vasos bambú'], ['A159-RO', 'Pesa rosa', 'Rosa']]);
   assert.equal(photo('A021-4.webp', 'A021 DARDOS', variants).variantId, variants.find(v => v.base === 'A021')!.id);
   assert.equal(photo('A091-2.jpg', 'COCINA', variants).variantId, variants.find(v => v.base === 'A091')!.id);
   assert.equal(photo('A159-ROpng', 'DEPORTE', variants).variantId, variants.find(v => v.base === 'A159')!.id);
-  assert.equal(photo('B0MARKETPLACE88.jpg', 'A021 DARDOS', variants).variantId, variants.find(v => v.base === 'A021')!.id);
+  assert.equal(photo('B0MARKETPLACE88.jpg', 'A021 DARDOS', variants).variantId, null);
   assert.equal(variants.length, 3);
 });
 
@@ -119,5 +119,5 @@ test('benchmark supervisado mide aciertos, errores y pendientes sin premiar asig
     else if (variants.find(v => v.id === actual.variantId)?.visual === fixture.expected) metrics.correct++;
     else metrics.incorrect++;
   }
-  assert.deepEqual(metrics, { correct: 2, incorrect: 0, pending: 2, costUsd: 0 });
+  assert.deepEqual(metrics, { correct: 1, incorrect: 0, pending: 3, costUsd: 0 });
 });

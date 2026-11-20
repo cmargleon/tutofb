@@ -92,6 +92,13 @@ const normalizeUsage = (
   };
 };
 
+export const recordedGeminiCostUsd = (metadata?: GeminiUsageMetadata): number | null => {
+  const counts = [metadata?.promptTokenCount, metadata?.candidatesTokenCount, metadata?.thoughtsTokenCount];
+  if (typeof counts[0] !== 'number' || typeof counts[1] !== 'number'
+    || counts.some(value => value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0))) return null;
+  return normalizeUsage(metadata, true).estimatedCostUsd;
+};
+
 const persistGeminiUsage = async ({
   context,
   status,
@@ -242,7 +249,7 @@ const callGeminiGenerateContentCore = async <TPayload>({
       console.error('No se pudo registrar el uso exitoso de Gemini.', trackingError);
     }
 
-    if (operation && context.automation) await settleAutomationOperation(context.automation.id, operation, normalizeUsage(parsedUsagePayload?.usageMetadata, Boolean(context.automation)).estimatedCostUsd);
+    if (operation && context.automation) await settleAutomationOperation(context.automation.id, operation, recordedGeminiCostUsd(parsedUsagePayload?.usageMetadata));
     return {
       payload: parsed,
       usage: normalizeUsage(parsedUsagePayload?.usageMetadata, Boolean(context.automation)),

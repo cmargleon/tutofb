@@ -145,8 +145,11 @@ export const reserveAutomationOperation = async (
 };
 
 export const settleAutomationOperation = async (
-  automationId: string, id: string, recordedUsd: number | null, confirmedFixedRate = false,
+  automationId: string, id: string, recordedUsd: number | null,
 ): Promise<void> => {
+  if (recordedUsd !== null && (!Number.isFinite(recordedUsd) || recordedUsd < 0)) {
+    throw new HttpsError('invalid-argument', 'El costo registrado debe ser finito y no negativo.');
+  }
   const db = getAppFirestore();
   const ref = db.collection('automationJobs').doc(automationId);
   const op = ref.collection('operations').doc(id);
@@ -156,11 +159,12 @@ export const settleAutomationOperation = async (
     const data = operation.data();
     if (!data || data.state !== 'reserved') return;
     // Unknown outcomes retain their entire exposure. Do not release money on a timeout.
-    const charged = usd(confirmedFixedRate && recordedUsd !== null ? recordedUsd : Math.max(data.holdUsd, recordedUsd || 0));
+    const charged = usd(recordedUsd === null ? data.holdUsd : recordedUsd);
     tx.update(op, { state: recordedUsd === null ? 'uncertain' : 'recorded', recordedUsd,
       committedUsd: charged, providerConfirmedUsd: null, settledAt: FieldValue.serverTimestamp() });
     tx.update(ref, { 'budget.reservedUsd': FieldValue.increment(-data.holdUsd),
-      'budget.spentUsd': FieldValue.increment(charged), 'budget.recordedUsd': FieldValue.increment(recordedUsd || 0),
+      'budget.spentUsd': FieldValue.increment(charged), 'budget.recordedUsd': FieldValue.increment(recordedUsd ?? 0),
+      'budget.uncertainUsd': FieldValue.increment(recordedUsd === null ? charged : 0),
       updatedAt: FieldValue.serverTimestamp() });
   }));
 };

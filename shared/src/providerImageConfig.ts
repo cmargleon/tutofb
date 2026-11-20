@@ -75,6 +75,11 @@ export const createDefaultProviderImageConfig = (provider: Provider): ProviderIm
     case 'fal-seedream-5-pro':
     case 'fal-seedream-5-flash':
     case 'fal-flux-2-edit':
+      return {
+        provider,
+        imageSize: 'portrait_4_3',
+        outputFormat: 'jpeg',
+      };
     case 'fal-seedream':
       return {
         provider,
@@ -85,6 +90,7 @@ export const createDefaultProviderImageConfig = (provider: Provider): ProviderIm
         provider,
         aspectRatio: '3:4',
         resolution: '1K',
+        outputFormat: 'jpeg',
       };
     case 'openai-gpt-image-1.5':
       return {
@@ -97,11 +103,13 @@ export const createDefaultProviderImageConfig = (provider: Provider): ProviderIm
         provider,
         aspectRatio: '3:4',
         resolution: '1K',
+        outputFormat: 'jpeg',
       };
     case 'fal-seedream-5':
       return {
         provider,
         imageSize: 'portrait_4_3',
+        outputFormat: 'jpeg',
       };
     case 'fal-gpt-image-2.5-sunburst':
     case 'fal-gpt-image-2.5-flare':
@@ -110,7 +118,7 @@ export const createDefaultProviderImageConfig = (provider: Provider): ProviderIm
         provider,
         imageSize: 'portrait_4_3',
         quality: 'medium',
-        outputFormat: 'png',
+        outputFormat: 'jpeg',
       };
     default:
       throw new Error(`Proveedor no soportado: ${provider satisfies never}`);
@@ -345,6 +353,11 @@ export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio:
     case 'fal-seedream-5-pro':
     case 'fal-seedream-5-flash':
     case 'fal-flux-2-edit':
+      return {
+        provider,
+        imageSize: mapLegacyAspectRatioToSeedreamImageSize(aspectRatio),
+        outputFormat: 'jpeg',
+      };
     case 'fal-seedream':
       return {
         provider,
@@ -355,6 +368,7 @@ export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio:
         provider,
         aspectRatio,
         resolution: '1K',
+        outputFormat: 'jpeg',
       };
     case 'openai-gpt-image-1.5':
       return {
@@ -367,11 +381,13 @@ export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio:
         provider,
         aspectRatio,
         resolution: '1K',
+        outputFormat: 'jpeg',
       };
     case 'fal-seedream-5':
       return {
         provider,
         imageSize: mapLegacyAspectRatioToSeedream5ImageSize(aspectRatio),
+        outputFormat: 'jpeg',
       };
     case 'fal-gpt-image-2.5-sunburst':
     case 'fal-gpt-image-2.5-flare':
@@ -380,7 +396,7 @@ export const createLegacyProviderImageConfig = (provider: Provider, aspectRatio:
         provider,
         imageSize: mapLegacyAspectRatioToGPTImage2ImageSize(aspectRatio),
         quality: 'medium',
-        outputFormat: 'png',
+        outputFormat: 'jpeg',
       };
     default:
       throw new Error(`Proveedor no soportado: ${provider satisfies never}`);

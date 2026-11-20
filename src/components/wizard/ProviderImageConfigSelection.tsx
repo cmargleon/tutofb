@@ -671,7 +671,7 @@ export const ProviderImageConfigSelection: React.FC<ProviderImageConfigSelection
     props.onChange(config);
   };
   return <div className="space-y-3">
-    {props.commercial ? <p className="text-xs text-slate-500">Solicitud: {summarizeProviderImageConfig(props.value)}. Archivo guardado: JPEG sRGB, hasta 2048 px y 2.8 MB, sin ampliar. El proveedor puede devolver otro tamaño; 2K es un nivel nativo.</p> : null}
+    {props.commercial ? <p className="text-xs text-slate-500">Solicitud: {summarizeProviderImageConfig(props.value)}. Archivo guardado: {'outputFormat' in props.value && props.value.outputFormat === 'png' ? 'PNG' : 'JPEG'} sRGB, hasta 2048 px y 2.8 MB, sin ampliar. El proveedor puede devolver otro tamaño; 2K es un nivel nativo.</p> : null}
     <ProviderImageConfigControls {...props} onChange={onChange} />
     {props.commercial && props.provider !== 'openai-gpt-image-1.5' && !('quality' in props.value) && 'outputFormat' in props.value ? renderCompactOptions({
       label: 'Formato solicitado al proveedor', values: COMMERCIAL_PHOTO_CAPABILITIES[props.provider].formats,

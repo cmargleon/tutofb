@@ -1,3 +1,4 @@
+import { ModelPosesViewGrid } from './ModelPosesViewGrid';
 import { usePhotoBaseVerification } from '../../features/models/hooks/usePhotoBaseVerification';
 import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -16,8 +17,6 @@ import { formatDateTimeLong } from '../../../shared/src/utils/dateUtils';
 import { Button } from '../ui';
 import { LocalFileThumb } from './LocalFileThumb';
 import { ModelIdentityTraitsFields } from './ModelIdentityTraitsFields';
-import { ModelPosesViewGrid } from './ModelPosesViewGrid';
-import { ModelPosesEditGrid } from './ModelPosesEditGrid';
 import { ModelPhotoSets } from './ModelPhotoSets';
 
 interface ModelLibraryItemProps {
@@ -170,8 +169,6 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
               />
             </div>
 
-            {hasPoses && <ModelPosesEditGrid model={model} library={library} />}
-
             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -241,8 +238,8 @@ export const ModelLibraryItem: React.FC<ModelLibraryItemProps> = ({
           </div>
         ) : null}
 
-        {!isArchived && hasPoses && <ModelPhotoSets model={model} client={clients.find(c => c.id === model.clientId)} />}
-        {!isEditing && hasPoses && <ModelPosesViewGrid model={model} />}
+        {isArchived && hasPoses && <ModelPosesViewGrid model={model} />}
+        {!isArchived && hasPoses && <ModelPhotoSets model={model} client={clients.find(c => c.id === model.clientId)} library={isEditing ? library : undefined} />}
       </div>
     </article>
   );

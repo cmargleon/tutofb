@@ -1,3 +1,5 @@
+import { CatalogSourceAlerts } from './CatalogSourceAlerts';
+import type { CatalogSourceAlert } from '../../../shared/src/types';
 import { CatalogPhotoEditor } from './CatalogPhotoEditor';
 import { productPhotoStatus } from '../../../shared/src/productWorkflow';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -15,6 +17,7 @@ import { useConfirm, useToast } from '../../features/feedback/FeedbackProvider';
 
 interface CatalogGarmentSectionProps {
   group: CatalogGarmentGroup;
+  sourceAlerts?: CatalogSourceAlert[];
   deferGallery?: boolean;
   showProductPhotoStatus?: boolean;
   onImageClick: (job: Job) => void;
@@ -27,6 +30,7 @@ const photoStatusLabels = { approved: 'Aprobada', attention: 'Requiere atención
 
 export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
   group,
+  sourceAlerts = [],
   deferGallery = false,
   showProductPhotoStatus = false,
   onImageClick,
@@ -251,6 +255,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
           )}
           <span className="font-medium text-gray-900 truncate">{group.garmentName}</span>
           <span className="text-xs text-gray-500 shrink-0">({group.jobs.length})</span>
+          {sourceAlerts.length > 0 && <span className={`text-xs font-semibold ${sourceAlerts.some(alert => alert.severity === 'error') ? 'text-red-700' : 'text-amber-800'}`}>{sourceAlerts.some(alert => alert.severity === 'error') ? 'Error de exportación' : 'Avisos'} · {sourceAlerts.length}</span>}
         </button>
         <button
           type="button"
@@ -268,6 +273,7 @@ export const CatalogGarmentSection: React.FC<CatalogGarmentSectionProps> = ({
         </button>
       </div>
 
+      <CatalogSourceAlerts alerts={sourceAlerts} clientId={group.jobs[0]?.clientId || ''} />
       {expanded && (
         <div ref={galleryRef} className="p-4">
           {marketplaceSections ? (

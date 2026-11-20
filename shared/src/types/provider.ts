@@ -115,8 +115,8 @@ export type { Provider, AspectRatio };
 
 export type CommercialPhotoProfile = 'commercial-photo-v1';
 export interface StoredPhotoMetadata {
-  width: number; height: number; sizeBytes: number; format: 'jpeg';
-  space: 'srgb'; depth: 'uchar'; hasAlpha: false; hasSrgbIcc: true;
+  width: number; height: number; sizeBytes: number; format: 'jpeg' | 'png';
+  space: 'srgb'; depth: 'uchar'; hasAlpha: boolean; hasSrgbIcc: true;
   sourceWidth: number; sourceHeight: number; sourceFormat: string;
   requestedGeometryDiffers: boolean;
 }

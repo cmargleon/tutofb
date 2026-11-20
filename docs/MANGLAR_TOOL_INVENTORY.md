@@ -127,6 +127,8 @@ Cada fila está implementada, validada por contrato y compilada. Las pruebas en 
 | wizard.previewProduct | `manglar_wizard` → `previewProduct` | admin, operador | Lectura directa | [functions/src/callables/createProductGenerationBatch.helpers.ts](../functions/src/callables/createProductGenerationBatch.helpers.ts) |
 | wizard.saveDraft | `manglar_wizard` → `saveDraft` | admin, operador | Cambio reversible + idempotencyKey | [functions/src/manglar/wizard.ts](../functions/src/manglar/wizard.ts) |
 
+Exportaciones marketplace: `spreadsheets.previewMarketplace` consulta cachés y URLs existentes sin publicar. El precompute de automatizaciones prepara categorías, autollenado y recortes cuadrados privados, sin crear copias públicas. `spreadsheets.downloadMarketplace` publica imágenes aprobadas y recortes pendientes solo con `authorizePublicImages:true`, además del presupuesto y confirmación MCP.
+
 ## Herramientas de control y compatibilidad
 
 - `manglar_capabilities`: Consulta primero los clientes, carpetas autorizadas, proveedores y límites de presupuesto disponibles.

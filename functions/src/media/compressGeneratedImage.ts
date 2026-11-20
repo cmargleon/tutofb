@@ -1,4 +1,4 @@
-import { addSyntheticPerformerXmp } from './photoPlanFile';
+import { addSyntheticPerformerXmp, SYNTHETIC_PERFORMER_XMP } from './photoPlanFile';
 import sharp from 'sharp';
 import { COMMERCIAL_PHOTO_PROFILE, COMMERCIAL_PHOTO_STORAGE } from '../../../shared/src/commercialPhoto';
 import { resolveAspectRatioForImageConfig } from '../../../shared/src/providerImageConfig';
@@ -22,8 +22,17 @@ export const compressGeneratedImageIfNeeded = async ({
   imageConfig?: ProviderImageConfig | null;
 }): Promise<{ bytes: Buffer; contentType: string; storedImage?: StoredPhotoMetadata }> => {
   if (photoProfile === COMMERCIAL_PHOTO_PROFILE) return normalizeCommercialPhoto(bytes, imageConfig, syntheticPerformer, plannedPhoto, Boolean(plannedPhoto && whiteBackground));
+  // Seedream v4.5 cannot request JPEG remotely; only normalize newly generated outputs here.
+  if (imageConfig?.provider === 'fal-seedream' && contentType !== 'image/jpeg') {
+    bytes = await sharp(bytes).rotate().flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
+    contentType = 'image/jpeg';
+  }
   if (bytes.length <= MAX_STORED_OUTPUT_BYTES) {
     return { bytes, contentType };
+  }
+
+  if (imageConfig && 'outputFormat' in imageConfig && imageConfig.outputFormat === 'png') {
+    return normalizeCommercialPhoto(bytes, imageConfig, syntheticPerformer);
   }
 
   const source = sharp(bytes, { failOn: 'none' }).rotate();
@@ -91,6 +100,8 @@ export async function snapNearWhite(bytes: Buffer) {
   return sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png({ compressionLevel: 1 }).toBuffer();
 }
 const normalizeCommercialPhoto = async (input: Buffer, imageConfig?: ProviderImageConfig | null, syntheticPerformer = false, plannedPhoto = false, whiteBackground = false) => {
+  const png = imageConfig && 'outputFormat' in imageConfig && imageConfig.outputFormat === 'png';
+  const format = png ? 'png' : 'jpeg';
   const bytes = whiteBackground ? await snapNearWhite(input) : input;
   const policy = plannedPhoto ? { ...COMMERCIAL_PHOTO_STORAGE, maxSide: 1920 } : COMMERCIAL_PHOTO_STORAGE;
   const original = await sharp(input, { failOn: 'warning' }).metadata();
@@ -108,26 +119,28 @@ const normalizeCommercialPhoto = async (input: Buffer, imageConfig?: ProviderIma
     const key = `${Math.max(1, Math.round(sourceWidth * Math.min(1, side / Math.max(sourceWidth, sourceHeight))))}x${Math.max(1, Math.round(sourceHeight * Math.min(1, side / Math.max(sourceWidth, sourceHeight))))}`;
     if (!attempted.has(key)) {
       attempted.add(key);
-      for (const quality of policy.qualities) {
-        let candidate = await sharp(bytes, { failOn: 'warning' }).rotate()
+      for (const quality of (png ? [90] : policy.qualities)) {
+        let pipeline = sharp(bytes, { failOn: 'warning' }).rotate()
           .resize({ width: side, height: side, fit: 'inside', withoutEnlargement: true })
-          .toColourspace('srgb').flatten({ background: '#ffffff' })
-          .withIccProfile('srgb')
-          .jpeg({ quality, mozjpeg: true }).toBuffer();
-        if (syntheticPerformer) candidate = addSyntheticPerformerXmp(candidate);
+          .toColourspace('srgb');
+        if (!png) pipeline = pipeline.flatten({ background: '#ffffff' });
+        pipeline = pipeline.withIccProfile('srgb');
+        if (png && syntheticPerformer) pipeline = pipeline.withXmp(SYNTHETIC_PERFORMER_XMP);
+        let candidate = await (png ? pipeline.png({ compressionLevel: 9 }) : pipeline.jpeg({ quality, mozjpeg: true })).toBuffer();
+        if (!png && syntheticPerformer) candidate = addSyntheticPerformerXmp(candidate);
         if (candidate.length > policy.maxBytes) continue;
         const actual = await sharp(candidate, { failOn: 'warning' }).metadata();
-        if (actual.format !== 'jpeg' || actual.depth !== 'uchar' || actual.space !== 'srgb'
-          || actual.hasAlpha || !actual.icc || !actual.width || !actual.height
+        if (actual.format !== format || actual.depth !== 'uchar' || actual.space !== 'srgb'
+          || (!png && actual.hasAlpha) || !actual.icc || !actual.width || !actual.height
           || Math.max(actual.width, actual.height) > policy.maxSide) throw new Error('La normalización fotográfica no cumple el perfil.');
         const storedImage: StoredPhotoMetadata = {
           width: actual.width, height: actual.height, sizeBytes: candidate.length,
-          format: 'jpeg', space: 'srgb', depth: 'uchar', hasAlpha: false, hasSrgbIcc: true,
+          format, space: 'srgb', depth: 'uchar', hasAlpha: actual.hasAlpha, hasSrgbIcc: true,
           sourceWidth, sourceHeight, sourceFormat: original.format || 'unknown',
           requestedGeometryDiffers: Boolean(requested && (requested.width !== sourceWidth || requested.height !== sourceHeight)
             || requestedRatio && sourceWidth * requestedRatio[1] !== sourceHeight * requestedRatio[0]),
         };
-        return { bytes: candidate, contentType: policy.contentType, storedImage };
+        return { bytes: candidate, contentType: png ? 'image/png' : policy.contentType, storedImage };
       }
     }
     if (side === 1) break;

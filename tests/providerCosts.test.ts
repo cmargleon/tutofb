@@ -26,7 +26,7 @@ test('backend holds preserve rate classification, reference handling and histori
         const estimateUsd = getProviderCostUsd(provider, config, references);
         const fixed = fixedProviders[provider];
         assert.deepEqual(estimateGenerationHold(provider, config as ProviderImageConfig, references), {
-          estimateUsd, holdUsd: fixed ? estimateUsd : Math.max(0.5, estimateUsd * 4), fixed,
+          estimateUsd, holdUsd: Math.ceil(estimateUsd * (fixed ? 1 : estimate(provider, config, references).maxUsd === null ? 4 : 2) * 1e6) / 1e6, fixed,
         }, `${provider}, ${JSON.stringify(config)}, references=${references}`);
       }
     }
@@ -34,16 +34,16 @@ test('backend holds preserve rate classification, reference handling and histori
   assert.equal(GEMINI_OPERATION_HOLD_USD, 0.05);
 });
 
-test('backend holds retain exact estimates, rounding, minimum and multiplier for nondefault options', () => {
+test('backend holds use config margins and micro-dollar rounding without a flat minimum', () => {
   const cases: Array<[ProviderImageConfig, number, number, number, boolean]> = [
     [{ provider: 'fal-banana-pro', resolution: '4K', aspectRatio: '3:4' }, 5, .3, .3, true],
     [{ provider: 'fal-nano-banana-2', resolution: '0.5K', aspectRatio: '3:4' }, 0, .06, .06, true],
-    [{ provider: 'openai-gpt-image-1.5', size: '1024x1536', quality: 'high' }, 0, .25, 1, false],
-    [{ provider: 'fal-gpt-image-2', imageSize: { width: 1297, height: 733 }, quality: 'high', outputFormat: 'png' }, 15, .19694, .78776, false],
-    [{ provider: 'fal-gpt-image-2.5-flare', imageSize: 'auto', quality: 'auto', outputFormat: 'png' }, 2, .1168, .5, false],
-    [{ provider: 'fal-gpt-image-2.5-sunburst', imageSize: 'square_hd', quality: 'max', outputFormat: 'webp' }, 1, .0611, .5, false],
-    [{ provider: 'fal-seedream-5-pro', imageSize: 'auto_2K' }, 2, .1395, .558, false],
-    [{ provider: 'fal-flux-2-edit', imageSize: { width: 2049, height: 2048 } }, 10, .18, .72, false],
+    [{ provider: 'openai-gpt-image-1.5', size: '1024x1536', quality: 'high' }, 0, .25, .5, false],
+    [{ provider: 'fal-gpt-image-2', imageSize: { width: 1297, height: 733 }, quality: 'high', outputFormat: 'png' }, 15, .19694, .39388, false],
+    [{ provider: 'fal-gpt-image-2.5-flare', imageSize: 'auto', quality: 'auto', outputFormat: 'png' }, 2, .1168, .2336, false],
+    [{ provider: 'fal-gpt-image-2.5-sunburst', imageSize: 'square_hd', quality: 'max', outputFormat: 'webp' }, 1, .0611, .2444, false],
+    [{ provider: 'fal-seedream-5-pro', imageSize: 'auto_2K' }, 2, .1395, .279, false],
+    [{ provider: 'fal-flux-2-edit', imageSize: { width: 2049, height: 2048 } }, 10, .18, .36, false],
   ];
   for (const [config, references, estimateUsd, holdUsd, fixed] of cases) {
     assert.deepEqual(estimateGenerationHold(config.provider, config, references), { estimateUsd, holdUsd, fixed });

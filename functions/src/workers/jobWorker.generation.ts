@@ -111,7 +111,7 @@ const reserveGenerationBudget = async (
 };
 
 const settleGenerationBudgetAfterSuccess = (budget: GenerationBudget) =>
-  settleAutomationOperation(budget.automationJobId, budget.operationId, budget.hold.estimateUsd, budget.hold.fixed);
+  settleAutomationOperation(budget.automationJobId, budget.operationId, budget.hold.estimateUsd);
 
 const releaseGenerationBudgetAfterFailure = (budget: GenerationBudget) =>
   settleAutomationOperation(budget.automationJobId, budget.operationId, null);
@@ -169,7 +169,7 @@ const obtainImage = (input: ProviderStepInput): Promise<ProviderResult> => {
 
 /**
  * Gets the image to review. Paid generations reserve budget first, settle the estimate on success and
- * release the hold (settle with null) on failure before rethrowing.
+ * retain the entire hold (settle with null) on failure before rethrowing.
  */
 export const obtainProviderResultWithinBudget = async (input: ProviderStepInput): Promise<ProviderResult> => {
   const budget = await reserveGenerationBudget(input.job, input.jobId, input.imageConfig);

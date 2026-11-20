@@ -2,7 +2,7 @@ import { activePhotoChannels } from '../../shared/src/marketplacePhotoPlan';
 import { MARKETPLACES } from '../../shared/src/marketplaces';
 import { resolveAutomationPresetName } from '../../shared/src/automationConfig';
 import { MarketplaceExportAction } from '../features/marketplaces/MarketplaceExportDrawer';
-import { remainingAutomationBudget } from '../../shared/src/automationPolicy';
+import { automationBudgetBreakdown, remainingAutomationBudget } from '../../shared/src/automationPolicy';
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Loader2, Workflow, XCircle } from 'lucide-react';
@@ -24,6 +24,7 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
   const resume = search.get('resume') || undefined;
   const state = useAutomation(resume, search.get('job') || undefined);
   const selected = state.selectedJob || state.jobs.find((job) => job.id === search.get('job'));
+  const budgetBreakdown = selected?.budget ? automationBudgetBreakdown(selected.budget) : null;
   const client = state.clients.find((entry) => entry.id === state.clientId);
   const activeChannels = activePhotoChannels(client?.marketplaces);
   const effectiveChannels = state.selectedChannels ?? client?.automation?.presets?.[resolveAutomationPresetName({ jobType: state.jobType, preset: state.preset || undefined }, client?.automation)]?.selectedChannels ?? activeChannels;
@@ -124,7 +125,7 @@ export const Automation: React.FC<{ intake?: boolean }> = ({ intake = false }) =
         {state.selectedPlan && <details className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-semibold">Plan guardado · {state.selectedPlan.preset}</summary><div className="mt-3 space-y-2 text-sm"><p>Proveedor: {state.selectedPlan.provider} · modelo humano: {state.selectedPlan.modelId || (state.selectedPlan.jobType === 'garment' ? 'Según el género de cada prenda' : 'No aplica')}</p><p>{state.selectedPlan.imageCount} imágenes · costo estimado USD {state.selectedPlan.estimatedCostUsd.toFixed(3)}</p>{state.selectedPlan.items.map((item) => <p key={item.itemId}><strong>{item.itemId}</strong>: {item.sceneIds.join(', ')} · USD {item.estimatedCostUsd.toFixed(3)}</p>)}</div></details>}
         {selected.effectivePolicy && <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
           <p>Escenas independientes</p><p>Calidad: {selected.effectivePolicy.maxReviewAttempts} intentos</p><p>Reintentos operativos: {selected.effectivePolicy.maxOperationalRetries}</p>
-          {selected.budget && <><p>Presupuesto USD {selected.budget.limitUsd.toFixed(2)}</p><p>Registrado USD {selected.budget.recordedUsd.toFixed(4)}</p><p>Disponible USD {remainingAutomationBudget(selected.budget).toFixed(4)}</p><p>Comprometido USD {selected.budget.spentUsd.toFixed(4)}</p><p>Reservado USD {selected.budget.reservedUsd.toFixed(4)}</p><p>Tarifas estimadas; cobros del proveedor sin confirmar.</p></>}
+          {selected.budget && budgetBreakdown && <><p>Presupuesto USD {selected.budget.limitUsd.toFixed(2)}</p><p>Registrado USD {selected.budget.recordedUsd.toFixed(4)}</p><p>Disponible USD {remainingAutomationBudget(selected.budget).toFixed(4)}</p><p>Comprometido USD {selected.budget.spentUsd.toFixed(4)}</p><p>Reservado USD {budgetBreakdown.reservedUsd.toFixed(4)}</p><p>Incierto USD {budgetBreakdown.uncertainUsd.toFixed(4)}</p>{budgetBreakdown.historicalRetainedUsd > 0 && <p>Retenido histórico sin conciliar USD {budgetBreakdown.historicalRetainedUsd.toFixed(4)}</p>}<p>Tarifas estimadas; cobros del proveedor sin confirmar.</p></>}
           {selected.planId && <p className="break-all text-xs sm:col-span-3">Plan: {selected.planId}</p>}
         </div>}
         {selected.items?.map((item) => <div key={item.itemId} className="overflow-auto rounded-xl border border-slate-200"><div className="flex justify-between bg-slate-50 p-3 text-sm"><strong>{item.itemId}</strong><span>{item.status}</span></div>{(item.garmentGender || item.modelId) && <p className="px-3 py-2 text-xs text-slate-600">{item.garmentGender ? { male: 'Prenda masculina', female: 'Prenda femenina', unisex: 'Prenda unisex' }[item.garmentGender] : 'Género sin determinar'}{item.modelId && ` · Modelo: ${(state.models || []).find(model => model.id === item.modelId)?.name || item.modelId}`}</p>}{item.issue && <p className="bg-amber-50 p-3 text-sm text-amber-900">{item.issue.code}: {item.issue.message}</p>}<table className="w-full text-left text-xs"><thead><tr>{['Escena', 'Estado', 'Intentos', 'Gemini / incidencia'].map((label) => <th className="p-3" key={label}>{label}</th>)}</tr></thead><tbody>{item.scenes.map((scene) => <tr key={scene.jobId} className="border-t"><td className="p-3">{scene.scene}</td><td className="p-3">{scene.status}</td><td className="p-3">{scene.attempts}</td><td className="p-3">{scene.verdict || '—'}<p>{scene.reason}</p></td></tr>)}</tbody></table></div>)}

@@ -1,3 +1,6 @@
+import { ModelPosesEditGrid } from './ModelPosesEditGrid';
+import { ModelPosesViewGrid } from './ModelPosesViewGrid';
+import type { UseModelLibraryResult } from '../../features/models/hooks/useModelLibrary';
 import { PoseSelectionChips } from './PoseSelectionChips';
 import { MODEL_POSE_GROUPS, MODEL_POSE_RECIPES_BY_ID } from '../../features/models/constants';
 import { useState } from 'react';
@@ -41,23 +44,39 @@ function BaseShot({ model, shot, sets }: { model: Model; shot: ModelPhotoSetsPre
       <span className={`absolute left-3 top-3 rounded-full px-2 py-1 text-xs font-semibold ${shot.poseId ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'}`}>{shot.poseId ? 'Aprobada' : operation ? `${OPERATION_LABELS[operation.status]} · intento ${operation.attemptNumber}/3` : pose ? 'Pendiente de aprobación' : 'Falta base'}</span>
     </div>
     <div className="space-y-3 p-4">
-      <p className="font-semibold">{label}</p>
+      <p className="font-semibold">{label}</p><p className="text-xs text-slate-600">Zona: {PHOTO_LABELS[shot.spec.bodyArea]} · Toma: {shot.spec.shot === 'front' ? 'Frente' : shot.spec.shot === 'commercial_back' ? 'Espalda' : '3/4'}</p>
       <p className="text-xs text-slate-600">{shot.spec.role === 'main' ? 'Portada' : 'Galería'} · {PHOTO_LABELS[shot.spec.background]} · {shot.spec.aspectRatio} · {shot.spec.faceVisible ? shot.spec.lookingAtCamera === false ? 'Rostro visible' : 'Rostro hacia cámara' : 'Sin rostro'}</p>
       {!shot.poseId && shot.issues?.length ? <Alert tone="warning">{shot.issues.join(" ")}</Alert> : null}
       {operation && <BaseOperationHistory operation={operation} approved={Boolean(shot.poseId)} /> }
       {sets.canGenerate(shot) && <Button size="sm" disabled={sets.busy || Boolean(sets.preview?.issues.length)} onClick={() => void sets.generate([shot])}>{operation ? 'Reanudar toma' : pose ? 'Reintentar toma' : 'Generar toma'} · ${shot.estimatedCostUsd.toFixed(3)}</Button>}
       <label className="block text-xs text-slate-600">Incorporar o verificar una base existente
         <select className="tuto-field mt-1 w-full" disabled={sets.busy} value={existing} onChange={e => setExisting(e.target.value)}>
-          <option value="">Selecciona una fotografía</option>{model.poses.filter(p => p.active !== false).map(p => <option key={p.id} value={p.id}>{p.fileName}</option>)}
+          <option value="">Selecciona una fotografía</option>{model.poses.map(p => <option key={p.id} value={p.id}>{p.fileName}{p.active === false ? ' · Inactiva' : ''}</option>)}
         </select>
       </label>
       <Button size="sm" variant="ghost" disabled={sets.busy || !(existing || poseId)} onClick={() => void sets.verify(shot, existing || poseId!)}>Verificar para esta toma · ~$0.01</Button>
     </div>
   </article>;
 }
-export function ModelPhotoSets({ model, client, wizard = false, onBusyChange, initialProvider, initialImageConfig }: { model: Model; client?: Client; wizard?: boolean; onBusyChange?: (busy: boolean) => void; initialProvider?: ModelPhotoProvider; initialImageConfig?: ProviderImageConfig }) {
+export function ModelPhotoSets({ model, client, wizard = false, onBusyChange, initialProvider, initialImageConfig, library }: { library?: UseModelLibraryResult; model: Model; client?: Client; wizard?: boolean; onBusyChange?: (busy: boolean) => void; initialProvider?: ModelPhotoProvider; initialImageConfig?: ProviderImageConfig }) {
   const sets = useModelPhotoSets(model, client, { wizard, onBusyChange, initialProvider, initialImageConfig });
-  return <section className="my-6 space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+  const poseGrid = (poses: Model['poses'], rejectionReasons?: Record<string, string>) => library
+    ? <ModelPosesEditGrid model={model} poses={poses} library={library} rejectionReasons={rejectionReasons} />
+    : <ModelPosesViewGrid model={model} poses={poses} rejectionReasons={rejectionReasons} />;
+  return <>
+    {!wizard && <section className="my-6 space-y-6" aria-label="Poses del catálogo por marketplace">
+      {sets.catalogGroups.marketplaces.map(group => <section key={group.channel}>
+        <h3 className="text-lg font-semibold">{MARKETPLACES.find(m => m.id === group.channel)?.name}</h3>
+        {group.poses.length ? poseGrid(group.poses) : <p className="mt-2 text-sm text-slate-500">Sin poses aprobadas para este canal.</p>}
+      </section>)}
+      <section><h3 className="text-lg font-semibold">Identidad y otras poses</h3>{poseGrid(sets.catalogGroups.other)}</section>
+      <details className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <summary className="cursor-pointer font-semibold">Intentos rechazados ({sets.catalogGroups.rejected.length})</summary>
+        <p className="mt-2 text-sm text-slate-600">Conservados para revisión. Puedes verificarlos de nuevo desde la toma correspondiente.</p>
+        {poseGrid(sets.catalogGroups.rejected.map(r => r.pose), Object.fromEntries(sets.catalogGroups.rejected.map(r => [r.pose.id, r.reason])))}
+      </details>
+    </section>}
+  <section className="my-6 space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
     <div><p className="text-xs font-semibold uppercase tracking-widest text-indigo-600">Bases de fotografía · receta v1</p><h3 className="mt-1 text-xl font-semibold text-slate-950">Una identidad, sets por marketplace</h3><p className="mt-2 text-sm text-slate-600">Selecciona las poses concretas y sus destinos. Hasta tres intentos por combinación compatible, con verificación automática; las aprobadas se conservan. La zona corporal y el encuadre dependen de cada pose. Cada incorporación requiere verificación para su destino.</p></div>
     {!wizard && <fieldset disabled={sets.busy} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3">
       <label className="text-sm">Identidad elegida<select className="tuto-field mt-1 w-full" value={sets.identityPoseId} onChange={e => sets.setIdentityPoseId(e.target.value)}>{model.poses.filter(p => p.active !== false).map(p => <option key={p.id} value={p.id}>{p.fileName}</option>)}</select></label>
@@ -84,5 +103,7 @@ export function ModelPhotoSets({ model, client, wizard = false, onBusyChange, in
     {(sets.preview?.issues.length || sets.issues.length) ? <Alert tone="warning">{[...(sets.preview?.issues || []), ...sets.issues].map((issue, i) => <p key={i}>{issue}</p>)}</Alert> : null}
     {sets.busy && <p role="status" className="text-sm font-medium text-indigo-700">{sets.progress || 'Preparando operación…'}</p>}
     {sets.channels.map(channel => { const shots = sets.preview?.shots.filter(s => s.spec.channel === channel) || []; return <div key={channel} className="space-y-3"><h4 className="font-semibold">{MARKETPLACES.find(m => m.id === channel)?.name} <span className="ml-2 text-xs font-normal text-slate-500">{shots.length && shots.every(s => s.poseId) ? 'Completo' : shots.some(s => s.poseId) ? 'Incompleto' : 'Pendiente'}</span></h4><div className="grid gap-4 md:grid-cols-3">{shots.map(shot => <BaseShot key={JSON.stringify(shot.spec)} model={model} shot={shot} sets={sets} />)}</div></div>; })}
-  </section>;
+  </section>
+
+  </>;
 }

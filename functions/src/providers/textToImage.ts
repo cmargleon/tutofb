@@ -176,7 +176,7 @@ const runFalBanana = (endpointId: string, prompt: string, imageConfig: FalBanana
       aspect_ratio: imageConfig.aspectRatio,
       resolution: imageConfig.resolution,
       num_images: 1,
-      output_format: 'jpeg',
+      output_format: imageConfig.outputFormat ?? 'jpeg',
     },
     falKey,
   );
@@ -216,7 +216,7 @@ export const editModelPhotoWithBananaPro = (
       num_images: 1,
       aspect_ratio: imageConfig.aspectRatio,
       resolution: imageConfig.resolution,
-      output_format: 'png',
+      output_format: imageConfig.outputFormat ?? 'jpeg',
     },
     falKey,
   );
@@ -234,7 +234,7 @@ export const generateModelPhotoWithNanoBanana2 = async (
       aspect_ratio: imageConfig.aspectRatio,
       resolution: imageConfig.resolution,
       num_images: 1,
-      output_format: 'jpeg',
+      output_format: imageConfig.outputFormat ?? 'jpeg',
     },
     falKey,
   );
@@ -254,7 +254,7 @@ export const editModelPhotoWithNanoBanana2 = (
       num_images: 1,
       aspect_ratio: imageConfig.aspectRatio,
       resolution: imageConfig.resolution,
-      output_format: 'png',
+      output_format: imageConfig.outputFormat ?? 'jpeg',
     },
     falKey,
   );
@@ -270,6 +270,7 @@ export const generateModelPhotoWithSeedream5 = async (
     {
       prompt,
       image_size: imageConfig.imageSize,
+      output_format: imageConfig.outputFormat ?? 'jpeg',
       num_images: 1,
       enable_safety_checker: false,
     },
@@ -290,6 +291,7 @@ export const editModelPhotoWithSeedream5 = (
       image_urls: [referenceImageUrl],
       num_images: 1,
       image_size: imageConfig.imageSize,
+      output_format: imageConfig.outputFormat ?? 'jpeg',
       enable_safety_checker: false,
     },
     falKey,

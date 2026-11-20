@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import type { Provider } from '../shared/src/types';
+import type { Provider, ProviderImageConfig } from '../shared/src/types';
 const require = createRequire(import.meta.url);
-const { createDefaultProviderImageConfig, createLegacyProviderImageConfig, isProviderImageConfig, cloneProviderImageConfig, resolveAspectRatioForImageConfig } = require('../functions/lib/shared/src/providerImageConfig.js') as typeof import('../shared/src/providerImageConfig');
+const { createDefaultProviderImageConfig, createLegacyProviderImageConfig, isProviderImageConfig, cloneProviderImageConfig, normalizeProviderImageConfig, resolveAspectRatioForImageConfig } = require('../functions/lib/shared/src/providerImageConfig.js') as typeof import('../shared/src/providerImageConfig');
 const { PROVIDER_VALUES, MODEL_PHOTO_PROVIDER_VALUES, isProvider } = require('../functions/lib/shared/src/domain.js') as typeof import('../shared/src/domain');
 const { getProviderCostUsd, getModelPhotoProviderCostUsd } = require('../functions/lib/shared/src/constants/providerCosts.js') as typeof import('../shared/src/constants/providerCosts');
 
@@ -81,6 +81,7 @@ test('batch generation and model creation/editing submit every new model only to
         const body = JSON.parse(calls[start].init!.body as string);
         assert.equal(body.prompt, 'A fashion model');
         assert.equal(body.num_images, 1);
+        assert.equal(body.output_format, 'jpeg');
         assert.equal(body.image_size, 'portrait_4_3');
         assert.deepEqual(body.image_urls, referenceImageUrl ? [referenceImageUrl] : undefined);
         assert.equal((calls[start].init!.headers as Record<string, string>).Authorization, 'Key test-fal');
@@ -135,4 +136,67 @@ test('commercial precedence preserves explicit generation formats/quality/dimens
   const resolved = resolveAutomationPreset({ source: 'api', externalId: 'a', clientId: 'c', jobType: 'product', provider: 'fal-nano-banana-2' }, client as any);
   assert.deepEqual(resolved.config.imageConfig, createCommercialProviderImageConfig('fal-nano-banana-2'));
   assert.equal(resolved.config.photoProfile, 'commercial-photo-v1');
+});
+
+test('every format-capable provider defaults to JPEG, preserving explicit PNG and WebP', () => {
+  for (const provider of PROVIDER_VALUES) {
+    const config = createDefaultProviderImageConfig(provider);
+    if (provider === 'fal-seedream') continue; // Endpoint has no output_format.
+    assert.equal('outputFormat' in config && config.outputFormat, 'jpeg');
+    assert.equal(getProviderCostUsd(provider, config), getProviderCostUsd(provider, { ...config, outputFormat: 'png' } as ProviderImageConfig));
+    for (const ratio of [undefined, '3:4', '1:1'] as const) {
+      const normalized: ProviderImageConfig = normalizeProviderImageConfig(provider, undefined, ratio).imageConfig;
+      assert.equal('outputFormat' in normalized && normalized.outputFormat, 'jpeg');
+    }
+    for (const format of ['png', 'webp'] as const) {
+      const explicit = { ...config, outputFormat: format };
+      if (isProviderImageConfig(explicit)) assert.deepEqual(normalizeProviderImageConfig(provider, explicit, '1:1').imageConfig, explicit);
+    }
+  }
+});
+
+
+test('model identities and loose/base poses request the default JPEG and honor explicit PNG in creation and edit', async t => {
+  const calls: { url: string; body: any }[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: any, init: any) => {
+    const url = String(input);
+    if (init?.method === 'POST') {
+      calls.push({ url, body: JSON.parse(init.body) });
+      return Response.json({ request_id: 'fixture', status_url: 'https://fixture.invalid/status', response_url: 'https://fixture.invalid/result' });
+    }
+    if (url.endsWith('/status')) return Response.json({ status: 'COMPLETED' });
+    if (url.endsWith('/result')) return Response.json({ images: [{ url: 'https://fixture.invalid/image', content_type: 'image/jpeg' }] });
+    return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/jpeg' } });
+  });
+  for (const provider of MODEL_PHOTO_PROVIDER_VALUES) {
+    if (provider === 'fal-seedream-v4.5' || provider === 'openai-dalle') continue;
+    for (const outputFormat of ['jpeg', 'png'] as const) for (const referenceImageUrl of [null, 'https://fixture.invalid/reference']) {
+      const imageConfig = { ...createDefaultProviderImageConfig(provider), outputFormat } as ProviderImageConfig;
+      await generateSingleModelPhoto({ provider, imageConfig, prompt: 'fixture', falKey: 'fixture', referenceImageUrl });
+      assert.equal(calls.at(-1)!.body.output_format, outputFormat, `${provider}/${referenceImageUrl}`);
+      await generateWithProvider(provider, { imageConfig, prompt: 'fixture', poseImageUrl: 'https://fixture.invalid/pose', garmentImageUrl: 'https://fixture.invalid/garment', signal: AbortSignal.timeout(1000) }, { falKey: 'fixture' });
+      assert.equal(calls.at(-1)!.body.output_format, outputFormat, provider);
+    }
+  }
+});
+
+
+test('Seedream v4.5 model photos normalize only new provider results to JPEG', async t => {
+  const sharp = require('../functions/node_modules/sharp');
+  const source = await sharp({ create: { width: 30, height: 40, channels: 4, background: '#ffffff00' } }).png().toBuffer();
+  t.mock.method(globalThis, 'fetch', async (input: any, init: any) => {
+    const url = String(input);
+    if (init?.method === 'POST') {
+      assert.equal(JSON.parse(init.body).output_format, undefined);
+      return Response.json({ request_id: 'fixture', status_url: 'https://fixture.invalid/status', response_url: 'https://fixture.invalid/result' });
+    }
+    if (url.endsWith('/status')) return Response.json({ status: 'COMPLETED' });
+    if (url.endsWith('/result')) return Response.json({ images: [{ url: 'https://fixture.invalid/image', content_type: 'image/png' }] });
+    return new Response(source, { headers: { 'content-type': 'image/png' } });
+  });
+  const result = await generateSingleModelPhoto({ provider: 'fal-seedream-v4.5', imageConfig: createDefaultProviderImageConfig('fal-seedream'), prompt: 'fixture', falKey: 'fixture' });
+  assert.equal(result.contentType, 'image/jpeg');
+  const metadata = await sharp(result.imageBytes).metadata();
+  assert.equal(metadata.format, 'jpeg'); assert.equal(metadata.hasAlpha, false);
+  assert.deepEqual([metadata.width, metadata.height], [30, 40]);
 });

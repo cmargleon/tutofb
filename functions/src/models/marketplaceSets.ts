@@ -1,3 +1,4 @@
+import { modelBasePoseActiveAfterReview } from '../../../shared/src/modelPoseCatalog';
 import { MODEL_BASE_MAX_ATTEMPTS, modelBaseRetryPrompt, modelBaseReviewOutcome } from './marketplaceSetPolicy';
 import { extensionForContentType } from '../workers/jobWorker.helpers';
 import type { GenerateModelBaseRequest, ModelBaseAttempt, ModelBaseOperation, ScheduleModelPhotoSetsRequest } from '../../../shared/src/types';
@@ -91,9 +92,9 @@ export async function loadModelSetContext(input: ModelPhotoSetsRequest, uid: str
   const bases = await currentModelPhotoBases(model);
   const shots = specs.map(spec => {
     const config = spec.aspectRatio === normalized.aspectRatio && spec.channel !== 'tiktok-shop' ? normalized : photoConfigForRatio({ provider: mappedProvider, imageConfig: normalized.imageConfig }, spec.aspectRatio);
-    const candidate = model.poses.filter(p => p.active !== false && p.marketplaceBaseSpec && sameBaseSpec(p.marketplaceBaseSpec, visualSpec(spec))).at(-1);
+    const candidate = model.poses.filter(p => p.marketplaceBaseSpec && sameBaseSpec(p.marketplaceBaseSpec, visualSpec(spec))).at(-1);
     return { spec, ...(candidate ? { issues: baseObservationIssues(spec, candidate.photoObservation || undefined) } : {}), poseId: bases.find(b => compatibleBaseApproval(b, spec))?.id || null,
-      candidatePoseIds: model.poses.filter(p => p.active !== false && p.marketplaceBaseSpec && sameBaseSpec(p.marketplaceBaseSpec, visualSpec(spec))).map(p => p.id),
+      candidatePoseIds: model.poses.filter(p => p.marketplaceBaseSpec && sameBaseSpec(p.marketplaceBaseSpec, visualSpec(spec))).map(p => p.id),
       estimatedCostUsd: getModelPhotoProviderCostUsd(provider, config.imageConfig, 1) + .01 };
   });
   const missing = shots.filter(s => !s.poseId);
@@ -123,7 +124,8 @@ export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: st
   const { ref, model, preview } = context;
   if (preview.issues.length) throw new HttpsError('failed-precondition', preview.issues.join(' '));
   const spec = preview.shots.find(s => s.spec.shot === input.shot && s.spec.poseRecipeId === input.poseRecipeId)?.spec;
-  const pose = model.poses.find(p => p.id === input.poseId && p.active !== false);
+  // Inactive candidates can be reviewed without first exposing them to generation.
+  const pose = model.poses.find(p => p.id === input.poseId);
   if (!spec || !pose) throw new HttpsError('invalid-argument', 'Toma o base no disponible.');
   const identity = model.approvedIdentity!;
   const identityFingerprint = await modelAssetFingerprint(identity.storagePath);
@@ -145,7 +147,7 @@ export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: st
     if (!issues.length) approvals.push({ clientId: model.clientId, modelId: ref.id, recipeRevision: context.client.marketplaces?.[spec.channel]?.photoRecipeRevision ?? 0,
       verifierModel: getGeminiModelBaseVerifierModel(), confidence: result.confidence, spec, poseId: pose.id, storagePath: pose.storagePath, ...fingerprint, identitySha256: identity.sha256, observation: observation!,
       verifiedAt: new Date().toISOString(), verifiedByUid: uid, verifierVersion: 'model-base-verifier-v1' });
-    tx.update(ref, { marketplaceBaseApprovals: approvals, poses: current.poses.map(p => p.id === pose.id && observation ? { ...p, photoObservation: observation, aiClassification: buildPoseAiClassification({ ...result, taggedAt: new Date().toISOString(), displayLabel: spec.poseRecipeId ? MODEL_POSE_RECIPES_BY_ID.get(spec.poseRecipeId)?.label : null }) } : p), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    tx.update(ref, { marketplaceBaseApprovals: approvals, poses: current.poses.map(p => p.id === pose.id && observation ? { ...p, active: modelBasePoseActiveAfterReview(p, approvals), photoObservation: observation, aiClassification: buildPoseAiClassification({ ...result, taggedAt: new Date().toISOString(), displayLabel: spec.poseRecipeId ? MODEL_POSE_RECIPES_BY_ID.get(spec.poseRecipeId)?.label : null }) } : p), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   });
   return { approved: !issues.length, poseId: pose.id, issues, observation, reviewCostUsd: result.usageCostUsd ?? 0 };
 }
@@ -264,7 +266,7 @@ export async function processModelBaseOperation(modelId: string, operationId: st
       tx.create(db.collection('model_generation_logs').doc(`${modelId}-${operationId}-${attempt.number}`), { provider: claimed.provider, requestedPhotos: 1, completedPhotos: 1, estimatedCostUsd: attempt.generationCostUsd, clientId: context.model.clientId, modelId, poseId, operationId, attemptNumber: attempt.number, stage: 'pose', createdByUid: claimed.createdByUid, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     });
     await admin.storage().bucket().file(storagePath).save(result.imageBytes, { resumable: false, metadata: { contentType: result.contentType } });
-    const pose: Pose = { id: poseId, storagePath, fileName: `${claimed.spec.channel}-${claimed.spec.bodyArea}-${claimed.spec.poseRecipeId || claimed.spec.shot}.${ext}`, marketplaceBaseSpec: claimed.spec, createdAt: new Date().toISOString() };
+    const pose: Pose = { id: poseId, active: false, storagePath, fileName: `${claimed.spec.channel}-${claimed.spec.bodyArea}-${claimed.spec.poseRecipeId || claimed.spec.shot}.${ext}`, marketplaceBaseSpec: claimed.spec, createdAt: new Date().toISOString() };
     await db.runTransaction(async tx => {
       const current = (await tx.get(ref)).data() as Model;
       const op = await tx.get(operation);

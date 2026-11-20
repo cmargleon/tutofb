@@ -9,10 +9,11 @@ import { GEMINI_API_KEY, GOOGLE_PRIVATE_KEY } from '../config/runtime';
 import { getSystemConfigDocRef, isOrganizerWatcherEnabled } from '../admin/systemConfig';
 import { APP_FIRESTORE_DATABASE_ID, getAppFirestore } from '../firebase/appFirestore';
 import { assertDelegatedStamp } from '../manglar/access';
-import { ALGORITHM_VERSION, associatePhotos, associationIndex, groupProductRows, identityFromFilename, normalize, productVariant, readWorkbook, type TabMapping } from './catalog';
+import { ALGORITHM_VERSION, associatePhotos, associationIndex, candidatesIn, groupProductRows, identityFromFilename, normalize, productVariant, readWorkbook, type TabMapping } from './catalog';
 import { digest, fileUrl, FOLDER, isImage, isWorkbook, OrganizerDrive, OrganizerDriveError, versionOf, type DriveEntry } from './drive';
 import { appliesCatalog, assertLease, clientRef, configs, documents, runRef, whileLeased, writePages, type StoredConfig, type StoredRun } from './store';
 import { analyze, OrganizerBudgetExhausted, reconcileReservations, type VisionPhoto } from './vision';
+import { commercialIdentityOf, uncodedGroupName } from '../../../shared/src/organizerIdentity';
 import { interpretStructure, rankCandidates, matchObservation } from './interpretation';
 import { photoDecisionKey, planFile } from './planning';
 import { automateNewPhotos } from './automation';
@@ -209,9 +210,10 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
   }
   type Association = ReturnType<typeof associatePhotos> extends Map<string, infer A> ? Omit<A, 'identityState'> & { identityState: PhotoState['identityState']; baseId?: string | null;
     baseCodeIdentity?: OrganizerPhoto['baseCodeIdentity'] } : never;
+  const filenameIndex = associationIndex(variants);
   const associations: Map<string, Association> = identityMode === 'baseCode' && baseIndex
     ? associateByBaseCode(photoFiles.map(file => file.entry), baseIndex, manual)
-    : associatePhotos(photoFiles.map(file => file.entry), associationIndex(variants), manual);
+    : associatePhotos(photoFiles.map(file => file.entry), filenameIndex, manual);
   const shadow = identityMode === 'shadow' && baseIndex ? associateByBaseCode(photoFiles.map(file => file.entry), baseIndex, manual) : null;
   const photoUpdates = photoFiles.map(({ entry }) => {
     const association = associations.get(entry.id)!;
@@ -221,7 +223,8 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
     const sameVersion = old && version === old.version;
     // In base-code mode identity follows content: a move or a metadata-only change keeps the analysis.
     const sameContent = old && (identityMode === 'baseCode' ? (old.contentVersion || old.version) === contentVersion : sameVersion);
-    const visualMethod = old && ['gemini_evidencia', 'gemini_variante'].includes(old.method);
+    const filenameHasCode = candidatesIn(entry.name, filenameIndex).length > 0;
+    const visualMethod = filenameHasCode && old && ['gemini_evidencia', 'gemini_variante'].includes(old.method);
     const stillValid = identityMode === 'baseCode'
       ? association.identityState === 'base' && association.candidates.includes(old?.variantId || '')
       : old?.path.join('/') === entry.path.join('/');
@@ -243,7 +246,7 @@ async function catalog(drive: OrganizerDrive, root: DocumentReference, doc: Docu
     if (association.issue) counts.conflicts++;
     const value: PhotoState = { id: entry.id, name: entry.name, path: entry.path, sourceUrl: fileUrl(entry),
       copyUrl: null, ...association, hasConflict: Boolean(association.issue), version, algorithm: ALGORITHM_VERSION, updatedAt: Date.now(),
-      candidates: identityMode === 'baseCode' ? association.candidates : ranked.map(candidate => candidate.id), candidateDetails: ranked, provisionalCode: identityFromFilename(entry)?.skc || null,
+      candidates: identityMode === 'baseCode' || !filenameHasCode ? association.candidates : ranked.map(candidate => candidate.id), candidateDetails: filenameHasCode ? ranked : [], provisionalCode: identityFromFilename(entry)?.skc || null,
       contentVersion, baseId: association.baseId ?? null,
       ...(identityMode === 'baseCode' && association.baseCodeIdentity ? { baseCodeIdentity: association.baseCodeIdentity } : {}),
       ...(shadow ? { baseCodeIdentity: shadow.get(entry.id)!.baseCodeIdentity } : {}),
@@ -328,7 +331,7 @@ async function vision(drive: OrganizerDrive, root: DocumentReference, doc: Docum
   const identityMode = identityModeOf(config);
   const contextKey = digest(allVariants.map(product => [product.id, product.catalogFingerprint || '']).sort());
   const analyzePhoto = async (item: FirebaseFirestore.QueryDocumentSnapshot) => {
-    const photo = item.data() as PhotoState;
+    const photo = commercialIdentityOf(item.data() as PhotoState);
     const forced = run.photoIds.includes(photo.id) || Boolean(run.variantId && photo.variantIds?.includes(run.variantId));
     const selected = (!run.photoIds.length && !run.variantId) || forced;
     // Base-code mode keys pixel work to content, not location; variant choice has its own per-base key.
@@ -357,10 +360,10 @@ async function vision(drive: OrganizerDrive, root: DocumentReference, doc: Docum
           visualColor: result.color, visualLabel: result.label,
           referenceEligibleFor: photo.reviewedBy ? photo.referenceEligibleFor || (variantId ? [variantId] : []) : variantId ? [variantId] : [],
           identityState: ids.length > 1 ? 'shared' : variantId ? 'variant' : association?.baseId ? 'base' : photo.identityState || 'unresolved',
-          baseId: association?.baseId || photo.baseId || null, visionKey: key, ...(association ? { candidates: association.ranked.map(candidate => candidate.id), candidateDetails: association.ranked } : {}),
+          baseId: association ? association.baseId : photo.baseId || null, visionKey: key, ...(association ? { candidates: association.ranked.map(candidate => candidate.id), candidateDetails: association.ranked } : {}),
           ...(association?.variantId ? { method: 'gemini_evidencia', confidence: view.confidence, issue: null, hasConflict: false } : {}),
           ...(association && !variantId ? { issue: `${association.baseId ? `Producto base ${association.baseId}; variante por confirmar. ` : ''}${'reason' in association && association.reason || photo.issue || 'Sin evidencia suficiente para asignar.'}`, hasConflict: true } : {}),
-          ...(!variantId && result.label ? { visualHint: { groupId: digest([file.entry.parents?.[0], normalize(result.label), normalize(result.color), normalize(result.pack), result.kind]),
+          ...(!variantId && result.label ? { visualHint: { groupId: uncodedGroupName(photo.name) ? digest([file.entry.sourceId, file.entry.parents?.[0], uncodedGroupName(photo.name)]) : digest([file.entry.parents?.[0], normalize(result.label), normalize(result.color), normalize(result.pack), result.kind]),
             label: result.label, color: result.color, pack: result.pack, kind: result.kind } } : {}) };
         await whileLeased(doc, lease, tx => tx.update(item.ref, update));
       } else await whileLeased(doc, lease, tx => tx.update(item.ref, { visionKey: key, hasConflict: true, issue: photo.issue || 'Análisis visual no resuelto; consulta el ledger antes de reintentar.' }));
@@ -393,7 +396,7 @@ async function vision(drive: OrganizerDrive, root: DocumentReference, doc: Docum
   }
   const byVariant = new Map<string, PhotoState[]>();
   for await (const item of documents(photos)) {
-    const photo = item.data() as PhotoState;
+    const photo = commercialIdentityOf(item.data() as PhotoState);
     if (photo.issue) continue;
     const associated = photo.variantIds || (photo.variantId ? [photo.variantId] : []);
     for (const id of photo.referenceEligibleFor || (photo.variantId ? [photo.variantId] : [])) {

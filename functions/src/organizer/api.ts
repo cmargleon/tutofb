@@ -1,3 +1,5 @@
+import { commercialIdentityOf } from '../../../shared/src/organizerIdentity';
+import { readCatalogAlerts } from './catalogAlerts';
 import { readProductWorkflow, readWorkflowVariant } from './productWorkflow';
 import { assertHumanClientAccess, loadHumanClientIds } from '../auth/clientAccess';
 import { FieldPath, Filter } from 'firebase-admin/firestore';
@@ -23,7 +25,7 @@ import { reportLinks } from './reports';
 
 type Actor = { uid: string; role: Role; delegated?: DelegatedCaller };
 const actions = ['clients', 'config', 'configure', 'start', 'run', 'pause', 'resume', 'cancel', 'report',
-  'runs', 'products', 'photos', 'conflicts', 'tabs', 'baseProducts', 'commercial', 'files', 'ledger', 'plan', 'interpretations', 'provenance', 'correct', 'references', 'thumbnail', 'draft', 'workflow'];
+  'runs', 'products', 'photos', 'conflicts', 'tabs', 'baseProducts', 'commercial', 'files', 'ledger', 'plan', 'interpretations', 'provenance', 'correct', 'references', 'thumbnail', 'draft', 'workflow', 'catalogAlerts'];
 const writeActions = new Set(['configure', 'start', 'pause', 'resume', 'cancel', 'correct', 'references', 'draft']);
 const paidModes = ['classify', 'sync'];
 const allowed = (actor: Actor, config?: StoredConfig) =>
@@ -113,6 +115,8 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
   if (!client.exists || client.data()?.status === 'archived') throw new HttpsError('not-found', 'Cliente no disponible.');
   const root = clientRef(clientId);
   const config = await currentConfig(clientId);
+  // Catalog readers already passed role and client access checks; organizer operation grants are separate.
+  if (request.action === 'catalogAlerts') return readCatalogAlerts(clientId, checkedId(request.batchId), actor.uid);
   if (!allowed(actor, config)) throw new HttpsError('permission-denied', 'Cliente fuera de los permisos del organizador.');
   if (request.action === 'configure') {
     if (actor.role !== 'admin') throw new HttpsError('permission-denied', 'La configuración requiere rol administrador.');
@@ -193,10 +197,15 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
       if (request.action === 'products') return listPage<OrganizerVariant>(request.status ? scope.collection('products').where('status', '==', request.status) : scope.collection('products'), request.cursor);
       if (request.action === 'tabs') return listPage<OrganizerTab>(scope.collection('tabs'), request.cursor);
       const photos = scope.collection('photos');
+      if (request.photoId) {
+        const photo = await photos.doc(checkedId(request.photoId)).get();
+        return { items: photo.exists ? [commercialIdentityOf({ ...photo.data(), id: photo.id } as OrganizerPhoto)] : [], next: null };
+      }
       const query = request.action === 'conflicts' ? photos.where('hasConflict', '==', true)
         : request.variantId ? photos.where(Filter.or(Filter.where('variantIds', 'array-contains', checkedId(request.variantId)),
           Filter.where('variantId', '==', checkedId(request.variantId)))) : photos;
-      return listPage<OrganizerPhoto>(query, request.cursor);
+      const page = await listPage<OrganizerPhoto>(query, request.cursor);
+      return { ...page, items: page.items.map(commercialIdentityOf) };
     }
     case 'files':
     case 'plan':

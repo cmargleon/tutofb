@@ -1,27 +1,29 @@
+import { modelPoseZoneAndShot } from '../../../shared/src/modelPoseCatalog';
 import React from 'react';
 import { RefreshCw, RotateCw, RotateCcw, Trash2 } from 'lucide-react';
 import { Model } from '../../../shared/src/types';
 import { isPoseActive } from '../../../shared/src/domain';
-import { formatPoseClassificationLabel } from '../../../shared/src/utils/poseAiClassification';
 import { ImageThumb } from '../ui';
 import { UseModelLibraryResult } from '../../features/models/hooks/useModelLibrary';
 
 interface ModelPosesEditGridProps {
   model: Model;
   library: UseModelLibraryResult;
+  poses?: Model['poses'];
+  rejectionReasons?: Record<string, string>;
 }
 
-export const ModelPosesEditGrid: React.FC<ModelPosesEditGridProps> = ({ model, library }) => (
+export const ModelPosesEditGrid: React.FC<ModelPosesEditGridProps> = ({ model, library, poses = model.poses, rejectionReasons }) => (
   <div>
     <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-      Poses ({model.poses.length})
+      Poses ({poses.length})
     </h4>
     <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
-      {model.poses.map((pose) => {
+      {poses.map((pose) => {
         const poseMarked = library.editPoseIdsToRemove.includes(pose.id);
         const isRegenerating = library.regeneratingPoseIds.has(pose.id);
         const isUpdating = library.updatingPoseIds.has(pose.id);
-        const active = isPoseActive(pose);
+        const active = !rejectionReasons?.[pose.id] && isPoseActive(pose);
         const regeneration = library.getPoseRegenerationAvailability(model, pose);
         return (
           <div
@@ -39,7 +41,7 @@ export const ModelPosesEditGrid: React.FC<ModelPosesEditGridProps> = ({ model, l
                 type="button"
                 role="switch"
                 onClick={() => void library.handleTogglePoseActive(model, pose)}
-                disabled={isUpdating || isRegenerating || library.isSavingEdit || poseMarked}
+                disabled={isUpdating || isRegenerating || library.isSavingEdit || poseMarked || Boolean(pose.marketplaceBaseSpec && !model.marketplaceBaseApprovals?.some(a => a.poseId === pose.id && !a.requiresReverification))}
                 title={active ? 'Desactivar pose (se guarda al pulsar)' : 'Activar pose (se guarda al pulsar)'}
                 aria-label={`Pose activa: ${pose.fileName}`}
                 aria-checked={active}
@@ -80,17 +82,18 @@ export const ModelPosesEditGrid: React.FC<ModelPosesEditGridProps> = ({ model, l
             </div>
             <div className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-md bg-gradient-to-t from-black/75 to-transparent px-2 py-2">
               <p className={`mb-1 text-[10px] font-semibold ${active ? 'text-emerald-200' : 'text-amber-200'}`}>
-                {active ? 'Activa' : 'Inactiva'}
+                {rejectionReasons?.[pose.id] ? 'Rechazada · pendiente de aprobación' : active ? 'Activa' : 'Inactiva'}
               </p>
               <p className="truncate text-[11px] text-white">{pose.fileName}</p>
               <p className="mt-1 inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white">
-                {formatPoseClassificationLabel(pose.aiClassification)}
+                {modelPoseZoneAndShot(pose)}
               </p>
               {pose.aiClassification ? (
                 <p className="mt-1 inline-flex rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/70">
                   {pose.aiClassification.faceVisible ? 'Con cara' : 'Sin cara'}
                 </p>
               ) : null}
+              {rejectionReasons?.[pose.id] && <p className="mt-1 text-[10px] text-amber-100">{rejectionReasons[pose.id]}</p>}
               {poseMarked && (
                 <p className="mt-1 text-[11px] font-medium text-amber-200">
                   Se eliminará al guardar

@@ -4,13 +4,13 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { buildJobImageFilename, readAssetBytes } from '../http/downloadAssets.helpers';
-import { remainingAutomationBudget } from '../../../shared/src/automationPolicy';
+import { automationBudgetBreakdown, remainingAutomationBudget } from '../../../shared/src/automationPolicy';
 
 export const automationReport = (job: AutomationJob, globalMaxBudgetUsd = Infinity) => ({
   photography: job.photoPlan ? { planId: job.photoPlan.id, channels: job.photoPlan.channels, uniqueImages: job.photoPlan.tasks.length, issues: job.photoPlan.issues } : null,
   spendingPaused: job.spendingPaused === true, clientId: job.clientId, clientName: job.clientNameSnapshot || job.clientId, items: job.items || [], policy: job.effectivePolicy || null,
   planId: job.planId || null, estimatedCostUsd: job.estimatedCostUsd ?? null,
-  budget: job.budget ? { ...job.budget, effectiveLimitUsd: Math.min(job.budget.limitUsd, globalMaxBudgetUsd), remainingUsd: remainingAutomationBudget({ ...job.budget, limitUsd: Math.min(job.budget.limitUsd, globalMaxBudgetUsd) }), costBasis: 'estimated_not_provider_confirmed' } : null,
+  budget: job.budget ? { ...job.budget, ...automationBudgetBreakdown(job.budget), effectiveLimitUsd: Math.min(job.budget.limitUsd, globalMaxBudgetUsd), remainingUsd: remainingAutomationBudget({ ...job.budget, limitUsd: Math.min(job.budget.limitUsd, globalMaxBudgetUsd) }), costBasis: 'estimated_not_provider_confirmed' } : null,
   catalogUrl: job.batchId ? `/catalogo?clientId=${encodeURIComponent(job.clientId)}&batchId=${encodeURIComponent(job.batchId)}` : null,
   batchIds: job.batchIds || (job.batchId ? [job.batchId] : []),
   catalogUrls: (job.batchIds || (job.batchId ? [job.batchId] : [])).map(id => `/catalogo?clientId=${encodeURIComponent(job.clientId)}&batchId=${encodeURIComponent(id)}`),

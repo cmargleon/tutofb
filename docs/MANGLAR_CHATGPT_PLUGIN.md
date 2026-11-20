@@ -1,6 +1,6 @@
 # Manglar MCP v2: operación de Tuto desde ChatGPT
 
-Actualización del servidor existente, conservando URL, OAuth PKCE, CIMD y los siete contratos originales. Implementación: 97 operaciones en 23 herramientas. [Matriz funcional](MANGLAR_COVERAGE.md) · [Inventario exacto generado desde código](MANGLAR_TOOL_INVENTORY.md).
+Actualización del servidor existente, conservando URL, OAuth PKCE, CIMD y los siete contratos originales. Implementación: 122 operaciones por dominio en 25 herramientas. [Matriz funcional](MANGLAR_COVERAGE.md) · [Inventario exacto generado desde código](MANGLAR_TOOL_INVENTORY.md).
 
 Servidor: `https://tutofb-260320-1003.web.app/api/manglar/mcp`.
 
@@ -93,6 +93,7 @@ Son instrucciones de uso con IDs descubiertos en cada cuenta; no son operaciones
 | Petición | Recorrido implementado |
 |---|---|
 | «Crea el cliente Tienda Norte y configura sus presets y esta carpeta autorizada» | `clients.save`; preparar/confirmar `clients.automation` con configuración exacta |
+| «Crea las bases SHEIN superior e inferior del modelo X, máximo 1 USD» | Descubrir IDs; `models.previewSets` por zona/categoría; revisar faltantes, máximo de tres intentos y reserva conservadora. Preparar `models.scheduleSets` con `approvedPreviewId`, combinaciones exactas y `requestId` estable por zona; confirmar solo si la suma de presupuestos cabe en 1 USD (si no, reducir selección y pedir autorización). Encolar y seguir `models.baseStatus` con `id` del modelo y paginación `cursor`/`limit` |
 | «Crea un modelo con estas referencias y genera dos poses; puedo gastar hasta 3 USD» | `files.importDrive`/referencias propias; preparar `models.save` y `models.generate`; confirmar presupuesto; seleccionar y guardar poses |
 | «Genera fotos de estas prendas con el modelo elegido, primero enséñame los prompts» | Draft, clasificación presupuestada, detalle visual del modelo, preview de prendas, confirmación, `createGarment` |
 | «Fotografía estos productos con las seis escenas habituales, presupuesto 8 USD» | Draft, clasificación/corrección, defaults compartidos, preview de producto, confirmación, `createProduct` |
@@ -107,7 +108,7 @@ Son instrucciones de uso con IDs descubiertos en cada cuenta; no son operaciones
 
 - El descubrimiento publica 25 herramientas, incluidas las dos del organizador. Cada rama de acción contiene el sobre completo `action`, `data`, `idempotencyKey` y `authorization`; no depende de que el cliente combine propiedades heredadas del esquema raíz. Refresca la ficha de la conexión existente para cargarlo.
 - Los contratos se regeneran desde los tipos actuales: contactos y edición parcial de clientes, controles de concurrencia, prompts por género, reglas y opciones globales del organizador, automatización del cliente y `selectedChannels`.
-- `clients.marketplace` configura canales/recetas; `models.previewSets`, `approveIdentity`, `verifyBase`, `generateBase`, `verifyPhotoBases` y `setActive` operan bases e identidad. `system.modelMarketplaceRules` consulta reglas y `saveModelMarketplaceRule` las guarda con confirmación administrativa.
+- `clients.marketplace` configura canales/recetas; `models.previewSets`, `scheduleSets`, `baseStatus`, `approveIdentity`, `verifyBase`, `generateBase`, `verifyPhotoBases` y `setActive` operan bases e identidad. `system.modelMarketplaceRules` consulta reglas y `saveModelMarketplaceRule` las guarda con confirmación administrativa.
 - `wizard.previewMarketplacePlan` y `createMarketplaceBatch` cubren producción por canal. `catalog.editPhoto` conserva el presupuesto aprobado en el job para su worker; `recordRejection` y `acknowledgeFailures` reutilizan las acciones de revisión de la aplicación.
 - `spreadsheets.previewMarketplace` consulta exclusivamente resultados cacheados: no admite banderas para iniciar Gemini. Usa `analyzeMarketplace` con presupuesto y confirmación para analizar/completar; `downloadMarketplace` prepara archivos bajo el presupuesto aprobado y publica las imágenes aprobadas y los recortes cuadrados que falten solo con `authorizePublicImages:true`. Sin esa autorización no crea copias públicas. El precompute al terminar una automatización solo prepara categorías, autollenado y recortes cuadrados privados; nunca publica imágenes. La vista previa puede reutilizar URLs publicadas anteriormente. Un timeout MCP no encola gasto nuevo fuera de ese presupuesto.
 - `catalog.saveMasterProduct`, `publishMarketplaceImages`, `spreadsheets.configureMarketplaceTemplate`, `archiveMarketplaceTemplate` y `setStatus` cubren fichas, imágenes y plantillas. Publicar imágenes exige confirmación exacta y `authorizePublicImages:true`. Los lotes resueltos indirectamente desde productos o ejecuciones del organizador también respetan cliente y propietario.
@@ -179,3 +180,15 @@ GOOGLE_CLOUD_QUOTA_PROJECT=tutofb-260320-1003 firebase deploy \
 ```
 
 No añadir flags de triggers, variables, secretos o IAM a esa recuperación; verificar su conservación y el estado `ACTIVE` antes de darla por terminada. El despliegue normal de nuevas funciones continúa siendo el de Firebase indicado arriba.
+
+## Bases en cola y configuración de automatización
+
+`models.scheduleSets` es la vía recomendada para **Completar seleccionados**. `models.generateBase` genera una toma suelta. Ambas son administrativas y pagadas. La cola conserva hasta tres intentos por combinación; la preparación MCP muestra el máximo previsto y reserva conservadoramente generación y verificación de todos ellos antes de encolar. Esta reserva puede superar el máximo estimado de la UI y no se libera si la cola termina antes. Un presupuesto insuficiente rechaza la preparación; no se aumenta automáticamente. El `requestId` y la clave MCP deben conservarse al reintentar. El despliegue del conector usa el worker de bases existente, sin modificarlo.
+
+`models.baseStatus` (admin, lectura) devuelve las combinaciones con canal, zona, toma y `poseRecipeId`, estado real (`queued`, `generating`, `verifying`, `approved`, `needs_attention`, `failed`), intentos y motivos del verificador, errores técnicos, costos separados de generación/verificación y pose resultante. Incluye `marketplaceBaseApprovals` para las bases previamente verificadas. Las poses tienen previews firmadas de 15 minutos; los costos registrados son estimaciones. La historia se pagina con `limit` (25 por defecto, máximo 100), `cursor` y `nextCursor`.
+
+`clients.automation` configura `organizerGeneration.autoRun` (`true` habilita incluso con el default global apagado; `enabled:false` desactiva el envío por cliente), `preset` (preset del cliente), `marketplaceId` (destino) y `sourceColumns` (columnas de origen), además de `defaultMaleModelId` / `defaultFemaleModelId`. La precedencia real es `modelId` explícito → `preset.modelId` (anula la selección por género) → modelos por género según Gemini → `defaultModelId` si no hay opciones por género. Se puede inferir el único modelo activo de cada género. Unisex usa una elección estable por pedido/artículo; incertidumbre con dos modelos requiere revisión. Un único modelo disponible se usa para cualquier género.
+
+El organizador solo lee Drive. `manglar_organizer_read` expone `catalogAlerts` con `clientId` y `batchId`, además de `photos`, `conflicts` y `workflow`; las fotos `SINCOD_` conservan la incidencia **Sin ficha comercial**. `manglar_organizer_manage` mantiene las correcciones y generación existentes; corregir una asociación no inventa una ficha comercial.
+
+`spreadsheets.analyzeMarketplace` admite `retryFailedAutofill:true` con presupuesto y confirmación para reintentar autollenados fallidos. `previewMarketplace` no admite esa bandera ni inicia análisis. Ni la vista previa ni el precálculo de automatización publican imágenes; `downloadMarketplace` y la publicación explícita requieren `authorizePublicImages:true` para crear copias públicas.

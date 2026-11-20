@@ -185,3 +185,6 @@ export interface ManglarExecutePlanRequest {
 }
 
 export interface ManglarClientSaveResponse { id: string; values: { name: string; generationPromptBase: string | null; contacts: ClientContact[] } }
+
+/** Bounded queue history with document-ID pagination. */
+export interface ManglarModelBaseStatusRequest { id: string; cursor?: string; limit?: number }

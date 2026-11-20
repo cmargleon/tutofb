@@ -50,7 +50,7 @@ export const MANGLAR_DOMAIN_TOOLS = [
         const schema = { ...object({ action: { type: 'string', enum: operations.map(op => op.action) }, data: { type: 'object' }, idempotencyKey, authorization }, ['action', 'data']),
             // Some MCP clients compile each union branch independently. Keep the entire
             // envelope in every branch so authorization and idempotency survive discovery.
-            oneOf: operations.map(op => object({ action: { type: 'string', const: op.action }, data: operationSchema(op), idempotencyKey, authorization },
+            oneOf: operations.map(op => object({ action: { type: 'string', const: op.action }, data: { ...operationSchema(op), ...(op.description ? { description: op.description } : {}) }, idempotencyKey, authorization },
                 ['action', 'data', ...(op.risk === 'write' ? ['idempotencyKey'] : ['paid', 'critical', 'destructive'].includes(op.risk) ? ['authorization'] : [])])) };
         return definition(`manglar_${domain}`, `Operaciones de ${domain}: ${operations.map(op => `${op.action} (${op.risk})`).join(', ')}. Usa manglar_describe para detalles.${domain === 'system' ? ' saveModelMarketplaceRule: main/alternative.background admiten client, white o neutral; para neutral se puede añadir backgroundTone: light_gray, medium_gray, warm_beige, cool_sand u off_white. Sin tono conserva neutro genérico. El guardado con expectedRevision invalida solo las aprobaciones del destino editado.' : ''} Lecturas directas; cambios reversibles con idempotencyKey; paid/critical/destructive requieren manglar_prepare_action y autorización exacta.`, compactSchema(schema), operations.every(op => op.risk === 'read'));
     }),
@@ -68,7 +68,7 @@ export const executeDomainTool = async (name: string, args: Record<string, unkno
     if (!caller.scopes.includes('jobs:read'))
         throw new HttpsError('permission-denied', 'Scope de lectura requerido.');
     if (name === 'manglar_describe') {
-        return { version: 2, identity: { uid: caller.uid, role: caller.role, clientIds: caller.allowedClientIds }, operations: MANGLAR_OPERATIONS.filter(op => (!args.domain || op.domain === args.domain) && (!args.action || op.action === args.action) && op.roles.includes(caller.role)).map(op => ({ domain: op.domain, action: op.action, risk: op.risk, roles: op.roles, ...(args.domain && args.action ? { inputSchema: operationSchema(op), source: op.source } : {}) })),
+        return { version: 2, identity: { uid: caller.uid, role: caller.role, clientIds: caller.allowedClientIds }, operations: MANGLAR_OPERATIONS.filter(op => (!args.domain || op.domain === args.domain) && (!args.action || op.action === args.action) && op.roles.includes(caller.role)).map(op => ({ domain: op.domain, action: op.action, risk: op.risk, roles: op.roles, ...(op.description ? { description: op.description } : {}), ...(args.domain && args.action ? { inputSchema: operationSchema(op), source: op.source } : {}) })),
             authorization: 'paid/critical/destructive: prepare_action → autorización humana exacta → domain tool con authorization. write: idempotencyKey. Los presupuestos estimados limitan reservas, no garantizan la factura del proveedor.' };
     }
     if (name === 'manglar_operation_status')

@@ -53,8 +53,8 @@ Antes de cada intento el worker revalida modelo/aprobación y generación actual
 
 ## Fronteras y compatibilidad
 
-- Callables: `approveModelIdentity`, `previewModelPhotoSets`, `generateModelMarketplaceBase`, `verifyModelMarketplaceBase`; todos administrativos y con acceso al cliente. Planes/prendas: `previewMarketplacePhotoPlan`, `createMarketplacePhotoBatch`.
-- Manglar: `models.previewSets`, `models.approveIdentity`, `models.generateBase`, `models.verifyBase`, `wizard.previewMarketplacePlan`, `wizard.createMarketplaceBatch`. Las acciones pagadas usan las autorizaciones y presupuesto de Manglar, también en los jobs creados.
+- Callables: `approveModelIdentity`, `previewModelPhotoSets`, `scheduleModelMarketplaceSets`, `generateModelMarketplaceBase`, `verifyModelMarketplaceBase`; todos administrativos y con acceso al cliente. Planes/prendas: `previewMarketplacePhotoPlan`, `createMarketplacePhotoBatch`.
+- Manglar: `models.previewSets`, `models.scheduleSets`, `models.baseStatus`, `models.approveIdentity`, `models.generateBase`, `models.verifyBase`, `wizard.previewMarketplacePlan`, `wizard.createMarketplaceBatch`. Las acciones pagadas usan las autorizaciones y presupuesto de Manglar, también en los jobs creados.
 - El endpoint antiguo de lotes de prendas pide usar el plan por marketplace cuando el cliente tiene canales activos. Clientes sin canales y documentos históricos conservan el recorrido anterior.
 - Firestore impide que el navegador cree o cambie `approvedIdentity`/`marketplaceBaseApprovals`; los servicios privilegiados son quienes los emiten. Storage permite crear nuevas fotos de modelo, pero impide sobrescribir una existente.
 - ZIP de modelos: conserva observaciones, especificaciones y procedencia/aprobaciones. Al importar se reasignan poses y rutas y **todas** las aprobaciones importadas quedan con `requiresReverification`; la identidad original se conserva como `importedIdentity`, pendiente de aprobación local. Ningún ZIP autoacredita compatibilidad. Los bundles anteriores siguen siendo válidos.
@@ -79,3 +79,5 @@ Gemini recibe el fondo esperado y devuelve categoría, tono aproximado (`backgro
 Al vestir una base aprobada, su fondo es la única referencia de fondo: se ignoran los fondos de identidad y prendas, y se conserva el tono, escena y sombras de la base. La revisión final recibe la misma definición compartida y exige conservarla. El texto de vestuario de relleno de las bases no cambia.
 
 MCP `system.saveModelMarketplaceRule`: `main` y `alternative` admiten el `backgroundTone` opcional anterior exclusivamente con `background: neutral`; conserva `expectedRevision` y la autorización administrativa existente. Contratos generados en `functions/src/manglar/contracts.json`.
+
+La vía recomendada de Manglar para completar seleccionados es `previewSets` → preparar/confirmar `scheduleSets` → `baseStatus`. `generateBase` es una toma suelta. La cola reserva el máximo conservador de generación y verificación para hasta tres intentos por combinación antes de encolar; puede superar la estimación de la UI. `baseStatus` pagina historia y muestra rechazos, errores, costos, aprobaciones y previews privadas de 15 minutos.

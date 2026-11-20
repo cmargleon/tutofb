@@ -28,6 +28,7 @@ op('clients', 'save', 'ManglarClientSaveRequest', ['admin'], 'write', 'functions
 for (const domain of ['clients', 'models'] as const)
     for (const action of ['archive', 'restore'])
         op(domain, action, 'ManglarEntityStateRequest', ['admin'], 'write', 'functions/src/manglar/catalogService.ts', (data, caller) => setCatalogArchivedService(domain, data, caller.uid, action === 'archive'));
+op('models', 'baseStatus', 'ManglarModelBaseStatusRequest', ['admin'], 'read', 'functions/src/manglar/modelSets.ts', async (data, caller) => (await import('./modelSets')).baseStatus(data, caller));
 op('models', 'save', 'ManglarModelSaveRequest', ['admin'], 'paid', 'functions/src/manglar/catalogService.ts', (data, caller) => saveModelService(data, caller.uid));
 op('models', 'replacePose', 'ManglarPoseReplaceRequest', ['admin'], 'write', 'functions/src/manglar/catalogService.ts', (data, caller) => replaceModelPoseService(data, caller.uid));
 op('models', 'classify', 'ManglarPoseClassifyRequest', ['admin'], 'paid', 'functions/src/utils/classifyPose.ts', classifyModelPoses);

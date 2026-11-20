@@ -34,7 +34,7 @@ test('new app workflows have explicit contracts and risk controls in MCP', () =>
     'clients.marketplace': 'critical', 'models.setActive': 'write', 'models.verifyPhotoBases': 'paid',
     'system.modelMarketplaceRules': 'read', 'system.saveModelMarketplaceRule': 'critical',
     'wizard.previewMarketplacePlan': 'read', 'wizard.createMarketplaceBatch': 'paid',
-    'models.previewSets': 'read', 'models.approveIdentity': 'write', 'models.verifyBase': 'paid', 'models.generateBase': 'paid',
+    'models.scheduleSets': 'paid', 'models.baseStatus': 'read', 'models.previewSets': 'read', 'models.approveIdentity': 'write', 'models.verifyBase': 'paid', 'models.generateBase': 'paid',
     'catalog.editPhoto': 'paid', 'catalog.recordRejection': 'write', 'catalog.acknowledgeFailures': 'write',
     'catalog.saveMasterProduct': 'write', 'catalog.publishMarketplaceImages': 'critical',
     'spreadsheets.setStatus': 'write', 'spreadsheets.previewMarketplace': 'read', 'spreadsheets.analyzeMarketplace': 'paid',
@@ -63,6 +63,9 @@ test('current contracts expose contacts, organizer settings, gender prompts and 
   const read = MANGLAR_MCP_TOOLS.find((tool: any) => tool.name === 'manglar_organizer_read');
   const manage = MANGLAR_MCP_TOOLS.find((tool: any) => tool.name === 'manglar_organizer_manage');
   assert.ok(read.inputSchema.properties.action.enum.includes('workflow'));
+  assert.ok(read.inputSchema.properties.action.enum.includes('catalogAlerts'));
+  assert.match(read.description, /Sin ficha comercial/);
+  assert.match(manage.description, /Sin ficha comercial/);
   assert.ok(read.inputSchema.properties.action.enum.includes('thumbnail'));
   assert.ok(!read.inputSchema.properties.action.enum.includes('draft'));
   assert.ok(manage.inputSchema.properties.action.enum.includes('draft'));
@@ -75,4 +78,22 @@ test('cached export previews cannot request paid Gemini analysis', () => {
   validateSchema(scope, schema);
   for (const flag of ['analyzeAutofill', 'retryFailedAutofill'])
     assert.throws(() => validateSchema({ ...scope, [flag]: true }, schema), { code: 'invalid-argument' });
+});
+
+test('queued sets are admin-only, budgeted, and bind exact request identity', () => {
+  for (const action of ['scheduleSets', 'baseStatus']) assert.deepEqual(findOperation('models', action).roles, ['admin']);
+  const schema = operationSchema(findOperation('models', 'scheduleSets'));
+  for (const key of ['modelId', 'requestId', 'approvedPreviewId', 'combinations']) assert.ok(schema.required.includes(key));
+  const { actionHash } = require('../functions/lib/functions/src/manglar/execution.js');
+  const data = { modelId: 'model', requestId: 'stable', approvedPreviewId: 'preview', combinations: [{ channel: 'shein', shot: 'front' }] };
+  assert.equal(actionHash('models', 'scheduleSets', data), actionHash('models', 'scheduleSets', { ...data }));
+  assert.notEqual(actionHash('models', 'scheduleSets', data), actionHash('models', 'scheduleSets', { ...data, requestId: 'different' }));
+  assert.match(findOperation('models', 'generateBase').description, /toma suelta/);
+  assert.match(findOperation('clients', 'automation').description, /preset.modelId/);
+});
+
+test('paid export analysis exposes retryFailedAutofill while cached previews reject it', () => {
+  const schema = operationSchema(findOperation('spreadsheets', 'analyzeMarketplace'));
+  validateSchema({ clientId: 'client', batchIds: ['batch'], retryFailedAutofill: true }, schema);
+  assert.match(findOperation('spreadsheets', 'downloadMarketplace').description, /authorizePublicImages:true/);
 });

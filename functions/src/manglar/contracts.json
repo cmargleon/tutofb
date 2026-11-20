@@ -7442,6 +7442,9 @@
                 "type": "string",
                 "maxLength": 30000
               }
+            },
+            "packCount": {
+              "type": "number"
             }
           },
           "required": [
@@ -11384,6 +11387,9 @@
                     "type": "string",
                     "maxLength": 30000
                   }
+                },
+                "packCount": {
+                  "type": "number"
                 }
               },
               "required": [
@@ -12091,6 +12097,29 @@
     "required": [
       "planId",
       "confirmedBudgetUsd"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
+  },
+  "ManglarModelBaseStatusRequest": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "cursor": {
+        "type": "string",
+        "maxLength": 30000
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    },
+    "required": [
+      "id"
     ],
     "additionalProperties": false,
     "maxProperties": 100

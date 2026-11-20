@@ -5,11 +5,12 @@ import { mapModelPhotoProviderToProvider } from '../../../shared/src/domain';
 import { normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import type { Provider } from '../../../shared/src/types';
 import type { Operation } from './registry';
-export const estimateManglarAction = async (operation: Operation, data: any) => {
+export const estimateManglarAction = async (operation: Operation, data: any, uid?: string) => {
     let units: number | null = null;
     let initialHoldUsd: number | null = null;
     let rateEstimateUsd: number | null = null;
     const key = `${operation.domain}.${operation.action}`;
+    if (key === 'models.scheduleSets') return (await import('./modelSets')).estimateSets(data, uid!);
     if (['catalog.review', 'wizard.classify', 'models.classify', 'models.save'].includes(key)) {
         if (key === 'catalog.review')
             units = 1;

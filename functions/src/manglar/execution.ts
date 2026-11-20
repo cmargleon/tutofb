@@ -110,7 +110,9 @@ export const prepareAction = async (input: PrepareActionInput, caller: Delegated
     }
     if (!paid && (input.budgetUsd !== undefined || input.allowEstimatedCosts !== undefined))
         throw new HttpsError('invalid-argument', 'Esta acción no necesita presupuesto.');
-    const estimate = paid ? await estimateManglarAction(operation, input.data) : null;
+    const estimate = paid ? await estimateManglarAction(operation, input.data, caller.uid) : null;
+    if (operation.domain === 'models' && operation.action === 'scheduleSets' && input.budgetUsd! + 1e-8 < estimate!.initialReservationUsd!)
+        throw new HttpsError('failed-precondition', 'El presupuesto no cubre el máximo de tres intentos por combinación; reduce la selección o autoriza otro presupuesto.');
     const hash = actionHash(input.domain, input.action, input.data);
     const id = idempotency(input.idempotencyKey, caller);
     const token = opaqueValue();

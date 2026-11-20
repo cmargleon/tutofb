@@ -145,6 +145,10 @@ service cloud.firestore {
     }
 
     match /models/{modelId} {
+      match /baseOperations/{operationId} {
+        allow read: if canAccessClient(get(/databases/$(database)/documents/models/$(modelId)).data.clientId);
+        allow write: if false;
+      }
       allow read: if canAccessClient(resource.data.get('clientId', ''));
       allow create: if isAdmin() && !request.resource.data.keys().hasAny(['approvedIdentity', 'marketplaceBaseApprovals']);
       allow update: if isAdmin() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approvedIdentity', 'marketplaceBaseApprovals']);

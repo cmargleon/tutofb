@@ -3,12 +3,16 @@ import type { ModelMarketplaceRules } from './types/modelMarketplaceRules';
 import { MODEL_POSE_RECIPES_BY_ID, type PoseRecipe } from './modelPoseRecipes';
 import { seedTryOnPrompt } from './approvedTryOnPrompt';
 import { DEFAULT_TRY_ON_PROMPT } from './domain';
-import type { AspectRatio, Model, ModelBaseApproval, ModelBaseSpec, ModelSetShot, PhotoBase, PhotoBaseObservation, PhotoPlanInput, PhotoRecipeCategory } from './types';
+import type { AspectRatio, Model, ModelBaseApproval, ModelBaseOperation, ModelBaseSpec, ModelSetShot, PhotoBase, PhotoBaseObservation, PhotoPlanInput, PhotoRecipeCategory } from './types';
 import type { MarketplaceId } from './marketplaces';
 import { effectivePhotoRecipe, photoRecipeAllowsAppearance } from './marketplacePhotoRecipe';
 import { createCommercialProviderImageConfig } from './commercialPhoto';
 
 export const MODEL_SET_VERSION = 'model-marketplace-set-v1' as const;
+export const MODEL_BASE_MAX_ATTEMPTS = 3;
+/** A technical error that left no image can be resumed by the operator; it never counts against the visual-attempt cap. */
+export const modelBaseResumable = (op: Pick<ModelBaseOperation, 'status' | 'attempts'>) =>
+  (op.status === 'failed' || op.status === 'needs_attention') && !op.attempts.at(-1)?.poseId && op.attempts.filter(a => a.poseId).length < MODEL_BASE_MAX_ATTEMPTS;
 export const MODEL_SET_SHOTS: ModelSetShot[] = ['front', 'front_three_quarter', 'commercial_back'];
 export const MODEL_SET_SHOT_LABELS: Record<ModelSetShot, string> = {
   front: 'Frontal', front_three_quarter: 'Tres cuartos frontal', commercial_back: 'Espalda comercial',

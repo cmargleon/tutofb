@@ -70,6 +70,8 @@ export interface ModelPhotoSetsPreview {
   incompatible?: Array<{ channel: MarketplaceId; poseRecipeId: string; reason: string }>;
   missing: number;
   estimatedCostUsd: number;
+  maxCostUsd?: number;
+  maxAttempts?: number;
   issues: string[];
 }
 export interface GenerateModelBaseRequest extends ModelPhotoSetsRequest {
@@ -86,7 +88,38 @@ export interface VerifyModelBaseRequest extends ModelPhotoSetsRequest {
   poseId: string;
 }
 export interface VerifyModelBaseResponse {
+  reviewCostUsd?: number;
+  observation?: PhotoBaseObservation;
   approved: boolean;
   poseId: string;
   issues: string[];
+}
+
+/** Persisted independently of the browser; technical failures never consume visual retries. */
+export interface ModelBaseAttempt {
+  number: number;
+  prompt: string;
+  poseId?: string;
+  storagePath?: string;
+  generationCostUsd?: number;
+  reviewCostUsd?: number;
+  verification?: VerifyModelBaseResponse;
+  error?: string;
+}
+export interface ModelBaseOperation {
+  id?: string;
+  spec: ModelBaseSpec;
+  identitySha256: string;
+  status: 'queued' | 'generating' | 'verifying' | 'approved' | 'needs_attention' | 'failed';
+  attemptNumber: number;
+  attempts: ModelBaseAttempt[];
+  /** Attempts that ended in a technical error without an image, moved aside when the operator resumes. */
+  technicalErrors?: ModelBaseAttempt[];
+  result?: VerifyModelBaseResponse;
+  error?: string;
+}
+export interface ScheduleModelPhotoSetsRequest extends ModelPhotoSetsRequest {
+  requestId: string;
+  approvedPreviewId: string;
+  combinations: Array<Pick<GenerateModelBaseRequest, 'channel' | 'shot' | 'poseRecipeId'>>;
 }

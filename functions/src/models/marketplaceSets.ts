@@ -1,3 +1,6 @@
+import { MODEL_BASE_MAX_ATTEMPTS, modelBaseRetryPrompt, modelBaseReviewOutcome } from './marketplaceSetPolicy';
+import { extensionForContentType } from '../workers/jobWorker.helpers';
+import type { GenerateModelBaseRequest, ModelBaseAttempt, ModelBaseOperation, ScheduleModelPhotoSetsRequest } from '../../../shared/src/types';
 import { getModelMarketplaceRules, modelMarketplaceRulesRef } from './marketplaceRules';
 import { effectiveModelMarketplaceRule } from '../../../shared/src/modelMarketplaceRules';
 import { MODEL_POSE_RECIPES_BY_ID } from '../../../shared/src/modelPoseRecipes';
@@ -6,7 +9,7 @@ import * as admin from 'firebase-admin';
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { Client, Model, ModelPhotoSetsPreview, ModelPhotoSetsRequest, Pose, VerifyModelBaseRequest, VerifyModelBaseResponse } from '../../../shared/src/types';
-import { MODEL_SET_SHOTS, concreteModelBaseSpec, baseObservationIssues, buildModelBasePrompt, compatibleBaseApproval, modelBaseSpec, modelPhotoBases, photoConfigForRatio, sameBaseSpec } from '../../../shared/src/modelPhotoSets';
+import { MODEL_SET_SHOTS, modelBaseResumable, concreteModelBaseSpec, baseObservationIssues, compatibleBaseApproval, modelBaseSpec, modelPhotoBases, photoConfigForRatio, sameBaseSpec } from '../../../shared/src/modelPhotoSets';
 import { PHOTO_RECIPE_CATEGORIES, effectivePhotoRecipe } from '../../../shared/src/marketplacePhotoRecipe';
 import { activePhotoChannels, photoIdentity } from '../../../shared/src/marketplacePhotoPlan';
 import { DEFAULT_IMAGE_PROVIDER, MODEL_PHOTO_PROVIDER_VALUES, mapModelPhotoProviderToProvider } from '../../../shared/src/domain';
@@ -14,6 +17,7 @@ import { getModelPhotoProviderCostUsd } from '../../../shared/src/constants/prov
 import { ASPECT_RATIO_VALUES, normalizeProviderImageConfig } from '../../../shared/src/providerImageConfig';
 import { withDeclaredModelAge } from '../../../shared/src/photoAttributes';
 import { resolveAutomationPresetName } from '../../../shared/src/automationConfig';
+import { assertUserRoles } from '../auth/roles';
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { FAL_KEY, GEMINI_API_KEY, getGeminiPoseClassificationModel } from '../config/runtime';
@@ -94,6 +98,7 @@ export async function loadModelSetContext(input: ModelPhotoSetsRequest, uid: str
   });
   const missing = shots.filter(s => !s.poseId);
   const preview: ModelPhotoSetsPreview = { ...(model.approvedIdentity ? { identitySha256: model.approvedIdentity.sha256 } : {}), id: photoIdentity([specs, model.poses.map(pose => [pose.id, pose.storagePath, pose.active ?? true, pose.marketplaceBaseSpec || null]), model.approvedIdentity || null, model.marketplaceBaseApprovals || [], provider, normalized]), provider, shots, incompatible,
+    maxAttempts: MODEL_BASE_MAX_ATTEMPTS, maxCostUsd: Number((missing.reduce((sum, s) => sum + s.estimatedCostUsd, 0) * MODEL_BASE_MAX_ATTEMPTS).toFixed(6)),
     missing: missing.length, estimatedCostUsd: Number(missing.reduce((sum, s) => sum + s.estimatedCostUsd, 0).toFixed(6)), issues };
   return { ref, model, client, provider, mappedProvider, normalized, preview };
 }
@@ -113,7 +118,7 @@ async function assetGenerationMatches(path: string, generation?: string) {
   try { return String((await admin.storage().bucket().file(path).getMetadata())[0].generation) === generation; } catch { return false; }
 }
 
-export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: string): Promise<VerifyModelBaseResponse> {
+export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: string, onReviewCost?: (costUsd: number) => Promise<void>): Promise<VerifyModelBaseResponse> {
   const context = await loadModelSetContext({ ...input, ...(input.poseRecipeId && !input.poseRecipeIds ? { poseRecipeIds: [input.poseRecipeId] } : {}), channels: [input.channel] }, uid);
   const { ref, model, preview } = context;
   if (preview.issues.length) throw new HttpsError('failed-precondition', preview.issues.join(' '));
@@ -125,8 +130,9 @@ export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: st
   if (identity.sha256 !== identityFingerprint.sha256 || identity.storageGeneration !== identityFingerprint.storageGeneration) throw new HttpsError('failed-precondition', 'La identidad cambió. Apruébala de nuevo.');
   const fingerprint = await modelAssetFingerprint(pose.storagePath);
   const result = await classifyPoseWithGemini({ apiKey: GEMINI_API_KEY.value(), model: getGeminiPoseClassificationModel(), pose: { ...pose, marketplaceBaseSpec: spec },
-    clientId: model.clientId, modelId: ref.id, userUid: uid, identityStoragePath: identity.storagePath, performer: identity.performer });
+    clientId: model.clientId, modelId: ref.id, userUid: uid, identityStoragePath: identity.storagePath, performer: identity.performer, onUsage: onReviewCost });
   const observation = result.photoObservation && withDeclaredModelAge(result.photoObservation, model.identityTraits);
+  if (!observation?.verified) throw new HttpsError('unavailable', 'Gemini no produjo una observación fiable. Conserva la imagen y verifica de nuevo, sin regenerar.');
   const issues = baseObservationIssues(spec, observation);
   if (!(await assetGenerationMatches(pose.storagePath, fingerprint.storageGeneration))) throw new HttpsError('aborted', 'La fotografía cambió durante la verificación.');
   await getAppFirestore().runTransaction(async tx => {
@@ -141,74 +147,168 @@ export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: st
       verifiedAt: new Date().toISOString(), verifiedByUid: uid, verifierVersion: 'model-base-verifier-v1' });
     tx.update(ref, { marketplaceBaseApprovals: approvals, poses: current.poses.map(p => p.id === pose.id && observation ? { ...p, photoObservation: observation, aiClassification: buildPoseAiClassification({ ...result, taggedAt: new Date().toISOString(), displayLabel: spec.poseRecipeId ? MODEL_POSE_RECIPES_BY_ID.get(spec.poseRecipeId)?.label : null }) } : p), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   });
-  return { approved: !issues.length, poseId: pose.id, issues };
+  return { approved: !issues.length, poseId: pose.id, issues, observation, reviewCostUsd: result.usageCostUsd ?? 0 };
 }
 
-export async function generateModelBaseCore(input: import('../../../shared/src/types').GenerateModelBaseRequest, uid: string) {
-  const context = await loadModelSetContext({ ...input, ...(input.poseRecipeId && !input.poseRecipeIds ? { poseRecipeIds: [input.poseRecipeId] } : {}), channels: [input.channel] }, uid);
-  const { ref, model, preview, provider, mappedProvider, normalized } = context;
+type StoredOperation = ModelBaseOperation & {
+  inputHash: string; input: GenerateModelBaseRequest; createdByUid: string;
+  provider: import('../../../shared/src/types').ModelPhotoProvider;
+  imageConfig: import('../../../shared/src/types').ProviderImageConfig;
+  identity: NonNullable<Model['approvedIdentity']>;
+  executionMode: 'inline' | 'background'; claimToken?: string;
+};
+const validRequestId = (id: string) => typeof id === 'string' && /^[\w-]{1,160}$/.test(id);
+
+/** All selected combinations enter the durable queue in one transaction, before returning to the UI. */
+export async function scheduleModelPhotoSetsCore(input: ScheduleModelPhotoSetsRequest, uid: string, executionMode: StoredOperation['executionMode'] = 'background') {
+  if (!validRequestId(input.requestId) || !Array.isArray(input.combinations) || !input.combinations.length || input.combinations.length > 160)
+    throw new HttpsError('invalid-argument', 'Solicitud o combinaciones inválidas.');
+  const concrete = executionMode === 'inline' && input.combinations[0].poseRecipeId && !input.poseRecipeIds ? { poseRecipeIds: [input.combinations[0].poseRecipeId] } : {};
+  const { ref, model, preview, provider, mappedProvider, normalized } = await loadModelSetContext({ ...input, ...concrete }, uid);
   if (preview.issues.length) throw new HttpsError('failed-precondition', preview.issues.join(' '));
-  if (!/^[\w-]{1,160}$/.test(input.requestId)) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
-  if (!preview.shots.some(s => s.spec.shot === input.shot && s.spec.poseRecipeId === input.poseRecipeId)) throw new HttpsError('invalid-argument', 'Toma no pertinente para esta receta.');
-  const selectedShot = preview.shots.find(s => s.spec.shot === input.shot && s.spec.poseRecipeId === input.poseRecipeId)!;
-  const combination = ref.collection('baseCombinationLocks').doc(photoIdentity([selectedShot.spec, preview.identitySha256]));
-  const operation = ref.collection('baseOperations').doc(input.requestId);
+  const selected = input.combinations.map(c => preview.shots.find(s => s.spec.channel === c.channel && s.spec.shot === c.shot && s.spec.poseRecipeId === c.poseRecipeId));
+  if (selected.some(s => !s) || new Set(selected.map(s => photoIdentity(s!.spec))).size !== selected.length)
+    throw new HttpsError('invalid-argument', 'Combinaciones inválidas o duplicadas.');
+  const batch = ref.collection('baseSchedules').doc(input.requestId);
   const inputHash = photoIdentity(input);
-  // A request is paid at most once. Interrupted requests remain visible for operator attention.
-  const previous = await getAppFirestore().runTransaction(async tx => {
-    const prior = await tx.get(operation);
+  return getAppFirestore().runTransaction(async tx => {
+    const prior = await tx.get(batch);
     if (prior.exists) {
-      if (prior.get('inputHash') !== inputHash) throw new HttpsError('already-exists', 'Solicitud usada con otra toma.');
-      if (prior.get('result')) return prior.get('result') as VerifyModelBaseResponse;
-      throw new HttpsError('failed-precondition', 'Operación ya iniciada; revisa las candidatas antes de reintentar con otra solicitud.');
+      if (prior.get('inputHash') !== inputHash) throw new HttpsError('already-exists', 'Solicitud usada con otras combinaciones.');
+      return prior.get('operationIds') as string[];
     }
-    const locked = await tx.get(combination);
-    const lockedOperation = locked.exists ? await tx.get(ref.collection('baseOperations').doc(locked.get('requestId'))) : null;
-    if (lockedOperation && ['generating', 'verifying'].includes(lockedOperation.get('status')))
-      throw new HttpsError('failed-precondition', 'Esta combinación ya se está procesando. Espera el resultado; no se cobrará otra solicitud.');
     const current = (await tx.get(ref)).data() as Model;
+    if (!current || current.clientId !== model.clientId || JSON.stringify(current.approvedIdentity) !== JSON.stringify(model.approvedIdentity)) throw new HttpsError('aborted', 'La identidad cambió.');
     const rules = (await tx.get(modelMarketplaceRulesRef())).get('marketplaces');
-    if ((rules?.[selectedShot.spec.channel]?.revision ?? 0) !== (selectedShot.spec.rulesRevision ?? 0)) throw new HttpsError('aborted', 'Las reglas cambiaron. Actualiza la estimación antes de generar.');
-    const currentBases = modelPhotoBases(current);
-    const approved = currentBases.find(b => compatibleBaseApproval(b, selectedShot.spec));
-    if (approved && lockedOperation?.get('status') === 'approved' && selectedShot.poseId !== approved.id)
-      throw new HttpsError('failed-precondition', 'Ya existe un resultado aprobado de esta combinación. Actualiza o verifica su archivo antes de generar.');
-    if (approved && selectedShot.poseId === approved.id) return { approved: true, poseId: approved.id, issues: [] };
+    const entries = [];
+    for (const shot of selected) {
+      const spec = shot!.spec;
+      if ((rules?.[spec.channel]?.revision ?? 0) !== (spec.rulesRevision ?? 0)) throw new HttpsError('aborted', 'Las reglas cambiaron.');
+      const lock = ref.collection('baseCombinationLocks').doc(photoIdentity([spec, preview.identitySha256]));
+      const locked = await tx.get(lock);
+      const existing = locked.exists ? await tx.get(ref.collection('baseOperations').doc(locked.get('requestId'))) : null;
+      entries.push({ shot: shot!, lock, existing });
+    }
     if (input.approvedPreviewId !== preview.id) throw new HttpsError('failed-precondition', 'El costo o el set cambió. Revisa la estimación.');
-    tx.set(combination, { requestId: input.requestId });
-    tx.create(operation, { inputHash, status: 'generating', createdByUid: uid, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-    return null;
+    const operationIds: string[] = [];
+    for (const { shot, lock, existing } of entries) {
+      if (modelPhotoBases(current).some(b => compatibleBaseApproval(b, shot.spec)) && shot.poseId) continue;
+      // Terminal operations stay available for manual review; a new request cannot reset the attempt cap.
+      if (existing?.exists && existing.get('spec')) {
+        const prior = existing.data() as StoredOperation;
+        // Only a technical failure without an image may resume; visual attempts already paid are kept and still count.
+        if (modelBaseResumable(prior)) tx.update(existing.ref, { status: 'queued', executionMode, attemptNumber: prior.attempts.filter(a => a.poseId).length,
+          attempts: prior.attempts.filter(a => a.poseId), technicalErrors: [...(prior.technicalErrors || []), ...prior.attempts.filter(a => !a.poseId)],
+          error: null, claimToken: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        operationIds.push(existing.id); continue;
+      }
+      if (existing?.exists && ['generating', 'verifying'].includes(existing.get('status'))) throw new HttpsError('failed-precondition', 'Esta combinación ya se está procesando.');
+      const operationId = executionMode === 'inline' ? input.requestId : photoIdentity([input.requestId, shot.spec]);
+      const operation = ref.collection('baseOperations').doc(operationId);
+      const config = shot.spec.aspectRatio === normalized.aspectRatio && shot.spec.channel !== 'tiktok-shop' ? normalized : photoConfigForRatio({ provider: mappedProvider, imageConfig: normalized.imageConfig }, shot.spec.aspectRatio);
+      const generationInput: GenerateModelBaseRequest = { ...input, ...concrete, channel: shot.spec.channel, shot: shot.spec.shot, ...(shot.spec.poseRecipeId ? { poseRecipeId: shot.spec.poseRecipeId } : {}), requestId: operationId };
+      tx.create(operation, { inputHash, input: generationInput, spec: shot.spec, identity: model.approvedIdentity!, identitySha256: preview.identitySha256!, provider, imageConfig: config.imageConfig,
+        status: 'queued', attemptNumber: 0, attempts: [], executionMode, createdByUid: uid, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      tx.set(lock, { requestId: operationId });
+      operationIds.push(operationId);
+    }
+    tx.create(batch, { inputHash, operationIds, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+    return operationIds;
   });
-  if (previous) return previous;
-  const spec = preview.shots.find(s => s.spec.shot === input.shot && s.spec.poseRecipeId === input.poseRecipeId)?.spec;
-  if (!spec) throw new HttpsError('invalid-argument', 'Toma inválida.');
+}
+
+/** One paid attempt per claim. Never reclaim an ambiguous in-flight provider call. */
+export async function processModelBaseOperation(modelId: string, operationId: string, expectedAttemptNumber?: number) {
+  const db = getAppFirestore(), ref = db.doc(`models/${modelId}`), operation = ref.collection('baseOperations').doc(operationId);
+  const expected = expectedAttemptNumber ?? (await operation.get()).get('attemptNumber');
+  const token = randomUUID();
+  const claimed = await db.runTransaction(async tx => {
+    const snapshot = await tx.get(operation);
+    const data = snapshot.data() as StoredOperation | undefined;
+    if (!data || data.status !== 'queued' || data.attemptNumber !== expected || data.attemptNumber >= MODEL_BASE_MAX_ATTEMPTS) return null;
+    const number = data.attemptNumber + 1;
+    const prompt = modelBaseRetryPrompt(data.spec, data.attempts.flatMap(a => a.verification?.issues || []));
+    const attempt: ModelBaseAttempt = { number, prompt };
+    tx.update(operation, { status: 'generating', result: null, error: null, claimToken: token, attemptNumber: number, attempts: [...data.attempts, attempt], updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    return { ...data, attemptNumber: number, attempts: [...data.attempts, attempt] };
+  });
+  if (!claimed) return;
+  const attempt = claimed.attempts.at(-1)!;
+  const patch = async (fields: Record<string, unknown>) => db.runTransaction(async tx => {
+    const snapshot = await tx.get(operation);
+    if (snapshot.get('claimToken') !== token) throw new HttpsError('aborted', 'La operación cambió.');
+    tx.update(operation, { ...fields, attempts: claimed.attempts, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
   try {
-    const identity = model.approvedIdentity!;
+    await assertUserRoles(claimed.createdByUid, null, ['admin']);
+    const context = await loadModelSetContext(claimed.input, claimed.createdByUid);
+    if (context.preview.issues.length || JSON.stringify(context.model.approvedIdentity) !== JSON.stringify(claimed.identity)
+      || !context.preview.shots.some(s => sameBaseSpec(s.spec, claimed.spec))) throw new Error('Identidad, reglas o configuración cambiaron; requiere revisión manual.');
+    const alreadyApproved = context.preview.shots.find(s => sameBaseSpec(s.spec, claimed.spec))?.poseId;
+    if (alreadyApproved) { await patch({ status: 'approved', result: { approved: true, poseId: alreadyApproved, issues: [] } }); return; }
+    const identity = claimed.identity;
     const fingerprint = await modelAssetFingerprint(identity.storagePath);
-    if (identity.sha256 !== fingerprint.sha256 || identity.storageGeneration !== fingerprint.storageGeneration) throw new HttpsError('failed-precondition', 'La identidad cambió.');
+    if (identity.sha256 !== fingerprint.sha256 || identity.storageGeneration !== fingerprint.storageGeneration) throw new Error('La identidad cambió.');
     const [url] = await admin.storage().bucket().file(identity.storagePath, { generation: identity.storageGeneration }).getSignedUrl({ action: 'read', expires: Date.now() + 3600000, version: 'v4' });
-    const config = spec.aspectRatio === normalized.aspectRatio && spec.channel !== 'tiktok-shop' ? normalized : photoConfigForRatio({ provider: mappedProvider, imageConfig: normalized.imageConfig }, spec.aspectRatio);
-    const result = await generateSingleModelPhoto({ provider, prompt: buildModelBasePrompt(spec), imageConfig: config.imageConfig, falKey: FAL_KEY.value(), referenceImageUrl: url, preserveReferenceDetails: true });
-    const poseId = randomUUID();
-    const ext = result.contentType.includes('jpeg') ? 'jpg' : result.contentType.includes('webp') ? 'webp' : 'png';
-    const storagePath = `model_generations/${model.clientId}/${ref.id}/pose/${input.requestId}/${poseId}.${ext}`;
-    await admin.storage().bucket().file(storagePath).save(result.imageBytes, { resumable: false, metadata: { contentType: result.contentType } });
-    const pose: Pose = { id: poseId, storagePath, fileName: `${spec.channel}-${spec.bodyArea}-${spec.poseRecipeId || spec.shot}.${ext}`, marketplaceBaseSpec: spec, createdAt: new Date().toISOString() };
-    const cost = getModelPhotoProviderCostUsd(provider, config.imageConfig, 1);
-    await getAppFirestore().runTransaction(async tx => {
-      const current = (await tx.get(ref)).data() as Model;
-      if (!current || current.clientId !== model.clientId || current.approvedIdentity?.sha256 !== identity.sha256) throw new HttpsError('aborted', 'La identidad cambió durante la generación.');
-      tx.update(ref, { poses: [...current.poses, pose], poseCount: current.poses.length + 1, generatedPhotoCount: admin.firestore.FieldValue.increment(1), generatedPhotoCostUsd: admin.firestore.FieldValue.increment(cost), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-      tx.create(getAppFirestore().collection('model_generation_logs').doc(), { provider, requestedPhotos: 1, completedPhotos: 1, estimatedCostUsd: cost, clientId: model.clientId, modelId: ref.id, stage: 'pose', createdByUid: uid, createdAt: admin.firestore.FieldValue.serverTimestamp() });
-      tx.update(operation, { status: 'verifying', poseId });
+    const result = await generateSingleModelPhoto({ provider: claimed.provider, prompt: attempt.prompt, imageConfig: claimed.imageConfig, falKey: FAL_KEY.value(), referenceImageUrl: url, preserveReferenceDetails: true });
+    const poseId = randomUUID(), ext = extensionForContentType(result.contentType);
+    const storagePath = `model_generations/${context.model.clientId}/${ref.id}/pose/${operationId}/${poseId}.${ext}`;
+    attempt.poseId = poseId; attempt.storagePath = storagePath;
+    attempt.generationCostUsd = getModelPhotoProviderCostUsd(claimed.provider, claimed.imageConfig, 1);
+    // Account for every completed provider call, including a later upload/review failure.
+    await db.runTransaction(async tx => {
+      const op = await tx.get(operation);
+      if (op.get('claimToken') !== token || op.get('status') !== 'generating') throw new Error('La operación cambió.');
+      tx.update(operation, { attempts: claimed.attempts, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      tx.update(ref, { generatedPhotoCount: admin.firestore.FieldValue.increment(1), generatedPhotoCostUsd: admin.firestore.FieldValue.increment(attempt.generationCostUsd!) });
+      tx.create(db.collection('model_generation_logs').doc(`${modelId}-${operationId}-${attempt.number}`), { provider: claimed.provider, requestedPhotos: 1, completedPhotos: 1, estimatedCostUsd: attempt.generationCostUsd, clientId: context.model.clientId, modelId, poseId, operationId, attemptNumber: attempt.number, stage: 'pose', createdByUid: claimed.createdByUid, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     });
-    let verification: VerifyModelBaseResponse;
-    try { verification = await verifyModelBaseCore({ ...input, poseId }, uid); }
-    catch (error) { verification = { approved: false, poseId, issues: [`Base conservada; verificación pendiente: ${error instanceof Error ? error.message : 'Error de verificación'}`] }; }
-    await operation.update({ status: verification.approved ? 'approved' : 'needs_attention', result: verification });
-    return verification;
+    await admin.storage().bucket().file(storagePath).save(result.imageBytes, { resumable: false, metadata: { contentType: result.contentType } });
+    const pose: Pose = { id: poseId, storagePath, fileName: `${claimed.spec.channel}-${claimed.spec.bodyArea}-${claimed.spec.poseRecipeId || claimed.spec.shot}.${ext}`, marketplaceBaseSpec: claimed.spec, createdAt: new Date().toISOString() };
+    await db.runTransaction(async tx => {
+      const current = (await tx.get(ref)).data() as Model;
+      const op = await tx.get(operation);
+      if (op.get('claimToken') !== token || op.get('status') !== 'generating') throw new Error('La operación cambió.');
+      if (!current) throw new Error('Modelo no disponible.');
+      tx.update(ref, { poses: [...current.poses, pose], poseCount: current.poses.length + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      tx.update(operation, { status: 'verifying', attempts: claimed.attempts, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+    const verification = await verifyModelBaseCore({ ...claimed.input, poseId }, claimed.createdByUid, async cost => {
+      attempt.reviewCostUsd = cost;
+      await patch({ status: 'verifying' });
+    });
+    attempt.verification = verification; attempt.reviewCostUsd = verification.reviewCostUsd ?? attempt.reviewCostUsd ?? 0;
+    await patch({ status: modelBaseReviewOutcome(verification, attempt.number), result: verification, claimToken: null });
   } catch (error) {
-    await operation.update({ status: 'failed', error: error instanceof Error ? error.message : 'Error de generación' });
-    throw new HttpsError('internal', error instanceof Error ? error.message : 'Error de generación', { modelBaseOperationFailed: true });
+    attempt.error = error instanceof Error ? error.message : 'Error técnico';
+    await patch({ status: attempt.poseId ? 'needs_attention' : 'failed', error: attempt.error, claimToken: null });
   }
+}
+
+/** Connector compatibility: waits server-side using the same persisted attempts and retry policy. */
+export async function generateModelBaseCore(input: GenerateModelBaseRequest, uid: string): Promise<VerifyModelBaseResponse> {
+  if (!validRequestId(input.requestId) || !validRequestId(input.modelId)) throw new HttpsError('invalid-argument', 'Solicitud inválida.');
+  const operation = getAppFirestore().doc(`models/${input.modelId}/baseOperations/${input.requestId}`);
+  const prior = await operation.get();
+  if (prior.exists) {
+    if (prior.get('inputHash') !== photoIdentity({ ...input, combinations: [{ channel: input.channel, shot: input.shot, ...(input.poseRecipeId ? { poseRecipeId: input.poseRecipeId } : {}) }] }))
+      throw new HttpsError('already-exists', 'Solicitud usada con otra toma.');
+    if (!['queued', 'generating', 'verifying'].includes(prior.get('status')) && prior.get('result')) return prior.get('result') as VerifyModelBaseResponse;
+    throw new HttpsError('failed-precondition', 'Operación ya iniciada; revisa su progreso.');
+  }
+  const ids = await scheduleModelPhotoSetsCore({ ...input, combinations: [{ channel: input.channel, shot: input.shot, ...(input.poseRecipeId ? { poseRecipeId: input.poseRecipeId } : {}) }] }, uid, 'inline');
+  if (!ids.length) {
+    const { preview } = await loadModelSetContext(input, uid);
+    return { approved: true, poseId: preview.shots.find(s => s.spec.shot === input.shot && s.spec.poseRecipeId === input.poseRecipeId)!.poseId!, issues: [] };
+  }
+  const target = operation.parent.doc(ids[0]);
+  for (let n = 0; n < MODEL_BASE_MAX_ATTEMPTS; n++) {
+    await processModelBaseOperation(input.modelId, ids[0]);
+    const latest = await target.get();
+    if (latest.get('status') !== 'queued') {
+      if (latest.get('result')) return latest.get('result') as VerifyModelBaseResponse;
+      throw new HttpsError('internal', latest.get('error') || 'Operación en curso; consulta su progreso.');
+    }
+  }
+  throw new HttpsError('internal', 'Revisa el estado de la operación.');
 }

@@ -14543,5 +14543,19 @@
     ],
     "additionalProperties": false,
     "maxProperties": 100
+  },
+  "AcknowledgeBatchFailuresRequest": {
+    "type": "object",
+    "properties": {
+      "batchId": {
+        "type": "string",
+        "maxLength": 30000
+      }
+    },
+    "required": [
+      "batchId"
+    ],
+    "additionalProperties": false,
+    "maxProperties": 100
   }
 }

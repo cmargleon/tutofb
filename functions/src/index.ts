@@ -34,6 +34,7 @@ export * from './callables/exportBatchSpreadsheet';
 export * from './callables/editBatchSpreadsheet';
 export * from './callables/regenerateFailedBatchJobs';
 export * from './callables/cancelPendingBatchJobs';
+export * from './callables/acknowledgeBatchFailures';
 export * from './callables/regenerateJobsBulk';
 export * from './callables/syncUserClaims';
 export * from './callables/createAppUser';

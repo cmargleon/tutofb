@@ -7,6 +7,13 @@ import type { ProductDraftInput, ProductDraftRow } from './spreadsheet';
 
 export type BatchNotificationRetryState = 'queued' | 'failed_after_retry' | 'succeeded_after_retry';
 
+/** An operator reviewed the batch's failures in Cola; the batch stays hidden there until failedJobs grows past this count. */
+export interface BatchFailuresAcknowledgement {
+  failedJobs: number;
+  acknowledgedAt: TimestampLike;
+  acknowledgedByUid: string;
+}
+
 export interface BatchNotificationState {
   retryState?: BatchNotificationRetryState | null;
   retryRequestedAt?: TimestampLike | null;
@@ -77,6 +84,7 @@ export interface Batch {
   createdByUid: string;
   createdByDisplayName?: string | null;
   notification?: BatchNotificationState | null;
+  failuresAcknowledged?: BatchFailuresAcknowledgement | null;
 }
 
 export interface ApprovedGarmentPrompt {
@@ -120,6 +128,16 @@ export interface RegenerateFailedBatchJobsResponse {
   skippedJobs: number;
   skippedJobIds: string[];
   retryProvider?: Provider | null;
+}
+
+export interface AcknowledgeBatchFailuresRequest {
+  batchId: string;
+}
+
+export interface AcknowledgeBatchFailuresResponse {
+  success: boolean;
+  batchId: string;
+  acknowledgedFailedJobs: number;
 }
 
 export interface CancelPendingBatchJobsRequest {

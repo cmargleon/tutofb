@@ -8,12 +8,13 @@ import {
   formatElapsedSince,
   formatRelativeDuration,
   getCompletedJobDuration,
-  getKanbanStage,
   getQueueClientOptions,
   getQueueProviderOptions,
-  groupQueueRowsByStage,
+  getQueueSection,
+  getUnreviewedFailedJobs,
+  groupQueueRowsBySection,
   QueueRow,
-  sumQueueTotals,
+  summarizeQueue,
 } from '../src/features/queue/queueRows';
 
 const batch = (overrides: Partial<Batch>): Batch => ({
@@ -80,14 +81,31 @@ test('getCompletedJobDuration only counts positive durations of completed jobs',
   assert.equal(getCompletedJobDuration(job({ status: 'completed', totalDurationSeconds: 0 })), null);
 });
 
-test('getKanbanStage prioritises processing, then ready, then pending', () => {
-  assert.equal(getKanbanStage(row({ processingJobs: 1, completedJobs: 3 })), 'processing');
-  assert.equal(getKanbanStage(row({ status: 'processing' })), 'processing');
-  assert.equal(getKanbanStage(row({ completedJobs: 1 })), 'ready');
-  assert.equal(getKanbanStage(row({ failedJobs: 1 })), 'ready');
-  assert.equal(getKanbanStage(row({ status: 'partial_failed' })), 'ready');
-  assert.equal(getKanbanStage(row({ status: 'failed' })), 'ready');
-  assert.equal(getKanbanStage(row({ pendingJobs: 4 })), 'pending');
+const NOW = 100 * 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+
+test('getQueueSection: active batches first, then unreviewed failures within 7 days, then the last 24 h', () => {
+  assert.equal(getQueueSection(row({ status: 'processing', updatedAt: 0 }), NOW), 'active');
+  assert.equal(getQueueSection(row({ status: 'partial_failed', pendingJobs: 2, failedJobs: 1, updatedAt: 0 }), NOW), 'active');
+  assert.equal(getQueueSection(row({ status: 'pending', updatedAt: 0 }), NOW), 'active');
+
+  assert.equal(getQueueSection(row({ status: 'partial_failed', failedJobs: 2, updatedAt: NOW - 3 * DAY }), NOW), 'attention');
+  assert.equal(getQueueSection(row({ status: 'failed', failedJobs: 2, updatedAt: NOW - 8 * DAY }), NOW), null);
+
+  const reviewed = { status: 'partial_failed', failedJobs: 2, failuresAcknowledged: { failedJobs: 2 } } as Partial<Batch>;
+  assert.equal(getQueueSection(row({ ...reviewed, updatedAt: NOW - 2 * HOUR }), NOW), 'recent');
+  assert.equal(getQueueSection(row({ ...reviewed, updatedAt: NOW - 2 * DAY }), NOW), null);
+
+  assert.equal(getQueueSection(row({ status: 'completed', completedJobs: 4, updatedAt: NOW - HOUR }), NOW), 'recent');
+  assert.equal(getQueueSection(row({ status: 'completed', completedJobs: 4, updatedAt: NOW - 25 * HOUR }), NOW), null);
+});
+
+test('getUnreviewedFailedJobs resurfaces a batch when a retry fails again past the reviewed count', () => {
+  assert.equal(getUnreviewedFailedJobs(batch({ failedJobs: 3 })), 3);
+  assert.equal(getUnreviewedFailedJobs(batch({ failedJobs: 3, failuresAcknowledged: { failedJobs: 3 } } as Partial<Batch>)), 0);
+  assert.equal(getUnreviewedFailedJobs(batch({ failedJobs: 1, failuresAcknowledged: { failedJobs: 3 } } as Partial<Batch>)), 0);
+  assert.equal(getUnreviewedFailedJobs(batch({ failedJobs: 5, failuresAcknowledged: { failedJobs: 3 } } as Partial<Batch>)), 2);
 });
 
 test('buildQueueRows computes ETA from batch or global averages and age from the oldest queued job', () => {
@@ -128,26 +146,34 @@ test('buildQueueRows falls back to the global average when a batch has no comple
   assert.equal(rows[0].etaSeconds, 90);
 });
 
-test('filters, options, grouping and totals', () => {
+test('filters, options, sections and summary', () => {
   const rows = [
-    row({ id: 'a', clientNameSnapshot: 'Zeta', provider: 'fal-seedream', status: 'pending', pendingJobs: 2 }),
-    row({ id: 'b', clientNameSnapshot: 'Alfa', provider: 'openai-gpt-image-1.5', status: 'processing', processingJobs: 1 }),
-    row({ id: 'c', clientNameSnapshot: 'Zeta', provider: 'fal-seedream', status: 'failed', failedJobs: 3 }),
+    { ...row({ id: 'a', clientId: 'cz', clientNameSnapshot: 'Zeta', provider: 'fal-seedream', status: 'pending', pendingJobs: 2 }), ageStartedAt: 50, etaSeconds: 120 },
+    { ...row({ id: 'b', clientId: 'ca', clientNameSnapshot: 'Alfa', provider: 'openai-gpt-image-1.5', status: 'processing', processingJobs: 1 }), ageStartedAt: 10, etaSeconds: 30 },
+    row({ id: 'c', clientId: 'cz', clientNameSnapshot: 'Zeta', provider: 'fal-seedream', status: 'failed', failedJobs: 3, updatedAt: NOW - DAY }),
+    row({ id: 'd', clientId: 'cz', clientNameSnapshot: 'Zeta', provider: 'fal-seedream', status: 'partial_failed', failedJobs: 1, updatedAt: NOW - HOUR }),
+    row({ id: 'e', clientId: 'ca', clientNameSnapshot: 'Alfa', provider: 'fal-seedream', status: 'completed', completedJobs: 2, updatedAt: NOW - HOUR }),
   ];
 
   assert.deepEqual(getQueueClientOptions(rows), ['Alfa', 'Zeta']);
   assert.deepEqual(getQueueProviderOptions(rows), ['fal-seedream', 'openai-gpt-image-1.5']);
 
-  const all = { clientFilter: 'all', providerFilter: 'all', statusFilter: 'all' } as const;
-  assert.equal(filterQueueRows(rows, all).length, 3);
-  assert.deepEqual(filterQueueRows(rows, { ...all, clientFilter: 'Zeta' }).map((entry) => entry.id), ['a', 'c']);
+  const all = { clientFilter: 'all', providerFilter: 'all' } as const;
+  assert.equal(filterQueueRows(rows, all).length, 5);
+  assert.deepEqual(filterQueueRows(rows, { ...all, clientFilter: 'Alfa' }).map((entry) => entry.id), ['b', 'e']);
   assert.deepEqual(filterQueueRows(rows, { ...all, providerFilter: 'openai-gpt-image-1.5' }).map((entry) => entry.id), ['b']);
-  assert.deepEqual(filterQueueRows(rows, { ...all, statusFilter: 'failed' }).map((entry) => entry.id), ['c']);
 
-  const grouped = groupQueueRowsByStage(rows);
-  assert.deepEqual(grouped.pending.map((entry) => entry.id), ['a']);
-  assert.deepEqual(grouped.processing.map((entry) => entry.id), ['b']);
-  assert.deepEqual(grouped.ready.map((entry) => entry.id), ['c']);
+  const sections = groupQueueRowsBySection(rows, NOW);
+  // Active: oldest waiting first. Finished: newest first.
+  assert.deepEqual(sections.active.map((entry) => entry.id), ['b', 'a']);
+  assert.deepEqual(sections.attention.map((entry) => entry.id), ['d', 'c']);
+  assert.deepEqual(sections.recent.map((entry) => entry.id), ['e']);
 
-  assert.deepEqual(sumQueueTotals(rows), { pending: 2, processing: 1, failed: 3 });
+  assert.deepEqual(summarizeQueue(sections), {
+    activeJobs: 3,
+    activeBatches: 2,
+    etaSeconds: 120,
+    attentionBatches: 2,
+    attentionFailedJobs: 4,
+  });
 });

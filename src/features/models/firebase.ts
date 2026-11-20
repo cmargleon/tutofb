@@ -465,3 +465,8 @@ export const getImageUrl = async (storagePath: string): Promise<string> => {
 
 export const verifyMarketplacePhotoBases = async (modelId: string, poseIds: string[]) =>
   (await httpsCallable<{ modelId: string; poseIds: string[] }, { modelId: string; observations: Record<string, import('../../../shared/src/types').PhotoBaseObservation> }>(functions, 'verifyMarketplacePhotoBases', { timeout: 300000 })({ modelId, poseIds })).data;
+
+export const scheduleModelMarketplaceSets = async (data: import('../../../shared/src/types').ScheduleModelPhotoSetsRequest) =>
+  (await httpsCallable<import('../../../shared/src/types').ScheduleModelPhotoSetsRequest, { operationIds: string[] }>(functions, 'scheduleModelMarketplaceSets')(data)).data;
+export const subscribeModelBaseOperations = (modelId: string, next: (operations: import('../../../shared/src/types').ModelBaseOperation[]) => void, error: (error: Error) => void) =>
+  onSnapshot(collection(db, 'models', modelId, 'baseOperations'), snapshot => next(snapshot.docs.filter(doc => doc.get('spec')).map(doc => ({ ...doc.data(), id: doc.id } as import('../../../shared/src/types').ModelBaseOperation))), error);

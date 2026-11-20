@@ -31,8 +31,9 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
   require('../functions/lib/functions/src/admin/systemConfig.js').invalidateSystemConfigCache();
   const { File } = require('../functions/node_modules/@google-cloud/storage');
   t.mock.method(File.prototype, 'getSignedUrl', async () => ['https://fixtures.invalid/base']);
-  let generations = 0, failThreeQuarter = true, concretePoseMatches = true;
+  let generations = 0, failThreeQuarter = true, concretePoseMatches = true, failProvider = false;
   t.mock.method(generator, 'generateSingleModelPhoto', async ({ imageConfig, prompt }: any) => {
+    if (failProvider) throw new Error('Provider outage fixture');
     generations++; assert.match(prompt, /approved identity reference/); assert.match(prompt, /Plain fitted opaque/);
     const ratio = typeof imageConfig.imageSize === 'object' ? imageConfig.imageSize.width / imageConfig.imageSize.height : .75;
     return { imageBytes: await sharp(bytes).resize(1200, Math.round(1200 / ratio)).png().toBuffer(), contentType: 'image/png' };
@@ -61,14 +62,14 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
     assert.equal(front.approved, true); assert.deepEqual(await service.generateModelBaseCore(request, uid), front); assert.equal(generations, 1);
     preview = (await service.loadModelSetContext(baseRequest, uid)).preview; assert.equal(preview.missing, 2);
     const side = await service.generateModelBaseCore({ ...request, shot: 'front_three_quarter', requestId: 'side-once', approvedPreviewId: preview.id }, uid);
-    assert.equal(side.approved, false); assert.match(side.issues.join(' '), /Pose requerida/); assert.equal(generations, 2);
+    assert.equal(side.approved, false); assert.match(side.issues.join(' '), /Pose requerida/); assert.equal(generations, 4);
     assert.ok((await db.doc(`models/${modelId}`).get()).get('poses').some((p: any) => p.id === side.poseId));
     failThreeQuarter = false;
     assert.equal((await service.verifyModelBaseCore({ ...baseRequest, channel: 'amazon', shot: 'front_three_quarter', poseId: side.poseId }, uid)).approved, true);
     const shared = await service.verifyModelBaseCore({ ...baseRequest, channel: 'shein', shot: 'front_three_quarter', poseId: side.poseId }, uid);
-    assert.equal(shared.approved, true); assert.equal(generations, 2);
+    assert.equal(shared.approved, true); assert.equal(generations, 4);
     const saved = (await db.doc(`models/${modelId}`).get()).data();
-    assert.equal(saved.poses.length, 3); assert.equal(saved.marketplaceBaseApprovals.filter((a: any) => a.poseId === side.poseId).length, 2);
+    assert.equal(saved.poses.length, 5); assert.equal(saved.marketplaceBaseApprovals.filter((a: any) => a.poseId === side.poseId).length, 2);
     const square = (await service.loadModelSetContext({ ...baseRequest, channels: ['tiktok-shop'] }, uid)).preview;
     assert.ok(square.shots.every((s: any) => s.spec.aspectRatio === '1:1'));
     const lower = (await service.loadModelSetContext({ ...baseRequest, bodyArea: 'lower_body' }, uid)).preview;
@@ -137,10 +138,13 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
     assert.deepEqual(await service.generateModelBaseCore(walking, uid), failedWalking);
     assert.equal(generations, failedCount);
     await assert.rejects(service.generateModelBaseCore({ ...walking, requestId: 'stale-duplicate-walking' }, uid), /estimación/);
+    assert.equal((await db.doc(`models/${modelId}/baseOperations/walking-failed`).get()).get('attempts').length, 3);
     concretePoseMatches = true;
     const walkingRetryPreview = (await service.loadModelSetContext(walkingRequest, uid)).preview;
-    const retried = await service.generateModelBaseCore({ ...walking, requestId: 'walking-retry', approvedPreviewId: walkingRetryPreview.id }, uid);
-    assert.equal(retried.approved, true); assert.equal(generations, failedCount + 1);
+    const capped = await service.generateModelBaseCore({ ...walking, requestId: 'walking-retry', approvedPreviewId: walkingRetryPreview.id }, uid);
+    assert.equal(capped.approved, false); assert.equal(generations, failedCount);
+    const retried = await service.verifyModelBaseCore({ ...walking, poseId: failedWalking.poseId }, uid);
+    assert.equal(retried.approved, true); assert.equal(generations, failedCount);
     const retained = (await db.doc(`models/${modelId}`).get()).data();
     assert.ok(retained.poses.some((p: any) => p.id === failedWalking.poseId));
     assert.ok(retained.marketplaceBaseApprovals.some((a: any) => a.poseId === second.poseId));
@@ -210,9 +214,98 @@ test('server-owned sets: identity, paid single-shot idempotency, failed verifica
         const fields = { [field]: field === 'approvedIdentity' ? { mapValue: { fields: {} } } : { arrayValue: { values: [] } } };
         assert.equal((await fetch(`${url}?updateMask.fieldPaths=${field}`, { method: 'PATCH', headers, body: JSON.stringify({ fields }) })).status, 403);
       }
+      const rulesOperation = rulesModel.collection('baseOperations').doc('protected');
+      await rulesOperation.set({ spec: {}, status: 'needs_attention' });
+      try {
+        assert.equal((await fetch(`${url}/baseOperations/protected`, { headers })).status, 200);
+        assert.equal((await fetch(`${url}/baseOperations/protected`, { method: 'PATCH', headers, body: JSON.stringify({ fields: { status: { stringValue: 'approved' } } }) })).status, 403);
+      } finally { await rulesOperation.delete(); }
       const overwrite = await fetch(`http://${process.env.FIREBASE_STORAGE_EMULATOR_HOST}/v0/b/${bucket.name}/o?uploadType=media&name=${encodeURIComponent(rulesAsset)}`, { method: 'POST', headers: { Authorization: `Firebase ${account.idToken}`, 'Content-Type': 'image/png' }, body: bytes });
       assert.equal(overwrite.status, 403, await overwrite.text());
     } finally { await rulesModel.delete(); await rulesUser.delete(); await admin.auth().deleteUser(account.localId); await bucket.file(rulesAsset).delete(); }
+    // Background queue survives a lost browser and claims each paid attempt only once.
+    const queueModelId = 'queued-model';
+    const queueModel = (await db.doc(`models/${modelId}`).get()).data();
+    await db.doc(`models/${queueModelId}`).set({ ...queueModel, poses: [queueModel.poses[0]], marketplaceBaseApprovals: [] });
+    const queuedInput = { ...baseRequest, aspectRatio: '3:4', modelId: queueModelId, poseRecipeIds: ['full-contrapposto', 'full-walking'] };
+    const queuePreview = (await service.loadModelSetContext(queuedInput, uid)).preview;
+    const queued = { ...queuedInput, requestId: 'queue-batch', approvedPreviewId: queuePreview.id,
+      combinations: queuePreview.shots.map((s: any) => ({ channel: s.spec.channel, shot: s.spec.shot, poseRecipeId: s.spec.poseRecipeId })) };
+    const beforeQueue = generations;
+    const ids = await service.scheduleModelPhotoSetsCore(queued, uid);
+    assert.equal(ids.length, 2); assert.equal(generations, beforeQueue);
+    assert.deepEqual(await service.scheduleModelPhotoSetsCore(queued, uid), ids);
+    const same = await service.scheduleModelPhotoSetsCore({ ...queued, requestId: 'concurrent-other-batch' }, uid);
+    assert.deepEqual(same, ids);
+    let rejectOnce = true;
+    const originalClassify = classifier.classifyPoseWithGemini;
+    t.mock.method(classifier, 'classifyPoseWithGemini', async (input: any) => {
+      const result = await originalClassify(input);
+      if (rejectOnce) { rejectOnce = false; result.photoObservation.background = 'context'; }
+      return { ...result, usageCostUsd: .003 };
+    });
+    await Promise.all([service.processModelBaseOperation(queueModelId, ids[0]), service.processModelBaseOperation(queueModelId, ids[0])]);
+    assert.equal(generations, beforeQueue + 1);
+    let queuedOp = (await db.doc(`models/${queueModelId}/baseOperations/${ids[0]}`).get()).data();
+    assert.equal(queuedOp.status, 'queued'); assert.equal(queuedOp.attemptNumber, 1);
+    await service.processModelBaseOperation(queueModelId, ids[0]);
+    queuedOp = (await db.doc(`models/${queueModelId}/baseOperations/${ids[0]}`).get()).data();
+    assert.equal(queuedOp.status, 'approved'); assert.equal(queuedOp.attempts.length, 2);
+    assert.match(queuedOp.attempts[1].prompt, /Fondo requerido/);
+    assert.ok(queuedOp.attempts.every((a: any) => a.storagePath && a.generationCostUsd > 0 && a.reviewCostUsd === .003 && a.verification.observation));
+    await service.processModelBaseOperation(queueModelId, ids[0]);
+    assert.equal(generations, beforeQueue + 2);
+    // A review outage preserves the generated file; no visual rejection, no second charge.
+    t.mock.method(classifier, 'classifyPoseWithGemini', async () => { throw new Error('Gemini timeout fixture'); });
+    await service.processModelBaseOperation(queueModelId, ids[1]);
+    const outage = (await db.doc(`models/${queueModelId}/baseOperations/${ids[1]}`).get()).data();
+    assert.equal(outage.status, 'needs_attention'); assert.equal(outage.attemptNumber, 1);
+    assert.ok(outage.attempts[0].storagePath); assert.equal(outage.attempts[0].verification, undefined);
+    await service.processModelBaseOperation(queueModelId, ids[1]); assert.equal(generations, beforeQueue + 3);
+    const uncertainInput = { ...queuedInput, channels: ['shein'], poseRecipeIds: ['full-front'] };
+    const uncertainPreview = (await service.loadModelSetContext(uncertainInput, uid)).preview;
+    const uncertainIds = await service.scheduleModelPhotoSetsCore({ ...uncertainInput, requestId: 'uncertain-review', approvedPreviewId: uncertainPreview.id,
+      combinations: uncertainPreview.shots.map((s: any) => ({ channel: s.spec.channel, shot: s.spec.shot, poseRecipeId: s.spec.poseRecipeId })) }, uid);
+    t.mock.method(classifier, 'classifyPoseWithGemini', async (input: any) => {
+      const result = await originalClassify(input);
+      return { ...result, photoObservation: { ...result.photoObservation, verified: false }, confidence: .4 };
+    });
+    await service.processModelBaseOperation(queueModelId, uncertainIds[0]);
+    const uncertain = (await db.doc(`models/${queueModelId}/baseOperations/${uncertainIds[0]}`).get()).data();
+    assert.equal(uncertain.status, 'needs_attention'); assert.equal(uncertain.attemptNumber, 1);
+    assert.match(uncertain.error, /observación fiable/); assert.equal(uncertain.attempts[0].verification, undefined);
+    assert.equal(generations, beforeQueue + 4);
+    const queueLogs = await db.collection('model_generation_logs').where('modelId', '==', queueModelId).get();
+    assert.equal(queueLogs.size, 4);
+    assert.ok(queueLogs.docs.every((log: any) => log.get('estimatedCostUsd') > 0));
+    // Recovery marks an ambiguous timeout for manual attention without calling a provider.
+    await db.doc(`models/${queueModelId}/baseOperations/stale`).set({ ...outage, status: 'generating', claimToken: 'dead', updatedAt: admin.firestore.Timestamp.fromMillis(Date.now() - 20 * 60_000) });
+    await require('../functions/lib/functions/src/models/marketplaceSetWorker.js').recoverModelMarketplaceBases.run({});
+    assert.equal((await db.doc(`models/${queueModelId}/baseOperations/stale`).get()).get('status'), 'needs_attention');
+    assert.equal(generations, beforeQueue + 4);
+    // A provider outage leaves no image: the operator resumes it without consuming a visual attempt.
+    t.mock.method(classifier, 'classifyPoseWithGemini', originalClassify);
+    const outageInput = { ...queuedInput, channels: ['tiktok-shop'], poseRecipeIds: ['full-front'] };
+    const scheduleOutage = async (requestId: string) => {
+      const p = (await service.loadModelSetContext(outageInput, uid)).preview;
+      return service.scheduleModelPhotoSetsCore({ ...outageInput, requestId, approvedPreviewId: p.id, combinations: p.shots.map((s: any) => ({ channel: s.spec.channel, shot: s.spec.shot, poseRecipeId: s.spec.poseRecipeId })) }, uid);
+    };
+    const [outageId] = await scheduleOutage('provider-outage');
+    failProvider = true;
+    await service.processModelBaseOperation(queueModelId, outageId);
+    failProvider = false;
+    const outageRef = db.doc(`models/${queueModelId}/baseOperations/${outageId}`);
+    assert.equal((await outageRef.get()).get('status'), 'failed'); assert.equal(generations, beforeQueue + 4);
+    assert.deepEqual(await scheduleOutage('provider-outage-resume'), [outageId]);
+    const resumed = (await outageRef.get()).data();
+    assert.equal(resumed.status, 'queued'); assert.equal(resumed.attemptNumber, 0); assert.equal(resumed.attempts.length, 0);
+    assert.match(resumed.technicalErrors[0].error, /Provider outage/);
+    await service.processModelBaseOperation(queueModelId, outageId);
+    assert.equal((await outageRef.get()).get('status'), 'approved'); assert.equal((await outageRef.get()).get('attemptNumber'), 1);
+    assert.equal(generations, beforeQueue + 5);
+    // Approved and exhausted combinations are never re-queued by a new request.
+    assert.deepEqual(await scheduleOutage('provider-outage-again'), []);
+    assert.equal((await outageRef.get()).get('status'), 'approved');
     await db.doc(`models/${modelId}`).update({ clientId: 'another-client' });
     await assert.rejects(require('../functions/lib/functions/src/callables/createMarketplacePhotoBatch.js').resolveMarketplacePhotoPlan({ clientId, modelId, articles: [{ kind: 'garment' }], provider: 'fal-gpt-image-2.5-flare' }, uid), /este cliente/);
   } finally { await cleanupEmulatorDatabase(db); }

@@ -613,6 +613,7 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "baseOperations", "fieldPath": "status", "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }] },
     { "collectionGroup": "automationOAuth", "fieldPath": "expiresAt", "ttl": true, "indexes": [] }
   ]
 }

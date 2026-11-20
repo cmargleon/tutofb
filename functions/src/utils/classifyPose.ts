@@ -11,6 +11,7 @@ import {
 import { callGeminiGenerateContent } from '../analytics/geminiUsage';
 
 export interface PoseClassificationResult {
+  usageCostUsd?: number;
   photoObservation?: import('../../../shared/src/types').PhotoBaseObservation;
   orientationDetail: PoseOrientationDetail;
   framing: PoseFraming;
@@ -125,6 +126,7 @@ export const classifyPoseWithGemini = async ({
   userUid,
   identityStoragePath,
   performer,
+  onUsage,
 }: {
   apiKey: string;
   model: string;
@@ -136,6 +138,7 @@ export const classifyPoseWithGemini = async ({
   userUid?: string | null;
   identityStoragePath?: string;
   performer?: 'real' | 'synthetic';
+  onUsage?: (estimatedCostUsd: number) => Promise<void>;
 }): Promise<PoseClassificationResult> => {
   const image = await downloadStorageImage(pose.storagePath);
   const identity = identityStoragePath ? await downloadStorageImage(identityStoragePath) : null;
@@ -168,7 +171,7 @@ export const classifyPoseWithGemini = async ({
     'Devuelve solo JSON con el schema solicitado.',
   ].join('\n');
 
-  const { payload } = await callGeminiGenerateContent<{
+  const { payload, usage } = await callGeminiGenerateContent<{
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   }>({
     apiKey,
@@ -206,13 +209,27 @@ export const classifyPoseWithGemini = async ({
     },
   });
 
+  await onUsage?.(usage.estimatedCostUsd);
   const parsed = JSON.parse(extractResponseText(payload)) as GeminiPoseClassificationPayload;
+  if (pose.marketplaceBaseSpec) {
+    const observation = parsed.photoObservation;
+    const booleans = ['concretePoseMatches', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'garmentVisible', 'accessories'];
+    if (!observation || booleans.some(key => typeof observation[key] !== 'boolean')
+      || typeof parsed.faceVisible !== 'boolean' || typeof parsed.confidence !== 'number' || !Number.isFinite(parsed.confidence)
+      || !['front', 'front_three_quarter', 'commercial_back', 'profile', 'unknown'].includes(observation.pose)
+      || !['upper_body', 'lower_body', 'full_body'].includes(observation.framing)
+      || !['white', 'neutral', 'context'].includes(observation.background)
+      || !['baby', 'child', 'adult'].includes(observation.audience)
+      || !['standing', 'other'].includes(observation.posture))
+      throw new Error('Respuesta incompleta de Gemini; conserva la imagen para volver a verificar sin regenerar.');
+  }
   const whiteRgbVerified = parsed.photoObservation?.background === 'white' && await verifyWhiteBackground(image.bytes);
   const metadata = await sharp(image.bytes).metadata();
   const rotated = [5, 6, 7, 8].includes(metadata.orientation || 1);
   const width = rotated ? metadata.height : metadata.width, height = rotated ? metadata.width : metadata.height;
 
   return {
+    usageCostUsd: usage.estimatedCostUsd,
     ...(parsed.photoObservation ? { photoObservation: { ...parsed.photoObservation, width, height, faceVisible: parsed.faceVisible === true, identityCoherent: Boolean(identity && parsed.photoObservation.identityCoherent === true), whiteRgbVerified, verified: (clampConfidence(parsed.confidence) || 0) >= .8, performer: performer || (pose.storagePath.startsWith('model_generations/') ? 'synthetic' as const : pose.photoObservation?.performer || 'unknown' as const) } } : {}),
     orientationDetail: isPoseOrientationDetail(parsed.orientationDetail)
       ? parsed.orientationDetail

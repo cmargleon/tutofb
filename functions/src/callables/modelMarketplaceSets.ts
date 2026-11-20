@@ -1,11 +1,11 @@
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import type { ApproveModelIdentityRequest, GenerateModelBaseRequest, Model, ModelPhotoSetsRequest, VerifyModelBaseRequest } from '../../../shared/src/types';
+import type { ApproveModelIdentityRequest, GenerateModelBaseRequest, ScheduleModelPhotoSetsRequest, Model, ModelPhotoSetsRequest, VerifyModelBaseRequest } from '../../../shared/src/types';
 import { assertCallableRoles } from '../auth/roles';
 import { assertHumanClientAccess } from '../auth/clientAccess';
 import { FAL_KEY, GEMINI_API_KEY } from '../config/runtime';
 import { getAppFirestore } from '../firebase/appFirestore';
-import { generateModelBaseCore, loadModelSetContext, modelAssetFingerprint, verifyModelBaseCore } from '../models/marketplaceSets';
+import { scheduleModelPhotoSetsCore, generateModelBaseCore, loadModelSetContext, modelAssetFingerprint, verifyModelBaseCore } from '../models/marketplaceSets';
 
 export const previewModelPhotoSets = onCall<ModelPhotoSetsRequest>(async request => {
   await assertCallableRoles(request, ['admin']);
@@ -37,4 +37,9 @@ export const verifyModelMarketplaceBase = onCall<VerifyModelBaseRequest>({ secre
 export const generateModelMarketplaceBase = onCall<GenerateModelBaseRequest>({ secrets: [FAL_KEY, GEMINI_API_KEY], timeoutSeconds: 540, memory: '1GiB' }, async request => {
   await assertCallableRoles(request, ['admin']);
   return generateModelBaseCore(request.data, request.auth!.uid);
+});
+
+export const scheduleModelMarketplaceSets = onCall<ScheduleModelPhotoSetsRequest>(async request => {
+  await assertCallableRoles(request, ['admin']);
+  return { operationIds: await scheduleModelPhotoSetsCore(request.data, request.auth!.uid) };
 });

@@ -1,3 +1,4 @@
+import type { IdentityTiming } from './identityTiming';
 import { modelBasePoseActiveAfterReview } from '../../../shared/src/modelPoseCatalog';
 import { MODEL_BASE_MAX_ATTEMPTS, modelBaseRetryPrompt, modelBaseReviewOutcome } from './marketplaceSetPolicy';
 import { extensionForContentType } from '../workers/jobWorker.helpers';
@@ -31,12 +32,14 @@ const visualSpec = (spec: import('../../../shared/src/types').ModelBaseSpec) => 
   return visual;
 };
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-export async function modelAssetFingerprint(storagePath: string) {
+export async function modelAssetFingerprint(storagePath: string, timing?: IdentityTiming) {
+  const measure = <T,>(stage: string, run: () => Promise<T>) => timing ? timing.measure(stage, run) : run();
   const file = admin.storage().bucket().file(storagePath);
-  const [metadata] = await file.getMetadata();
-  const [bytes] = await admin.storage().bucket().file(storagePath, { generation: metadata.generation }).download();
+  const [metadata] = await measure('storageMetadata', () => file.getMetadata());
+  const [bytes] = await measure('storageDownload', () => admin.storage().bucket().file(storagePath, { generation: metadata.generation }).download());
   if (!metadata.contentType?.startsWith('image/') || bytes.length >= 10 * 1024 * 1024) throw new HttpsError('failed-precondition', 'Base fuera del perfil de imagen admitido.');
-  return { sha256: hash(bytes), storageGeneration: String(metadata.generation) };
+  const sha256 = await measure('sha256', async () => hash(bytes));
+  return { sha256, storageGeneration: String(metadata.generation) };
 }
 export async function loadModelSetContext(input: ModelPhotoSetsRequest, uid: string) {
   if (typeof input?.modelId !== 'string' || !/^[\w-]{1,160}$/.test(input.modelId) || !PHOTO_RECIPE_CATEGORIES.includes(input.category)

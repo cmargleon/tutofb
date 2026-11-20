@@ -27,12 +27,19 @@ import { functions } from '../../firebase';
 import { httpsCallable } from 'firebase/functions';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
+const timeModelCall = async <T,>(stage: string, modelId: string | undefined, run: () => Promise<T>): Promise<T> => {
+  const start = performance.now();
+  let outcome = 'error';
+  try { const result = await run(); outcome = 'success'; return result; }
+  finally { console.info('model_identity_timing', JSON.stringify({ stage, modelId, outcome, durationMs: Math.round(performance.now() - start) })); }
+};
+
 export const previewModelPhotoSets = async (data: import('../../../shared/src/types').ModelPhotoSetsRequest) =>
   (await httpsCallable<import('../../../shared/src/types').ModelPhotoSetsRequest, import('../../../shared/src/types').ModelPhotoSetsPreview>(functions, 'previewModelPhotoSets')(data)).data;
 export const approveModelIdentity = async (modelId: string, poseId: string, performer: 'real' | 'synthetic') =>
-  (await httpsCallable<{ modelId: string; poseId: string; performer: 'real' | 'synthetic' }, import('../../../shared/src/types').ApprovedModelIdentity>(functions, 'approveModelIdentity')({ modelId, poseId, performer })).data;
+  timeModelCall('approveModelIdentity', modelId, async () => (await httpsCallable<{ modelId: string; poseId: string; performer: 'real' | 'synthetic' }, import('../../../shared/src/types').ApprovedModelIdentity>(functions, 'approveModelIdentity')({ modelId, poseId, performer })).data);
 export const approveGeneratedModelIdentity = async (modelId: string, storagePath: string) => {
-  const model = (await getDoc(doc(db, 'models', modelId))).data() as Model;
+  const model = await timeModelCall('readSavedModel', modelId, async () => (await getDoc(doc(db, 'models', modelId))).data() as Model);
   const pose = model?.poses.find(p => p.storagePath === storagePath);
   if (!pose) throw new Error('La identidad elegida no está guardada en el modelo.');
   return approveModelIdentity(modelId, pose.id, 'synthetic');
@@ -443,11 +450,11 @@ export const createModelFromPaths = async (
 ): Promise<string> => {
   if (!auth.currentUser) throw new Error('Usuario no autenticado');
 
-  return (await httpsCallable<import('../../../shared/src/types').ManglarModelSaveRequest, { id: string }>(functions, 'saveModel')({
+  return timeModelCall('saveModel', options.modelId, async () => (await httpsCallable<import('../../../shared/src/types').ManglarModelSaveRequest, { id: string }>(functions, 'saveModel')({
     ...(options.modelId ? { id: options.modelId } : {}), clientId, name, identityTraits: options.identityTraits,
     posesToAdd: poses.map((pose, index) => ({ storagePath: pose.storagePath, fileName: pose.storagePath.split('/').pop() || `pose_${index}`, aiClassification: pose.aiClassification })),
     generatedPhotoCount: options.generatedPhotoCount, generatedPhotoCostUsd: options.generatedPhotoCostUsd,
-  })).data.id;
+  })).data.id);
 };
 
 export const getImageUrl = async (storagePath: string): Promise<string> => {

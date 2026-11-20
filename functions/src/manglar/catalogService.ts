@@ -1,3 +1,4 @@
+import { identityTiming, type IdentityTiming } from '../models/identityTiming';
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -56,12 +57,13 @@ export const setCatalogArchivedService = async (collection: 'clients' | 'models'
         archivedAt: archived ? FieldValue.serverTimestamp() : null, archivedByUid: archived ? uid : null, updatedAt: FieldValue.serverTimestamp() });
     return { id: input.id, status: archived ? 'archived' : 'active' };
 };
-export const saveModelService = async (input: ManglarModelSaveRequest, uid: string) => {
-    await assertUserRoles(uid, undefined, ['admin']);
+export const saveModelService = async (input: ManglarModelSaveRequest, uid: string, timing?: IdentityTiming) => {
+    const measure = <T,>(stage: string, run: () => Promise<T>) => timing ? timing.measure(stage, run) : run();
+    await measure('authorizationReads', () => assertUserRoles(uid, undefined, ['admin']));
     const name = nameValue(input.name);
     const db = getAppFirestore();
     const ref = input.id ? db.collection('models').doc(validId(input.id)) : db.collection('models').doc();
-    const originalModel = (await ref.get()).data() as Model | undefined;
+    const originalModel = (await measure('modelRead', () => ref.get())).data() as Model | undefined;
     const originalRoot = originalModel?.storageRootPath || (originalModel ? `models/${originalModel.clientId}/${ref.id}` : null);
     const additions = input.posesToAdd || [];
     if (additions.length > 100 || (input.poseIdsToRemove?.length || 0) > 100)
@@ -74,7 +76,7 @@ export const saveModelService = async (input: ManglarModelSaveRequest, uid: stri
         const allowed = pose.storagePath.startsWith(`garments/drafts/${uid}/`) || pose.storagePath.startsWith(`models/${input.clientId}/${ref.id}/poses/`) || Boolean(originalRoot && pose.storagePath.startsWith(`${originalRoot}/poses/`)) || pose.storagePath.startsWith(`model_generations/${input.clientId}/`);
         if (!allowed)
             throw new HttpsError('permission-denied', 'Referencia ajena al modelo.');
-        const [metadata] = await admin.storage().bucket().file(pose.storagePath).getMetadata();
+        const [metadata] = await measure('storageMetadata', () => admin.storage().bucket().file(pose.storagePath).getMetadata());
         if (!metadata.contentType?.startsWith('image/') || Number(metadata.size) >= 10 * 1024 * 1024)
             throw new HttpsError('invalid-argument', 'Fotografía inválida.');
         const id = randomUUID();
@@ -85,12 +87,12 @@ export const saveModelService = async (input: ManglarModelSaveRequest, uid: stri
             // Copy before committing the model. A concurrent discard either wins before
             // this copy (save fails), or removes only the temporary source afterwards.
             // Pin the validated generation so an overwritten upload cannot slip through.
-            await admin.storage().bucket().file(pose.storagePath, { generation: metadata.generation }).copy(admin.storage().bucket().file(storagePath));
+            await measure('storageCopy', () => admin.storage().bucket().file(pose.storagePath, { generation: metadata.generation }).copy(admin.storage().bucket().file(storagePath)));
         }
         nextPoses.push({ id, storagePath, fileName, aiClassification: pose.aiClassification || null, createdAt: new Date().toISOString() });
     }
     let removed: Pose[] = [];
-    await db.runTransaction(async (tx) => {
+    await measure('firestoreTransaction', () => db.runTransaction(async (tx) => {
         const [snapshot, client] = await tx.getAll(ref, db.collection('clients').doc(validId(input.clientId)));
         const model = snapshot.data() as Model | undefined;
         if (!client.exists || client.data()?.status === 'archived' || model?.status === 'archived')
@@ -106,7 +108,7 @@ export const saveModelService = async (input: ManglarModelSaveRequest, uid: stri
             coverPoseId: poses[0].id, coverPosePath: poses[0].storagePath, updatedAt: now,
             ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}),
             ...(!model ? { status: 'active', archivedAt: null, archivedByUid: null, generatedPhotoCount: Math.max(0, input.generatedPhotoCount || 0), generatedPhotoCostUsd: Math.max(0, input.generatedPhotoCostUsd || 0), createdByUid: uid, createdAt: now } : {}) }, { merge: true });
-    });
+    }));
     // Only delete assets removed from this model, using the same cleanup convention as the UI.
     await Promise.allSettled(removed.flatMap((pose) => [pose.storagePath, pose.previewStoragePath].filter((p): p is string => Boolean(p))).map((path) => admin.storage().bucket().file(path).delete()));
     return { id: ref.id };
@@ -145,7 +147,16 @@ export const flagJobService = async (input: ManglarJobFlagRequest, uid: string) 
     return { jobId: input.jobId, flagged: input.flagged };
 };
 export const saveClient = onCall<ManglarClientSaveRequest>(async (request) => { await assertCallableRoles(request, ['admin']); return saveClientService(request.data, request.auth!.uid); });
-export const saveModel = onCall<ManglarModelSaveRequest>(async (request) => { await assertCallableRoles(request, ['admin']); return saveModelService(request.data, request.auth!.uid); });
+export const saveModel = onCall<ManglarModelSaveRequest>(async (request) => {
+    const timing = identityTiming('saveModel', request.data?.id);
+    let outcome: 'success' | 'error' = 'error';
+    try {
+        await timing.measure('callableAuthorizationReads', () => assertCallableRoles(request, ['admin']));
+        const result = await saveModelService(request.data, request.auth!.uid, timing);
+        outcome = 'success';
+        return result;
+    } finally { timing.finish(outcome); }
+});
 export const setClientArchived = onCall<ManglarEntityStateRequest & {
     archived: boolean;
 }>(async (request) => { await assertCallableRoles(request, ['admin']); return setCatalogArchivedService('clients', request.data, request.auth!.uid, request.data.archived); });

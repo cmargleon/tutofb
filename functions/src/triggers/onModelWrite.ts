@@ -12,7 +12,7 @@ import { classifyPoseWithGemini } from '../utils/classifyPose';
  * Automatically classifies new (unclassified) model poses with Gemini Vision
  * whenever a model document is created or updated.
  *
- * - Only processes poses that don't already have `aiClassification`.
+ * - Only processes poses without classification, verifier observation or an identity role.
  * - Errors on individual poses are caught and logged — the trigger never fails
  *   the entire batch because of one problematic image.
  * - Safe against infinite loops: the write that adds `aiClassification` will
@@ -32,7 +32,12 @@ export const onModelWrite = onDocumentWritten(
 
     // Marketplace bases are classified by their explicit identity/recipe verification.
     // Do not charge a second analysis or race that verification with this trigger.
-    const unclassifiedPoses = model.poses.filter((p) => !p.aiClassification && !p.marketplaceBaseSpec);
+    // Identity candidates are not garment poses. Recognize their server-generated
+    // stage path before approval exists, so save/approval writes cannot race Gemini.
+    const unclassifiedPoses = model.poses.filter((p) => !p.aiClassification && !p.marketplaceBaseSpec
+      && !p.photoObservation
+      && !(model.approvedIdentity?.poseId === p.id && model.approvedIdentity.storagePath === p.storagePath)
+      && !/^model_generations\/[^/]+\/[^/]+\/identity\/[^/]+\/[^/]+$/.test(p.storagePath || ''));
     if (unclassifiedPoses.length === 0) return;
 
     console.log(

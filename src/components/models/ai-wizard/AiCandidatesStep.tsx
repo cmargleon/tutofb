@@ -24,13 +24,15 @@ export const AiCandidatesStep: React.FC<AiCandidatesStepProps> = ({ ai }) => (
           index={index}
           isSelected={ai.selectedCandidateIndex === index}
           isRegenerating={ai.regeneratingCandidateIndex === index}
-          disabled={ai.busy || ai.selectedProviderDisabled}
+          disabled={ai.busy || ai.identityLocked || ai.selectedProviderDisabled}
           onSelect={() => ai.handleSelectCandidate(index)}
           onRegenerate={() => void ai.handleRegenerateCandidate(index)}
         />
       ))}
     </div>
 
+    {ai.createProgress && <p role="status" aria-live="polite" className="text-sm font-medium text-indigo-700">{ai.createProgress}</p>}
+    {ai.createError && <p role="alert" className="text-sm text-red-700">{ai.createError}</p>}
     <div className="flex items-center justify-between pt-2">
       <Button
         type="button"
@@ -45,10 +47,11 @@ export const AiCandidatesStep: React.FC<AiCandidatesStepProps> = ({ ai }) => (
         type="button"
         variant="primary"
         size="md"
+        loading={Boolean(ai.createProgress)}
         disabled={!ai.selectedCandidate || ai.busy}
         onClick={() => void ai.handleCreateFromAI()}
       >
-        Continuar a Poses
+        {ai.createProgress || 'Continuar a Poses'}
       </Button>
     </div>
   </div>

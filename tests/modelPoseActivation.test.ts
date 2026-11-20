@@ -124,3 +124,29 @@ test('marketplace bases rely on explicit verification without a second backgroun
   await onModelWrite.run({ params: { modelId: 'model' }, data: { after: { exists: true, data: () => ({ poses: [{ id: 'base', marketplaceBaseSpec: { poseRecipeId: 'full-front' } }] }) } } });
   assert.equal(classify.mock.callCount(), 0);
 });
+
+
+test('identity save and approval writes skip Gemini while ordinary generated poses still classify', async t => {
+  const classifier = require('../functions/lib/functions/src/utils/classifyPose.js');
+  const { onModelWrite } = require('../functions/lib/functions/src/triggers/onModelWrite.js');
+  const calls: string[] = [];
+  t.mock.method(classifier, 'classifyPoseWithGemini', async ({ pose }: any) => {
+    calls.push(pose.id);
+    return { orientationDetail: 'front', framing: 'full_body', faceVisible: true, confidence: .99 };
+  });
+  t.mock.method(firestore, 'getAppFirestore', () => ({
+    collection: () => ({ doc: () => ({}) }),
+    runTransaction: async (callback: any) => callback({ get: async () => ({ data: () => undefined }) }),
+  }));
+  const identity = { id: 'identity', storagePath: 'model_generations/client/model/identity/session/0.png' };
+  const ordinary = { id: 'ordinary', storagePath: 'model_generations/client/model/pose/session/0.png' };
+  const observed = { id: 'observed', storagePath: 'observed.png', photoObservation: { verified: true } };
+  const base = { id: 'base', storagePath: 'base.png', marketplaceBaseSpec: { poseRecipeId: 'full-front' } };
+  const approved = { id: 'approved', storagePath: 'uploaded.png' };
+  for (const patch of [{}, { approvedIdentity: { poseId: identity.id, storagePath: identity.storagePath } }]) {
+    await onModelWrite.run({ params: { modelId: 'model' }, data: { after: { exists: true, data: () => ({ ...patch, poses: [identity, base, observed] }) } } });
+  }
+  assert.deepEqual(calls, []);
+  await onModelWrite.run({ params: { modelId: 'model' }, data: { after: { exists: true, data: () => ({ approvedIdentity: { poseId: approved.id, storagePath: approved.storagePath }, poses: [approved, ordinary] }) } } });
+  assert.deepEqual(calls, ['ordinary']);
+});

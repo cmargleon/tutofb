@@ -1,3 +1,4 @@
+import { identityTiming } from '../models/identityTiming';
 import * as admin from 'firebase-admin';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { ApproveModelIdentityRequest, GenerateModelBaseRequest, ScheduleModelPhotoSetsRequest, Model, ModelPhotoSetsRequest, VerifyModelBaseRequest } from '../../../shared/src/types';
@@ -12,23 +13,28 @@ export const previewModelPhotoSets = onCall<ModelPhotoSetsRequest>(async request
   return (await loadModelSetContext(request.data, request.auth!.uid)).preview;
 });
 export const approveModelIdentity = onCall<ApproveModelIdentityRequest>(async request => {
-  await assertCallableRoles(request, ['admin']);
-  const { modelId, poseId, performer } = request.data;
-  if (typeof modelId !== 'string' || !/^[\w-]{1,160}$/.test(modelId) || !['real', 'synthetic'].includes(performer)) throw new HttpsError('invalid-argument', 'Identidad inválida.');
-  const db = getAppFirestore(), ref = db.doc(`models/${modelId}`);
-  const model = (await ref.get()).data() as Model;
-  if (!model || model.status === 'archived') throw new HttpsError('not-found', 'Modelo no disponible.');
-  await assertHumanClientAccess(request.auth!.uid, model.clientId);
-  const pose = model.poses.find(p => p.id === poseId && p.active !== false);
-  if (!pose) throw new HttpsError('invalid-argument', 'Selecciona una foto del propio modelo.');
-  const fingerprint = await modelAssetFingerprint(pose.storagePath);
-  const identity = { ...fingerprint, traitsSnapshot: model.identityTraits || null, poseId, storagePath: pose.storagePath, performer, approvedByUid: request.auth!.uid, approvedAt: new Date().toISOString() };
-  await db.runTransaction(async tx => {
-    const current = (await tx.get(ref)).data() as Model;
-    if (current?.clientId !== model.clientId || current.poses.find(p => p.id === poseId)?.storagePath !== pose.storagePath) throw new HttpsError('aborted', 'La foto cambió.');
-    tx.update(ref, { approvedIdentity: identity, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-  });
-  return identity;
+  const timing = identityTiming('approveModelIdentity', request.data?.modelId);
+  let outcome: 'success' | 'error' = 'error';
+  try {
+    await timing.measure('authorizationReads', () => assertCallableRoles(request, ['admin']));
+    const { modelId, poseId, performer } = request.data;
+    if (typeof modelId !== 'string' || !/^[\w-]{1,160}$/.test(modelId) || !['real', 'synthetic'].includes(performer)) throw new HttpsError('invalid-argument', 'Identidad inválida.');
+    const db = getAppFirestore(), ref = db.doc(`models/${modelId}`);
+    const model = (await timing.measure('modelRead', () => ref.get())).data() as Model;
+    if (!model || model.status === 'archived') throw new HttpsError('not-found', 'Modelo no disponible.');
+    await timing.measure('clientAccessReads', () => assertHumanClientAccess(request.auth!.uid, model.clientId));
+    const pose = model.poses.find(p => p.id === poseId && p.active !== false);
+    if (!pose) throw new HttpsError('invalid-argument', 'Selecciona una foto del propio modelo.');
+    const fingerprint = await modelAssetFingerprint(pose.storagePath, timing);
+    const identity = { ...fingerprint, traitsSnapshot: model.identityTraits || null, poseId, storagePath: pose.storagePath, performer, approvedByUid: request.auth!.uid, approvedAt: new Date().toISOString() };
+    await timing.measure('firestoreTransaction', () => db.runTransaction(async tx => {
+      const current = (await tx.get(ref)).data() as Model;
+      if (current?.clientId !== model.clientId || current.poses.find(p => p.id === poseId)?.storagePath !== pose.storagePath) throw new HttpsError('aborted', 'La foto cambió.');
+      tx.update(ref, { approvedIdentity: identity, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    }));
+    outcome = 'success';
+    return identity;
+  } finally { timing.finish(outcome); }
 });
 export const verifyModelMarketplaceBase = onCall<VerifyModelBaseRequest>({ secrets: [GEMINI_API_KEY], timeoutSeconds: 300 }, async request => {
   await assertCallableRoles(request, ['admin']);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useConfirm, useToast } from '../../feedback/FeedbackProvider';
 import { AI_WIZARD_MAX_STEP, AI_WIZARD_STEPS, IDENTITY_CANDIDATE_COUNT } from '../constants';
@@ -27,6 +27,8 @@ export interface ModelCreateFlowAiState
   identityCandidateCount: typeof IDENTITY_CANDIDATE_COUNT;
   wizardStep: number;
   busy: boolean;
+  createProgress: string | null;
+  createError: string | null;
   canGenerateCandidates: boolean;
   generateCandidatesDisabledReason: string | null;
   savedModel: Model | null;
@@ -61,6 +63,9 @@ export const useAiWizard = ({
   const [wizardStep, setWizardStep] = useState(1);
   const [draftModelId, setDraftModelId] = useState(() => uuidv4());
   const [isCreating, setIsCreating] = useState(false);
+  const creatingRef = useRef(false);
+  const [createProgress, setCreateProgress] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const [savedModelId, setSavedModelId] = useState<string | null>(null);
   const [savedModel, setSavedModel] = useState<Model | null>(null);
@@ -102,6 +107,7 @@ export const useAiWizard = ({
   );
 
   const resetFlow = useCallback(() => {
+    setCreateError(null);
     candidates.resetCandidates();
     setSavedModelId(null); setSavedModel(null); setDraftModelId(uuidv4());
     setWizardStep(1);
@@ -109,24 +115,34 @@ export const useAiWizard = ({
   }, [candidates, identityForm]);
 
   const handleCreateFromAI = useCallback(async () => {
-    if (busy || !candidates.selectedCandidate || !newModelName.trim() || !selectedClientId) return;
+    if (creatingRef.current || busy || !candidates.selectedCandidate || !newModelName.trim() || !selectedClientId) return;
+    creatingRef.current = true;
     setIsCreating(true);
+    setCreateError(null);
+    let modelId = savedModelId;
     try {
       // Save once; a failed approval retries against the same model without losing identity.
-      let modelId = savedModelId;
       if (!modelId) {
+        setCreateProgress('Guardando modelo…');
         modelId = await createModelFromPaths(selectedClientId, newModelName.trim(), [candidates.selectedCandidate], {
           modelId: draftModelId,
           identityTraits: buildModelIdentityTraitsFromAiForm(identityForm),
         });
         setSavedModelId(modelId);
       }
+      setCreateProgress('Aprobando identidad…');
       await approveGeneratedModelIdentity(modelId, candidates.selectedCandidate.storagePath);
+      setCreateProgress('Preparando poses…');
+      // Let the status paint before mounting the pose setup.
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       setWizardStep(3);
       onSuccess();
     } catch (error) {
-      toast({ tone: 'error', title: 'No se pudo preparar la identidad', description: error instanceof Error ? error.message : 'Inténtalo de nuevo.' });
-    } finally { setIsCreating(false); }
+      const detail = error instanceof Error ? error.message : 'Inténtalo de nuevo.';
+      const description = modelId ? `El modelo quedó guardado. Puedes reintentar la aprobación con Continuar a Poses sin crear otro modelo. ${detail}` : detail;
+      setCreateError(description);
+      toast({ tone: 'error', title: 'No se pudo preparar la identidad', description });
+    } finally { creatingRef.current = false; setIsCreating(false); setCreateProgress(null); }
   }, [busy, candidates.selectedCandidate, newModelName, selectedClientId, savedModelId, draftModelId, identityForm, onSuccess, toast]);
 
   const handleStepSelect = useCallback(
@@ -163,6 +179,7 @@ export const useAiWizard = ({
       identityCandidateCount: IDENTITY_CANDIDATE_COUNT,
       wizardStep,
       busy,
+      createProgress, createError,
       canGenerateCandidates,
       generateCandidatesDisabledReason,
       savedModel, savedClient, setsBusy, setSetsBusy,

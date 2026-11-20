@@ -16,3 +16,38 @@ test('extractLiveOutputPaths deduplica y omite outputs ya marcados como borrados
 
   assert.deepEqual(paths, ['generated/a.png', 'generated/c.png']);
 });
+
+const { modelStoragePrefixes, batchesToRecomputeAfterModelDelete } = require('../functions/lib/functions/src/triggers/deletePlans.js') as {
+  modelStoragePrefixes: typeof import('../functions/src/triggers/deletePlans').modelStoragePrefixes;
+  batchesToRecomputeAfterModelDelete: typeof import('../functions/src/triggers/deletePlans').batchesToRecomputeAfterModelDelete;
+};
+
+test('modelStoragePrefixes incluye la raíz del modelo y model_generations', () => {
+  assert.deepEqual(modelStoragePrefixes({ modelId: 'm1', clientId: 'c1' }), [
+    'models/c1/m1/',
+    'model_generations/c1/m1/',
+  ]);
+  assert.deepEqual(modelStoragePrefixes({ modelId: 'm1', clientId: 'c1', storageRootPath: 'imports/c1/m1/' }), [
+    'imports/c1/m1/',
+    'models/c1/m1/',
+    'model_generations/c1/m1/',
+  ]);
+});
+
+test('modelStoragePrefixes ignora un storageRootPath que no termina en el modelo', () => {
+  assert.deepEqual(modelStoragePrefixes({ modelId: 'm1', clientId: 'c1', storageRootPath: 'models/c1' }), [
+    'models/c1/m1/',
+    'model_generations/c1/m1/',
+  ]);
+  assert.deepEqual(modelStoragePrefixes({ modelId: 'm1', storageRootPath: 'm1' }), []);
+});
+
+test('batchesToRecomputeAfterModelDelete devuelve solo lotes mixtos, sin duplicados', () => {
+  assert.deepEqual(
+    batchesToRecomputeAfterModelDelete(
+      [{ batchId: 'own' }, { batchId: 'mixed' }, { batchId: 'mixed' }, { batchId: null }, {}],
+      ['own'],
+    ),
+    ['mixed'],
+  );
+});

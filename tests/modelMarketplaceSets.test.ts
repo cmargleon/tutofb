@@ -30,7 +30,8 @@ test('destination subset, per-task native ratios and pose/evidence are independe
     assert.ok(task.destinations.every(d => d.channel !== 'shein'));
     if (task.view === 'side') { assert.equal(task.outputPose, 'front_three_quarter'); assert.equal(task.referencePaths.length, 2); }
     if (task.view === 'back') assert.equal(task.outputPose, 'commercial_back');
-    assert.ok(task.instructions.length < 850);
+    // Brief, but it carries the placeholder-replacement order (JISHOP 20-11 long chino regression).
+    assert.ok(task.instructions.length < 1000, String(task.instructions.length));
     assert.doesNotMatch(task.instructions, /strict lateral|turn.*90|adapta fondo|crea una persona/i);
   }
   const invalid = buildMarketplacePhotoPlan({ ...i, selectedChannels: ['mercado-libre'] });
@@ -79,7 +80,7 @@ test('base generation and final review agree on commercial back, natural three-q
     if (task.outputPose === 'commercial_back') assert.match(prompt, /look at the camera over the shoulder/);
     if (task.outputPose === 'front_three_quarter') assert.match(prompt, /Natural commercial three-quarter/);
     const review = selectReviewPrompt({ photoTask: task, generationKind: 'product', finalPrompt: task.instructions } as any);
-    assert.match(review, /First image: approved model base/); assert.match(review, /rostro está fuera de cuadro/);
+    assert.match(review, /IMAGE 1 \(FIRST\) = APPROVED MODEL BASE/); assert.match(review, /rostro está fuera de cuadro/);
     assert.doesNotMatch(review, /No human model or garment replacement is required/);
   }
   const lower = sets.modelBaseSpec('amazon', 'ordinary', 'adult', 'lower_body', 'commercial_back', i.marketplaces);

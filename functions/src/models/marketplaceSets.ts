@@ -138,7 +138,7 @@ export async function verifyModelBaseCore(input: VerifyModelBaseRequest, uid: st
     clientId: model.clientId, modelId: ref.id, userUid: uid, identityStoragePath: identity.storagePath, performer: identity.performer, onUsage: onReviewCost });
   const observation = result.photoObservation && withDeclaredModelAge(result.photoObservation, model.identityTraits);
   if (!observation?.verified) throw new HttpsError('unavailable', 'Gemini no produjo una observación fiable. Conserva la imagen y verifica de nuevo, sin regenerar.');
-  const issues = baseObservationIssues(spec, observation);
+  const issues = baseObservationIssues(spec, observation, { requireFillerOutfit: true });
   if (!(await assetGenerationMatches(pose.storagePath, fingerprint.storageGeneration))) throw new HttpsError('aborted', 'La fotografía cambió durante la verificación.');
   await getAppFirestore().runTransaction(async tx => {
     const current = (await tx.get(ref)).data() as Model;

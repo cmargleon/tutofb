@@ -1,5 +1,6 @@
 import { MODEL_NEUTRAL_TONES, modelBackgroundVerification } from '../../../shared/src/modelBackgrounds';
 import { MODEL_POSE_RECIPES_BY_ID } from '../../../shared/src/modelPoseRecipes';
+import { MODEL_BASE_FILLER_VERIFICATION } from '../../../shared/src/modelPhotoSets';
 import sharp from 'sharp';
 import { verifyWhiteBackground } from '../media/verifyWhiteBackground';
 import * as admin from 'firebase-admin';
@@ -46,7 +47,8 @@ const POSE_CLASSIFICATION_RESPONSE_SCHEMA = {
       backgroundMatches: { type: 'boolean' }, backgroundEvidence: { type: 'string' },
       background: { type: 'string', enum: ['white', 'neutral', 'context'] },
       garmentVisible: { type: 'boolean' }, accessories: { type: 'boolean' }, evidence: { type: 'string' },
-    }, required: ['concretePoseMatches', 'concretePoseEvidence', 'pose', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'identityEvidence', 'audience', 'orientation', 'posture', 'framing', 'background', 'backgroundTone', 'backgroundMatches', 'backgroundEvidence', 'garmentVisible', 'accessories', 'evidence'] },
+      fillerOutfitCompliant: { type: 'boolean' }, fillerOutfitEvidence: { type: 'string' },
+    }, required: ['fillerOutfitCompliant', 'fillerOutfitEvidence', 'concretePoseMatches', 'concretePoseEvidence', 'pose', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'identityEvidence', 'audience', 'orientation', 'posture', 'framing', 'background', 'backgroundTone', 'backgroundMatches', 'backgroundEvidence', 'garmentVisible', 'accessories', 'evidence'] },
     orientationDetail: {
       type: 'string',
       enum: [
@@ -156,6 +158,7 @@ export const classifyPoseWithGemini = async ({
     'photoObservation.framing: upper_body desde muslos hasta encima de cabeza; lower_body desde pecho o cintura hasta debajo de pies, sin rostro, cintura y bajos completos; full_body cabeza a pies completa.',
     ...(pose.marketplaceBaseSpec?.poseRecipeId ? [`Pose concreta solicitada: ${JSON.stringify(MODEL_POSE_RECIPES_BY_ID.get(pose.marketplaceBaseSpec.poseRecipeId))}. Evalúa sus detalles visibles y modificadores (por ejemplo caminando, contrapposto, diagonal). concretePoseMatches solo true si coincide también esta pose concreta, no basta compartir orientación. Explica concretePoseEvidence.`] : ['Sin pose concreta solicitada: concretePoseMatches=false.']),
     ...(pose.marketplaceBaseSpec?.rulesRevision !== undefined ? [`Configuración editable de Reglas Marketplace: ${JSON.stringify(pose.marketplaceBaseSpec)}. concretePoseMatches evalúa la postura, orientación y gesto de la pose concreta. Para encuadre y mirada prevalece esta configuración sobre el texto genérico del catálogo de poses. Registra lo observado; no des por cumplida la configuración solicitada.`] : []),
+    MODEL_BASE_FILLER_VERIFICATION,
     ...(pose.marketplaceBaseSpec ? [modelBackgroundVerification(pose.marketplaceBaseSpec)] : ['Reporta backgroundTone aproximado y backgroundEvidence visible; sin fondo solicitado backgroundMatches=false.']),
     'Reglas:',
     '- front: cuerpo mayormente de frente',
@@ -217,7 +220,7 @@ export const classifyPoseWithGemini = async ({
   const parsed = JSON.parse(extractResponseText(payload)) as GeminiPoseClassificationPayload;
   if (pose.marketplaceBaseSpec) {
     const observation = parsed.photoObservation;
-    const booleans = ['concretePoseMatches', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'garmentVisible', 'accessories'];
+    const booleans = ['concretePoseMatches', 'lookingAtCamera', 'mainPoseCompliant', 'identityCoherent', 'garmentVisible', 'accessories', 'fillerOutfitCompliant'];
     if (!observation || booleans.some(key => typeof observation[key] !== 'boolean')
       || typeof parsed.faceVisible !== 'boolean' || typeof parsed.confidence !== 'number' || !Number.isFinite(parsed.confidence)
       || !['front', 'front_three_quarter', 'commercial_back', 'profile', 'unknown'].includes(observation.pose)

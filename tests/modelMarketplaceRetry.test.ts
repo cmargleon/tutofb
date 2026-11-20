@@ -38,7 +38,7 @@ test('real Gemini verifier records usage before parsing and treats malformed obs
     identityStoragePath: 'fixtures/identity.png', performer: 'synthetic', onUsage: async (cost: number) => { tracked += cost; } };
   await assert.rejects(classifyPoseWithGemini(input), /Respuesta incompleta/);
   assert.equal(tracked, .004);
-  payload = { ...payload, confidence: .4, photoObservation: { concretePoseMatches: true, lookingAtCamera: true, mainPoseCompliant: true, identityCoherent: true, garmentVisible: true, accessories: false,
+  payload = { ...payload, confidence: .4, photoObservation: { concretePoseMatches: true, lookingAtCamera: true, mainPoseCompliant: true, identityCoherent: true, garmentVisible: true, accessories: false, fillerOutfitCompliant: true, fillerOutfitEvidence: 'Camiseta y leggings lisos hasta el tobillo',
     pose: 'front', framing: 'full_body', background: 'white', backgroundTone: 'white', backgroundMatches: true, backgroundEvidence: 'Uniform white backdrop', audience: 'adult', posture: 'standing' } };
   const uncertain = await classifyPoseWithGemini(input);
   assert.equal(uncertain.photoObservation.verified, false);

@@ -63,6 +63,9 @@ export interface PhotoBaseObservation {
   backgroundTone?: import('../modelBackgrounds').ModelNeutralTone | 'white' | 'neutral' | 'context' | 'unknown';
   backgroundMatches?: boolean;
   backgroundEvidence?: string;
+  /** Base placeholder clothing (fitted tee + ankle-length leggings, never shorts). Absent on approvals verified before the check. */
+  fillerOutfitCompliant?: boolean;
+  fillerOutfitEvidence?: string;
   audience?: 'baby' | 'child' | 'adult';
   orientation: GarmentView; posture: 'standing' | 'other'; framing: 'upper_body' | 'lower_body' | 'full_body';
   background: 'white' | 'neutral' | 'context'; garmentVisible: boolean; accessories: boolean;

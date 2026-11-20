@@ -15229,6 +15229,22 @@
                   "type": "string",
                   "maxLength": 30000
                 },
+                "fillerOutfitCompliant": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "fillerOutfitEvidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                },
                 "audience": {
                   "type": "string",
                   "enum": [
@@ -15651,6 +15667,22 @@
                         ]
                       },
                       "backgroundEvidence": {
+                        "type": "string",
+                        "maxLength": 30000
+                      },
+                      "fillerOutfitCompliant": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "fillerOutfitEvidence": {
                         "type": "string",
                         "maxLength": 30000
                       },
@@ -17316,6 +17348,22 @@
                   "type": "string",
                   "maxLength": 30000
                 },
+                "fillerOutfitCompliant": {
+                  "anyOf": [
+                    {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "fillerOutfitEvidence": {
+                  "type": "string",
+                  "maxLength": 30000
+                },
                 "audience": {
                   "type": "string",
                   "enum": [
@@ -17738,6 +17786,22 @@
                         ]
                       },
                       "backgroundEvidence": {
+                        "type": "string",
+                        "maxLength": 30000
+                      },
+                      "fillerOutfitCompliant": {
+                        "anyOf": [
+                          {
+                            "const": false,
+                            "type": "boolean"
+                          },
+                          {
+                            "const": true,
+                            "type": "boolean"
+                          }
+                        ]
+                      },
+                      "fillerOutfitEvidence": {
                         "type": "string",
                         "maxLength": 30000
                       },

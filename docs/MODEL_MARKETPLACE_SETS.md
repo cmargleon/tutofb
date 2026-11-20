@@ -76,8 +76,17 @@ La especificación/aprobación congela `backgroundTone` cuando existe. Un cambio
 
 Gemini recibe el fondo esperado y devuelve categoría, tono aproximado (`backgroundTone`), cumplimiento (`backgroundMatches`) y evidencia visible (`backgroundEvidence`). Para un tono específico se exige categoría neutra, tono coincidente, cumplimiento afirmativo y evidencia no vacía. Un blanco cuando se pide gris claro se rechaza como «Fondo requerido: gris claro neutro; observado: blanco». Se toleran sombras e iluminación natural, no otro tono de fondo. El blanco puro conserva la comprobación técnica existente.
 
-Al vestir una base aprobada, su fondo es la única referencia de fondo: se ignoran los fondos de identidad y prendas, y se conserva el tono, escena y sombras de la base. La revisión final recibe la misma definición compartida y exige conservarla. El texto de vestuario de relleno de las bases no cambia.
+Al vestir una base aprobada, su fondo es la única referencia de fondo: se ignoran los fondos de identidad y prendas, y se conserva el tono, escena y sombras de la base. La revisión final recibe la misma definición compartida y exige conservarla. El vestuario de relleno de las bases se describe en «Ropa de relleno y largo de la prenda».
 
 MCP `system.saveModelMarketplaceRule`: `main` y `alternative` admiten el `backgroundTone` opcional anterior exclusivamente con `background: neutral`; conserva `expectedRevision` y la autorización administrativa existente. Contratos generados en `functions/src/manglar/contracts.json`.
 
 La vía recomendada de Manglar para completar seleccionados es `previewSets` → preparar/confirmar `scheduleSets` → `baseStatus`. `generateBase` es una toma suelta. La cola reserva el máximo conservador de generación y verificación para hasta tres intentos por combinación antes de encolar; puede superar la estimación de la UI. `baseStatus` pagina historia y muestra rechazos, errores, costos, aprobaciones y previews privadas de 15 minutos.
+
+## Ropa de relleno y largo de la prenda
+
+Corrección del 20 de noviembre de 2026 (prueba JISHOP, pantalón chino largo JST-H04-AZM generado como short y aprobado por el revisor).
+
+- **Bases:** `MODEL_BASE_FILLER_OUTFIT` sustituye a «T-shirt and shorts». Todas las bases visten un relleno fijo: camiseta lisa ajustada y leggings lisos ajustados hasta el tobillo, de colores neutros. Se eligió un relleno fijo y no el vestuario de la identidad porque este puede ser ancho, corto o con estampados y volvería a condicionar largo y silueta; un relleno ajustado y largo es verificable y deja al generador solo añadir volumen o descubrir piernas. El prompt de base no menciona prendas prohibidas (evita sugerirlas al generador).
+- **Verificador de bases:** devuelve `fillerOutfitCompliant`/`fillerOutfitEvidence`. Las verificaciones nuevas exigen `true` (`MODEL_BASE_FILLER_ISSUE` si no). Las aprobaciones anteriores sin el campo siguen siendo válidas; un `false` explícito invalida siempre. No se cambió la versión de especificación, así que no se invalidan aprobaciones existentes.
+- **Vestido:** `MODEL_DRESSING_GARMENT_REPLACEMENT` ordena reemplazar por completo la ropa de la base en la zona vendida; tipo, largo, silueta, corte, bajos, color y detalles salen solo de las referencias. Se conservan persona, pose, mirada, cámara, luz, fondo y encuadre.
+- **Revisor:** `MODEL_PLAN_IMAGE_ROLES` rotula las imágenes (1 = base: solo persona/pose/cámara/fondo/encuadre, su ropa es relleno; intermedias = prenda vendida, única fuente de largo y silueta; última = resultado) y exige un criterio `garmentLength` contra las referencias.

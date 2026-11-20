@@ -5,7 +5,7 @@ import type { ModelMarketplaceRules, PhotoBaseObservation, ModelBaseSpec } from 
 const require = createRequire(new URL('../functions/package.json', import.meta.url));
 const { MODEL_NEUTRAL_TONES, MODEL_BACKGROUNDS, modelBackgroundVerification, MODEL_DRESSING_BACKGROUND } = require('./lib/shared/src/modelBackgrounds.js') as typeof import('../shared/src/modelBackgrounds');
 const { defaultModelMarketplaceRule, validateModelMarketplaceRule } = require('./lib/shared/src/modelMarketplaceRules.js') as typeof import('../shared/src/modelMarketplaceRules');
-const { modelBaseSpec, buildModelBasePrompt, sameBaseSpec, baseObservationIssues, compatibleBaseApproval } = require('./lib/shared/src/modelPhotoSets.js') as typeof import('../shared/src/modelPhotoSets');
+const { MODEL_BASE_FILLER_OUTFIT, modelBaseSpec, buildModelBasePrompt, sameBaseSpec, baseObservationIssues, compatibleBaseApproval } = require('./lib/shared/src/modelPhotoSets.js') as typeof import('../shared/src/modelPhotoSets');
 const { selectReviewPrompt } = require('./lib/functions/src/review/geminiImageReview.prompts.js');
 
 function observation(spec: ModelBaseSpec): PhotoBaseObservation {
@@ -20,7 +20,7 @@ function configured() {
   const rules: ModelMarketplaceRules = { shein: { ...rule, revision: 1 } };
   return { rule, rules, spec: modelBaseSpec('shein', 'ordinary', 'adult', 'upper_body', 'front', {}, '3:4', rules) };
 }
-test('every neutral tone has one prompt shared by base generation and verification; filler clothing is unchanged', () => {
+test('every neutral tone has one prompt shared by base generation and verification; filler clothing is the shared placeholder', () => {
   const { rule, rules } = configured();
   for (const tone of MODEL_NEUTRAL_TONES) {
     rule.main.backgroundTone = tone;
@@ -31,7 +31,7 @@ test('every neutral tone has one prompt shared by base generation and verificati
     assert.ok(prompt.includes('Ignore and completely replace the identity reference background, even if it is white.'));
     assert.ok(prompt.includes(MODEL_BACKGROUNDS[tone].prompt));
     assert.ok(modelBackgroundVerification(spec).includes(MODEL_BACKGROUNDS[tone].prompt));
-    assert.ok(prompt.includes('Plain fitted opaque neutral T-shirt and shorts, no prints or accessories, suitable for replacing clothing.'));
+    assert.ok(prompt.includes(MODEL_BASE_FILLER_OUTFIT));
   }
   for (const background of ['white', 'client'] as const) assert.throws(() => validateModelMarketplaceRule({ ...rule, main: { ...rule.main, background } }));
   assert.throws(() => validateModelMarketplaceRule({ ...rule, main: { ...rule.main, backgroundTone: 'pink' } }));

@@ -18,6 +18,10 @@ export const MODEL_SET_SHOTS: ModelSetShot[] = ['front', 'front_three_quarter', 
 export const MODEL_SET_SHOT_LABELS: Record<ModelSetShot, string> = {
   front: 'Frontal', front_three_quarter: 'Tres cuartos frontal', commercial_back: 'Espalda comercial',
 };
+/** Base clothing is a placeholder replaced at dressing time; it must never suggest a garment length or silhouette. */
+export const MODEL_BASE_FILLER_OUTFIT = 'Placeholder clothing only, chosen so it never conditions the garment dressed later: a plain fitted opaque crew-neck T-shirt in one solid neutral color and plain fitted opaque full-length leggings in one solid neutral color that cover the legs completely and visibly reach the ankles. Both pieces are simple, tight-fitting and unlayered, with no prints, logos or accessories.';
+export const MODEL_BASE_FILLER_VERIFICATION = 'Ropa de relleno requerida en la base: camiseta lisa, ajustada y opaca de un color neutro liso, y prenda inferior lisa, ajustada y opaca hasta el tobillo (tipo leggings) de un color neutro liso. fillerOutfitCompliant=true solo si toda la ropa visible en el encuadre cumple. Con encuadre lower_body o full_body la prenda inferior debe llegar visiblemente hasta los tobillos: short, bermuda, falda, vestido, pantalón cortado, remangado, ancho o suelto es false. Con upper_body evalúa la camiseta y, si se ven los muslos, también la prenda inferior (un short visible es false). Estampados, logos, capas o accesorios en la ropa son false. Explica fillerOutfitEvidence con lo que se ve.';
+export const MODEL_BASE_FILLER_ISSUE = 'Ropa de relleno no válida: se requiere camiseta lisa ajustada y prenda inferior lisa ajustada hasta el tobillo, nunca short.';
 export const MODEL_SET_POSE_INSTRUCTIONS: Record<ModelSetShot, string> = {
   front: 'True frontal standing pose, shoulders and hips facing the camera. Arms relaxed at sides, eyes open and mouth closed when the face is visible.',
   front_three_quarter: 'Natural commercial three-quarter front turn, showing volume and part of the side. Never a rigid 90-degree profile.',
@@ -64,7 +68,11 @@ export function applyModelMarketplaceRule(spec: ModelBaseSpec, ratio: AspectRati
 export const sameBaseSpec = (a: ModelBaseSpec, b: ModelBaseSpec): boolean =>
   a?.backgroundTone === b.backgroundTone && (Object.keys(b) as Array<keyof ModelBaseSpec>).every(key => key === 'validation'
     ? !!a?.validation && !!b.validation && (Object.keys(b.validation) as Array<keyof NonNullable<ModelBaseSpec['validation']>>).every(field => a.validation?.[field] === b.validation?.[field]) : a?.[key] === b[key]);
-export function baseObservationIssues(spec: ModelBaseSpec, o?: PhotoBaseObservation): string[] {
+/**
+ * `requireFillerOutfit` is set by the verifier for new approvals. Stored approvals verified before the filler check
+ * (field absent) stay valid; an explicit false is always rejected.
+ */
+export function baseObservationIssues(spec: ModelBaseSpec, o?: PhotoBaseObservation, options: { requireFillerOutfit?: boolean } = {}): string[] {
   if (!o?.verified) return ['Observación visual incierta o pendiente.'];
   const [w, h] = spec.aspectRatio.split(':').map(Number);
   return [
@@ -75,6 +83,7 @@ export function baseObservationIssues(spec: ModelBaseSpec, o?: PhotoBaseObservat
       ? `Fondo requerido: ${modelBackground(spec).label.toLowerCase()}; observado: ${o.background === 'white' ? 'blanco' : o.backgroundTone && o.backgroundTone in MODEL_BACKGROUNDS ? MODEL_BACKGROUNDS[o.backgroundTone as keyof typeof MODEL_BACKGROUNDS].label.toLowerCase() : o.backgroundTone || o.background}.` : '',
     spec.background === 'white' && spec.validation?.pureWhite !== false && o.whiteRgbVerified !== true ? 'El blanco puro no supera la comprobación técnica del perímetro.' : '',
     !o.width || !o.height || Math.abs(o.width / o.height - w / h) > .002 ? `Proporción requerida: ${spec.aspectRatio}, sin recortar la prenda.` : '',
+    (options.requireFillerOutfit ? o.fillerOutfitCompliant !== true : o.fillerOutfitCompliant === false) ? MODEL_BASE_FILLER_ISSUE : '',
     (spec.validation?.garmentVisible !== false && !o.garmentVisible) || (spec.validation?.noAccessories !== false && o.accessories) ? 'La zona de la prenda debe estar completa, sin ocultaciones ni accesorios ajenos.' : '',
     o.faceVisible !== spec.faceVisible ? 'Visibilidad del rostro incompatible con el encuadre.' : '',
     spec.faceVisible && spec.lookingAtCamera !== false && !o.lookingAtCamera ? 'El rostro visible debe mirar hacia cámara.' : '',
@@ -108,7 +117,7 @@ export function buildModelBasePrompt(spec: ModelBaseSpec): string {
   const poseInstructions = spec.shot === 'commercial_back' && spec.lookingAtCamera === false
     ? MODEL_SET_POSE_INSTRUCTIONS[spec.shot].replace('when the face is in frame look at the camera over the shoulder.', 'allow a natural gaze when the face appears.')
     : MODEL_SET_POSE_INSTRUCTIONS[spec.shot];
-  return `Create a commercial model base from the approved identity reference. Preserve the exact person, age, skin, build and body proportions. ${MODEL_BASE_BACKGROUND_REPLACEMENT} Plain fitted opaque neutral T-shirt and shorts, no prints or accessories, suitable for replacing clothing. ${poseInstructions} ${concrete ? `Concrete pose: ${concrete.shotType}. ${(concrete.promptDirectives || []).join(' ')}` : ''} ${configured ? 'The following configured framing and gaze take precedence over crop and gaze wording in the pose recipe.' : ''} ${framing} ${spec.faceVisible ? `Keep the face visible.${spec.lookingAtCamera !== false ? ' Look at the camera.' : ' Natural gaze; looking at camera is optional.'}` : 'Gaze instructions do not apply; keep the face outside the crop.'} Configured background for ${spec.channel} / ${spec.role}: ${modelBackground(spec).prompt} Compose natively at ${spec.aspectRatio}; never crop off the clothing to obtain the ratio. Clear even lighting. ${spec.validation?.garmentVisible !== false ? 'No occlusion by arms or hair; the garment area must be fully visible.' : ''} ${(spec.standingFront ?? (spec.channel === 'amazon' && spec.role === 'main')) ? 'Standing frontal, eyes open, mouth closed and arms at sides.' : ''}`;
+  return `Create a commercial model base from the approved identity reference. Preserve the exact person, age, skin, build and body proportions. ${MODEL_BASE_BACKGROUND_REPLACEMENT} ${MODEL_BASE_FILLER_OUTFIT} ${poseInstructions} ${concrete ? `Concrete pose: ${concrete.shotType}. ${(concrete.promptDirectives || []).join(' ')}` : ''} ${configured ? 'The following configured framing and gaze take precedence over crop and gaze wording in the pose recipe.' : ''} ${framing} ${spec.faceVisible ? `Keep the face visible.${spec.lookingAtCamera !== false ? ' Look at the camera.' : ' Natural gaze; looking at camera is optional.'}` : 'Gaze instructions do not apply; keep the face outside the crop.'} Configured background for ${spec.channel} / ${spec.role}: ${modelBackground(spec).prompt} Compose natively at ${spec.aspectRatio}; never crop off the clothing to obtain the ratio. Clear even lighting. ${spec.validation?.garmentVisible !== false ? 'No occlusion by arms or hair; the garment area must be fully visible.' : ''} ${(spec.standingFront ?? (spec.channel === 'amazon' && spec.role === 'main')) ? 'Standing frontal, eyes open, mouth closed and arms at sides.' : ''}`;
 }
 
 /** Composition changes belong to recipes, never to optional dressing instructions. */

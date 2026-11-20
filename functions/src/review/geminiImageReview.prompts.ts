@@ -191,6 +191,15 @@ const GARMENT_IMAGE_ORDER =
 const PRODUCT_IMAGE_ORDER =
   'using all images except the last as original article references and the last as the generated result.';
 
+/** Marketplace model tasks: the base supplies the person and composition; garment shape comes only from references. */
+export const MODEL_PLAN_IMAGE_ROLES = [
+  'with these explicitly labelled image roles:',
+  'IMAGE 1 (FIRST) = APPROVED MODEL BASE. Use it ONLY for person identity, pose, gaze, camera, lighting, background and framing. The clothing it wears is a neutral placeholder that the generation must replace: ignore it completely and never use it as evidence of the sold garment type, length, silhouette, fit, color or details.',
+  'MIDDLE IMAGES (every image between the first and the last) = SOLD GARMENT REFERENCES. They are the ONLY source of truth for garment type, length (for example full-length trousers versus shorts), silhouette, fit, cut, color, texture, logos and details. Their orientation does not dictate the model output pose.',
+  'LAST IMAGE = GENERATED RESULT.',
+  'Check garment fidelity, length included, only against the middle images. Include a criterion with key garmentLength comparing the length and silhouette of the result garment with the references. Reject a result whose garment length or silhouette follows the base placeholder instead of the references (for example shorts when the references show full-length trousers). Never reject a result for differing from the base clothing, and never ask in revisedPrompt to keep the base clothing or its length. Exact framing preservation refers to camera, crop and body position, not to the outline of the garment.',
+].join('\n');
+
 // Technical evaluation instructions are separate from the approved generation instructions.
 export const buildApprovedTryOnReviewPrompt = (finalPrompt: string, imageOrder = GARMENT_IMAGE_ORDER): string => [
   'TECHNICAL REVIEW INSTRUCTIONS (not generation requirements):',
@@ -267,7 +276,7 @@ export const usesApprovedReviewPrompt = (request: ReviewRequest): boolean => {
 
 const selectBaseReviewPrompt = (request: ReviewRequest): string => {
   const isProduct = request.generationKind === 'product';
-  if (request.photoTask && (request.photoTask.baseSpec || request.photoTask.aspectRatio)) return buildApprovedTryOnReviewPrompt(request.finalPrompt, request.photoTask.composition === 'model' ? 'First image: approved model base. Middle images: garment evidence. Last image: result. Garment reference orientation does not dictate the model output pose.' : PRODUCT_IMAGE_ORDER);
+  if (request.photoTask && (request.photoTask.baseSpec || request.photoTask.aspectRatio)) return buildApprovedTryOnReviewPrompt(request.finalPrompt, request.photoTask.composition === 'model' ? MODEL_PLAN_IMAGE_ROLES : PRODUCT_IMAGE_ORDER);
   if (usesApprovedReviewPrompt(request)) {
     return buildApprovedTryOnReviewPrompt(request.finalPrompt, isProduct ? PRODUCT_IMAGE_ORDER : GARMENT_IMAGE_ORDER);
   }
@@ -292,7 +301,7 @@ export const selectReviewPrompt = (request: ReviewRequest): string => {
     prompt += buildPhotoTaskScope(request.photoTask);
     if (request.photoTask.baseSpec || request.photoTask.aspectRatio) prompt += '\n' +
       `Reglas de validación aplicables, con nivel explícito: ${JSON.stringify(PHOTO_RULES.filter(r => request.photoTask!.destinations.some(d => d.ruleIds.includes(r.id)) && (!configuredModel || !overriddenCompositionRules.includes(r.id))))}. ` +
-      'Comprueba identidad, edad, proporciones, pose, mirada, cámara, fondo, iluminación y encuadre exactos de la base. outputPose distingue frontal real, tres cuartos frontal natural y espalda comercial. En espalda, el rostro visible debe mirar a cámara por encima del hombro. Si el rostro está fuera de cuadro, la mirada no aplica. No debe haber ocultaciones de la prenda por brazos, cabello o giro. Una referencia lateral es evidencia de la prenda; nunca exige perfil rígido del modelo. La proporción se valida técnicamente en servidor.';
+      'Comprueba identidad, edad, proporciones, pose, mirada, cámara, fondo, iluminación y encuadre exactos de la base. La ropa de la base es relleno que debe reemplazarse: no la compares con el resultado. Tipo, largo, silueta, corte, color y detalles de la prenda se comprueban solo contra las referencias de la prenda (imágenes intermedias). outputPose distingue frontal real, tres cuartos frontal natural y espalda comercial. En espalda, el rostro visible debe mirar a cámara por encima del hombro. Si el rostro está fuera de cuadro, la mirada no aplica. No debe haber ocultaciones de la prenda por brazos, cabello o giro. Una referencia lateral es evidencia de la prenda; nunca exige perfil rígido del modelo. La proporción se valida técnicamente en servidor.';
   }
   if (request.photoTask?.composition === 'model' && request.photoTask.baseSpec) prompt += '\n' + MODEL_DRESSING_BACKGROUND + '\n' + modelBackgroundVerification(request.photoTask.baseSpec, 'review') + ' Reject a result that copies the identity or garment reference background instead of the approved base. Explain the observed tone and visible evidence in the review.';
   if (configuredModel) prompt += '\nPara esta base se aplican las reglas de composición configuradas por el administrador y congeladas en baseSpec: fondo, proporción, encuadre, rostro, lookingAtCamera, standingFront y validation. Prevalecen sobre los valores de composición predeterminados del marketplace y las instrucciones generales anteriores. No exijas mirar a cámara si lookingAtCamera=false. No rechaces por accesorios u ocultaciones de la base si su comprobación está desactivada; sí comprueba siempre fidelidad de la prenda vendida e identidad. Conserva la composición de la base aprobada.';

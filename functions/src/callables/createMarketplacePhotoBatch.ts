@@ -86,11 +86,14 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
       if (task.destinations.some(d => (modelRules?.[d.channel]?.revision ?? 0) !== (task.baseSpec?.rulesRevision ?? 0)))
         throw new HttpsError('failed-precondition', 'Las reglas de modelos cambiaron. Revisa el plan antes de generar.');
     }
-    if (data.modelId) {
-      const currentModel = (await tx.get(db.doc(`models/${data.modelId}`))).data() as Model | undefined;
+    // Automation may dress each article on its own (gender-selected) model; the worker revalidates each job's model.
+    const taskModelId = (task: PhotoPlan['tasks'][number]) => data.modelId || plan.articles.find(a => a.itemId === task.itemId)?.modelId || '';
+    const modelIds = [...new Set(plan.tasks.filter(t => t.composition === 'model').map(taskModelId).filter(Boolean))];
+    for (const modelId of modelIds) {
+      const currentModel = (await tx.get(db.doc(`models/${modelId}`))).data() as Model | undefined;
       if (!currentModel || currentModel.clientId !== data.clientId || currentModel.active === false || currentModel.status === 'archived') throw new HttpsError('failed-precondition', 'Modelo no disponible.');
-      const currentBases = modelPhotoBases({ ...currentModel, id: data.modelId });
-      for (const task of plan.tasks.filter(t => t.composition === 'model')) {
+      const currentBases = modelPhotoBases({ ...currentModel, id: modelId });
+      for (const task of plan.tasks.filter(t => t.composition === 'model' && taskModelId(t) === modelId)) {
         const base = currentBases.find(b => b.id === task.base?.id && b.storagePath === task.base.storagePath);
         if (!base || !task.baseSpec || task.destinations.some(d => !compatibleBaseApproval(base, { ...task.baseSpec!, channel: d.channel }))) throw new HttpsError('failed-precondition', 'La aprobación de la base cambió. Revisa el plan.');
       }
@@ -98,7 +101,7 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
     const now = admin.firestore.FieldValue.serverTimestamp();
     const batch: Omit<Batch, 'id'> = { ...(getManglarContext()?.budgetId ? { manglarBudgetId: getManglarContext()!.budgetId } : {}), ...(organizerOrigin ? { organizerOrigin } : {}), photoPlan: plan, photoProfile: COMMERCIAL_PHOTO_PROFILE, generationKind: data.articles[0].kind,
       ...(automation ? { automationJobId: automation.id } : {}),
-      clientId: data.clientId, clientNameSnapshot: client.name, clientSnapshot: { id: data.clientId, name: client.name }, modelId: data.modelId || '', modelNameSnapshot: 'Plan de fotografías', outputMode: 'photos_only',
+      clientId: data.clientId, clientNameSnapshot: client.name, clientSnapshot: { id: data.clientId, name: client.name }, modelId: data.modelId || (modelIds.length === 1 ? modelIds[0] : ''), modelNameSnapshot: 'Plan de fotografías', outputMode: 'photos_only',
       provider: plan.effectiveConfig.provider, aspectRatio: plan.effectiveConfig.aspectRatio, imageConfig: plan.effectiveConfig.imageConfig, promptBase: data.prompt,
       poseIds: plan.tasks.map(t => t.id), garmentCount: plan.articles.length, totalJobs: plan.tasks.length, pendingJobs: plan.tasks.length, processingJobs: 0, completedJobs: 0, failedJobs: 0, status: 'pending',
       latestJobCreatedAt: now, createdAt: now, updatedAt: now, createdByUid: uid };
@@ -114,7 +117,7 @@ export async function createMarketplacePhotoBatchCore(data: CreateMarketplacePho
         ...(automation ? { automationJobId: automation.id } : {}),
         // Reference editing accepts both a verified model base and model-free product inputs.
         generationKind: 'product', productScene: task.id, productReferencePaths: references,
-        batchId: batchRef.id, clientId: data.clientId, clientNameSnapshot: client.name, modelId: data.modelId || '', modelNameSnapshot: 'Plan de fotografías',
+        batchId: batchRef.id, clientId: data.clientId, clientNameSnapshot: client.name, modelId: task.composition === 'model' ? taskModelId(task) : data.modelId || '', modelNameSnapshot: 'Plan de fotografías',
         poseImageId: task.id, poseImagePath: references[0], garmentId: task.itemId, garmentName: article.name, garmentFilePath: task.referencePaths[0], garmentIsMultiAngle: task.referencePaths.length > 1,
         aspectRatio: task.aspectRatio || plan.effectiveConfig.aspectRatio, imageConfig: task.imageConfig || plan.effectiveConfig.imageConfig,
         maxRetries: current?.effectivePolicy?.maxOperationalRetries ?? system.jobMaxRetries,

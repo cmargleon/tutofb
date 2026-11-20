@@ -19,6 +19,7 @@ import { DEFAULT_AUTOMATION_PROVIDER } from './provider';
 import { DEFAULT_AUTOMATION_RULES } from '../../../shared/src/automationConfig';
 import { organizerCategory } from './organizerCategory';
 import { organizerReferenceViews } from '../organizer/commerce';
+import { loadAutomationModelOptions, selectAutomationModel } from './models';
 
 export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Client, config: AutomationPreset) {
   const classificationMinConfidence = job.effectiveRules?.classificationMinConfidence ?? DEFAULT_AUTOMATION_RULES.classificationMinConfidence;
@@ -29,6 +30,7 @@ export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Cli
   const grouped = new Map<string, typeof job.inputImages>();
   job.inputImages.forEach(i => grouped.set(i.itemId, [...(grouped.get(i.itemId) || []), i]));
   const articles: PhotoArticle[] = []; const items: AutomationItemState[] = [];
+  const genders = new Map<string, { gender: Awaited<ReturnType<typeof classifyGarmentWithGemini>>['garmentGender']; confidence: number | null | undefined }>();
   const patch = async (extra: Record<string, unknown> = {}) => db.runTransaction(async tx => {
     const current = (await tx.get(ref)).data();
     if (current?.leaseToken !== job.leaseToken || current.status !== 'importing' || current.batchId) throw new HttpsError('aborted', 'Reserva de importación no disponible.');
@@ -46,6 +48,7 @@ export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Cli
       };
       const analysis = job.analysisCache?.[key] || await (commerce?.classify(input, classificationKey) ?? classifyGarmentWithGemini(input));
       await patch({ [`analysisCache.${key}`]: analysis });
+      genders.set(itemId, { gender: analysis.garmentGender, confidence: analysis.garmentGenderConfidence });
       if (analysis.itemKind !== job.jobType || (analysis.itemKindConfidence ?? 0) < classificationMinConfidence) throw new Error('Confirma el tipo de artículo.');
       const explicit = (job.metadata?.photoArticles as Record<string, any> | undefined)?.[itemId];
       const referenceViews = { ...await organizerReferenceViews(job, itemId), ...explicit?.referenceViews };
@@ -58,10 +61,27 @@ export async function dispatchMarketplacePhotos(job: AutomationJob, _client: Cli
       items.push({ itemId, status: 'needs_attention', scenes: [], issue: { code: 'classification-required', message: error instanceof Error ? error.message : 'Clasificación pendiente' } });
     }
   }
-  const selectedModelId = job.photoModelId || job.modelId || config.modelId || _client.automation?.defaultModelId || null;
-  const selectedModel = selectedModelId ? (await db.doc(`models/${selectedModelId}`).get()).data() as Model | undefined : undefined;
-  if (selectedModelId && (!selectedModel || selectedModel.clientId !== job.clientId || selectedModel.active === false || selectedModel.status === 'archived')) throw new HttpsError('failed-precondition', 'Modelo explícito/preset no disponible.');
-  const bases = await currentModelPhotoBases(selectedModel, config.poseIds);
+  // An explicit/preset model dresses every article; otherwise each article gets the client's model for its garment
+  // gender (defaultMaleModelId/defaultFemaleModelId, or defaultModelId when no gender defaults exist).
+  const explicitModelId = job.photoModelId || job.modelId || config.modelId || null;
+  const options = explicitModelId || !articles.length ? null : await loadAutomationModelOptions(job.clientId, _client, null, config.poseIds);
+  for (const article of [...articles]) {
+    if (!options) continue;
+    const gender = genders.get(article.itemId);
+    const option = selectAutomationModel(options, gender?.gender, gender?.confidence, `${job.id}:${article.itemId}`, job.effectiveRules?.garmentGenderMinConfidence);
+    if (option) { article.modelId = option.modelId; continue; }
+    articles.splice(articles.indexOf(article), 1);
+    items.push({ itemId: article.itemId, status: 'needs_attention', scenes: [], issue: { code: 'model-required',
+      message: `Confirma el género de la prenda (${gender?.gender || 'desconocido'}) para elegir el modelo masculino o femenino del cliente.` } });
+  }
+  const modelIds = explicitModelId ? [explicitModelId] : [...new Set(articles.map(a => a.modelId!).filter(Boolean))];
+  const bases: Awaited<ReturnType<typeof currentModelPhotoBases>> = [];
+  for (const modelId of modelIds) {
+    const model = (await db.doc(`models/${modelId}`).get()).data() as Model | undefined;
+    if (!model || model.clientId !== job.clientId || model.active === false || model.status === 'archived') throw new HttpsError('failed-precondition', 'Modelo explícito/preset no disponible.');
+    bases.push(...await currentModelPhotoBases({ ...model, id: modelId }, config.poseIds));
+  }
+  const selectedModelId = modelIds.length === 1 ? modelIds[0] : null;
   const defaults = createDefaultProductGeneration(await getSystemConfigCached());
   const plan = buildMarketplacePhotoPlan({
     modelMarketplaceRules: await getModelMarketplaceRules(),

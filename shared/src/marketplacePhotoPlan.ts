@@ -97,7 +97,7 @@ export function buildMarketplacePhotoPlan(input: PhotoPlanInput): PhotoPlan {
       }
       // A lateral garment reference is evidence, never a command to turn the person 90 degrees.
       if (view === 'side' && composition === 'model') refs.push(...article.references.filter(r => r.view === 'front').map(r => r.storagePath).filter(path => !refs.includes(path)));
-      const candidate = spec ? (input.bases || []).find(b => compatibleBaseApproval(b, spec)) || null : null;
+      const candidate = spec ? (input.bases || []).find(b => (!article.modelId || b.approvals?.some(a => a.modelId === article.modelId)) && compatibleBaseApproval(b, spec)) || null : null;
       const approval = candidate && compatibleBaseApproval(candidate, spec!);
       const base = candidate && approval ? { id: candidate.id, storagePath: candidate.storagePath, observation: approval.observation, approvals: [approval] } : null;
       if (spec && !base) {

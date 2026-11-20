@@ -151,3 +151,20 @@ test('concrete pose approvals still match shared garment planning without confla
   assert.ok(plan.tasks.filter(task => task.view === 'side').every(task => task.outputPose === 'front_three_quarter' && task.referencePaths.length === 2));
   assert.ok(plan.tasks.filter(task => task.view === 'back').every(task => task.outputPose === 'commercial_back'));
 });
+
+test('an article assigned to a model only uses that model approved bases (gender-selected automation)', () => {
+  const i = input(); i.selectedChannels = ['shein'];
+  const male = approvedBasesForInput(i).map(base => ({ ...base, id: `m-${base.id}`, storagePath: `models/m/${base.id}.jpg`,
+    approvals: base.approvals!.map(approval => ({ ...approval, modelId: 'male', poseId: `m-${base.id}`, storagePath: `models/m/${base.id}.jpg` })) }));
+  const female = approvedBasesForInput(i).map(base => ({ ...base, id: `f-${base.id}`, storagePath: `models/f/${base.id}.jpg`,
+    approvals: base.approvals!.map(approval => ({ ...approval, modelId: 'female', poseId: `f-${base.id}`, storagePath: `models/f/${base.id}.jpg` })) }));
+  i.bases = [...female, ...male];
+  const shirt = i.articles[0];
+  i.articles = [{ ...shirt, itemId: 'men', modelId: 'male' }, { ...shirt, itemId: 'women', modelId: 'female' }];
+  const plan = buildMarketplacePhotoPlan(i);
+  assert.ok(plan.tasks.length > 0);
+  assert.ok(plan.tasks.filter(task => task.itemId === 'men').every(task => task.base?.id.startsWith('m-')));
+  assert.ok(plan.tasks.filter(task => task.itemId === 'women').every(task => task.base?.id.startsWith('f-')));
+  const missing = buildMarketplacePhotoPlan({ ...i, articles: [{ ...shirt, itemId: 'other', modelId: 'nobody' }] });
+  assert.ok(missing.issues.some(issue => issue.blocking && issue.code.startsWith('base-shein')));
+});

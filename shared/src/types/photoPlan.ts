@@ -45,6 +45,8 @@ export interface PhotoArticle {
   itemId: string; productId: string; variantId: string; name: string; kind: GenerationKind;
   attributes: Partial<PhotoArticleAttributes>;
   references: Array<{ id: string; storagePath: string; view: GarmentView | 'detail'; sha256?: string }>;
+  /** Model chosen for this article (automation picks it by garment gender); restricts which approved bases it may use. */
+  modelId?: string;
 }
 export interface PhotoBaseObservation {
   concretePoseMatches?: boolean;

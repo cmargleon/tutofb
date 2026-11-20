@@ -17,9 +17,11 @@ export function useCatalogSourceAlerts(clientId: string, batchIds: string[]) {
         if (active) setState({ key, byBatch: {}, error: (error as Error).message });
       }
     };
+    const refresh = () => { void read(); };
+    window.addEventListener('organizer-commercial-linked', refresh);
     void read();
     const timer = window.setInterval(() => { if (!document.hidden) void read(); }, 30000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('organizer-commercial-linked', refresh); };
   }, [key]);
   return state?.key === key ? state : { byBatch: {}, error: null };
 }

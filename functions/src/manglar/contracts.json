@@ -12647,6 +12647,112 @@
         "type": "object",
         "properties": {
           "action": {
+            "const": "linkCandidates",
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "photoId": {
+            "type": "string",
+            "maxLength": 30000
+          }
+        },
+        "required": [
+          "action",
+          "clientId",
+          "photoId"
+        ],
+        "additionalProperties": false,
+        "maxProperties": 100
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": {
+            "const": "previewLink",
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "photoId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "variantId": {
+            "type": "string",
+            "maxLength": 30000
+          }
+        },
+        "required": [
+          "action",
+          "clientId",
+          "photoId",
+          "variantId"
+        ],
+        "additionalProperties": false,
+        "maxProperties": 100
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": {
+            "const": "link",
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "photoId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "variantId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "previewToken": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "requestId": {
+            "type": "string",
+            "maxLength": 30000
+          },
+          "resolutions": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "source",
+                "target",
+                "excel"
+              ]
+            },
+            "maxProperties": 100
+          }
+        },
+        "required": [
+          "action",
+          "clientId",
+          "photoId",
+          "variantId",
+          "previewToken",
+          "requestId"
+        ],
+        "additionalProperties": false,
+        "maxProperties": 100
+      },
+      {
+        "type": "object",
+        "properties": {
+          "action": {
             "const": "correct",
             "type": "string"
           },

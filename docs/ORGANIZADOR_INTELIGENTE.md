@@ -73,3 +73,15 @@ node --env-file=functions/.env.tutofb-260320-1003 --import tsx scripts/organizer
 ```
 
 La precisión se mide únicamente sobre casos con verdad visual independiente. Los casos sin etiqueta supervisada se informan como no verificados: más asociaciones no implican más aciertos.
+
+## Fotos SINCOD y vínculo comercial posterior
+
+Las vistas `SINCOD_<DESCRIPCION>_<VISTA>_NN` del mismo origen y carpeta comparten un grupo comercial pendiente. No heredan códigos ni sugerencias automáticas de otros productos y pueden conservar sus generaciones mientras falta la ficha.
+
+Después de **Sincronizar cambios**, Organizador y los avisos de lote/prenda en `/catalogo` consultan las variantes del Excel vigente sin fotos asociadas, agrupando sus filas por talla. Si no queda ninguna, muestran el error que pide agregar una fila y sincronizar. Si quedan filas, muestran un warning con candidatas. Ninguna se elige automáticamente. La aprobación de referencias es independiente de esta ocupación comercial. Durante una sincronización se espera su finalización.
+
+**Vincular a fila del Excel** permite revisar el grupo, la ficha destino, los datos fuente y los conflictos entre valores manuales. La confirmación incorpora todas las generaciones del grupo a una única ficha canónica mediante aliases y generationLinks; las fichas provisionales quedan redirigidas. Conserva archivos, jobs, outputs, revisiones, fotos seleccionadas y publicaciones históricas. Los datos del Excel reemplazan los valores provisionales; los conflictos manuales exigen elegir el valor a conservar. No se regenera ni se copia Storage. El drawer **Exportar a marketplaces** sigue siendo el único editor de producto.
+
+La operación es atómica y admite reintentos con el mismo requestId: si cambian las fotos, el Excel o las fichas, exige revisar otra previsualización. Dos grupos no pueden confirmar la misma fila libre concurrentemente. Las lecturas se limitan a 5000 documentos por colección y la confirmación a 400 escrituras; excederlos cancela sin cambios parciales. Un vínculo nuevo nunca dispara generación. `organizer_identity` desaparece al completar el vínculo; otros requisitos del marketplace siguen vigentes. `skipBlockedProducts` excluye y reporta los pendientes, incluso si todos quedan excluidos.
+
+Manglar: `manglar_organizer_read` con `action: "linkCandidates"`, `clientId`, `photoId`; después `action: "previewLink"` y `variantId`. Tras la confirmación humana, `manglar_organizer_manage` con `action: "link"`, los mismos IDs, `previewToken`, `requestId` estable y `resolutions` para cada conflicto (`source`, `target` o `excel`). `correct` conserva su circuito para otras fotos; los grupos SINCOD usan el vínculo completo.

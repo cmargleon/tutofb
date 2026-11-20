@@ -1,3 +1,4 @@
+import { OrganizerCommercialLink } from '../components/catalog/OrganizerCommercialLink';
 import { uncodedGroupName } from '../../shared/src/organizerIdentity';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -282,7 +283,8 @@ export function Organizador() {
               {access.canCreateBatches && !state.simulation && <Button size="sm" variant="ghost" disabled={busy || locked || Boolean(state.simulation)} onClick={() => state.start('classify', { photoIds: [item.id] })}>Reanalizar</Button>}
               {access.canCreateBatches && <Button size="sm" variant="ghost" disabled={busy || locked} onClick={() => state.start('generate', { photoIds: [item.id] })}>Generar desde original</Button>}
             </div>
-            <PhotoReview clientId={clientId} photo={item} products={state.products} disabled={locked || busy || Boolean(state.simulation)}
+            {uncodedGroupName(item.name) && !item.variantId && <OrganizerCommercialLink clientId={clientId} photoId={item.id} disabled={locked || busy || Boolean(state.simulation)} onLinked={() => state.refresh()} />}
+            {(!uncodedGroupName(item.name) || Boolean(item.variantId)) && <PhotoReview clientId={clientId} photo={item} products={state.products} disabled={locked || busy || Boolean(state.simulation)}
               group={(state.page.items as OrganizerPhoto[]).filter(other => uncodedGroupName(item.name)
                 ? uncodedGroupName(other.name) === uncodedGroupName(item.name) && other.path.slice(0, -1).join('/') === item.path.slice(0, -1).join('/')
                 : config.identityMode === 'baseCode' && item.baseCodeIdentity?.baseId
@@ -290,7 +292,7 @@ export function Organizador() {
                 : other.path.slice(0, -1).join('/') === item.path.slice(0, -1).join('/') && [...other.candidates].sort().join() === [...item.candidates].sort().join()).map(other => other.id).slice(0, 25)}
               correct={async (variantIds, photoIds, referenceVariantIds) => {
                 if (await state.perform({ action: 'correct', clientId, photoId: item.id, variantId: variantIds.length === 1 ? variantIds[0] : null, variantIds, photoIds, referenceVariantIds }, 'Asociación guardada; se conservaron las excepciones humanas')) state.refresh();
-              }} />
+              }} />}
           </li>)}
           {state.view === 'tabs' && (state.page.items as OrganizerTab[]).map(item => <li key={item.id} className="py-4">
             <h3 className="font-semibold">{item.name}</h3><p className="text-sm text-slate-600">{item.fileName} · {item.imported} filas importadas · {item.skipped} omitidas</p>

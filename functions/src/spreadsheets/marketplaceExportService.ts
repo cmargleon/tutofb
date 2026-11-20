@@ -370,7 +370,7 @@ export function splitBlockedProducts(context: Context, readiness: MarketplaceExp
     reasons.set(productId, entry);
   }
   const products = context.products.filter(product => !reasons.has(product.id));
-  if (!products.length) return { context: null, skipped: [] };
+  if (!products.length) return { context: null, skipped: [...reasons.values()] };
   return { context: { ...context, products }, skipped: [...reasons.values()] };
 }
 /** Read-only validation; never serializes or saves a workbook. */
@@ -567,7 +567,10 @@ export async function downloadMarketplaceExport(input: DownloadMarketplaceExport
       try {
         const readiness = preview.channels.find(c => c.marketplaceId === channel)!;
         const split = splitBlockedProducts(context, readiness, input.skipBlockedProducts === true);
-        if (!split.context) throw new Error(readiness.issues.filter(i => i.blocking !== false).map(i => `${i.productName || channel}: ${i.message}`).join('\n'));
+        if (!split.context) {
+          skippedProducts.push(...split.skipped.map(item => ({ ...item, marketplaceId: channel })));
+          throw new Error(readiness.issues.filter(i => i.blocking !== false).map(i => `${i.productName || channel}: ${i.message}`).join('\n'));
+        }
         let channelContext = split.context;
         const skipped = [...split.skipped];
         // With skipBlockedProducts, a product whose marketplace images cannot be prepared is left out instead of failing the file.

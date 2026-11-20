@@ -275,6 +275,9 @@ export type OrganizerRequest =
   | { action: 'workflow'; clientId: string; variantId: string; baseProductId?: string; batchId?: string }
   | { action: 'draft'; clientId: string; variantId: string; baseProductId?: string }
   | { action: 'thumbnail'; clientId: string; photoId: string }
+  | { action: 'linkCandidates'; clientId: string; photoId: string }
+  | { action: 'previewLink'; clientId: string; photoId: string; variantId: string }
+  | { action: 'link'; clientId: string; photoId: string; variantId: string; previewToken: string; requestId: string; resolutions?: Record<string, 'source' | 'target' | 'excel'> }
   | { action: 'correct'; clientId: string; photoId: string; variantId: string | null; variantIds?: string[]; photoIds?: string[]; referenceVariantIds?: string[] }
   | { action: 'references'; clientId: string; variantId: string; decision: 'approve' | 'reject' | 'reset' };
 export interface OrganizerDraft {
@@ -312,10 +315,24 @@ export interface OrganizerClient {
   driveFolderIds?: string[];
 }
 
-export interface CatalogSourceAlert { itemId: string | null; severity: 'error' | 'warning'; message: string; photoId: string | null }
+export interface OrganizerLinkCandidate {
+  variantId: string; name: string; color: string; pack: string; skcs: string[]; skus: string[]; sizes: string[];
+  origins: import('./marketplaceExport').OrganizerRowOrigin[];
+}
+export interface OrganizerLinkCandidates {
+  groupId: string; name: string; photoIds: string[]; state: 'pending_link' | 'linked' | 'needs_review';
+  severity: 'error' | 'warning'; message: string; candidates: OrganizerLinkCandidate[];
+}
+export interface OrganizerLinkConflict { field: string; source: string; target: string; excel: string }
+export interface OrganizerLinkPreview {
+  group: OrganizerLinkCandidates; variantId: string; productId: string; sourceProductIds: string[];
+  previewToken: string; conflicts: OrganizerLinkConflict[]; values: import('./marketplaceExport').OrganizerCommercialSource;
+}
+export interface OrganizerLinkResult { groupId: string; productId: string; state: 'linked' }
+export interface CatalogSourceAlert { itemId: string | null; severity: 'error' | 'warning'; message: string; photoId: string | null; link?: OrganizerLinkCandidates }
 export interface CatalogSourceAlerts { alerts: CatalogSourceAlert[] }
 
-export type OrganizerResponse = CatalogSourceAlerts | OrganizerProductWorkflow | OrganizerDraft | { mimeType: 'image/jpeg'; base64: string } | OrganizerConfig | OrganizerRun | OrganizerVariant | OrganizerPhoto | null
+export type OrganizerResponse = OrganizerLinkCandidates | OrganizerLinkPreview | OrganizerLinkResult | CatalogSourceAlerts | OrganizerProductWorkflow | OrganizerDraft | { mimeType: 'image/jpeg'; base64: string } | OrganizerConfig | OrganizerRun | OrganizerVariant | OrganizerPhoto | null
   | OrganizerPage<OrganizerClient>
   | OrganizerPage<OrganizerRun | OrganizerVariant | OrganizerPhoto | OrganizerProductRow | OrganizerTab | OrganizerRunFile | OrganizerLedgerItem | OrganizerBaseProduct | OrganizerCommercialVariant | OrganizerPlanItem | OrganizerInterpretation>
   | { run: OrganizerRun; reportUrl: string | null; controlSheetUrl: string | null };

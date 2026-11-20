@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { AutomationJob, CatalogSourceAlert, CatalogSourceAlerts, OrganizerPhoto } from '../../../shared/src/types';
-import { commercialIdentityOf } from '../../../shared/src/organizerIdentity';
+import { readLinkCandidates } from './link';
+import { uncodedGroupName, commercialIdentityOf } from '../../../shared/src/organizerIdentity';
 import { getAppFirestore } from '../firebase/appFirestore';
 import { loadExportContext } from '../spreadsheets/marketplaceExportService';
 import type { OrganizerCommercialLink } from './commerce';
@@ -11,6 +12,19 @@ export async function readCatalogAlerts(clientId: string, batchId: string, uid: 
   const batch = await db.doc(`batches/${batchId}`).get();
   if (!batch.exists || batch.get('clientId') !== clientId) throw new HttpsError('not-found', 'Lote no disponible.');
   const alerts: CatalogSourceAlert[] = [];
+  const uncodedItems = new Set<string>();
+  const groups = new Set<string>();
+  const addUncoded = async (photo: OrganizerPhoto, itemId: string | null) => {
+    if (!uncodedGroupName(photo.name) || photo.reviewedBy && photo.variantId) return false;
+    const link = await readLinkCandidates(clientId, photo.id);
+    if (itemId) uncodedItems.add(itemId);
+    const key = `${link.groupId}:${itemId || ''}`;
+    if (!groups.has(key)) {
+      groups.add(key);
+      alerts.push({ itemId, photoId: photo.id, severity: link.severity, message: link.message, link });
+    }
+    return true;
+  };
   const automationId = batch.get('automationJobId') as string | undefined;
   if (!automationId) {
     const origin = batch.get('organizerOrigin') as { variantId?: string; itemId?: string } | undefined;
@@ -21,6 +35,7 @@ export async function readCatalogAlerts(clientId: string, batchId: string, uid: 
       const snapshot = await db.doc(`organizers/${clientId}/photos/${id}`).get();
       if (!snapshot.exists) continue;
       const photo = commercialIdentityOf(snapshot.data() as OrganizerPhoto);
+      if (await addUncoded({ ...photo, id }, origin.itemId || null)) continue;
       if (photo.issue) alerts.push({ itemId: origin.itemId || null, severity: 'warning', message: photo.issue, photoId: id });
     }
     return { alerts };
@@ -31,20 +46,21 @@ export async function readCatalogAlerts(clientId: string, batchId: string, uid: 
   const links = (await ref.collection('organizerCommerce').get()).docs.map(doc => doc.data() as OrganizerCommercialLink);
   const photoFor = (itemId: string) => links.find(link => link.itemId === itemId)?.photos[0]?.id || null;
   const context = await loadExportContext({ clientId, batchIds: [batchId] }, uid);
-  for (const product of context.products) {
-    if (product.organizer?.source.issue && !product.organizer.confirmedIdentity)
-      alerts.push({ itemId: product.garmentId, severity: 'error', message: product.organizer.source.issue, photoId: photoFor(product.garmentId) });
-  }
   for (const link of links) {
     for (const source of link.photos) {
       const snapshot = await db.doc(`organizers/${clientId}/photos/${source.id}`).get();
       if (!snapshot.exists) continue;
       const photo = commercialIdentityOf(snapshot.data() as OrganizerPhoto);
+      if (await addUncoded({ ...photo, id: source.id }, link.itemId)) continue;
       const message = photo.issue || (photo.identityState === 'needs_review' ? 'Conflicto de identidad pendiente de revisión.' : null);
       if (message) alerts.push({ itemId: link.itemId, severity: 'warning', message, photoId: source.id });
     }
     if (link.category && !link.category.categoryId)
       alerts.push({ itemId: link.itemId, severity: 'warning', message: link.category.reason || 'Clasificación comercial incierta.', photoId: photoFor(link.itemId) });
+  }
+  for (const product of context.products) {
+    if (!uncodedItems.has(product.garmentId) && product.organizer?.source.issue && !product.organizer.confirmedIdentity)
+      alerts.push({ itemId: product.garmentId, severity: 'error', message: product.organizer.source.issue, photoId: photoFor(product.garmentId) });
   }
   for (const item of automation.items || []) {
     if (item.status === 'needs_attention' || item.issue)

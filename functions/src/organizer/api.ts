@@ -1,4 +1,5 @@
-import { commercialIdentityOf } from '../../../shared/src/organizerIdentity';
+import { confirmCommercialLink, previewCommercialLink, readLinkCandidates } from './link';
+import { uncodedGroupName, commercialIdentityOf } from '../../../shared/src/organizerIdentity';
 import { readCatalogAlerts } from './catalogAlerts';
 import { readProductWorkflow, readWorkflowVariant } from './productWorkflow';
 import { assertHumanClientAccess, loadHumanClientIds } from '../auth/clientAccess';
@@ -25,8 +26,8 @@ import { reportLinks } from './reports';
 
 type Actor = { uid: string; role: Role; delegated?: DelegatedCaller };
 const actions = ['clients', 'config', 'configure', 'start', 'run', 'pause', 'resume', 'cancel', 'report',
-  'runs', 'products', 'photos', 'conflicts', 'tabs', 'baseProducts', 'commercial', 'files', 'ledger', 'plan', 'interpretations', 'provenance', 'correct', 'references', 'thumbnail', 'draft', 'workflow', 'catalogAlerts'];
-const writeActions = new Set(['configure', 'start', 'pause', 'resume', 'cancel', 'correct', 'references', 'draft']);
+  'runs', 'products', 'photos', 'conflicts', 'tabs', 'baseProducts', 'commercial', 'files', 'ledger', 'plan', 'interpretations', 'provenance', 'correct', 'references', 'thumbnail', 'draft', 'workflow', 'catalogAlerts', 'linkCandidates', 'previewLink', 'link'];
+const writeActions = new Set(['configure', 'start', 'pause', 'resume', 'cancel', 'correct', 'references', 'draft', 'link']);
 const paidModes = ['classify', 'sync'];
 const allowed = (actor: Actor, config?: StoredConfig) =>
   (!actor.delegated || !config || actor.delegated.allowedClientIds === null || actor.delegated.allowedClientIds.includes(config.clientId)) &&
@@ -154,6 +155,9 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
   if (request.action === 'config') return config ? publicConfig(config) : null;
   if (!config) throw new HttpsError('failed-precondition', 'El cliente aún no tiene organizador.');
   switch (request.action) {
+    case 'linkCandidates': return readLinkCandidates(clientId, checkedId(request.photoId));
+    case 'previewLink': return previewCommercialLink(clientId, checkedId(request.photoId), checkedId(request.variantId));
+    case 'link': return confirmCommercialLink(clientId, checkedId(request.photoId), checkedId(request.variantId), request.previewToken, checkedId(request.requestId), actor.uid, request.resolutions);
     case 'start': {
       if (actor.role === 'revisor') throw new HttpsError('permission-denied', 'El revisor no puede iniciar una ejecución.');
       if (!['inventory', 'dry_run', 'generate', ...paidModes].includes(request.mode)) throw new HttpsError('invalid-argument', 'Modo inválido.');
@@ -324,6 +328,7 @@ export async function executeOrganizer(request: OrganizerRequest, actor: Actor):
           throw new HttpsError('not-found', 'Foto, origen o variante no disponible.');
         if (current.data()?.activeRunId) throw new HttpsError('failed-precondition', 'Termina la ejecución antes de aplicar correcciones.');
         const seed = photos.find(photo => photo.id === request.photoId)!.data() as OrganizerPhoto;
+        if (uncodedGroupName(seed.name) && targets.length) throw new HttpsError('failed-precondition', 'Usa previewLink y link para vincular el grupo SINCOD y sus generaciones.');
         // Base-code mode groups by product base: the client may spread one product across folders.
         const baseCode = identityModeOf(config) === 'baseCode';
         const groupKey = (photo: OrganizerPhoto) => baseCode && photo.baseCodeIdentity?.baseId ? digest(['base', photo.baseCodeIdentity.baseId])

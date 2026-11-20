@@ -19,6 +19,9 @@ const GENERIC_MODEL_NAMES = new Set(['', 'Plan de fotografías']);
 const batchSubtitleModel = (modelName: string | undefined) =>
   modelName && !GENERIC_MODEL_NAMES.has(modelName.trim()) ? `${modelName} · ` : '';
 
+/** Batch ids share prefixes (e.g. "photo-"), so the tail is what tells them apart. */
+const shortBatchId = (id: string) => id.slice(-6);
+
 export const queueCatalogHref = (row: QueueRow) => `/catalogo?clientId=${row.batch.clientId}&batchId=${row.id}`;
 
 /** Stacked bar: completed, failed, processing, pending, as shares of the batch's jobs. */
@@ -93,44 +96,45 @@ export const QueueBatchRow: React.FC<{
 
   return (
     <li className="px-4 py-3 sm:px-5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="grid items-center gap-x-6 gap-y-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
           disabled={!canExpand}
           aria-expanded={canExpand ? expanded : undefined}
           aria-controls={canExpand ? detailsId : undefined}
-          className="group flex min-w-0 flex-1 basis-64 items-start gap-2 rounded-md text-left disabled:cursor-default"
+          className="group flex min-w-0 items-start gap-2 rounded-md text-left disabled:cursor-default"
         >
           <ChevronRight
             aria-hidden="true"
             className={`mt-0.5 h-4 w-4 shrink-0 text-[var(--color-text-muted)] transition-transform motion-reduce:transition-none ${expanded ? 'rotate-90' : ''} ${canExpand ? '' : 'invisible'}`}
           />
           <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="truncate text-sm font-semibold text-[var(--color-text-primary)] group-enabled:group-hover:underline">
-                {batch.clientNameSnapshot || 'Cliente sin nombre'}
-              </span>
-              <span className="text-xs text-[var(--color-text-muted)]">
-                {batchSubtitleModel(batch.modelNameSnapshot)}
-                {PROVIDER_LABELS[batch.provider] || batch.provider}
-                {batch.garmentCount ? ` · ${batch.garmentCount} prenda${batch.garmentCount === 1 ? '' : 's'}` : ''}
-                {' · '}<span className="font-mono">{row.id.slice(0, 6)}</span>
-              </span>
+            <span className="block truncate text-sm font-semibold text-[var(--color-text-primary)] group-enabled:group-hover:underline">
+              {batch.clientNameSnapshot || 'Cliente sin nombre'}
             </span>
-            <span className="mt-1.5 block max-w-md"><BatchProgress row={row} /></span>
-            <span className="mt-1 block text-xs"><RowStatus row={row} section={section} /></span>
+            <span className="block truncate text-xs text-[var(--color-text-muted)]">
+              {batchSubtitleModel(batch.modelNameSnapshot)}
+              {PROVIDER_LABELS[batch.provider] || batch.provider}
+              {batch.garmentCount ? ` · ${batch.garmentCount} prenda${batch.garmentCount === 1 ? '' : 's'}` : ''}
+              {' · '}<span className="font-mono" title={`Lote ${row.id}`}>…{shortBatchId(row.id)}</span>
+            </span>
           </span>
         </button>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="min-w-0 pl-6 md:pl-0">
+          <BatchProgress row={row} />
+          <p className="mt-1 text-xs"><RowStatus row={row} section={section} /></p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pl-6 md:justify-end md:pl-0">
           {canRegenerate && section === 'active' ? (
             <Button size="sm" variant="secondary" icon={Square} disabled={busy} loading={busyAction === 'cancel'} onClick={() => onCancel([row.id])}>
               Cancelar
             </Button>
           ) : null}
           {canRegenerate && section !== 'active' && batch.failedJobs > 0 ? (
-            <Button size="sm" variant={section === 'attention' ? 'warning' : 'secondary'} icon={RefreshCw} disabled={busy} onClick={() => onRetry([row.id])}>
+            <Button size="sm" variant="secondary" icon={RefreshCw} disabled={busy} onClick={() => onRetry([row.id])}>
               Reintentar
             </Button>
           ) : null}
@@ -139,7 +143,7 @@ export const QueueBatchRow: React.FC<{
               Descartar
             </Button>
           ) : null}
-          <Link to={queueCatalogHref(row)} className={buttonClasses('ghost', 'sm')} aria-label={`Abrir lote ${row.id.slice(0, 6)} en el catálogo`}>
+          <Link to={queueCatalogHref(row)} className={buttonClasses('ghost', 'sm')} aria-label={`Abrir lote …${shortBatchId(row.id)} en el catálogo`}>
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
             <span className="hidden sm:inline">Abrir</span>
           </Link>

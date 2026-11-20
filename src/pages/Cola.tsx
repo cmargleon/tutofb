@@ -104,7 +104,8 @@ export const Cola: React.FC = () => {
         ) : null}
       </div>
 
-      <QueueSectionPanel section="active" rows={board.sections.active} {...sectionProps} />
+      {/* The summary line already says nothing is running; an empty card would only push the failures down. */}
+      {board.sections.active.length > 0 ? <QueueSectionPanel section="active" rows={board.sections.active} {...sectionProps} /> : null}
       <QueueSectionPanel section="attention" rows={board.sections.attention} {...sectionProps} />
       <QueueSectionPanel section="recent" rows={board.sections.recent} defaultCollapsed {...sectionProps} />
 

@@ -1,9 +1,9 @@
 import { subscribeHumanQuery } from '../auth/scopedQuery';
 import { useRole } from '../auth/AuthProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { AnalyticsSummary, Batch, BatchNotificationRetryState, BatchStatus } from '../../../shared/src/types';
+import { Batch, BatchNotificationRetryState, BatchStatus } from '../../../shared/src/types';
 import { useToast } from '../feedback/FeedbackProvider';
 import { BatchNotificationItem, buildBatchNotificationDescription, buildBatchNotificationItem, isFinalBatchStatus, resolveBatchNotificationOutcome } from './batchNotifications';
 
@@ -36,14 +36,17 @@ export const useNotifications = (): UseNotificationsReturn => {
   }>>({});
 
   useEffect(() => {
-    const unsubQueue = canAccessAnalytics ? onSnapshot(doc(db, 'analytics_summary', 'global'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data() as AnalyticsSummary;
-        setQueueCount((data.pendingJobs ?? 0) + (data.processingJobs ?? 0));
-      } else {
-        setQueueCount(0);
-      }
-    }, () => setQueueCount(0)) : () => {};
+    // Count from the active batches themselves, like Cola does. analytics_summary/global is kept by
+    // incremental trigger deltas and drifts when an event is lost or replayed (seen 2026-11-20: 1 phantom job).
+    const unsubQueue = canAccessAnalytics ? subscribeHumanQuery(
+      query(collection(db, 'batches'), where('status', 'in', ['pending', 'processing']), limit(100)),
+      'clientId',
+      (snap) => setQueueCount(snap.docs.reduce((sum, docSnapshot) => {
+        const batch = docSnapshot.data() as Batch;
+        return sum + (batch.pendingJobs ?? 0) + (batch.processingJobs ?? 0);
+      }, 0)),
+      () => setQueueCount(0),
+    ) : () => {};
 
     const unsubBatches = subscribeHumanQuery(
       query(collection(db, 'batches'), orderBy('updatedAt', 'desc'), limit(60)),

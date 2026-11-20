@@ -6,7 +6,7 @@ import { getManglarContext, withManglarContext } from './context';
 import { loadManglarAccess, loadManglarUser } from './access';
 import { oauthHash } from '../automation/mcpOAuth.helpers';
 // Conservative holds, not a contractual upper bound on a token-priced provider's bill.
-export const runManglarPaid = async <T>(holdUsd: number, run: () => Promise<T>, budgetId = getManglarContext()?.budgetId): Promise<T> => {
+export const runManglarPaid = async <T>(holdUsd: number, run: () => Promise<T>, budgetId = getManglarContext()?.budgetId, recordedCost?: (result: T) => number | null): Promise<T> => {
     if (!budgetId)
         return run(); // Existing UI and automation retain their budget mechanisms.
     const db = getAppFirestore();
@@ -33,7 +33,15 @@ export const runManglarPaid = async <T>(holdUsd: number, run: () => Promise<T>, 
     });
     try {
         const result = await run();
-        await payment.update({ state: 'estimated', settledAt: FieldValue.serverTimestamp() });
+        const actual = recordedCost?.(result);
+        if (typeof actual === 'number' && Number.isFinite(actual) && actual >= 0) {
+            await db.runTransaction(async tx => {
+                const snapshot = await tx.get(payment);
+                if (snapshot.data()?.state !== 'reserved') return;
+                tx.update(payment, { state: 'recorded', recordedUsd: actual, settledAt: FieldValue.serverTimestamp() });
+                tx.update(ref, { committedUsd: FieldValue.increment(actual - holdUsd) });
+            });
+        } else await payment.update({ state: recordedCost ? 'uncertain' : 'estimated', settledAt: FieldValue.serverTimestamp() });
         return result;
     }
     catch (error) {

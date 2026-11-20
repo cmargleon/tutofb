@@ -7,6 +7,7 @@ import { getModelMarketplaceRules, modelMarketplaceRulesRef } from './marketplac
 import { effectiveModelMarketplaceRule } from '../../../shared/src/modelMarketplaceRules';
 import { MODEL_POSE_RECIPES_BY_ID } from '../../../shared/src/modelPoseRecipes';
 import { buildPoseAiClassification } from '../../../shared/src/utils/poseAiClassification';
+import { GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
 import * as admin from 'firebase-admin';
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -98,7 +99,7 @@ export async function loadModelSetContext(input: ModelPhotoSetsRequest, uid: str
     const candidate = model.poses.filter(p => p.marketplaceBaseSpec && sameBaseSpec(p.marketplaceBaseSpec, visualSpec(spec))).at(-1);
     return { spec, ...(candidate ? { issues: baseObservationIssues(spec, candidate.photoObservation || undefined) } : {}), poseId: bases.find(b => compatibleBaseApproval(b, spec))?.id || null,
       candidatePoseIds: model.poses.filter(p => p.marketplaceBaseSpec && sameBaseSpec(p.marketplaceBaseSpec, visualSpec(spec))).map(p => p.id),
-      estimatedCostUsd: getModelPhotoProviderCostUsd(provider, config.imageConfig, 1) + .01 };
+      estimatedCostUsd: getModelPhotoProviderCostUsd(provider, config.imageConfig, 1) + GEMINI_OPERATION_HOLD_USD };
   });
   const missing = shots.filter(s => !s.poseId);
   const preview: ModelPhotoSetsPreview = { ...(model.approvedIdentity ? { identitySha256: model.approvedIdentity.sha256 } : {}), id: photoIdentity([specs, model.poses.map(pose => [pose.id, pose.storagePath, pose.active ?? true, pose.marketplaceBaseSpec || null]), model.approvedIdentity || null, model.marketplaceBaseApprovals || [], provider, normalized]), provider, shots, incompatible,

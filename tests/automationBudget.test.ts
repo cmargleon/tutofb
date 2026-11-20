@@ -48,10 +48,10 @@ test('invalid recorded costs cannot release a hold', async () => {
 
 test('missing Gemini usage is unknown; real usage includes thinking tokens', () => {
   for (const metadata of [undefined, {}, { totalTokenCount: 30 }, { promptTokenCount: 10 }, { promptTokenCount: NaN, candidatesTokenCount: 0 }]) {
-    assert.equal(recordedGeminiCostUsd(metadata), null);
+    assert.equal(recordedGeminiCostUsd('gemini-3.1-flash-lite', metadata), null);
   }
-  assert.equal(recordedGeminiCostUsd({ promptTokenCount: 1000, candidatesTokenCount: 100, thoughtsTokenCount: 100 }), 0.00055);
-  assert.equal(recordedGeminiCostUsd({ promptTokenCount: 0, candidatesTokenCount: 0 }), 0);
+  assert.equal(recordedGeminiCostUsd('gemini-3.1-flash-lite', { promptTokenCount: 1000, candidatesTokenCount: 100, thoughtsTokenCount: 100 }), 0.00055);
+  assert.equal(recordedGeminiCostUsd('gemini-3.1-flash-lite', { promptTokenCount: 0, candidatesTokenCount: 0 }), 0);
 });
 
 test('holds follow config, references and margin instead of a fixed 0.50 minimum', () => {

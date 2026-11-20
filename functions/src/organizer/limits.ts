@@ -31,7 +31,7 @@ export const callsPerPhoto = (config: Pick<OrganizerSettings, 'model' | 'escalat
 
 /** Estimated USD per photo with the configured models (escalation priced only when it differs). */
 export function estimatedPhotoCostUsd(config: Pick<OrganizerSettings, 'model' | 'escalationModel'>) {
-  const call = (model: string) => MODEL_PRICES[model] ? usageCost(model, ESTIMATED_CALL_TOKENS.input, ESTIMATED_CALL_TOKENS.output, 0) / 1_000_000 : 0;
+  const call = (model: string) => usageCost(model, ESTIMATED_CALL_TOKENS.input, ESTIMATED_CALL_TOKENS.output, 0) / 1_000_000;
   const escalation = config.escalationModel && config.escalationModel !== config.model ? call(config.escalationModel) : 0;
   return (2 * call(config.model) + escalation) * ESTIMATE_MARGIN;
 }

@@ -31,7 +31,7 @@ test('backend holds preserve rate classification, reference handling and histori
       }
     }
   }
-  assert.equal(GEMINI_OPERATION_HOLD_USD, 0.05);
+  assert.equal(GEMINI_OPERATION_HOLD_USD, 1.46);
 });
 
 test('backend holds use config margins and micro-dollar rounding without a flat minimum', () => {
@@ -62,7 +62,7 @@ test('backend estimation imports without loading or initializing Firebase', () =
     const costs = require(${JSON.stringify(require.resolve('../functions/lib/functions/src/costs/generationEstimates.js'))});
     assert.deepEqual(costs.estimateGenerationHold('fal-seedream', { provider: 'fal-seedream', imageSize: 'auto_2K' }, 2),
       { estimateUsd: .04, holdUsd: .04, fixed: true });
-    assert.equal(costs.GEMINI_OPERATION_HOLD_USD, .05);
+    assert.equal(costs.GEMINI_OPERATION_HOLD_USD, 1.46);
   `], { stdio: 'pipe' });
 });
 

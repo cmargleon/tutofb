@@ -1,3 +1,4 @@
+import { geminiModelRates, geminiUsageCost } from '../../../shared/src/constants/geminiPrices';
 import { runManglarPaid } from '../manglar/budget';
 import { reserveAutomationOperation, settleAutomationOperation } from '../automation/budget';
 import { GEMINI_OPERATION_HOLD_USD } from '../costs/generationEstimates';
@@ -57,11 +58,10 @@ interface CallGeminiGenerateContentResult<TPayload> {
     outputTokens: number;
     totalTokens: number;
     estimatedCostUsd: number;
+    thinkingTokens: number;
   };
 }
 
-const GEMINI_INPUT_COST_PER_MILLION_USD = 0.25;
-const GEMINI_OUTPUT_COST_PER_MILLION_USD = 1.5;
 const GEMINI_USAGE_COLLECTION = 'analytics_gemini_usage';
 
 const toSafeInteger = (value: unknown): number => {
@@ -72,31 +72,32 @@ const toSafeInteger = (value: unknown): number => {
   return Math.max(0, Math.trunc(value));
 };
 
-const normalizeUsage = (
+export const normalizeUsage = (
+  model: string,
   usageMetadata?: GeminiUsageMetadata,
-  includeThinking = false,
 ): CallGeminiGenerateContentResult<never>['usage'] => {
   const inputTokens = toSafeInteger(usageMetadata?.promptTokenCount);
-  const outputTokens = toSafeInteger(usageMetadata?.candidatesTokenCount) + (includeThinking ? toSafeInteger(usageMetadata?.thoughtsTokenCount) : 0);
+  const thinkingTokens = toSafeInteger(usageMetadata?.thoughtsTokenCount);
+  const candidateTokens = toSafeInteger(usageMetadata?.candidatesTokenCount);
+  const outputTokens = candidateTokens + thinkingTokens;
   const reportedTotalTokens = toSafeInteger(usageMetadata?.totalTokenCount);
   const totalTokens = reportedTotalTokens || inputTokens + outputTokens;
-  const estimatedCostUsd =
-    (inputTokens / 1_000_000) * GEMINI_INPUT_COST_PER_MILLION_USD +
-    (outputTokens / 1_000_000) * GEMINI_OUTPUT_COST_PER_MILLION_USD;
+  const estimatedCostUsd = geminiUsageCost(model, inputTokens, candidateTokens, thinkingTokens);
 
   return {
     inputTokens,
+    thinkingTokens,
     outputTokens,
     totalTokens,
     estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),
   };
 };
 
-export const recordedGeminiCostUsd = (metadata?: GeminiUsageMetadata): number | null => {
+export const recordedGeminiCostUsd = (model: string, metadata?: GeminiUsageMetadata): number | null => {
   const counts = [metadata?.promptTokenCount, metadata?.candidatesTokenCount, metadata?.thoughtsTokenCount];
   if (typeof counts[0] !== 'number' || typeof counts[1] !== 'number'
     || counts.some(value => value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0))) return null;
-  return normalizeUsage(metadata, true).estimatedCostUsd;
+  return normalizeUsage(model, metadata).estimatedCostUsd;
 };
 
 const persistGeminiUsage = async ({
@@ -107,7 +108,8 @@ const persistGeminiUsage = async ({
   httpStatus,
   errorMessage,
 }: TrackGeminiUsageInput): Promise<void> => {
-  const usage = normalizeUsage(usageMetadata, Boolean(context.automation));
+  const usage = normalizeUsage(context.model, usageMetadata);
+  const pricing = geminiModelRates(context.model, usage.inputTokens);
   const payload: Omit<GeminiUsageRecord, 'id'> = {
     provider: 'gemini',
     feature: context.feature,
@@ -118,6 +120,10 @@ const persistGeminiUsage = async ({
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
     estimatedCostUsd: usage.estimatedCostUsd,
+    thinkingTokens: usage.thinkingTokens,
+    pricingStatus: pricing.pricingStatus,
+    pricingVerifiedAt: pricing.pricingVerifiedAt,
+    pricingSourceUrl: pricing.pricingSourceUrl,
     durationMs: typeof durationMs === 'number' && Number.isFinite(durationMs) ? Math.max(0, Math.round(durationMs)) : null,
     httpStatus: typeof httpStatus === 'number' && Number.isFinite(httpStatus) ? httpStatus : null,
     errorMessage: typeof errorMessage === 'string' && errorMessage.trim() ? errorMessage.trim().slice(0, 1000) : null,
@@ -178,6 +184,8 @@ const callGeminiGenerateContentCore = async <TPayload>({
   signal,
 }: CallGeminiGenerateContentArgs): Promise<CallGeminiGenerateContentResult<TPayload>> => {
   const startedAt = Date.now();
+  const pricing = geminiModelRates(model, 0);
+  if (pricing.pricingStatus !== 'verified') console.warn('Gemini pricing uses conservative rates.', { model, pricingStatus: pricing.pricingStatus, pricingSourceUrl: pricing.pricingSourceUrl });
   let loggedUsage = false;
   const usageContext: GeminiUsageContext = {
     ...context,
@@ -249,10 +257,10 @@ const callGeminiGenerateContentCore = async <TPayload>({
       console.error('No se pudo registrar el uso exitoso de Gemini.', trackingError);
     }
 
-    if (operation && context.automation) await settleAutomationOperation(context.automation.id, operation, recordedGeminiCostUsd(parsedUsagePayload?.usageMetadata));
+    if (operation && context.automation) await settleAutomationOperation(context.automation.id, operation, recordedGeminiCostUsd(model, parsedUsagePayload?.usageMetadata));
     return {
       payload: parsed,
-      usage: normalizeUsage(parsedUsagePayload?.usageMetadata, Boolean(context.automation)),
+      usage: normalizeUsage(model, parsedUsagePayload?.usageMetadata),
     };
   } catch (error) {
     if (operation && context.automation) await settleAutomationOperation(context.automation.id, operation, null);
@@ -275,4 +283,5 @@ const callGeminiGenerateContentCore = async <TPayload>({
 };
 
 export const callGeminiGenerateContent: typeof callGeminiGenerateContentCore = (request) =>
-  runManglarPaid(GEMINI_OPERATION_HOLD_USD, () => callGeminiGenerateContentCore(request));
+  runManglarPaid(GEMINI_OPERATION_HOLD_USD, () => callGeminiGenerateContentCore(request), undefined,
+    result => recordedGeminiCostUsd(request.model, (result.payload as GeminiUsagePayload)?.usageMetadata));

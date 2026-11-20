@@ -150,6 +150,11 @@ export type GeminiUsageFeature =
 export type GeminiUsageStatus = 'success' | 'error';
 
 export interface GeminiUsageRecord {
+  /** Optional for historical records; outputTokens includes these billable tokens. */
+  thinkingTokens?: number;
+  pricingStatus?: import('../constants/geminiPrices').GeminiPricingStatus;
+  pricingVerifiedAt?: string | null;
+  pricingSourceUrl?: string;
   id: string;
   provider: 'gemini';
   feature: GeminiUsageFeature;

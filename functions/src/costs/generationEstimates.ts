@@ -14,4 +14,4 @@ export const estimateGenerationHold = (provider: Provider, config: ProviderImage
   return { estimateUsd: estimate, holdUsd, fixed };
 };
 
-export const GEMINI_OPERATION_HOLD_USD = 0.05;
+export { GEMINI_CONSERVATIVE_HOLD_USD as GEMINI_OPERATION_HOLD_USD } from '../../../shared/src/constants/geminiPrices';

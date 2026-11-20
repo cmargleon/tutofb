@@ -7,17 +7,13 @@ import { getAppFirestore } from '../firebase/appFirestore';
 import { digest, type DriveEntry, type OrganizerDrive } from './drive';
 import { assertLease, whileLeased, type StoredRun } from './store';
 
-// USD per million tokens. Preview aliases are priced using the same paid tier.
-export const MODEL_PRICES: Record<string, readonly [number, number]> = {
-  'gemini-3.1-flash-lite': [0.25, 1.5],
-  'gemini-3-flash-preview': [0.5, 3], 'gemini-3.1-pro-preview': [4, 18],
-};
+// Compatibility export: the shared rate card is the only source of prices.
+export { GEMINI_MODEL_PRICES as MODEL_PRICES } from '../../../shared/src/constants/geminiPrices';
+import { geminiUsageCost } from '../../../shared/src/constants/geminiPrices';
 const micros = (value: number) => Math.round(value * 1_000_000);
 const dollars = (value: number) => value / 1_000_000;
-export const usageCost = (model: string, input: number, output: number, thinking: number) => {
-  const [inputPrice, outputPrice] = MODEL_PRICES[model];
-  return Math.ceil(input * inputPrice + (output + thinking) * outputPrice);
-};
+export const usageCost = (model: string, input: number, output: number, thinking: number) =>
+  micros(geminiUsageCost(model, input, output, thinking));
 export const holdFor = (model: string) => usageCost(model, 16_384, 4096, 65_536);
 export const availableBudget = (run: Pick<StoredRun, 'budgetUsd' | 'estimatedUsd' | 'reservedUsd' | 'uncertainUsd'>) =>
   micros(run.budgetUsd) - micros(run.estimatedUsd) - micros(run.reservedUsd) - micros(run.uncertainUsd);
